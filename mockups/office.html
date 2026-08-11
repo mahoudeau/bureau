@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agent HQ — The Office (mockup)</title>
+<title>Bureau · The Office (mockup)</title>
 <style>
   @font-face { font-family: 'px'; src: local('Courier New'); }
   html, body { margin: 0; height: 100%; background: #14121f; overflow: hidden;
@@ -44,7 +44,7 @@
 <body>
 <div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
 <div id="hud">
-  <span class="logo">AGENT&nbsp;HQ</span>
+  <span class="logo">BUREAU</span>
   <span class="st"><span class="sq" style="background:#5ad05a"></span>ACTIVE</span>
   <span class="st"><span class="sq" style="background:#ffd23e"></span>IDLE</span>
   <span class="st"><span class="sq" style="background:#6b6580"></span>OFFLINE</span>
@@ -53,7 +53,7 @@
 <div id="ticker">▸ booting office…</div>
 <script>
 /* =========================================================
-   Agent HQ — pixel office mockup.
+   Bureau: pixel office mockup.
    Everything is drawn procedurally (no assets) at 320x180,
    integer-scaled to the window. Later this page swaps its
    scripted "events" array for the hub's live SSE stream.
@@ -259,12 +259,12 @@ function tick(msg) { document.getElementById('ticker').innerHTML = '▸ ' + msg;
 const SCRIPT = [
   { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>fix Bitly export'); tick('🏃 <b>Nova</b> claimed t-42 · fix Bitly export (P1)'); } },
   { at: 1200,  run: () => walkTo(AGENTS[1], 140, 124) },                     // Scout carries card from board to desk
-  { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it — scraping<br>3 sources'); tick('📥 <b>Scout</b> picked t-45 from the board'); } },
+  { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it, scraping<br>3 sources'); tick('📥 <b>Scout</b> picked t-45 from the board'); } },
   { at: 7500,  run: () => { say(AGENTS[0], 'tests green ✓'); tick('✏️ <b>Nova</b> · t-42: tests green'); } },
   { at: 9000,  run: () => walkTo(AGENTS[2], 28, 88) },                        // Archie to the shelf
   { at: 12000, run: () => { say(AGENTS[2], 'filing STATE.md 🧠'); tick('🧠 <b>Archie</b> wrote projects/trace/STATE.md'); } },
   { at: 15000, run: () => { walkTo(AGENTS[0], 224, 140); AGENTS[0].carry = P.cardR; } },   // Nova takes work to review door
-  { at: 19500, run: () => { say(AGENTS[0], '<b>t-42</b> ready for<br>your review 👀'); tick('👀 <b>Nova</b> parked t-42 at your door — review needed'); } },
+  { at: 19500, run: () => { say(AGENTS[0], '<b>t-42</b> ready for<br>your review 👀'); tick('👀 <b>Nova</b> parked t-42 at your door, review needed'); } },
   { at: 23000, run: () => { AGENTS[0].carry = null; walkTo(AGENTS[0], 84, 124); } },
   { at: 24000, run: () => walkTo(AGENTS[2], 196, 124) },
   { at: 26000, run: () => walkTo(AGENTS[1], 250, 60) },                       // Scout to conference

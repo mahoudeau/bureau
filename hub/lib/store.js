@@ -1,4 +1,4 @@
-// lib/store.js — JSON state with atomic writes. Zero dependencies.
+// lib/store.js: JSON state with atomic writes. Zero dependencies.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -69,18 +69,25 @@ function upsertAgent({ name, kind, capabilities }) {
   return a;
 }
 
-function heartbeat(name, note) {
+function heartbeat(name, note, activity) {
   const s = load();
   const a = s.agents.find(x => x.name === name);
   if (!a) return null;
   a.last_seen = nowISO();
   if (note !== undefined) a.note = note;
+  if (activity !== undefined) {
+    if (activity !== null && !ACTIVITIES.includes(activity)) return { error: `unknown activity; use one of ${ACTIVITIES.join(', ')}` };
+    a.activity = activity;
+  }
   save();
   return a;
 }
 
 // ---- Tasks ----
-const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'review', 'done', 'failed'];
+const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed'];
+
+// Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
+const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_input', 'waiting_permission', 'blocked', 'idle'];
 
 function createTask({ title, body, priority, project, created_by }) {
   const t = {
@@ -150,7 +157,8 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (status) {
     if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;
-    if (status === 'done' || status === 'failed' || status === 'review') t.lease_until = null;
+    // blocked keeps its assignee but pauses the lease, so it never auto-requeues
+    if (status === 'done' || status === 'failed' || status === 'review' || status === 'blocked') t.lease_until = null;
     if (status === 'queued') { t.assignee = null; t.lease_until = null; }
   }
   if (lease_minutes) t.lease_until = new Date(Date.now() + (+lease_minutes) * 60000).toISOString();
@@ -184,5 +192,5 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, logEvent, upsertAgent, heartbeat,
   createTask, claimTask, updateTask, expireLeases,
-  postMessage, getMessages, TASK_STATUSES,
+  postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };

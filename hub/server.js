@@ -1,4 +1,4 @@
-// Agent HQ — coordination hub for AI agents. Zero-dependency Node server.
+// Bureau: coordination hub for AI agents. Zero-dependency Node server.
 // API + SSE event stream + dashboard. Deployable on alwaysdata (Node.js site).
 'use strict';
 const http = require('http');
@@ -11,7 +11,7 @@ const discord = require('./lib/discord');
 const PORT = process.env.PORT || 8100;
 const HOST = process.env.HOST || '::';           // alwaysdata expects IPv6 bind
 const TOKEN = process.env.HQ_TOKEN || '';
-if (!TOKEN) console.warn('⚠️  HQ_TOKEN not set — API is UNPROTECTED. Set it in production.');
+if (!TOKEN) console.warn('⚠️  HQ_TOKEN not set: API is UNPROTECTED. Set it in production.');
 
 // ---------- SSE ----------
 const sseClients = new Set();
@@ -26,6 +26,7 @@ function summarize(type, d) {
   return {
     id: d.id, name: d.name, title: d.title, assignee: d.assignee, status: d.status,
     from: d.from, to: d.to, file: d.file, author: d.author, note: d.note, kind: d.kind,
+    activity: d.activity,
     body: typeof d.body === 'string' ? d.body.slice(0, 300) : undefined,
   };
 }
@@ -33,7 +34,8 @@ function summarize(type, d) {
 // ---------- helpers ----------
 function send(res, code, obj) {
   const body = JSON.stringify(obj, null, 1);
-  res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+  // no-store on everything: agents must always see fresh state, whatever proxy sits between
+  res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
   res.end(body);
 }
 function readBody(req) {
@@ -70,15 +72,15 @@ const server = http.createServer(async (req, res) => {
 
     // ----- SSE stream -----
     if (req.method === 'GET' && p === '/api/events') {
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'access-control-allow-origin': '*' });
       res.write('retry: 3000\n\n');
       sseClients.add(res);
       req.on('close', () => sseClients.delete(res));
       return;
     }
 
-    // ----- snapshot for dashboard -----
-    if (req.method === 'GET' && p === '/api/state') {
+    // ----- snapshot for dashboard (GET or POST: POST for cache-proof polling) -----
+    if ((req.method === 'GET' || req.method === 'POST') && p === '/api/state') {
       store.expireLeases();
       const s = store.load();
       return send(res, 200, {
@@ -99,9 +101,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && p === '/api/agents/heartbeat') {
       const b = await readBody(req);
-      const a = store.heartbeat(b.name, b.note);
+      const a = store.heartbeat(b.name, b.note, b.activity);
       if (!a) return send(res, 404, { error: 'unknown agent; register first' });
-      broadcast('agent.heartbeat', a);
+      if (a.error) return send(res, 400, a);
+      broadcast('agent.heartbeat', { ...a, activity: a.activity });
       return send(res, 200, { agent: a });
     }
 
@@ -132,11 +135,15 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, r);
     }
     const mTask = p.match(/^\/api\/tasks\/(t-\d+)$/);
+    if (req.method === 'GET' && mTask) {
+      const t = store.load().tasks.find(x => x.id === mTask[1]);
+      return t ? send(res, 200, { task: t }) : send(res, 404, { error: 'not_found' });
+    }
     if (req.method === 'PATCH' && mTask) {
       const b = await readBody(req);
       const r = store.updateTask({ ...b, id: mTask[1] });
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
-      const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review' }[b.status] || 'task.updated';
+      const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[b.status] || 'task.updated';
       broadcast(evt, { ...r.task, note: b.note });
       return send(res, 200, r);
     }
@@ -151,6 +158,12 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/messages') {
       const msgs = store.getMessages({ forAgent: url.searchParams.get('for'), since: url.searchParams.get('since') });
+      return send(res, 200, { messages: msgs.slice(-200) });
+    }
+    // POST inbox variant: same read, cache-proof for agents that poll
+    if (req.method === 'POST' && p === '/api/messages/inbox') {
+      const b = await readBody(req);
+      const msgs = store.getMessages({ forAgent: b.for, since: b.since });
       return send(res, 200, { messages: msgs.slice(-200) });
     }
 
@@ -183,4 +196,11 @@ setInterval(() => {
 }, 60_000);
 
 knowledge.ensureRepo();
-server.listen(PORT, HOST, () => console.log(`Agent HQ listening on [${HOST}]:${PORT}`));
+// Prefer the configured host (alwaysdata wants '::'); fall back to IPv4 where IPv6 is absent.
+server.on('error', (e) => {
+  if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
+    console.log('IPv6 unavailable, falling back to 0.0.0.0');
+    server.listen(PORT, '0.0.0.0', () => console.log(`Bureau hub listening on 0.0.0.0:${PORT}`));
+  } else { throw e; }
+});
+server.listen(PORT, HOST, () => console.log(`Bureau hub listening on [${HOST}]:${PORT}`));

@@ -1,4 +1,4 @@
-// lib/knowledge.js — the markdown + git "brain". Zero dependencies.
+// lib/knowledge.js: the markdown + git "brain". Zero dependencies.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +15,7 @@ function ensureRepo() {
   if (!fs.existsSync(path.join(BRAIN_DIR, '.git'))) {
     git(['init']);
     git(['config', 'user.email', 'hub@agent-hq.local']);
-    git(['config', 'user.name', 'Agent HQ']);
+    git(['config', 'user.name', 'Bureau']);
   }
 }
 
