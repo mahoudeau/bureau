@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent HQ</title>
+<style>
+  /* Tokens (light + dark) */
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb; --ink: #0b0b0b; --ink2: #52514e; --muted: #898781;
+    --hairline: #e1e0d9; --border: rgba(11,11,11,.10);
+    --accent: #2a78d6; --good: #0ca30c; --warning: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19; --ink: #ffffff; --ink2: #c3c2b7; --muted: #898781;
+      --hairline: #2c2c2a; --border: rgba(255,255,255,.10);
+      --accent: #3987e5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--hairline); }
+  header h1 { font-size: 16px; margin: 0; letter-spacing: .2px; }
+  #conn { font-size: 12px; color: var(--ink2); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .dot.on { background: var(--good); }
+  main { display: grid; grid-template-columns: 260px 1fr 340px; gap: 16px; padding: 16px 20px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 1000px) { main { grid-template-columns: 1fr; } }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 4px 0 10px; font-weight: 600; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; }
+  /* Agents */
+  .agent .name { font-weight: 600; }
+  .agent .meta { color: var(--ink2); font-size: 12px; margin-top: 2px; }
+  .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px;
+           border: 1px solid var(--border); border-radius: 999px; color: var(--ink2); }
+  .badge .dot { width: 7px; height: 7px; }
+  .badge.active .dot { background: var(--good); }
+  .badge.idle .dot { background: var(--warning); }
+  .badge.offline .dot { background: var(--muted); }
+  /* Board */
+  #board { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: start; }
+  .col h3 { font-size: 12px; color: var(--ink2); margin: 0 0 8px; font-weight: 600; }
+  .task { border-left: 3px solid var(--muted); }
+  .task.queued { border-left-color: var(--muted); }
+  .task.claimed, .task.in_progress { border-left-color: var(--accent); }
+  .task.review { border-left-color: var(--warning); }
+  .task.done { border-left-color: var(--good); }
+  .task.failed { border-left-color: var(--critical); }
+  .task .t { font-weight: 600; font-size: 13px; }
+  .task .meta { font-size: 11.5px; color: var(--ink2); margin-top: 3px; }
+  /* Feed */
+  #feed { max-height: 78vh; overflow-y: auto; }
+  .evt { padding: 7px 0; border-bottom: 1px solid var(--hairline); font-size: 12.5px; }
+  .evt .ts { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; margin-right: 6px; }
+  .evt b { font-weight: 600; }
+  /* Forms */
+  form.newtask { display: flex; gap: 8px; margin-bottom: 14px; }
+  input, select, button, textarea { font: inherit; color: var(--ink); background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
+  input { flex: 1; }
+  button { cursor: pointer; background: var(--accent); color: #fff; border: none; font-weight: 600; }
+  .empty { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🧠 Agent HQ</h1>
+  <span id="conn"><span class="dot" id="conndot"></span><span id="conntext">connecting…</span></span>
+</header>
+<main>
+  <section>
+    <h2>Agents</h2>
+    <div id="agents" class="empty">No agents yet.</div>
+    <h2 style="margin-top:22px">Brain — recent commits</h2>
+    <div id="brain" class="empty">Nothing written yet.</div>
+  </section>
+  <section>
+    <h2>Tasks</h2>
+    <form class="newtask" id="newtask">
+      <input id="nt-title" placeholder="New task for the team…" required>
+      <select id="nt-prio"><option value="1">P1</option><option value="2">P2</option><option value="3" selected>P3</option></select>
+      <button>Add</button>
+    </form>
+    <div id="board"></div>
+  </section>
+  <section>
+    <h2>Activity</h2>
+    <div id="feed"></div>
+  </section>
+</main>
+<script>
+// This dashboard is served by YOUR hub (not a Claude artifact), so localStorage is fine here.
+let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('hq_token') || '';
+if (!TOKEN) TOKEN = prompt('Agent HQ token:') || '';
+localStorage.setItem('hq_token', TOKEN);
+const api = (p, opts={}) => fetch(p, { ...opts, headers: { 'authorization': 'Bearer ' + TOKEN, 'content-type': 'application/json', ...(opts.headers||{}) } }).then(r => { if (r.status === 401) { localStorage.removeItem('hq_token'); location.reload(); } return r.json(); });
+
+const COLS = [['queued','Queued'],['claimed','Claimed'],['in_progress','In progress'],['review','👀 Review'],['done','✅ Done'],['failed','❌ Failed']];
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const ago = iso => { const s = (Date.now() - new Date(iso)) / 1000;
+  return s < 60 ? Math.floor(s)+'s' : s < 3600 ? Math.floor(s/60)+'m' : s < 86400 ? Math.floor(s/3600)+'h' : Math.floor(s/86400)+'d'; };
+
+let state = { agents: [], tasks: [], log: [], brain: { recent: [] } };
+
+function agentStatus(a) {
+  const mins = (Date.now() - new Date(a.last_seen)) / 60000;
+  return mins < 5 ? 'active' : mins < 60 ? 'idle' : 'offline';
+}
+function render() {
+  const ag = document.getElementById('agents');
+  ag.className = state.agents.length ? '' : 'empty';
+  ag.innerHTML = state.agents.length ? state.agents.map(a => {
+    const st = agentStatus(a);
+    return `<div class="card agent"><div class="name">${esc(a.name)}
+      <span class="badge ${st}"><span class="dot"></span>${st}</span></div>
+      <div class="meta">${esc(a.kind)} · seen ${ago(a.last_seen)} ago${a.note ? ' · ' + esc(a.note) : ''}</div></div>`;
+  }).join('') : 'No agents yet.';
+
+  document.getElementById('board').innerHTML = COLS.map(([key, label]) => {
+    const ts = state.tasks.filter(t => t.status === key)
+      .sort((a,b) => a.priority - b.priority || b.created_at.localeCompare(a.created_at));
+    const shown = key === 'done' ? ts.slice(0, 8) : ts;
+    return `<div class="col"><h3>${label} · ${ts.length}</h3>` + shown.map(t =>
+      `<div class="card task ${t.status}"><div class="t">${esc(t.title)}</div>
+       <div class="meta">${t.id} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}</div></div>`
+    ).join('') + `</div>`;
+  }).join('');
+
+  const br = document.getElementById('brain');
+  br.className = state.brain.recent.length ? '' : 'empty';
+  br.innerHTML = state.brain.recent.length ? state.brain.recent.slice(0,8).map(c =>
+    `<div class="evt"><span class="ts">${esc(c.date.slice(5,16))}</span><b>${esc(c.author)}</b> ${esc(c.message)}</div>`).join('') : 'Nothing written yet.';
+
+  document.getElementById('feed').innerHTML = state.log.slice().reverse().map(e =>
+    `<div class="evt"><span class="ts">${esc(e.ts.slice(11,19))}</span>${fmtEvt(e)}</div>`).join('');
+}
+function fmtEvt(e) {
+  const who = e.assignee || e.name || e.from || e.author || '';
+  const what = e.title || e.file || e.body || e.note || '';
+  const label = { 'task.created':'📥 task created','task.claimed':'🏃 claimed','task.done':'✅ done','task.failed':'❌ failed',
+    'task.review':'👀 review','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online',
+    'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','message.human':'💬 human','knowledge.written':'🧠 brain write' }[e.type] || e.type;
+  return `${label} — <b>${esc(who)}</b> ${esc(String(what).slice(0,120))}`;
+}
+
+async function refresh() { state = await api('/api/state'); render(); }
+function connectSSE() {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(TOKEN));
+  es.onopen = () => { document.getElementById('conndot').classList.add('on'); document.getElementById('conntext').textContent = 'live'; };
+  es.onerror = () => { document.getElementById('conndot').classList.remove('on'); document.getElementById('conntext').textContent = 'reconnecting…'; };
+  es.onmessage = refresh;
+  ['task.created','task.claimed','task.done','task.failed','task.review','task.requeued','task.updated',
+   'agent.registered','agent.heartbeat','message.posted','message.human','knowledge.written']
+    .forEach(t => es.addEventListener(t, refresh));
+}
+document.getElementById('newtask').addEventListener('submit', async e => {
+  e.preventDefault();
+  const title = document.getElementById('nt-title').value.trim();
+  if (!title) return;
+  await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, priority: +document.getElementById('nt-prio').value, created_by: 'human' }) });
+  document.getElementById('nt-title').value = '';
+  refresh();
+});
+refresh(); connectSSE(); setInterval(refresh, 60000);
+</script>
+</body>
+</html>

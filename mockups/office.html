@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent HQ — The Office (mockup)</title>
+<style>
+  @font-face { font-family: 'px'; src: local('Courier New'); }
+  html, body { margin: 0; height: 100%; background: #14121f; overflow: hidden;
+               font-family: 'Press Start 2P', 'px', monospace; }
+  #stage { position: relative; width: 100vw; height: 100vh; display: flex;
+           align-items: center; justify-content: center; }
+  #wrap { position: relative; }
+  canvas { image-rendering: pixelated; display: block; }
+  .bubble {
+    position: absolute; transform: translate(-50%, -100%);
+    background: #fffef2; color: #2b2440; border: 2px solid #2b2440;
+    border-radius: 3px; padding: 5px 7px; font-size: 9px; line-height: 1.5;
+    white-space: nowrap; box-shadow: 2px 2px 0 rgba(0,0,0,.35);
+    pointer-events: none; transition: opacity .3s;
+  }
+  .bubble::after {
+    content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+    border: 4px solid transparent; border-top-color: #2b2440; border-bottom: 0;
+  }
+  .bubble .who { color: #7a4fd0; font-weight: bold; }
+  #hud {
+    position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 14px;
+    padding: 8px 12px; color: #cfc9ee; font-size: 10px; align-items: center;
+    text-shadow: 1px 1px 0 #000;
+  }
+  #hud .logo { color: #ffd23e; font-size: 12px; }
+  #hud .st { display: inline-flex; align-items: center; gap: 5px; }
+  #hud .sq { width: 8px; height: 8px; display: inline-block; border: 1px solid #000; }
+  #ticker {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px;
+    background: rgba(10, 8, 20, .85); color: #b8e6a3; font-size: 10px;
+    border-top: 2px solid #2b2440; text-shadow: 1px 1px 0 #000;
+    white-space: nowrap; overflow: hidden;
+  }
+  #ticker b { color: #ffd23e; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
+<div id="hud">
+  <span class="logo">AGENT&nbsp;HQ</span>
+  <span class="st"><span class="sq" style="background:#5ad05a"></span>ACTIVE</span>
+  <span class="st"><span class="sq" style="background:#ffd23e"></span>IDLE</span>
+  <span class="st"><span class="sq" style="background:#6b6580"></span>OFFLINE</span>
+  <span style="margin-left:auto; color:#8f88b0">MOCKUP · not wired to live events yet</span>
+</div>
+<div id="ticker">▸ booting office…</div>
+<script>
+/* =========================================================
+   Agent HQ — pixel office mockup.
+   Everything is drawn procedurally (no assets) at 320x180,
+   integer-scaled to the window. Later this page swaps its
+   scripted "events" array for the hub's live SSE stream.
+   ========================================================= */
+const W = 320, H = 180, TILE = 16;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+let SCALE = 4;
+function fit() {
+  SCALE = Math.max(2, Math.floor(Math.min(innerWidth / W, (innerHeight - 0) / H)));
+  cv.style.width = W * SCALE + 'px'; cv.style.height = H * SCALE + 'px';
+}
+fit(); addEventListener('resize', () => { fit(); });
+
+// ---------- palette ----------
+const P = {
+  night: '#14121f', wallTop: '#4a3f66', wall: '#6b5a8e', wallShade: '#584a78',
+  floorA: '#c9a06b', floorB: '#bd9260', floorLine: '#a87f52',
+  rug: '#7a4fd0', rugDark: '#6743b3',
+  glass: '#9fd7e8', glassHi: '#c9ecf6', frame: '#3a3153',
+  desk: '#8a5a33', deskTop: '#a06c3f', deskHi: '#b98049',
+  screenOn: '#8ef0c0', screenOff: '#3d3854', screenGlow: '#c4ffe2',
+  chair: '#41395c', chairHi: '#544a75',
+  board: '#f4f2e6', boardFrame: '#8a5a33',
+  ink: '#2b2440', white: '#fffef2',
+  plant: '#4f9e4f', plantDark: '#3c7c3c', pot: '#b06a3b',
+  coffee: '#d8d4e8', coffeeDark: '#8f88b0',
+  shelf: '#7d5230', shelfDark: '#65401f', bookA: '#d05a5a', bookB: '#5a7ad0', bookC: '#5ad05a', bookD: '#ffd23e',
+  cardQ: '#ffd23e', cardP: '#7ec4f0', cardR: '#f0a05a', cardD: '#8ee08e',
+  doorMat: '#d05a5a',
+};
+
+// ---------- tiny pixel helpers ----------
+function px(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w, h); }
+
+// ---------- room geometry (in px) ----------
+// Back wall band y:0..32. Interior walls for conference (right-top) and MM office (right-bottom).
+const ROOMS = {
+  confer: { x: 224, y: 32, w: 96, h: 64 },     // conference room, top-right
+  office: { x: 232, y: 112, w: 88, h: 68 },    // the boss's office, bottom-right
+};
+
+function drawWorld(t) {
+  // floor
+  for (let ty = 2; ty < 12; ty++)
+    for (let tx = 0; tx < 20; tx++) {
+      px(tx * TILE, ty * TILE, TILE, TILE, (tx + ty) % 2 ? P.floorA : P.floorB);
+      px(tx * TILE, ty * TILE + TILE - 1, TILE, 1, P.floorLine);
+    }
+  // back wall
+  px(0, 0, W, 26, P.wall); px(0, 0, W, 8, P.wallTop); px(0, 26, W, 6, P.wallShade);
+
+  // windows on back wall (night city!)
+  for (const wx of [116, 152, 188]) {
+    px(wx, 4, 26, 20, P.frame);
+    px(wx + 2, 6, 22, 16, '#1b2440');
+    // stars + skyline
+    px(wx + 4, 8, 1, 1, '#fff'); px(wx + 12, 10, 1, 1, '#fff'); px(wx + 19, 7, 1, 1, '#fff');
+    px(wx + 3, 15, 4, 7, '#2b3a63'); px(wx + 9, 12, 5, 10, '#2b3a63'); px(wx + 16, 14, 4, 8, '#2b3a63');
+    px(wx + 10, 14, 1, 1, '#ffd23e'); px(wx + 12, 16, 1, 1, '#ffd23e'); px(wx + 4, 17, 1, 1, '#ffd23e');
+  }
+
+  // ---- task whiteboard (the queue), top-left wall ----
+  px(8, 2, 88, 26, P.boardFrame);
+  px(10, 4, 84, 22, P.board);
+  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText('TASKS', 13, 10);
+  // columns of little cards: queued/doing/review/done
+  const cols = [[P.cardQ, 3], [P.cardP, 2], [P.cardR, 1], [P.cardD, 4]];
+  cols.forEach(([col, n], i) => {
+    for (let k = 0; k < n; k++) px(14 + i * 20, 12 + k * 4, 14, 3, col);
+  });
+
+  // ---- archive shelf, left-mid wall area ----
+  px(8, 40, 40, 34, P.shelfDark); px(10, 42, 36, 30, P.shelf);
+  for (let row = 0; row < 3; row++) {
+    px(10, 50 + row * 10, 36, 2, P.shelfDark);
+    const books = [P.bookA, P.bookB, P.bookD, P.bookC, P.bookB, P.bookA];
+    books.forEach((b, i) => px(12 + i * 5, 44 + row * 10, 3, 6, b));
+  }
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('BRAIN', 15, 80);
+
+  // ---- coffee corner, bottom-left ----
+  px(6, 148, 22, 26, P.coffeeDark); px(8, 150, 18, 12, P.coffee);
+  px(14, 154, 6, 5, '#5a3a22'); px(15, 160, 4, 8, '#3a3153');
+  // plant
+  px(34, 156, 10, 8, P.pot);
+  px(36, 144, 6, 12, P.plant); px(33, 148, 5, 7, P.plantDark); px(41, 147, 5, 8, P.plantDark);
+
+  // ---- three open-space desks ----
+  for (const d of DESKS) drawDesk(d, t);
+
+  // ---- conference room (top-right) ----
+  const c = ROOMS.confer;
+  px(c.x, c.y, 4, c.h, P.wallShade); px(c.x, c.y + c.h - 4, c.w, 4, P.wallShade);
+  px(c.x, c.y + c.h - 4, 24, 4, P.floorA); // door gap
+  // table + chairs
+  px(c.x + 26, c.y + 20, 44, 20, P.deskTop); px(c.x + 26, c.y + 36, 44, 4, P.desk);
+  for (const cx of [c.x + 30, c.x + 46, c.x + 62]) { px(cx, c.y + 10, 8, 6, P.chair); px(cx, c.y + 44, 8, 6, P.chair); }
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('MEET', c.x + 38, c.y + 32);
+
+  // ---- the boss's office (bottom-right) ----
+  const o = ROOMS.office;
+  px(o.x, o.y, 4, o.h, P.wallShade); px(o.x, o.y, o.w, 4, P.wallShade);
+  px(o.x, o.y + 34, 4, 22, P.floorA); // door gap in left wall
+  px(o.x - 10, o.y + 36, 10, 18, P.doorMat); px(o.x - 8, o.y + 38, 6, 14, '#e07a7a'); // door mat
+  px(o.x + 26, o.y + 22, 46, 16, P.deskTop); px(o.x + 26, o.y + 34, 46, 4, P.desk);
+  px(o.x + 40, o.y + 12, 12, 8, P.chair);
+  // nameplate + trophy
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('BOSS', o.x + 26, o.y + 48);
+  px(o.x + 66, o.y + 16, 4, 5, P.cardQ);
+  // review card bouncing at the door
+  const bounce = Math.floor(Math.sin(t / 250) * 2);
+  px(o.x - 8, o.y + 24 + bounce, 12, 9, P.cardR);
+  px(o.x - 6, o.y + 26 + bounce, 8, 1, P.ink); px(o.x - 6, o.y + 29 + bounce, 8, 1, P.ink);
+}
+
+// ---------- desks & agents ----------
+const DESKS = [
+  { x: 64, y: 96, name: 'NOVA' },
+  { x: 120, y: 96, name: 'SCOUT' },
+  { x: 176, y: 96, name: 'ARCHIE' },
+];
+function drawDesk(d, t) {
+  px(d.x, d.y, 40, 14, P.deskTop); px(d.x, d.y + 10, 40, 4, P.desk); px(d.x, d.y, 40, 2, P.deskHi);
+  // monitor (glows when its agent is active)
+  const ag = AGENTS.find(a => a.desk === d);
+  const on = ag && ag.state !== 'offline';
+  px(d.x + 14, d.y - 10, 14, 10, P.frame);
+  px(d.x + 15, d.y - 9, 12, 8, on ? P.screenOn : P.screenOff);
+  if (on && Math.floor(t / 400) % 2) px(d.x + 16, d.y - 8 + (Math.floor(t / 200) % 3) * 2, 8, 1, P.screenGlow);
+  px(d.x + 19, d.y - 1, 4, 1, P.frame);
+  // nameplate
+  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText(d.name, d.x + 2, d.y + 8);
+}
+
+// 12x16-ish sprite, drawn from simple rects. dir: 0 down, frame for leg swap.
+function drawSprite(a, t) {
+  const { x, y } = a.pos;
+  const f = a.walking ? Math.floor(t / 140) % 2 : 0;
+  const bob = a.walking ? 0 : (Math.floor(t / 500) % 2 ? 0 : -1); // idle breathing
+  const c = a.colors;
+  // shadow
+  px(x - 5, y + 13, 10, 2, 'rgba(0,0,0,.25)');
+  // legs
+  px(x - 4, y + 8, 3, 5 + (f ? 1 : 0), c.pants); px(x + 1, y + 8, 3, 6 - (f ? 1 : 0), c.pants);
+  // body
+  px(x - 5, y + bob, 10, 9, c.shirt); px(x - 5, y + bob, 10, 2, c.shirtHi);
+  // arms
+  px(x - 7, y + 1 + bob, 2, 6, c.shirt); px(x + 5, y + 1 + bob, 2, 6, c.shirt);
+  // head
+  px(x - 4, y - 8 + bob, 8, 8, c.skin);
+  // hair
+  px(x - 4, y - 9 + bob, 8, 3, c.hair); px(x - 5, y - 8 + bob, 2, 4, c.hair); px(x + 3, y - 8 + bob, 2, 4, c.hair);
+  // eyes (blink)
+  if (Math.floor(t / 1700) % 5 !== 4) { px(x - 2, y - 4 + bob, 1, 1, P.ink); px(x + 1, y - 4 + bob, 1, 1, P.ink); }
+  // status pixel above head
+  const sc = a.state === 'active' ? '#5ad05a' : a.state === 'idle' ? '#ffd23e' : '#6b6580';
+  px(x - 1, y - 13 + bob + Math.floor(Math.sin(t / 300 + x) * 1), 3, 3, sc);
+  // carried card
+  if (a.carry) px(x + 6, y + 2 + bob, 8, 6, a.carry);
+}
+
+// ---------- agents & scripted choreography ----------
+const AGENTS = [
+  { name: 'Nova',   colors: { hair: '#3a3153', skin: '#f0c8a0', shirt: '#5a7ad0', shirtHi: '#7e9ae6', pants: '#2b2440' },
+    desk: DESKS[0], state: 'active', pos: { x: 84, y: 124 }, walking: false, carry: null },
+  { name: 'Scout',  colors: { hair: '#d05a2a', skin: '#e8b088', shirt: '#f0a05a', shirtHi: '#f6bc82', pants: '#41395c' },
+    desk: DESKS[1], state: 'active', pos: { x: 60, y: 40 }, walking: false, carry: P.cardQ },
+  { name: 'Archie', colors: { hair: '#2b2440', skin: '#c89264', shirt: '#5ad07a', shirtHi: '#84e0a0', pants: '#2b2440' },
+    desk: DESKS[2], state: 'idle', pos: { x: 56, y: 90 }, walking: false, carry: null },
+];
+
+// waypoint walk helper
+function walkTo(a, tx, ty, speed = 0.045) {
+  a.target = { x: tx, y: ty }; a.walking = true; a.speed = speed;
+}
+function stepAgents(dt) {
+  for (const a of AGENTS) {
+    if (!a.target) continue;
+    const dx = a.target.x - a.pos.x, dy = a.target.y - a.pos.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1.5) { a.pos = { ...a.target }; a.target = null; a.walking = false; continue; }
+    // straight-line for mockup; A* comes with the real build
+    a.pos.x += (dx / dist) * a.speed * dt;
+    a.pos.y += (dy / dist) * a.speed * dt;
+  }
+}
+
+// ---------- scripted mock events (this array becomes the SSE feed later) ----------
+const bubbles = new Map(); // agent -> {el, until}
+function say(agent, html, ms = 4200) {
+  let b = bubbles.get(agent.name);
+  if (!b) {
+    const el = document.createElement('div'); el.className = 'bubble';
+    document.getElementById('wrap').appendChild(el);
+    b = { el }; bubbles.set(agent.name, b);
+  }
+  b.el.innerHTML = `<span class="who">${agent.name}</span> ${html}`;
+  b.el.style.opacity = 1; b.until = performance.now() + ms;
+}
+function tick(msg) { document.getElementById('ticker').innerHTML = '▸ ' + msg; }
+
+const SCRIPT = [
+  { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>fix Bitly export'); tick('🏃 <b>Nova</b> claimed t-42 · fix Bitly export (P1)'); } },
+  { at: 1200,  run: () => walkTo(AGENTS[1], 140, 124) },                     // Scout carries card from board to desk
+  { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it — scraping<br>3 sources'); tick('📥 <b>Scout</b> picked t-45 from the board'); } },
+  { at: 7500,  run: () => { say(AGENTS[0], 'tests green ✓'); tick('✏️ <b>Nova</b> · t-42: tests green'); } },
+  { at: 9000,  run: () => walkTo(AGENTS[2], 28, 88) },                        // Archie to the shelf
+  { at: 12000, run: () => { say(AGENTS[2], 'filing STATE.md 🧠'); tick('🧠 <b>Archie</b> wrote projects/trace/STATE.md'); } },
+  { at: 15000, run: () => { walkTo(AGENTS[0], 224, 140); AGENTS[0].carry = P.cardR; } },   // Nova takes work to review door
+  { at: 19500, run: () => { say(AGENTS[0], '<b>t-42</b> ready for<br>your review 👀'); tick('👀 <b>Nova</b> parked t-42 at your door — review needed'); } },
+  { at: 23000, run: () => { AGENTS[0].carry = null; walkTo(AGENTS[0], 84, 124); } },
+  { at: 24000, run: () => walkTo(AGENTS[2], 196, 124) },
+  { at: 26000, run: () => walkTo(AGENTS[1], 250, 60) },                       // Scout to conference
+  { at: 29500, run: () => { say(AGENTS[1], 'syncing with HQ<br>in the meet room'); tick('✉️ <b>Scout</b> → <b>Nova</b>: found the schema change'); } },
+  { at: 33000, run: () => { walkTo(AGENTS[1], 140, 124); } },
+  { at: 36000, run: () => { say(AGENTS[2], 'back at my desk'); tick('💓 heartbeats · 3 agents active · queue: 3 · review: 1'); } },
+  { at: 39000, run: () => { walkTo(AGENTS[2], 24, 158, 0.03); say(AGENTS[2], 'coffee ☕', 2500); } },
+  { at: 44000, run: () => walkTo(AGENTS[2], 196, 124) },
+];
+let scriptStart = performance.now(), fired = new Set();
+
+// ---------- main loop ----------
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(50, t - last); last = t;
+  // script
+  const st = t - scriptStart;
+  SCRIPT.forEach((s, i) => { if (st >= s.at && !fired.has(i)) { fired.add(i); s.run(); } });
+  if (st > 47000) { fired.clear(); scriptStart = t; } // loop the demo
+
+  stepAgents(dt);
+  ctx.clearRect(0, 0, W, H);
+  px(0, 0, W, H, P.night);
+  drawWorld(t);
+  // draw agents sorted by y for overlap
+  [...AGENTS].sort((a, b) => a.pos.y - b.pos.y).forEach(a => drawSprite(a, t));
+
+  // position bubbles (HTML overlay, crisp text)
+  const rect = cv.getBoundingClientRect(), wrap = document.getElementById('wrap');
+  wrap.style.width = rect.width + 'px'; wrap.style.height = rect.height + 'px';
+  for (const a of AGENTS) {
+    const b = bubbles.get(a.name);
+    if (!b) continue;
+    if (b.until && t > b.until) { b.el.style.opacity = 0; continue; }
+    b.el.style.left = (a.pos.x * SCALE) + 'px';
+    b.el.style.top = ((a.pos.y - 16) * SCALE) + 'px';
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// pixel font (nice-to-have; falls back silently if offline)
+const link = document.createElement('link'); link.rel = 'stylesheet';
+link.href = 'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap';
+document.head.appendChild(link);
+</script>
+</body>
+</html>
