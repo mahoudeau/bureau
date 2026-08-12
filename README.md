@@ -56,6 +56,7 @@ Plus `GET /api/events` (SSE) for anything that watches.
 - [docs/protocol.md](docs/protocol.md): the agent protocol, the vendor-neutrality guarantee
 - [docs/task-flows.md](docs/task-flows.md): how tasks get added and reviewed
 - [docs/office.md](docs/office.md): the pixel office design
+- [docs/design.md](docs/design.md): visual direction, knowns and unknowns
 - [mockups/office.html](mockups/office.html): static office mockup, open it in a browser
 
 ## License
