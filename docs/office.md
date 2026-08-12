@@ -44,8 +44,8 @@ approving = walks to the door and hands the card back; rejecting = card returns 
 the whiteboard with a red note).
 
 **Garnish backlog:** heartbeat monitor flicker, coffee-beans usage gauge (tokens as
-coffee; the team "runs out of coffee" near the cap), night mode when no sessions for
-hours, P1 failure = small wastebasket fire until re-queued.
+coffee; the team "runs out of coffee" near the cap), P1 failure = small wastebasket
+fire until re-queued. Day/night lighting is not garnish: `design.md` owns it.
 
 ## Design notes
 
@@ -56,7 +56,8 @@ hours, P1 failure = small wastebasket fire until re-queued.
   all encode the same thing.
 - **Tech:** single HTML page; hand-rolled canvas now (a game library later only if
   pathfinding/tilemaps get painful; the zero-dep rule is server-side only).
-  320×180 logical, integer-scaled, `image-rendering: pixelated`. Bubbles/ticker are
+  Small logical resolution, integer-scaled, `image-rendering: pixelated`; the
+  mockup uses 320×180, final size is open, see `design.md`. Bubbles/ticker are
   HTML overlays for crisp text (Press Start 2P, graceful fallback).
 - **Art:** currently 100% procedural (palette in the mockup source). Option later:
   free licensed 16-bit packs or custom sprites per agent tied to their brain profile.
