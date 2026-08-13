@@ -96,9 +96,9 @@
     <div id="brain" class="empty">Nothing written yet.</div>
   </section>
   <section>
-    <h2>Tasks</h2>
+    <h2>Missions</h2>
     <form class="newtask" id="newtask">
-      <input id="nt-title" placeholder="New task for the team…" required>
+      <input id="nt-title" placeholder="New mission for the team…" required>
       <select id="nt-prio"><option value="1">P1</option><option value="2">P2</option><option value="3" selected>P3</option></select>
       <button>Add</button>
     </form>
@@ -112,17 +112,17 @@
 <div id="overlay"><div id="detail"></div></div>
 <script>
 // This dashboard is served by your own hub, so localStorage is fine here.
-let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('hq_token') || '';
+let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('bureau_token') || '';
 if (!TOKEN) TOKEN = prompt('Bureau token:') || '';
-localStorage.setItem('hq_token', TOKEN);
-const api = (p, opts={}) => fetch(p, { ...opts, headers: { 'authorization': 'Bearer ' + TOKEN, 'content-type': 'application/json', ...(opts.headers||{}) } }).then(r => { if (r.status === 401) { localStorage.removeItem('hq_token'); location.reload(); } return r.json(); });
+localStorage.setItem('bureau_token', TOKEN);
+const api = (p, opts={}) => fetch(p, { ...opts, headers: { 'authorization': 'Bearer ' + TOKEN, 'content-type': 'application/json', ...(opts.headers||{}) } }).then(r => { if (r.status === 401) { localStorage.removeItem('bureau_token'); location.reload(); } return r.json(); });
 
 const COLS = [['queued','Queued'],['claimed','Claimed'],['in_progress','In progress'],['blocked','⏸ Blocked'],['review','👀 Review'],['done','✅ Done'],['failed','❌ Failed']];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const ago = iso => { const s = (Date.now() - new Date(iso)) / 1000;
   return s < 60 ? Math.floor(s)+'s' : s < 3600 ? Math.floor(s/60)+'m' : s < 86400 ? Math.floor(s/3600)+'h' : Math.floor(s/86400)+'d'; };
 
-let state = { agents: [], tasks: [], log: [], brain: { recent: [] } };
+let state = { agents: [], tasks: [], log: [], knowledge: { recent: [] } };
 
 function agentStatus(a) {
   const mins = (Date.now() - new Date(a.last_seen)) / 60000;
@@ -149,8 +149,8 @@ function render() {
   }).join('');
 
   const br = document.getElementById('brain');
-  br.className = state.brain.recent.length ? '' : 'empty';
-  br.innerHTML = state.brain.recent.length ? state.brain.recent.slice(0,8).map(c =>
+  br.className = state.knowledge.recent.length ? '' : 'empty';
+  br.innerHTML = state.knowledge.recent.length ? state.knowledge.recent.slice(0,8).map(c =>
     `<div class="evt"><span class="ts">${esc(c.date.slice(5,16))}</span><b>${esc(c.author)}</b> ${esc(c.message)}</div>`).join('') : 'Nothing written yet.';
 
   document.getElementById('feed').innerHTML = state.log.slice().reverse().map(e =>
@@ -161,7 +161,7 @@ function fmtEvt(e) {
   const what = e.title || e.file || e.body || e.note || '';
   const label = { 'task.created':'📥 task created','task.claimed':'🏃 claimed','task.done':'✅ done','task.failed':'❌ failed',
     'task.review':'👀 review','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online',
-    'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','message.human':'💬 human','knowledge.written':'🧠 brain write' }[e.type] || e.type;
+    'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','knowledge.written':'🧠 brain write' }[e.type] || e.type;
   return `${label} · <b>${esc(who)}</b> ${esc(String(what).slice(0,120))}`;
 }
 
@@ -172,7 +172,7 @@ function connectSSE() {
   es.onerror = () => { document.getElementById('conndot').classList.remove('on'); document.getElementById('conntext').textContent = 'reconnecting…'; };
   es.onmessage = refresh;
   ['task.created','task.claimed','task.done','task.failed','task.review','task.blocked','task.requeued','task.updated',
-   'agent.registered','agent.heartbeat','message.posted','message.human','knowledge.written']
+   'agent.registered','agent.heartbeat','message.posted','knowledge.written']
     .forEach(t => es.addEventListener(t, refresh));
 }
 // Task detail panel: full log and artifacts, review actions when parked in review.

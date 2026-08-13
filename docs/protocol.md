@@ -1,15 +1,10 @@
 # The agent protocol (generic core)
 
-**This document is the vendor-neutrality guarantee.** The hub speaks only this
-protocol. No vendor name (Claude, OpenAI, ...) may appear in hub core code, hub
-events, or office rendering logic. Vendor names live exclusively in `connectors/`.
-Rule of thumb: if deleting every connector still leaves a working system testable
-with curl, we're generic. The day the core imports a connector, we've failed.
+**This document is the vendor-neutrality guarantee.** The hub speaks only this protocol. No vendor name (Claude, OpenAI, ...) may appear in hub core code, hub events, or office rendering logic. Vendor names live exclusively in `connectors/`. Rule of thumb: if deleting every connector still leaves a working system testable with curl, we're generic. The day the core imports a connector, we've failed.
 
 ## What an agent is
 
-Anything that can make HTTP calls. No SDK, no library, no framework. The reference
-connector is **curl**. Everything below is the complete integration surface.
+Anything that can make HTTP calls. No SDK, no library, no framework. The reference connector is **curl**. Everything below is the complete integration surface.
 
 ## The six calls (+ the stream)
 
@@ -22,17 +17,17 @@ connector is **curl**. Everything below is the complete integration surface.
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
 | `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed) |
 
-Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office,
-mirrors). Auth: single Bearer token. All responses `Cache-Control: no-store`.
+Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office, mirrors). Auth: single Bearer token. All responses `Cache-Control: no-store`.
 
-`kind` is a free string used only for display/grouping (`cowork`, `claude-code`,
-`sdk`, `n8n`, `human`, ...). The hub attaches no behavior to it. Ever.
+Planned transport adapter: an `/mcp` endpoint (Streamable HTTP) exposing the same six calls as MCP tools, for AI apps that speak MCP but have no shell. Same protocol, different wire; the core does not change.
+
+Session guidance for connectors: a session is a shift, not the queue. Make every task self-contained (claim, work, write knowledge, update status, claim next) and keep state in the hub, never in session context. Leases turn dead sessions into requeued work; fresh sessions resume from the hub, not from memory.
+
+`kind` is a free string used only for display/grouping (`cowork`, `claude-code`, `sdk`, `n8n`, `human`, ...). The hub attaches no behavior to it. Ever.
 
 ## Generic activity vocabulary
 
-The stickiness trap isn't the API, it's the UI animating vendor event names. The
-office animates ONLY these hub-level verbs (sent via heartbeat `activity` or task
-log entries); every connector maps its native events into them:
+The stickiness trap isn't the API, it's the UI animating vendor event names. The office animates ONLY these hub-level verbs (sent via heartbeat `activity` or task log entries); every connector maps its native events into them:
 
 | Verb | Meaning | Office animation |
 |---|---|---|
@@ -45,16 +40,11 @@ log entries); every connector maps its native events into them:
 | `blocked` | waiting on external dependency | sits on the waiting bench |
 | `idle` | alive, no work | coffee machine / wander |
 
-(Example mapping, claude-code connector: `PostToolUse(Edit|Write)` → `editing`,
-`PostToolUse(Read|Grep|Glob)` → `reading`, `PostToolUse(Bash)` → `executing`,
-`Notification/permission` → `waiting_permission`, `Stop` → `idle`.)
+(Example mapping, claude-code connector: `PostToolUse(Edit|Write)` → `editing`, `PostToolUse(Read|Grep|Glob)` → `reading`, `PostToolUse(Bash)` → `executing`, `Notification/permission` → `waiting_permission`, `Stop` → `idle`.)
 
 ## Connectors
 
-A connector is any glue that (a) reports a runtime's activity into the protocol
-and/or (b) wakes agents up in that runtime. Connectors are optional, live in
-`connectors/<name>/`, and are one-directional dependencies: connectors know the
-hub; the hub never knows connectors.
+A connector is any glue that (a) reports a runtime's activity into the protocol and/or (b) wakes agents up in that runtime. Connectors are optional, live in `connectors/<name>/`, and are one-directional dependencies: connectors know the hub; the hub never knows connectors.
 
 | Connector | Report side | Wake side |
 |---|---|---|
@@ -65,22 +55,12 @@ hub; the hub never knows connectors.
 | `n8n` | HTTP nodes | n8n schedule triggers |
 | future: codex / gemini / cursor / ... | map their events → verbs | their schedulers |
 
-Wake-up is legitimately runtime-specific: the hub guarantees a durable queue (and
-later, optional outbound webhook "pokes"); *how* each runtime wakes is connector
-business.
+Wake-up is legitimately runtime-specific: the hub guarantees a durable queue (and later, optional outbound webhook "pokes"); *how* each runtime wakes is connector business.
 
 ## Conformance: the dummy agent
 
-`test/dummy-agent.sh`, a plain shell script that registers, heartbeats with each
-verb, claims a task, posts progress, writes knowledge, messages another agent, and
-parks work in review, using nothing but curl. It is the acceptance test for the
-core **and the standing proof of genericity**: the hub must be fully exercisable,
-and the office fully animated, by this script alone, before any connector exists.
-If a feature can't be reached by the dummy agent, the feature is designed wrong.
+`test/dummy-agent.sh`, a plain shell script that registers, heartbeats with each verb, claims a task, posts progress, writes knowledge, messages another agent, and parks work in review, using nothing but curl. It is the acceptance test for the core **and the standing proof of genericity**: the hub must be fully exercisable, and the office fully animated, by this script alone, before any connector exists. If a feature can't be reached by the dummy agent, the feature is designed wrong.
 
 ## Migration story
 
-Because the contract is this small, migrating between vendors means writing one
-connector, or none: self-reporting via curl works. The brain is markdown+git and
-moves anywhere. This document plus `docs/task-flows.md` is the complete onboarding
-for any future agent, human or machine.
+Because the contract is this small, migrating between vendors means writing one connector, or none: self-reporting via curl works. The brain is markdown+git and moves anywhere. This document plus `docs/task-flows.md` is the complete onboarding for any future agent, human or machine.

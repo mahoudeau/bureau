@@ -4,12 +4,12 @@
 # If a hub feature cannot be reached from here, the feature is designed wrong.
 # All fixture data is deliberately fake.
 #
-# Usage: HQ_URL=http://localhost:8100 HQ_TOKEN=devtoken ./test/dummy-agent.sh
+# Usage: BUREAU_URL=http://localhost:8100 BUREAU_TOKEN=devtoken ./test/dummy-agent.sh
 set -u
 
-HQ_URL="${HQ_URL:-http://localhost:8100}"
-HQ_TOKEN="${HQ_TOKEN:-devtoken}"
-AUTH="Authorization: Bearer $HQ_TOKEN"
+BUREAU_URL="${BUREAU_URL:-http://localhost:8100}"
+BUREAU_TOKEN="${BUREAU_TOKEN:-devtoken}"
+AUTH="Authorization: Bearer $BUREAU_TOKEN"
 JSON="Content-Type: application/json"
 PASS=0; FAIL=0
 
@@ -17,12 +17,12 @@ check () { # check <label> <haystack> <needle>
   if echo "$2" | grep -q "$3"; then PASS=$((PASS+1)); echo "  ok: $1"
   else FAIL=$((FAIL+1)); echo "  FAIL: $1"; echo "    wanted: $3"; echo "    got: $(echo "$2" | head -c 300)"; fi
 }
-api () { curl -s -X "$1" "$HQ_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
+api () { curl -s -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
 
 echo "1. health and auth"
-check "health" "$(curl -s "$HQ_URL/health")" '"ok": true'
-check "rejects bad token" "$(curl -s "$HQ_URL/api/state" -H 'Authorization: Bearer wrong')" 'unauthorized'
-check "no-store header" "$(curl -si "$HQ_URL/health" | tr -d '\r')" 'cache-control: no-store'
+check "health" "$(curl -s "$BUREAU_URL/health")" '"ok": true'
+check "rejects bad token" "$(curl -s "$BUREAU_URL/api/state" -H 'Authorization: Bearer wrong')" 'unauthorized'
+check "no-store header" "$(curl -si "$BUREAU_URL/health" | tr -d '\r')" 'cache-control: no-store'
 
 echo "2. register and heartbeat through every activity verb"
 check "register" "$(api POST /api/agents/register '{"name":"menace","kind":"dummy","capabilities":["curl"]}')" '"name": "menace"'
@@ -70,7 +70,7 @@ sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
 
 echo "9. the event stream speaks"
-EVENTS=$(curl -s -N -m 3 "$HQ_URL/api/events?token=$HQ_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
+EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
 check "SSE delivers heartbeat" "$EVENTS" 'agent.heartbeat'
 
 echo

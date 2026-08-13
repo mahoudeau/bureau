@@ -8,7 +8,7 @@ const WEBHOOK = process.env.DISCORD_WEBHOOK_URL || '';
 // Which event types are worth a Discord ping (keep the channel readable).
 const NOTABLE = new Set([
   'task.created', 'task.claimed', 'task.review', 'task.done', 'task.failed',
-  'agent.registered', 'message.human', 'knowledge.written',
+  'agent.registered', 'message.posted', 'knowledge.written',
 ]);
 
 function fmt(type, data) {
@@ -20,7 +20,8 @@ function fmt(type, data) {
     case 'task.failed':   return `❌ **Failed** · ${data.id}: ${data.title} · ${data.note || ''}`;
     case 'agent.registered': return `🤖 Agent online: **${data.name}** (${data.kind})`;
     case 'knowledge.written': return `🧠 ${data.author} wrote \`${data.file}\``;
-    case 'message.human': return `💬 **${data.from} → ${data.to}**: ${data.body}`;
+    // Only human-authored messages ping the channel; agent chatter stays out of Discord.
+    case 'message.posted': return data.from === 'human' ? `💬 **${data.from} → ${data.to}**: ${data.body}` : null;
     default: return null;
   }
 }

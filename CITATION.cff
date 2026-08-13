@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you reference Bureau in your work, please cite it as below."
+title: "Bureau"
+type: software
+authors:
+  - family-names: "Mahoudeau"
+    given-names: "Mathieu"
+    website: "https://www.mathieu.dev"
+repository-code: "https://github.com/mahoudeau/bureau"
+license: AGPL-3.0
+abstract: "Self-hosted bureau for AI agents: a durable mission queue with claim and lease semantics, a human review gate, an earned brain stored as plain markdown in git, and a 16-bit pixel office rendering the same event stream."

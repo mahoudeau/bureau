@@ -119,7 +119,7 @@ function drawWorld(t) {
   // ---- task whiteboard (the queue), top-left wall ----
   px(8, 2, 88, 26, P.boardFrame);
   px(10, 4, 84, 22, P.board);
-  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText('TASKS', 13, 10);
+  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText('MISSIONS', 13, 10);
   // columns of little cards: queued/doing/review/done
   const cols = [[P.cardQ, 3], [P.cardP, 2], [P.cardR, 1], [P.cardD, 4]];
   cols.forEach(([col, n], i) => {
@@ -257,7 +257,7 @@ function say(agent, html, ms = 4200) {
 function tick(msg) { document.getElementById('ticker').innerHTML = '▸ ' + msg; }
 
 const SCRIPT = [
-  { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>fix Bitly export'); tick('🏃 <b>Nova</b> claimed t-42 · fix Bitly export (P1)'); } },
+  { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>patch the roof pixels'); tick('🏃 <b>Nova</b> claimed t-42 · patch the roof pixels (P1)'); } },
   { at: 1200,  run: () => walkTo(AGENTS[1], 140, 124) },                     // Scout carries card from board to desk
   { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it, scraping<br>3 sources'); tick('📥 <b>Scout</b> picked t-45 from the board'); } },
   { at: 7500,  run: () => { say(AGENTS[0], 'tests green ✓'); tick('✏️ <b>Nova</b> · t-42: tests green'); } },

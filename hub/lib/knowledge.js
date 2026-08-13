@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const BRAIN_DIR = process.env.HQ_BRAIN_DIR || path.join(__dirname, '..', 'brain');
+const BRAIN_DIR = process.env.BUREAU_BRAIN_DIR || path.join(__dirname, '..', 'brain');
 
 function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: BRAIN_DIR, encoding: 'utf8', ...opts });
@@ -14,7 +14,7 @@ function ensureRepo() {
   fs.mkdirSync(BRAIN_DIR, { recursive: true });
   if (!fs.existsSync(path.join(BRAIN_DIR, '.git'))) {
     git(['init']);
-    git(['config', 'user.email', 'hub@agent-hq.local']);
+    git(['config', 'user.email', 'hub@bureau.local']);
     git(['config', 'user.name', 'Bureau']);
   }
 }
@@ -40,7 +40,7 @@ function writeKnowledge({ file, content, mode, author, message }) {
   const rel = path.relative(BRAIN_DIR, abs);
   git(['add', rel]);
   try {
-    git(['commit', '-m', message || `update ${rel}`, '--author', `${author || 'agent'} <${(author || 'agent').replace(/\s+/g, '.')}@agent-hq.local>`]);
+    git(['commit', '-m', message || `update ${rel}`, '--author', `${author || 'agent'} <${(author || 'agent').replace(/\s+/g, '.')}@bureau.local>`]);
   } catch (e) {
     // "nothing to commit" (identical content) is fine
     if (!/nothing to commit/i.test(String(e.stdout || e.message))) throw e;

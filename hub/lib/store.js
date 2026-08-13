@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const DATA_DIR = process.env.HQ_DATA_DIR || path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0 };

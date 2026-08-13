@@ -1,15 +1,10 @@
 # The pixel office
 
-A 16-bit office rendered in the browser, where each agent is a sprite and every hub
-event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub
-does not know it exists. Served at `/office`; the flat dashboard stays at `/` as the
-information-dense view. Mockup: `mockups/office.html` (procedural canvas pixel art,
-no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
+A 16-bit office rendered in the browser, where each agent is a sprite and every hub event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub does not know it exists. Served at `/office`; the flat dashboard stays at `/` as the information-dense view. Mockup: `mockups/office.html` (procedural canvas pixel art, no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
 
 ## Why it exists
 
-A board says what is *true*; the office shows what is *happening*, readably, to
-anyone. Both views consume the same events; neither adds hub complexity.
+A board says what is *true*; the office shows what is *happening*, readably, to anyone. Both views consume the same events; neither adds hub complexity.
 
 ## Event → choreography mapping (core)
 
@@ -31,36 +26,16 @@ anyone. Both views consume the same events; neither adds hub complexity.
 
 ## Rooms & furniture
 
-**v1 map:** front door, open space with named desks + monitors, task whiteboard
-(card colors = queued/doing/review/done), Brain bookshelf, meeting room, the boss's
-office (door + mat + bouncing review card), coffee corner, windows (night city),
-**alarm lamp + failure bin**, **server room** (one rack unit per recurring schedule),
-**shipping wall** ("shipped this week: N").
+**v1 map:** front door, open space with named desks + monitors, task whiteboard (card colors = queued/doing/review/done), Brain bookshelf, meeting room, the boss's office (door + mat + bouncing review card), coffee corner, windows (night city), **alarm lamp + failure bin**, **server room** (one rack unit per recurring schedule), **shipping wall** ("shipped this week: N").
 
-**Phase 2:** waiting bench (requires the `blocked` status; bubble shows "waiting on:
-X"), pigeonhole mail wall (envelopes pile up for offline agents, collected on next
-session), **operator sprite** (appears when the operator views the dashboard;
-approving = walks to the door and hands the card back; rejecting = card returns to
-the whiteboard with a red note).
+**Phase 2:** waiting bench (uses the `blocked` status; bubble shows "waiting on: X"), pigeonhole mail wall (envelopes pile up for offline agents, collected on next session), **boss sprite** (appears when the boss views the dashboard; approving = walks to the door and hands the card back; rejecting = card returns to the whiteboard with a red note).
 
-**Garnish backlog:** heartbeat monitor flicker, coffee-beans usage gauge (tokens as
-coffee; the team "runs out of coffee" near the cap), P1 failure = small wastebasket
-fire until re-queued. Day/night lighting is not garnish: `design.md` owns it.
+**Garnish backlog:** heartbeat monitor flicker, coffee-beans usage gauge (tokens as coffee; the team "runs out of coffee" near the cap), P1 failure = small wastebasket fire until re-queued. Day/night lighting is not garnish: `design.md` owns it.
 
 ## Design notes
 
-- **Bursty events need theatre.** Real agents emit 5 events in a minute then nothing
-  for 2 h. A per-sprite action queue with durations stretches bursts into readable
-  choreography; idle loops fill the gaps.
-- **Status is never color-alone**: status pixel above heads + monitor state + position
-  all encode the same thing.
-- **Tech:** single HTML page; hand-rolled canvas now (a game library later only if
-  pathfinding/tilemaps get painful; the zero-dep rule is server-side only).
-  Small logical resolution, integer-scaled, `image-rendering: pixelated`; the
-  mockup uses 320×180, final size is open, see `design.md`. Bubbles/ticker are
-  HTML overlays for crisp text (Press Start 2P, graceful fallback).
-- **Art:** currently 100% procedural (palette in the mockup source). Option later:
-  free licensed 16-bit packs or custom sprites per agent tied to their brain profile.
-- **v1 punts:** straight-line walking (no A*), one shared body with palette swaps,
-  no click interactions. Planned clicks: desk → agent profile; office door → review
-  inbox; whiteboard → task board.
+- **Bursty events need theatre.** Real agents emit 5 events in a minute then nothing for 2 h. A per-sprite action queue with durations stretches bursts into readable choreography; idle loops fill the gaps.
+- **Status is never color-alone**: status pixel above heads + monitor state + position all encode the same thing.
+- **Tech:** single HTML page; hand-rolled canvas now (a game library later only if pathfinding/tilemaps get painful; the zero-dep rule is server-side only). Small logical resolution, integer-scaled, `image-rendering: pixelated`; the mockup uses 320×180, final size is open, see `design.md`. Bubbles/ticker are HTML overlays for crisp text (Press Start 2P, graceful fallback).
+- **Art:** currently 100% procedural (palette in the mockup source). Option later: free licensed 16-bit packs or custom sprites per agent tied to their brain profile.
+- **v1 punts:** straight-line walking (no A*), one shared body with palette swaps, no click interactions. Planned clicks: desk → agent profile; office door → review inbox; whiteboard → task board.

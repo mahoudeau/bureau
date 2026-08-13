@@ -10,8 +10,8 @@ const discord = require('./lib/discord');
 
 const PORT = process.env.PORT || 8100;
 const HOST = process.env.HOST || '::';           // alwaysdata expects IPv6 bind
-const TOKEN = process.env.HQ_TOKEN || '';
-if (!TOKEN) console.warn('⚠️  HQ_TOKEN not set: API is UNPROTECTED. Set it in production.');
+const TOKEN = process.env.BUREAU_TOKEN || '';
+if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set it in production.');
 
 // ---------- SSE ----------
 const sseClients = new Set();
@@ -86,7 +86,7 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, {
         agents: s.agents, tasks: s.tasks,
         log: s.log.slice(-200),
-        brain: { recent: knowledge.recentCommits(15) },
+        knowledge: { recent: knowledge.recentCommits(15) },
         now: new Date().toISOString(),
       });
     }
@@ -153,7 +153,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       if (!b.from || !b.body) return send(res, 400, { error: 'from and body required' });
       const m = store.postMessage(b);
-      broadcast(b.from === 'human' ? 'message.human' : 'message.posted', m);
+      broadcast('message.posted', m);
       return send(res, 200, { message: m });
     }
     if (req.method === 'GET' && p === '/api/messages') {
