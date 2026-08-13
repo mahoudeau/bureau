@@ -35,6 +35,15 @@
   /* Agents */
   .agent .name { font-weight: 600; }
   .agent .meta { color: var(--ink2); font-size: 12px; margin-top: 2px; }
+  /* Projects */
+  .proj { display: flex; align-items: baseline; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--hairline);
+          font-size: 13px; cursor: pointer; }
+  .proj:hover .pname { color: var(--accent); }
+  .proj.active .pname { color: var(--accent); font-weight: 700; }
+  .proj .pname { font-weight: 600; }
+  .proj .pcounts { color: var(--ink2); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .proj .pedit { text-decoration: none; opacity: .5; }
+  .proj .pedit:hover { opacity: 1; }
   .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px;
            border: 1px solid var(--border); border-radius: 999px; color: var(--ink2); }
   .badge .dot { width: 7px; height: 7px; }
@@ -92,15 +101,16 @@
   <section>
     <h2>Agents</h2>
     <div id="agents" class="empty">No agents yet.</div>
+    <h2 style="margin-top:22px">Projects <a href="#" onclick="addProject();return false" title="new project" style="color:var(--accent);text-decoration:none;font-size:14px">＋</a></h2>
+    <div id="projects" class="empty">No projects yet.</div>
     <h2 style="margin-top:22px">Brain · recent commits</h2>
     <div id="brain" class="empty">Nothing written yet.</div>
   </section>
   <section>
-    <h2>Missions</h2>
+    <h2 id="missions-title">Missions</h2>
     <form class="newtask" id="newtask">
       <input id="nt-title" placeholder="New mission for the team…" required>
-      <input id="nt-project" placeholder="project" list="projects-list" style="flex:0 1 130px" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}" title="letters, digits, dot, dash, underscore">
-      <datalist id="projects-list"></datalist>
+      <select id="nt-project" style="flex:0 1 130px"></select>
       <select id="nt-prio"><option value="1">P1</option><option value="2">P2</option><option value="3" selected>P3</option></select>
       <button>Add</button>
     </form>
@@ -124,7 +134,9 @@ const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;
 const ago = iso => { const s = (Date.now() - new Date(iso)) / 1000;
   return s < 60 ? Math.floor(s)+'s' : s < 3600 ? Math.floor(s/60)+'m' : s < 86400 ? Math.floor(s/3600)+'h' : Math.floor(s/86400)+'d'; };
 
-let state = { agents: [], tasks: [], log: [], knowledge: { recent: [] } };
+let state = { agents: [], tasks: [], log: [], projects: [], knowledge: { recent: [] } };
+let projectFilter = null;
+const projLabel = id => (state.projects.find(pj => pj.id === id) || {}).label || id;
 
 function agentStatus(a) {
   const mins = (Date.now() - new Date(a.last_seen)) / 60000;
@@ -140,8 +152,12 @@ function render() {
       <div class="meta">${esc(a.kind)}${a.activity ? ' · ' + esc(a.activity) : ''} · seen ${ago(a.last_seen)} ago${a.note ? ' · ' + esc(a.note) : ''}</div></div>`;
   }).join('') : 'No agents yet.';
 
+  document.getElementById('missions-title').innerHTML = projectFilter
+    ? `Missions · ${esc(projLabel(projectFilter))} <a href="#" onclick="toggleProjectFilter(null);return false" style="color:var(--accent);text-decoration:none">✕</a>`
+    : 'Missions';
+  const visible = projectFilter ? state.tasks.filter(t => t.project === projectFilter) : state.tasks;
   document.getElementById('board').innerHTML = COLS.map(([key, label]) => {
-    const ts = state.tasks.filter(t => t.status === key)
+    const ts = visible.filter(t => t.status === key)
       .sort((a,b) => a.priority - b.priority || b.created_at.localeCompare(a.created_at));
     const shown = key === 'done' ? ts.slice(0, 8) : ts;
     return `<div class="col"><h3>${label} · ${ts.length}</h3>` + shown.map(t =>
@@ -150,8 +166,37 @@ function render() {
     ).join('') + `</div>`;
   }).join('');
 
-  document.getElementById('projects-list').innerHTML =
-    [...new Set(state.tasks.map(t => t.project).filter(Boolean))].map(pj => `<option value="${esc(pj)}">`).join('');
+  // Projects pane: registry plus per-project counts; click to filter, click again to clear.
+  const byProj = {};
+  for (const pj of (state.projects || [])) {
+    const id = typeof pj === 'string' ? pj : pj && pj.id; // tolerate a stale server mid-deploy
+    if (id) byProj[id] = { queued: 0, active: 0, review: 0, closed: 0 };
+  }
+  for (const t of state.tasks) {
+    // Count into registered projects only: deleted projects keep their closed
+    // missions on the board, but never resurrect as pane rows.
+    const b = t.project && byProj[t.project];
+    if (!b) continue;
+    if (t.status === 'queued') b.queued++;
+    else if (t.status === 'review') b.review++;
+    else if (t.status === 'done' || t.status === 'failed') b.closed++;
+    else b.active++;
+  }
+  if (projectFilter && !byProj[projectFilter]) projectFilter = null;
+  const ids = Object.keys(byProj).sort();
+  const sel = document.getElementById('nt-project');
+  const keep = projectFilter || sel.value;
+  sel.innerHTML = ids.map(n => `<option value="${esc(n)}"${n === (keep || 'general') ? ' selected' : ''}>${esc(projLabel(n))}</option>`).join('');
+  const pr = document.getElementById('projects');
+  pr.className = ids.length ? '' : 'empty';
+  pr.innerHTML = ids.length ? ids.map(n => {
+    const b = byProj[n];
+    return `<div class="proj${projectFilter === n ? ' active' : ''}" onclick="toggleProjectFilter('${esc(n)}')">
+      <span class="pname">${esc(projLabel(n))}</span>
+      <a href="#" class="pedit" title="edit label" onclick="event.stopPropagation();editProjectLabel('${esc(n)}');return false">✏️</a>
+      <a href="#" class="pedit" title="delete (needs no open missions)" onclick="event.stopPropagation();deleteProject('${esc(n)}');return false">🗑</a>
+      <span class="pcounts">${b.queued}q · ${b.active}w · ${b.review}r · ${b.closed}✓</span></div>`;
+  }).join('') : 'No projects yet.';
 
   const br = document.getElementById('brain');
   br.className = state.knowledge.recent.length ? '' : 'empty';
@@ -165,7 +210,7 @@ function fmtEvt(e) {
   const who = e.assignee || e.name || e.from || e.author || '';
   const what = e.title || e.file || e.body || e.note || '';
   const label = { 'task.created':'📥 task created','task.claimed':'🏃 claimed','task.done':'✅ done','task.failed':'❌ failed',
-    'task.review':'👀 review','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online','project.renamed':'🏷 project renamed',
+    'task.review':'👀 review','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online','project.renamed':'🏷 project renamed','project.created':'🏷 project created','project.deleted':'🏷 project deleted',
     'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','knowledge.written':'🧠 brain write' }[e.type] || e.type;
   return `${label} · <b>${esc(who)}</b> ${esc(String(what).slice(0,120))}`;
 }
@@ -177,7 +222,7 @@ function connectSSE() {
   es.onerror = () => { document.getElementById('conndot').classList.remove('on'); document.getElementById('conntext').textContent = 'reconnecting…'; };
   es.onmessage = refresh;
   ['task.created','task.claimed','task.done','task.failed','task.review','task.blocked','task.requeued','task.updated',
-   'agent.registered','agent.heartbeat','message.posted','knowledge.written','project.renamed']
+   'agent.registered','agent.heartbeat','message.posted','knowledge.written','project.renamed','project.created','project.deleted']
     .forEach(t => es.addEventListener(t, refresh));
 }
 // Task detail panel: full log and artifacts, review actions when parked in review.
@@ -205,7 +250,7 @@ async function openTask(id) {
     <div class="actions"><button class="ghost" onclick="reviewTask('${t.id}','queued')">↩️ Re-queue</button></div>` : '';
   el.innerHTML = `
     <h3>${esc(t.title)}</h3>
-    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(t.project)} <a href="#" onclick="renameProject('${esc(t.project)}');return false" title="rename project">✏️</a>` : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
+    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(projLabel(t.project))}` : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
     ${t.body ? `<div class="body">${esc(t.body)}</div>` : ''}
     ${arts}
     <div style="margin-top:8px">${logs}</div>
@@ -223,10 +268,31 @@ async function reviewTask(id, status) {
 document.getElementById('overlay').addEventListener('click', e => {
   if (e.target.id === 'overlay') e.target.classList.remove('open');
 });
-async function renameProject(from) {
-  const to = (prompt(`Rename project "${from}" to:`, from) || '').trim();
-  if (!to || to === from) return;
-  const r = await api('/api/projects/rename', { method: 'POST', body: JSON.stringify({ from, to }) });
+function toggleProjectFilter(name) {
+  projectFilter = (name && projectFilter !== name) ? name : null;
+  // Filtering also selects the quick-add project: new missions land where you are looking.
+  if (projectFilter) document.getElementById('nt-project').value = projectFilter;
+  render();
+}
+async function addProject() {
+  const label = (prompt('New project name:') || '').trim();
+  if (!label) return;
+  const r = await api('/api/projects', { method: 'POST', body: JSON.stringify({ label }) });
+  if (r.error) { alert(r.error); return; }
+  projectFilter = r.project.id;
+  refresh();
+}
+async function deleteProject(id) {
+  if (!confirm(`Delete project "${projLabel(id)}"? Closed missions keep their history; the brain is untouched.`)) return;
+  const r = await api('/api/projects/' + id, { method: 'DELETE' });
+  if (r.error) { alert(r.error); return; }
+  if (projectFilter === id) projectFilter = null;
+  refresh();
+}
+async function editProjectLabel(id) {
+  const label = (prompt(`New label for "${projLabel(id)}":`, projLabel(id)) || '').trim();
+  if (!label || label === projLabel(id)) return;
+  const r = await api('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify({ label }) });
   if (r.error) { alert(r.error); return; }
   document.getElementById('overlay').classList.remove('open');
   refresh();
@@ -236,8 +302,8 @@ document.getElementById('newtask').addEventListener('submit', async e => {
   e.preventDefault();
   const title = document.getElementById('nt-title').value.trim();
   if (!title) return;
-  const project = document.getElementById('nt-project').value.trim();
-  await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, ...(project ? { project } : {}), priority: +document.getElementById('nt-prio').value, created_by: 'human' }) });
+  const project = document.getElementById('nt-project').value || 'general';
+  await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, project, priority: +document.getElementById('nt-prio').value, created_by: 'human' }) });
   document.getElementById('nt-title').value = '';
   refresh();
 });

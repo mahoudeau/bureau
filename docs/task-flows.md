@@ -2,7 +2,7 @@
 
 ## Adding tasks: four doors, one queue
 
-1. **Dashboard quick-add**: title, project (defaults to `general`; autocompleted from existing projects), priority. Works from a phone. Projects can be renamed from any mission's detail panel; the rename carries every mission and moves the brain folder with its git history.
+1. **Dashboard quick-add**: title, project (a dropdown of registered projects, `general` by default), priority. Works from a phone. Projects live in the Projects pane: create with any human name (a path-safe id is derived: "Trace Bingo" becomes `trace-bingo`), relabel freely, filter the board per project, delete when no missions are open. Deleting touches neither closed history nor the brain, and closed missions never resurrect a deleted project. The deep id-rename API also exists and moves the brain folder with its git history.
 2. **Any agent session**: "add these three tasks to the hub" → the session POSTs via curl or its connector.
 3. **Raw curl** from anywhere: `curl -X POST $BUREAU_URL/api/tasks -H "Authorization: Bearer $BUREAU_TOKEN" -d '{"title":"…","priority":1}'`
 4. **Later, a chat command channel** (e.g. Discord): commands accepted from the boss's user ID only.

@@ -152,7 +152,7 @@ const server = http.createServer(async (req, res) => {
       store.expireLeases();
       const s = store.load();
       return send(res, 200, {
-        agents: s.agents, tasks: s.tasks,
+        agents: s.agents, tasks: s.tasks, projects: s.projects || [],
         log: s.log.slice(-200),
         knowledge: { recent: knowledge.recentCommits(15) },
         now: new Date().toISOString(),
@@ -197,9 +197,35 @@ const server = http.createServer(async (req, res) => {
 
     // ----- projects -----
     if (req.method === 'GET' && p === '/api/projects') {
+      const s = store.load();
       const counts = {};
-      for (const t of store.load().tasks) if (t.project) counts[t.project] = (counts[t.project] || 0) + 1;
-      return send(res, 200, { projects: Object.entries(counts).map(([name, tasks]) => ({ name, tasks })) });
+      for (const t of s.tasks) if (t.project) counts[t.project] = (counts[t.project] || 0) + 1;
+      return send(res, 200, { projects: s.projects.map(pj => ({ ...pj, tasks: counts[pj.id] || 0 })) });
+    }
+    if (req.method === 'POST' && p === '/api/projects') {
+      const b = await readBody(req);
+      const label = b.label || b.name;
+      if (!label) return send(res, 400, { error: 'label required' });
+      const r = store.createProject(label, b.id);
+      if (r.error) return send(res, 400, r);
+      if (r.exists) return send(res, 409, { error: 'project already exists', project: r.project });
+      broadcast('project.created', { note: `${r.project.label} (${r.project.id})` });
+      return send(res, 200, r);
+    }
+    const mProj = p.match(/^\/api\/projects\/([A-Za-z0-9._-]+)$/);
+    if (req.method === 'PATCH' && mProj) {
+      const b = await readBody(req);
+      if (!b.label) return send(res, 400, { error: 'label required' });
+      const pj = store.setProjectLabel(mProj[1], b.label);
+      if (!pj) return send(res, 404, { error: 'not_found' });
+      broadcast('project.renamed', { note: `${pj.id} relabeled: ${pj.label}` });
+      return send(res, 200, { project: pj });
+    }
+    if (req.method === 'DELETE' && mProj) {
+      const r = store.deleteProject(mProj[1]);
+      if (r.error) return send(res, r.error === 'not_found' ? 404 : 409, r);
+      broadcast('project.deleted', { note: mProj[1] });
+      return send(res, 200, r);
     }
     if (req.method === 'POST' && p === '/api/projects/rename') {
       const b = await readBody(req);

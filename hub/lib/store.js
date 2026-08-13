@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
-const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0 };
+const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
 let state = null;
 
@@ -19,6 +19,14 @@ function load() {
     state = structuredClone(EMPTY);
   }
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
+  // Projects grew from plain names to {id, label}; migrate old state transparently.
+  state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
+  // Self-heal: any project with OPEN missions is registered (pre-registry data included).
+  // Closed missions do not resurrect deliberately deleted projects.
+  for (const t of state.tasks)
+    if (t.project && t.status !== 'done' && t.status !== 'failed' && !state.projects.some(pj => pj.id === t.project))
+      state.projects.push({ id: t.project, label: t.project });
+  state.projects.sort((a, b) => a.id.localeCompare(b.id));
   return state;
 }
 
@@ -115,7 +123,46 @@ const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_inpu
 // Project names become brain paths (projects/<name>/...), so they stay path-safe.
 const PROJECT_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}$/;
 
+// Free-text label to path-safe id: "Chasse aux Trésors" → "chasse-aux-tresors".
+function slugify(label) {
+  return String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 40);
+}
+
+function createProject(label, id) {
+  const s = load();
+  id = id || slugify(label);
+  if (!PROJECT_RE.test(id)) return { error: 'label produces an empty or invalid id' };
+  if (s.projects.some(p => p.id === id)) return { exists: true, project: s.projects.find(p => p.id === id) };
+  const project = { id, label: String(label || id) };
+  s.projects.push(project);
+  s.projects.sort((a, b) => a.id.localeCompare(b.id));
+  save();
+  return { created: true, project };
+}
+
+function deleteProject(id) {
+  const s = load();
+  if (!s.projects.some(p => p.id === id)) return { error: 'not_found' };
+  const open = s.tasks.filter(t => t.project === id && t.status !== 'done' && t.status !== 'failed').length;
+  if (open) return { error: `project has ${open} open mission(s); finish or move them first` };
+  s.projects = s.projects.filter(p => p.id !== id);
+  save();
+  // Closed missions keep their project id for history; the brain folder is never touched.
+  return { deleted: true };
+}
+
+function setProjectLabel(id, label) {
+  const s = load();
+  const p = s.projects.find(x => x.id === id);
+  if (!p) return null;
+  p.label = String(label);
+  save();
+  return p;
+}
+
 function createTask({ title, body, priority, project, created_by }) {
+  if (project) createProject(project, project); // tasks can only live in registered projects
   const t = {
     id: nextId('t'),
     title: String(title || 'untitled'),
@@ -141,7 +188,10 @@ function renameProject(from, to) {
   const s = load();
   let n = 0;
   for (const t of s.tasks) if (t.project === from) { t.project = to; n++; }
-  if (n) save();
+  const dupe = s.projects.some(p => p.id === to);
+  s.projects = s.projects.filter(p => !(p.id === from && dupe)).map(p => (p.id === from ? { ...p, id: to } : p));
+  s.projects.sort((a, b) => a.id.localeCompare(b.id));
+  save();
   return n;
 }
 
@@ -256,6 +306,6 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, logEvent, upsertAgent, heartbeat, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
-  renameProject, findByViewToken, PROJECT_RE,
+  renameProject, createProject, setProjectLabel, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };
