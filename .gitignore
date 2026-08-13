@@ -4,5 +4,4 @@ data/
 brain/
 .DS_Store
 *.log
-HANDOVER-claude-code.md
-docs-internal/
+bureau-internal/
