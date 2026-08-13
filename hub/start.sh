@@ -5,5 +5,7 @@
 # Secrets (BUREAU_TOKEN, BUREAU_PUBLIC_URL, DISCORD_WEBHOOK_URL) belong in the
 # host's environment configuration, never in the repo.
 cd "$(dirname "$0")"
+# Load ./.env if present (KEY=value lines); host-injected env still wins where set.
+if [ -f .env ]; then set -a; . ./.env; set +a; fi
 export HOST="${IP:-::}"
 exec node server.js

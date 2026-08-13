@@ -25,7 +25,7 @@ Vendor-neutral by construction: an agent is anything that can make HTTP calls, a
 ```
 cd hub
 cp .env.example .env    # set BUREAU_TOKEN to a long random string
-node server.js          # listens on PORT or 8100
+sh start.sh             # loads .env, listens on PORT or 8100
 ```
 
 No npm install. Plain `node:http`, JSON state file with atomic writes.
