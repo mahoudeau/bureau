@@ -61,7 +61,7 @@ Extra frontmatter fields and grammar rules. In other tools they are inert custom
 
 ## The linter
 
-`brain-lint` (ships with the hub) checks: frontmatter schema per compartment · provenance coverage in knowledge/ and recipes/ · link integrity (no dangling wikilinks in authoritative compartments) · lineage completeness across attic/ · belief-status transitions (no validated without sources) · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
+`brain-lint` ships with the hub: `node hub/tools/brain-lint.js <brain-dir>`, zero dependencies, Apache-2.0, exit 1 on errors. v0 enforces the frontmatter schema, provenance, dangling links, and attic lineage; belief-status and freshness are warnings. The full contract it grows into: frontmatter schema per compartment · provenance coverage in knowledge/ and recipes/ · link integrity (no dangling wikilinks in authoritative compartments) · lineage completeness across attic/ · belief-status transitions (no validated without sources) · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
 
 ## Interoperability
 
