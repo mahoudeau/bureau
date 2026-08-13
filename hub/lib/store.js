@@ -2,6 +2,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -160,6 +161,9 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
     // blocked keeps its assignee but pauses the lease, so it never auto-requeues
     if (status === 'done' || status === 'failed' || status === 'review' || status === 'blocked') t.lease_until = null;
     if (status === 'queued') { t.assignee = null; t.lease_until = null; }
+    // Capability links exist exactly while the task sits in review; any transition out consumes them.
+    if (status === 'review') t.review_links = makeReviewLinks();
+    else delete t.review_links;
   }
   if (lease_minutes) t.lease_until = new Date(Date.now() + (+lease_minutes) * 60000).toISOString();
   if (priority !== undefined) t.priority = +priority;
@@ -169,6 +173,27 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
   save();
   return { task: t };
+}
+
+// ---- Review capability links ----
+// Single-use by construction: updateTask clears review_links on any transition out of review.
+function makeReviewLinks() {
+  const exp = new Date(Date.now() + 7 * 86400_000).toISOString();
+  return {
+    approve: { token: crypto.randomBytes(16).toString('hex'), exp },
+    sendback: { token: crypto.randomBytes(16).toString('hex'), exp },
+  };
+}
+
+function findByReviewToken(token) {
+  const s = load();
+  for (const t of s.tasks) {
+    const l = t.review_links;
+    if (!l) continue;
+    if (l.approve.token === token) return { task: t, action: 'done', exp: l.approve.exp };
+    if (l.sendback.token === token) return { task: t, action: 'queued', exp: l.sendback.exp };
+  }
+  return null;
 }
 
 // ---- Messages ----
@@ -191,6 +216,6 @@ function getMessages({ forAgent, since }) {
 
 module.exports = {
   load, save, logEvent, upsertAgent, heartbeat,
-  createTask, claimTask, updateTask, expireLeases,
+  createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };

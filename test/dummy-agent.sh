@@ -58,9 +58,22 @@ check "append state" "$(api POST /api/knowledge '{"file":"projects/demo/STATE.md
 check "read back" "$(api GET '/api/knowledge?file=agents/menace.md')" 'dummy conformance agent'
 check "git log has author" "$(api GET /api/state)" '"author": "menace"'
 
-echo "7. review gate: park, then the human approves"
+echo "7. review gate: park, send back via capability link, approve via capability link"
 check "park in review" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"review","note":"ready for sign-off"}')" '"review"'
-check "human approves" "$(api PATCH "/api/tasks/$TID" '{"agent":"human","status":"done","note":"approved"}')" '"done"'
+DETAIL=$(api GET "/api/tasks/$TID")
+check "review links issued" "$DETAIL" 'review_links'
+SB_TOKEN=$(echo "$DETAIL" | grep -A2 '"sendback"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "link page renders without acting" "$(curl -s "$BUREAU_URL/r/$SB_TOKEN")" 'Send back'
+check "still in review after GET" "$(api GET "/api/tasks/$TID")" '"review"'
+check "sendback without note refused" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$SB_TOKEN" --data 'note=')" '400'
+check "sendback with note re-queues" "$(curl -s -X POST "$BUREAU_URL/r/$SB_TOKEN" --data-urlencode 'note=more beans, fewer pixels')" 'Sent back'
+check "note reached the log" "$(api GET "/api/tasks/$TID")" 'more beans, fewer pixels'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TID\"}" > /dev/null
+api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"review","note":"fixed per the note"}' > /dev/null
+AP_TOKEN=$(api GET "/api/tasks/$TID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "approve via link" "$(curl -s -X POST "$BUREAU_URL/r/$AP_TOKEN")" 'Approved'
+check "task is done" "$(api GET "/api/tasks/$TID")" '"done"'
+check "used link is dead" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$AP_TOKEN")" '410'
 
 echo "8. lease expiry re-queues abandoned work"
 T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3,"project":"demo"}')

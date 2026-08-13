@@ -17,6 +17,8 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 - **Approve** → status `done` (office: card to shipping wall)
 - **Send back** → status `queued` with the boss's note attached; the agent reads the note as its correction on next claim (office: card back to whiteboard + red note)
 
+**Review from anywhere:** when `BUREAU_PUBLIC_URL` is set, the review ping carries two links, approve and send back. Each opens a small confirmation page served by the hub: approve is one tap; send back asks for the note, which stays required. Links are mission-scoped, single-use, and expire after 7 days.
+
 **Chat fallback:** tell any connected agent session "approve t-42" / "send t-42 back, the tone is wrong" and it PATCHes the hub.
 
 ## Statuses

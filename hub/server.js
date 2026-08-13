@@ -46,6 +46,20 @@ function readBody(req) {
     req.on('error', reject);
   });
 }
+function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function sendPage(res, code, title, bodyHtml) {
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bureau · review</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:480px;margin:12vh auto;padding:0 20px;color:#111}h1{font-size:18px}textarea{width:100%;min-height:90px;font:inherit;padding:8px;box-sizing:border-box}button{font:inherit;font-weight:600;padding:10px 18px;border:none;border-radius:8px;background:#2a78d6;color:#fff;cursor:pointer}p.err{color:#c22}</style></head><body><h1>${title}</h1>${bodyHtml}</body></html>`;
+  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.end(html);
+}
+function reviewForm(task, action, token, err) {
+  const noteField = action === 'queued'
+    ? `<p>A note is required: the agent reads it as its correction.</p><textarea name="note" placeholder="What should change?"></textarea>`
+    : '';
+  const verb = action === 'done' ? 'Approve' : 'Send back';
+  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><form method="POST" action="/r/${token}">${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
+}
+
 function authed(req, url) {
   if (!TOKEN) return true;
   const h = req.headers['authorization'] || '';
@@ -66,6 +80,35 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
     }
     if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
+
+    // ----- review capability links (the token IS the auth; GET renders, POST acts) -----
+    // GET must never mutate: chat clients unfurl links, and a side-effecting GET
+    // would let a preview fetch approve a mission.
+    const mReview = p.match(/^\/r\/([a-f0-9]{32})$/);
+    if (mReview) {
+      const found = store.findByReviewToken(mReview[1]);
+      if (!found || found.task.status !== 'review')
+        return sendPage(res, 410, 'Link no longer valid', '<p>This link was already used, or the mission has moved on.</p>');
+      if (found.exp < new Date().toISOString())
+        return sendPage(res, 410, 'Link expired', '<p>This link has expired. Review the mission from the dashboard.</p>');
+      const { task, action } = found;
+      if (req.method === 'GET')
+        return sendPage(res, 200, action === 'done' ? 'Approve this mission?' : 'Send this mission back?', reviewForm(task, action, mReview[1]));
+      if (req.method === 'POST') {
+        const raw = await new Promise((resolve, reject) => {
+          let d = ''; req.on('data', c => { d += c; if (d.length > 1e5) req.destroy(); });
+          req.on('end', () => resolve(d)); req.on('error', reject);
+        });
+        const note = (new URLSearchParams(raw).get('note') || '').trim();
+        if (action === 'queued' && !note)
+          return sendPage(res, 400, 'Send this mission back?', reviewForm(task, action, mReview[1], 'The note is required.'));
+        const r = store.updateTask({ id: task.id, agent: 'human', status: action, note: note || 'approved via link' });
+        if (r.error) return sendPage(res, 400, 'Something went wrong', `<p>${escHtml(r.error)}</p>`);
+        broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' });
+        return sendPage(res, 200, action === 'done' ? 'Approved' : 'Sent back',
+          `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
+      }
+    }
 
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     if (!authed(req, url)) return send(res, 401, { error: 'unauthorized' });
