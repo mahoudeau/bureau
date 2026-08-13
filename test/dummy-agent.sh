@@ -122,6 +122,23 @@ echo "9. the event stream speaks"
 EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
 check "SSE delivers heartbeat" "$EVENTS" 'agent.heartbeat'
 
+echo "10. the MCP door: same bureau, no shell required"
+MURL=$(api GET /api/mcp | grep -o '"url": "[^"]*"' | cut -d'"' -f4)
+mcp () { curl -s -X POST "$MURL" -H "Content-Type: application/json" -d "$1"; }
+check "connector url revealed to the token holder" "$MURL" '/mcp/'
+check "initialize negotiates" "$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"conformance","version":"0"}}}')" '"protocolVersion"'
+check "initialized notification gets 202" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$MURL" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}')" '202'
+check "tools listed" "$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')" 'create_mission'
+check "whoami answers as consul" "$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"whoami","arguments":{}}}')" 'consul'
+check "unknown project refused over MCP" "$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"x","project":"nonexistent"}}}')" 'unknown project'
+MC=$(mcp '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"Check the MCP door hinges","project":"general","priority":3}}}')
+check "mission created over MCP" "$MC" 'Check the MCP door hinges'
+MID=$(echo "$MC" | grep -o 't-[0-9]*' | head -1)
+check "mission started over MCP" "$(mcp "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"start_mission\",\"arguments\":{\"id\":\"$MID\",\"note\":\"testing hinges\"}}}")" 'in_progress'
+check "knowledge written over MCP" "$(mcp '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"write_knowledge","arguments":{"file":"projects/general/STATE.md","content":"- MCP door checked (fake)","mode":"append","message":"general: mcp check"}}}')" 'STATE.md'
+mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"status\":\"done\",\"note\":\"hinges fine\"}}}" > /dev/null
+check "bad capability token is 404" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "${MURL%/*}/000000000000000000000000000000000000000000000000" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":9,"method":"ping"}')" '404'
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ] && echo "CONFORMANT: the hub is fully drivable by curl." || echo "NOT CONFORMANT."

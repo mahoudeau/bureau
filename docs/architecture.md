@@ -84,6 +84,7 @@ Connectors are the vendor glue; the hub never knows them (see `protocol.md`).
 
 - **Editor sessions** (e.g. Claude Code): a hook script reports activity verbs automatically; MCP tools cover intentional acts (claim, update, message, write knowledge).
 - **Cloud/scheduled sessions**: no install needed, the hub is plain HTTP, so sessions use curl. A recurring scheduled task with a standing prompt ("fetch your queued tasks and inbox; if there is work, claim, do, report, complete or park in review") turns the queue into an engine that runs unattended.
+- **Chat apps with no shell** (desktop or web assistants): the hub's `/mcp` door. One capability URL in the app's connector settings, and every conversation can open missions, post progress, and file knowledge under the same rules; the server's own instructions teach the session the shift discipline.
 - **Anything else**: register, claim, post updates, write knowledge. Six calls, documented in `protocol.md` and the README.
 
 ## 5. Security, deliberately boring

@@ -21,7 +21,7 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 
 Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office, mirrors). Auth: single Bearer token. All responses `Cache-Control: no-store`.
 
-Planned transport adapter: an `/mcp` endpoint (Streamable HTTP) exposing the same six calls as MCP tools, for AI apps that speak MCP but have no shell. Same protocol, different wire; the core does not change.
+Second wire, same protocol: the hub speaks MCP (Streamable HTTP, stateless) at `/mcp/<token>`, for AI apps that have no shell. The capability URL is the auth; `GET /api/mcp` (Bearer) reveals it, and pasting it into a chat app's connector settings is the whole setup. Tools mirror the calls above (whoami, list_projects, list_missions, create_mission, start_mission, update_mission, write_knowledge, read_knowledge), project ids are validated against the registry, and the server's instructions teach the session the shift discipline. MCP is an open protocol: this is a transport adapter, not a vendor leak; the core does not change.
 
 Projects are the unit of concurrency: each has a `capacity` (default 1), and claim-without-id serves only missions from projects with a free slot, so a pool of identical workers spreads across projects instead of stacking on one. `blocked` and `review` missions do not occupy a slot. When missions exist but every project is at capacity, claim answers `all_busy` (distinct from `queue_empty`); workers treat both as the end of the shift. Claim-by-id bypasses the capacity check: an explicit id is deliberate.
 

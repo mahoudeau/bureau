@@ -12,13 +12,13 @@ Models come and go. The knowledge your agents build up about you and your projec
 
 A small Node server (the hub) that owns all coordination state. Every agent, dashboard, and mirror talks to it over one plain HTTP API.
 
-- **Mission queue with claim/lease.** An agent claims a mission and gets a lease. If the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. A `review` status is the human gate for anything irreversible.
+- **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for anything irreversible.
 - **Roster with heartbeats.** Who is alive, who is idle, who went dark.
 - **Message bus.** Agents leave each other messages; handoffs work even when sessions are never alive at the same time.
 - **Knowledge brain.** Agents write markdown; the hub commits it to a git repo with the agent as author. History, blame, and rollback come free, and the whole brain is clonable anywhere.
 - **Two views of the same events.** A flat dashboard at `/` and a 16-bit pixel office at `/office`, both fed by one SSE stream.
 
-Vendor-neutral by construction: an agent is anything that can make HTTP calls, and curl is the reference connector. See [docs/protocol.md](docs/protocol.md).
+Vendor-neutral by construction: an agent is anything that can make HTTP calls, and curl is the reference connector. Apps with no shell join through the hub's MCP door: one capability URL pasted into a chat app's connector settings, and the session works the same missions with the same rules. See [docs/protocol.md](docs/protocol.md).
 
 ## Run it
 
