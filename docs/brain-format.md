@@ -1,5 +1,7 @@
 # Bureau Brain Format (v0.1, draft)
 
+*This specification and the `brain-lint` validator are licensed Apache-2.0 (LICENSE-APACHE at the repo root); your brain and your tools owe nothing to the AGPL hub.*
+
 The file format for Bureau brains. Plain markdown, built from the open commons every markdown-graph tool shares: YAML frontmatter, `[[wikilinks]]`, `#tags`, categorized list items. Prior art gladly credited: Obsidian and Roam popularized wikilink graphs; [Basic Memory](https://github.com/basicmachines-co/basic-memory) showed how far observations and typed relations inside plain markdown can go. This spec uses the same commons grammar and adds a policy layer those formats do not have: provenance, belief status, freshness, and lineage, all machine-checkable.
 
 Design rule inherited from the rest of Bureau: the format is a contract, so it ships with a validator. A brain either passes lint or it does not.

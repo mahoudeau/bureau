@@ -1,5 +1,7 @@
 # The agent protocol (generic core)
 
+*This specification is licensed Apache-2.0 (LICENSE-APACHE at the repo root); implement it in anything. The hub itself is AGPL-3.0.*
+
 **This document is the vendor-neutrality guarantee.** The hub speaks only this protocol. No vendor name (Claude, OpenAI, ...) may appear in hub core code, hub events, or office rendering logic. Vendor names live exclusively in `connectors/`. Rule of thumb: if deleting every connector still leaves a working system testable with curl, we're generic. The day the core imports a connector, we've failed.
 
 ## What an agent is

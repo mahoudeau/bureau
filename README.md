@@ -55,4 +55,4 @@ Plus `GET /api/events` (SSE) for anything that watches.
 
 ## License
 
-AGPL-3.0. Self-host it freely; if you run a modified version as a service, share your changes.
+Two tiers, on purpose. The hub is AGPL-3.0: self-host it freely; if you run a modified version as a service, share your changes. The parts meant to spread are Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)): the protocol spec, the Brain Format spec, `brain-lint`, and future `connectors/` and `skills/`. Embed those anywhere, no strings attached.
