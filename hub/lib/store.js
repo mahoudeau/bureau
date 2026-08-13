@@ -237,12 +237,13 @@ function claimTask({ id, agent, lease_minutes }) {
       if (x.status === 'claimed' || x.status === 'in_progress') active[x.project] = (active[x.project] || 0) + 1;
     const capOf = pid => { const pj = s.projects.find(x => x.id === pid); return (pj && pj.capacity) || 1; };
     const queued = s.tasks
-      .filter(x => x.status === 'queued')
+      .filter(x => x.status === 'queued' && (!x.reserved_for || x.reserved_for === agent))
       .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at));
     if (!queued.length) return { error: 'queue_empty' };
     t = queued.find(x => (active[x.project] || 0) < capOf(x.project));
     if (!t) return { error: 'all_busy' };
   }
+  delete t.reserved_for; // any claim (owner, or explicit by id) clears the reservation
   t.status = 'claimed';
   t.assignee = agent;
   const mins = Number.isFinite(+lease_minutes) ? +lease_minutes : 120;
@@ -256,6 +257,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
+  const prevStatus = t.status, prevAssignee = t.assignee;
   if (status) {
     if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;
@@ -265,6 +267,15 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
     // Capability links exist exactly while the task sits in review; any transition out consumes them.
     if (status === 'review') t.review_links = makeReviewLinks();
     else delete t.review_links;
+    // Same pattern for blocked: an answer link, so the boss can reply from any channel.
+    if (status === 'blocked') t.answer_link = { token: crypto.randomBytes(16).toString('hex'), exp: new Date(Date.now() + 7 * 86400_000).toISOString() };
+    else delete t.answer_link;
+    // Shift workers are interchangeable; the envoy is not. An answered mission
+    // whose asker was not a cowork worker re-queues reserved for that asker.
+    if (status === 'queued' && prevStatus === 'blocked' && prevAssignee) {
+      const asker = s.agents.find(a => a.name === prevAssignee);
+      if (!asker || asker.kind !== 'cowork') t.reserved_for = prevAssignee;
+    }
   }
   if (lease_minutes) t.lease_until = new Date(Date.now() + (+lease_minutes) * 60000).toISOString();
   if (priority !== undefined) t.priority = +priority;
@@ -290,9 +301,11 @@ function findByReviewToken(token) {
   const s = load();
   for (const t of s.tasks) {
     const l = t.review_links;
-    if (!l) continue;
-    if (l.approve.token === token) return { task: t, action: 'done', exp: l.approve.exp };
-    if (l.sendback.token === token) return { task: t, action: 'queued', exp: l.sendback.exp };
+    if (l) {
+      if (l.approve.token === token) return { task: t, action: 'done', exp: l.approve.exp, kind: 'approve' };
+      if (l.sendback.token === token) return { task: t, action: 'queued', exp: l.sendback.exp, kind: 'sendback' };
+    }
+    if (t.answer_link && t.answer_link.token === token) return { task: t, action: 'queued', exp: t.answer_link.exp, kind: 'answer' };
   }
   return null;
 }

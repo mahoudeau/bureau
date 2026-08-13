@@ -162,7 +162,7 @@ function render() {
     const shown = key === 'done' ? ts.slice(0, 8) : ts;
     return `<div class="col"><h3>${label} · ${ts.length}</h3>` + shown.map(t =>
       `<div class="card task ${t.status}" onclick="openTask('${t.id}')"><div class="t">${esc(t.title)}</div>
-       <div class="meta">${t.id} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}</div></div>`
+       <div class="meta">${t.id} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}${t.reserved_for ? ' · 🔒 ' + esc(t.reserved_for) : ''}</div></div>`
     ).join('') + `</div>`;
   }).join('');
 
@@ -246,7 +246,10 @@ async function openTask(id) {
       <button onclick="reviewTask('${t.id}','done')">✅ Approve</button>
       <button class="ghost" onclick="reviewTask('${t.id}','queued')">↩️ Send back</button>
     </div>` : '';
-  const requeue = (t.status === 'blocked' || t.status === 'failed') ? `
+  const requeue = t.status === 'blocked' ? `
+    <div class="actions"><input id="rv-note" placeholder="Your answer to the worker (required)"></div>
+    <div class="actions"><button onclick="reviewTask('${t.id}','queued')">💬 Answer &amp; re-queue</button></div>` :
+  t.status === 'failed' ? `
     <div class="actions"><button class="ghost" onclick="reviewTask('${t.id}','queued')">↩️ Re-queue</button></div>` : '';
   el.innerHTML = `
     <h3>${esc(t.title)}</h3>

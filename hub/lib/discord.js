@@ -7,7 +7,7 @@ const WEBHOOK = process.env.DISCORD_WEBHOOK_URL || '';
 
 // Which event types are worth a Discord ping (keep the channel readable).
 const NOTABLE = new Set([
-  'task.created', 'task.claimed', 'task.review', 'task.done', 'task.failed',
+  'task.created', 'task.claimed', 'task.review', 'task.blocked', 'task.done', 'task.failed',
   'agent.registered', 'message.posted', 'knowledge.written',
 ]);
 
@@ -24,12 +24,22 @@ function fmt(type, data) {
         msg += `\n✅ Approve: ${base}/r/${data.review_links.approve.token}\n↩️ Send back: ${base}/r/${data.review_links.sendback.token}`;
       return msg + view;
     }
+    case 'task.blocked': {
+      let msg = `❓ **Waiting on the boss** · ${data.id}: ${data.title}${data.note ? ` · ${data.note}` : ''}`;
+      if (base && data.answer_link) msg += `\n💬 Answer: ${base}/r/${data.answer_link.token}`;
+      return msg + view;
+    }
     case 'task.done':     return `✅ **Done** · ${data.id}: ${data.title} (by ${data.assignee || '?'})${view}`;
     case 'task.failed':   return `❌ **Failed** · ${data.id}: ${data.title} · ${data.note || ''}${view}`;
     case 'agent.registered': return `🤖 Agent online: **${data.name}** (${data.kind})`;
     case 'knowledge.written': return `🧠 ${data.author} wrote \`${data.file}\``;
-    // Only human-authored messages ping the channel; agent chatter stays out of Discord.
-    case 'message.posted': return data.from === 'human' ? `💬 **${data.from} → ${data.to}**: ${data.body}` : null;
+    // The boss's messages ping, and so does anything addressed to the boss;
+    // agent-to-agent chatter stays out of Discord.
+    case 'message.posted': {
+      if (data.from === 'human') return `💬 **${data.from} → ${data.to}**: ${data.body}`;
+      if (data.to === 'boss' || data.to === 'human') return `📨 **${data.from} to the boss**: ${data.body}`;
+      return null;
+    }
     default: return null;
   }
 }

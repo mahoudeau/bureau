@@ -43,10 +43,20 @@ check "claim carries a lease" "$CLAIM" '"lease_until"'
 check "progress note" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"in_progress","note":"located the machine"}')" '"in_progress"'
 check "artifact" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","artifact":{"label":"bean report","url":"https://example.com/beans"},"note":"filed the bean report"}')" 'bean report'
 
-echo "4. blocked pauses the lease, then work resumes"
+echo "4. blocked pauses the lease; the boss answers via capability link; work resumes"
 check "blocked" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"blocked","note":"waiting on: bean delivery"}')" '"blocked"'
 check "blocked clears lease" "$(api GET "/api/tasks/$TID")" '"lease_until": null'
-check "resume with fresh lease" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"in_progress","lease_minutes":60,"note":"beans arrived"}')" '"in_progress"'
+AN_TOKEN=$(api GET "/api/tasks/$TID" | grep -A2 '"answer_link"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "answer link issued" "$AN_TOKEN" '[a-f0-9]'
+check "answer form renders" "$(curl -s "$BUREAU_URL/r/$AN_TOKEN")" 'Answer'
+check "empty answer refused" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$AN_TOKEN" --data 'note=')" '400'
+check "answer re-queues the mission" "$(curl -s -X POST "$BUREAU_URL/r/$AN_TOKEN" --data-urlencode 'note=beans are in the cupboard, second shelf')" 'Answer filed'
+check "answer reached the log" "$(api GET "/api/tasks/$TID")" 'second shelf'
+check "answered mission is reserved for the asker" "$(api GET "/api/tasks/$TID")" '"reserved_for": "menace"'
+check "strangers cannot claim a reserved mission" "$(api POST /api/tasks/claim '{"agent":"stranger"}')" 'queue_empty'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TID\"}" > /dev/null
+check "owner claim clears the reservation" "$(api GET "/api/tasks/$TID" | grep -c reserved_for || true)" '0'
+check "resume with fresh lease" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"in_progress","lease_minutes":60,"note":"beans found, resuming"}')" '"in_progress"'
 
 echo "5. messages: broadcast, directed, POST inbox"
 api POST /api/messages '{"from":"menace","to":"*","body":"coffee situation under control"}' > /dev/null
