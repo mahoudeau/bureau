@@ -32,6 +32,8 @@ done
 check "rejects unknown verb" "$(api POST /api/agents/heartbeat '{"name":"menace","activity":"vibing"}')" 'unknown activity'
 
 echo "3. tasks: create, claim, progress, artifact"
+check "unknown project refused with the registry" "$(api POST /api/tasks '{"title":"x","project":"nonexistent"}')" '"projects"'
+api POST /api/projects '{"name":"demo"}' > /dev/null
 T1=$(api POST /api/tasks '{"title":"Refill the coffee machine","body":"The beans are decorative pixels. Replace them.","priority":2,"project":"demo"}')
 check "create" "$T1" '"status": "queued"'
 TID=$(echo "$T1" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')

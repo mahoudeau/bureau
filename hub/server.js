@@ -190,6 +190,12 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       if (!b.title) return send(res, 400, { error: 'title required' });
       if (b.project && !store.PROJECT_RE.test(b.project)) return send(res, 400, { error: 'bad project name: letters, digits, dot, dash, underscore, max 40' });
+      // Projects are chosen deliberately, never invented by a typo: unknown ids are
+      // refused with the registry, so every client (dashboard, workers, future
+      // connectors) must pick from what exists or create the project first.
+      const wanted = b.project || 'general';
+      if (!store.load().projects.some(pj => pj.id === wanted))
+        return send(res, 400, { error: `unknown project: ${wanted}`, projects: store.load().projects.map(pj => pj.id) });
       const t = store.createTask(b);
       broadcast('task.created', t);
       return send(res, 200, { task: t });

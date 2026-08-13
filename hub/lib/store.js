@@ -167,7 +167,6 @@ function updateProject(id, { label, capacity }) {
 }
 
 function createTask({ title, body, priority, project, created_by }) {
-  if (project) createProject(project, project); // tasks can only live in registered projects
   const t = {
     id: nextId('t'),
     title: String(title || 'untitled'),
