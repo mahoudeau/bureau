@@ -19,8 +19,9 @@ function load() {
     state = structuredClone(EMPTY);
   }
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
-  // Projects grew from plain names to {id, label}; migrate old state transparently.
+  // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
   state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
+  for (const pj of state.projects) if (!Number.isInteger(pj.capacity) || pj.capacity < 1) pj.capacity = 1;
   // Self-heal: any project with OPEN missions is registered (pre-registry data included).
   // Closed missions do not resurrect deliberately deleted projects.
   for (const t of state.tasks)
@@ -134,7 +135,7 @@ function createProject(label, id) {
   id = id || slugify(label);
   if (!PROJECT_RE.test(id)) return { error: 'label produces an empty or invalid id' };
   if (s.projects.some(p => p.id === id)) return { exists: true, project: s.projects.find(p => p.id === id) };
-  const project = { id, label: String(label || id) };
+  const project = { id, label: String(label || id), capacity: 1 };
   s.projects.push(project);
   s.projects.sort((a, b) => a.id.localeCompare(b.id));
   save();
@@ -152,11 +153,15 @@ function deleteProject(id) {
   return { deleted: true };
 }
 
-function setProjectLabel(id, label) {
+function updateProject(id, { label, capacity }) {
   const s = load();
   const p = s.projects.find(x => x.id === id);
   if (!p) return null;
-  p.label = String(label);
+  if (label !== undefined) p.label = String(label);
+  if (capacity !== undefined) {
+    if (!Number.isInteger(+capacity) || +capacity < 1 || +capacity > 9) return { error: 'capacity must be an integer from 1 to 9' };
+    p.capacity = +capacity;
+  }
   save();
   return p;
 }
@@ -225,11 +230,19 @@ function claimTask({ id, agent, lease_minutes }) {
     if (!t) return { error: 'not_found' };
     if (t.status !== 'queued') return { error: `not claimable (status: ${t.status})` };
   } else {
-    // Highest-priority queued task (lowest number wins, then oldest).
-    t = s.tasks
+    // Projects are the unit of concurrency: claim-without-id serves only projects
+    // with free capacity (active = claimed or in_progress, whoever holds them).
+    // blocked and review missions do not occupy a slot. Claim-by-id bypasses this.
+    const active = {};
+    for (const x of s.tasks)
+      if (x.status === 'claimed' || x.status === 'in_progress') active[x.project] = (active[x.project] || 0) + 1;
+    const capOf = pid => { const pj = s.projects.find(x => x.id === pid); return (pj && pj.capacity) || 1; };
+    const queued = s.tasks
       .filter(x => x.status === 'queued')
-      .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at))[0];
-    if (!t) return { error: 'queue_empty' };
+      .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at));
+    if (!queued.length) return { error: 'queue_empty' };
+    t = queued.find(x => (active[x.project] || 0) < capOf(x.project));
+    if (!t) return { error: 'all_busy' };
   }
   t.status = 'claimed';
   t.assignee = agent;
@@ -306,6 +319,6 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, logEvent, upsertAgent, heartbeat, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
-  renameProject, createProject, setProjectLabel, deleteProject, findByViewToken, PROJECT_RE,
+  renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };

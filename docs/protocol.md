@@ -14,7 +14,7 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 |---|---|
 | `POST /api/agents/register` | join the roster: `{name, kind, capabilities[]}` |
 | `POST /api/agents/heartbeat` | I'm alive: `{name, note?, activity?}` |
-| `POST /api/tasks/claim` | claim by id or highest-priority queued; returns lease |
+| `POST /api/tasks/claim` | claim by id, or highest-priority queued from a project with free capacity; returns lease |
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
 | `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed) |
@@ -22,6 +22,8 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office, mirrors). Auth: single Bearer token. All responses `Cache-Control: no-store`.
 
 Planned transport adapter: an `/mcp` endpoint (Streamable HTTP) exposing the same six calls as MCP tools, for AI apps that speak MCP but have no shell. Same protocol, different wire; the core does not change.
+
+Projects are the unit of concurrency: each has a `capacity` (default 1), and claim-without-id serves only missions from projects with a free slot, so a pool of identical workers spreads across projects instead of stacking on one. `blocked` and `review` missions do not occupy a slot. When missions exist but every project is at capacity, claim answers `all_busy` (distinct from `queue_empty`); workers treat both as the end of the shift. Claim-by-id bypasses the capacity check: an explicit id is deliberate.
 
 Session guidance for connectors: a session is a shift, not the queue. Make every task self-contained (claim, work, write knowledge, update status, claim next) and keep state in the hub, never in session context. Leases turn dead sessions into requeued work; fresh sessions resume from the hub, not from memory.
 

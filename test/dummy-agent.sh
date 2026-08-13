@@ -96,11 +96,25 @@ check "task is done" "$(api GET "/api/tasks/$TID")" '"done"'
 check "used link is dead" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$AP_TOKEN")" '410'
 
 echo "8. lease expiry re-queues abandoned work"
-T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3,"project":"demo"}')
+T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3}')
 T2ID=$(echo "$T2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minutes\":0.03}" > /dev/null
 sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
+
+echo "8b. project capacity: one desk per project, spillover, all_busy, by-id bypass"
+api POST /api/projects '{"label":"Busy Corner"}' > /dev/null
+check "capacity is settable" "$(api PATCH /api/projects/busy-corner '{"capacity":2}')" '"capacity": 2'
+check "capacity bounds enforced" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/projects/busy-corner" -H "$AUTH" -H "$JSON" -d '{"capacity":0}')" '400'
+api PATCH /api/projects/busy-corner '{"capacity":1}' > /dev/null
+BA=$(api POST /api/tasks '{"title":"Polish the busy corner sign","project":"busy-corner","priority":1}')
+BAID=$(echo "$BA" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+BB=$(api POST /api/tasks '{"title":"Wax the busy corner floor","project":"busy-corner","priority":1}')
+BBID=$(echo "$BB" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+check "first worker takes the busy corner" "$(api POST /api/tasks/claim '{"agent":"worker-a"}')" "\"id\": \"$BAID\""
+check "second worker spills to the next project" "$(api POST /api/tasks/claim '{"agent":"worker-b"}')" 'Dust the pixel plants'
+check "third worker finds every desk taken" "$(api POST /api/tasks/claim '{"agent":"worker-c"}')" 'all_busy'
+check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "{\"agent\":\"worker-c\",\"id\":\"$BBID\"}")" '"claimed"'
 
 echo "9. the event stream speaks"
 EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)

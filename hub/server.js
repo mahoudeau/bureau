@@ -215,10 +215,11 @@ const server = http.createServer(async (req, res) => {
     const mProj = p.match(/^\/api\/projects\/([A-Za-z0-9._-]+)$/);
     if (req.method === 'PATCH' && mProj) {
       const b = await readBody(req);
-      if (!b.label) return send(res, 400, { error: 'label required' });
-      const pj = store.setProjectLabel(mProj[1], b.label);
+      if (b.label === undefined && b.capacity === undefined) return send(res, 400, { error: 'label or capacity required' });
+      const pj = store.updateProject(mProj[1], b);
       if (!pj) return send(res, 404, { error: 'not_found' });
-      broadcast('project.renamed', { note: `${pj.id} relabeled: ${pj.label}` });
+      if (pj.error) return send(res, 400, pj);
+      broadcast('project.renamed', { note: `${pj.id}: label ${pj.label}, capacity ${pj.capacity}` });
       return send(res, 200, { project: pj });
     }
     if (req.method === 'DELETE' && mProj) {
