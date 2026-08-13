@@ -112,6 +112,9 @@ const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 
 // Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
 const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_input', 'waiting_permission', 'blocked', 'idle'];
 
+// Project names become brain paths (projects/<name>/...), so they stay path-safe.
+const PROJECT_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}$/;
+
 function createTask({ title, body, priority, project, created_by }) {
   const t = {
     id: nextId('t'),
@@ -119,17 +122,31 @@ function createTask({ title, body, priority, project, created_by }) {
     body: body || '',
     status: 'queued',
     priority: Number.isFinite(+priority) ? +priority : 3, // 1 = highest
-    project: project || null,
+    project: project || 'general', // always named: the brain files under projects/<project>/
     created_by: created_by || 'human',
     created_at: nowISO(),
     assignee: null,
     lease_until: null,
     log: [],
     artifacts: [],
+    // Read-only capability: the mission record page (/m/<token>), linked from pings.
+    view_token: crypto.randomBytes(16).toString('hex'),
   };
   load().tasks.push(t);
   save();
   return t;
+}
+
+function renameProject(from, to) {
+  const s = load();
+  let n = 0;
+  for (const t of s.tasks) if (t.project === from) { t.project = to; n++; }
+  if (n) save();
+  return n;
+}
+
+function findByViewToken(token) {
+  return load().tasks.find(t => t.view_token === token) || null;
 }
 
 function expireLeases() {
@@ -239,5 +256,6 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, logEvent, upsertAgent, heartbeat, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
+  renameProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };

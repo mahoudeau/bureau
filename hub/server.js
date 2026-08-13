@@ -119,6 +119,22 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // ----- mission record page (read-only capability; linked from pings) -----
+    const mView = p.match(/^\/m\/([a-f0-9]{32})$/);
+    if (req.method === 'GET' && mView) {
+      const t = store.findByViewToken(mView[1]);
+      if (!t) return sendPage(res, 404, 'Not found', '<p>No mission record behind this link.</p>');
+      const logs = (t.log || []).map(l =>
+        `<p style="border-bottom:1px solid #eee;padding:6px 0;margin:0"><span style="color:#888;font-size:13px">${escHtml(l.ts.slice(5, 16).replace('T', ' '))}</span> <b>${escHtml(l.by)}</b><br>${escHtml(l.note).replace(/\n/g, '<br>')}</p>`).join('') || '<p>No log yet.</p>';
+      const arts = (t.artifacts || []).map(a => {
+        const linkable = a.url && /^https?:\/\//i.test(a.url);
+        return `<p>📎 ${linkable ? `<a href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</p>`;
+      }).join('');
+      return sendPage(res, 200, `${escHtml(t.id)} · ${escHtml(t.title)}`,
+        `<p style="color:#666">${escHtml(t.status)} · P${t.priority}${t.assignee ? ' · ' + escHtml(t.assignee) : ''} · ${escHtml(t.project || '')}</p>` +
+        (t.body ? `<p>${escHtml(t.body).replace(/\n/g, '<br>')}</p>` : '') + arts + logs);
+    }
+
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     if (!authed(req, url)) return send(res, 401, { error: 'unauthorized' });
 
@@ -173,9 +189,28 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/tasks') {
       const b = await readBody(req);
       if (!b.title) return send(res, 400, { error: 'title required' });
+      if (b.project && !store.PROJECT_RE.test(b.project)) return send(res, 400, { error: 'bad project name: letters, digits, dot, dash, underscore, max 40' });
       const t = store.createTask(b);
       broadcast('task.created', t);
       return send(res, 200, { task: t });
+    }
+
+    // ----- projects -----
+    if (req.method === 'GET' && p === '/api/projects') {
+      const counts = {};
+      for (const t of store.load().tasks) if (t.project) counts[t.project] = (counts[t.project] || 0) + 1;
+      return send(res, 200, { projects: Object.entries(counts).map(([name, tasks]) => ({ name, tasks })) });
+    }
+    if (req.method === 'POST' && p === '/api/projects/rename') {
+      const b = await readBody(req);
+      if (!b.from || !b.to) return send(res, 400, { error: 'from and to required' });
+      if (!store.PROJECT_RE.test(b.from) || !store.PROJECT_RE.test(b.to)) return send(res, 400, { error: 'bad project name' });
+      if (b.from === b.to) return send(res, 400, { error: 'same name' });
+      const brain = knowledge.renameProjectDir(b.from, b.to);
+      if (brain.error) return send(res, 409, brain);
+      const renamed = store.renameProject(b.from, b.to);
+      broadcast('project.renamed', { note: `${b.from} → ${b.to} (${renamed} missions${brain.moved ? ', brain folder moved' : ''})` });
+      return send(res, 200, { renamed, brain });
     }
     if (req.method === 'POST' && p === '/api/tasks/claim') {
       const b = await readBody(req);

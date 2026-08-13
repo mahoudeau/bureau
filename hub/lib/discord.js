@@ -12,19 +12,20 @@ const NOTABLE = new Set([
 ]);
 
 function fmt(type, data) {
+  // Capability links only when a public base URL is configured; localhost links are noise in a channel.
+  const base = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
+  const view = base && data.view_token ? `\n🔗 View: ${base}/m/${data.view_token}` : '';
   switch (type) {
     case 'task.created':  return `📥 **New task** ${data.id}: ${data.title}`;
     case 'task.claimed':  return `🏃 **${data.assignee}** claimed ${data.id}: ${data.title}`;
     case 'task.review': {
       let msg = `👀 **Review needed** · ${data.id}: ${data.title} (by ${data.assignee || '?'})`;
-      // Capability links only when a public base URL is configured; localhost links are noise in a channel.
-      const base = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
       if (base && data.review_links)
         msg += `\n✅ Approve: ${base}/r/${data.review_links.approve.token}\n↩️ Send back: ${base}/r/${data.review_links.sendback.token}`;
-      return msg;
+      return msg + view;
     }
-    case 'task.done':     return `✅ **Done** · ${data.id}: ${data.title} (by ${data.assignee || '?'})`;
-    case 'task.failed':   return `❌ **Failed** · ${data.id}: ${data.title} · ${data.note || ''}`;
+    case 'task.done':     return `✅ **Done** · ${data.id}: ${data.title} (by ${data.assignee || '?'})${view}`;
+    case 'task.failed':   return `❌ **Failed** · ${data.id}: ${data.title} · ${data.note || ''}${view}`;
     case 'agent.registered': return `🤖 Agent online: **${data.name}** (${data.kind})`;
     case 'knowledge.written': return `🧠 ${data.author} wrote \`${data.file}\``;
     // Only human-authored messages ping the channel; agent chatter stays out of Discord.

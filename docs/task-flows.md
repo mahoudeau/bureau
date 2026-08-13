@@ -2,7 +2,7 @@
 
 ## Adding tasks: four doors, one queue
 
-1. **Dashboard quick-add**: title + priority, works from a phone.
+1. **Dashboard quick-add**: title, project (defaults to `general`; autocompleted from existing projects), priority. Works from a phone. Projects can be renamed from any mission's detail panel; the rename carries every mission and moves the brain folder with its git history.
 2. **Any agent session**: "add these three tasks to the hub" → the session POSTs via curl or its connector.
 3. **Raw curl** from anywhere: `curl -X POST $BUREAU_URL/api/tasks -H "Authorization: Bearer $BUREAU_TOKEN" -d '{"title":"…","priority":1}'`
 4. **Later, a chat command channel** (e.g. Discord): commands accepted from the boss's user ID only.
@@ -18,6 +18,8 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 - **Send back** → status `queued` with the boss's note attached; the agent reads the note as its correction on next claim (office: card back to whiteboard + red note)
 
 **Review from anywhere:** when `BUREAU_PUBLIC_URL` is set, the review ping carries two links, approve and send back. Each opens a small confirmation page served by the hub: approve is one tap; send back asks for the note, which stays required. Links are mission-scoped, single-use, and expire after 7 days.
+
+**Read from anywhere:** review, done, and failed pings also carry a View link: a read-only page of the full mission record (brief, artifacts, complete log), so the answer is one tap away before any brain browser exists. View links are per-mission, unguessable, and never grant actions.
 
 **Chat fallback:** tell any connected agent session "approve t-42" / "send t-42 back, the tone is wrong" and it PATCHes the hub.
 

@@ -75,6 +75,20 @@ function safeDir(rel) {
   return path.join(BRAIN_DIR, norm);
 }
 
+// Rename a project's brain folder with git mv, so file history survives the move.
+// Caller validates the names (they come through the hub's project regex).
+function renameProjectDir(from, to) {
+  ensureRepo();
+  const src = path.join(BRAIN_DIR, 'projects', from);
+  const dst = path.join(BRAIN_DIR, 'projects', to);
+  if (!fs.existsSync(src)) return { moved: false };
+  if (fs.existsSync(dst)) return { error: `projects/${to} already exists in the brain` };
+  fs.mkdirSync(path.dirname(dst), { recursive: true });
+  git(['mv', `projects/${from}`, `projects/${to}`]);
+  git(['commit', '-m', `project renamed: ${from} → ${to}`, '--author', 'human <human@bureau.local>']);
+  return { moved: true };
+}
+
 function recentCommits(n = 20) {
   ensureRepo();
   try {
@@ -86,4 +100,4 @@ function recentCommits(n = 20) {
   } catch { return []; }
 }
 
-module.exports = { ensureRepo, writeKnowledge, readKnowledge, listKnowledge, recentCommits, BRAIN_DIR };
+module.exports = { ensureRepo, writeKnowledge, readKnowledge, listKnowledge, recentCommits, renameProjectDir, BRAIN_DIR };

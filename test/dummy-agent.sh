@@ -58,6 +58,18 @@ check "append state" "$(api POST /api/knowledge '{"file":"projects/demo/STATE.md
 check "read back" "$(api GET '/api/knowledge?file=agents/menace.md')" 'dummy conformance agent'
 check "git log has author" "$(api GET /api/state)" '"author": "menace"'
 
+echo "6b. projects: default name, rename moves tasks and brain, view link"
+TP=$(api POST /api/tasks '{"title":"Dust the pixel plants"}')
+check "project defaults to general" "$TP" '"project": "general"'
+check "projects listing" "$(api GET /api/projects)" '"name": "demo"'
+check "bad project name rejected" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/tasks" -H "$AUTH" -H "$JSON" -d '{"title":"x","project":"../evil"}')" '400'
+check "rename moves tasks" "$(api POST /api/projects/rename '{"from":"demo","to":"ops"}')" '"renamed": 1'
+check "task carries new project" "$(api GET "/api/tasks/$TID")" '"project": "ops"'
+check "brain folder moved" "$(api GET '/api/knowledge?file=projects/ops/STATE.md')" 'coffee machine refilled'
+VIEW_TOKEN=$(api GET "/api/tasks/$TID" | grep -o '"view_token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "view page renders the record" "$(curl -s "$BUREAU_URL/m/$VIEW_TOKEN")" 'Refill the coffee machine'
+check "bad view token is 404" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/m/00000000000000000000000000000000")" '404'
+
 echo "7. review gate: park, send back via capability link, approve via capability link"
 check "park in review" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"review","note":"ready for sign-off"}')" '"review"'
 DETAIL=$(api GET "/api/tasks/$TID")

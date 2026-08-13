@@ -99,6 +99,8 @@
     <h2>Missions</h2>
     <form class="newtask" id="newtask">
       <input id="nt-title" placeholder="New mission for the team…" required>
+      <input id="nt-project" placeholder="project" list="projects-list" style="flex:0 1 130px" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}" title="letters, digits, dot, dash, underscore">
+      <datalist id="projects-list"></datalist>
       <select id="nt-prio"><option value="1">P1</option><option value="2">P2</option><option value="3" selected>P3</option></select>
       <button>Add</button>
     </form>
@@ -148,6 +150,9 @@ function render() {
     ).join('') + `</div>`;
   }).join('');
 
+  document.getElementById('projects-list').innerHTML =
+    [...new Set(state.tasks.map(t => t.project).filter(Boolean))].map(pj => `<option value="${esc(pj)}">`).join('');
+
   const br = document.getElementById('brain');
   br.className = state.knowledge.recent.length ? '' : 'empty';
   br.innerHTML = state.knowledge.recent.length ? state.knowledge.recent.slice(0,8).map(c =>
@@ -160,7 +165,7 @@ function fmtEvt(e) {
   const who = e.assignee || e.name || e.from || e.author || '';
   const what = e.title || e.file || e.body || e.note || '';
   const label = { 'task.created':'📥 task created','task.claimed':'🏃 claimed','task.done':'✅ done','task.failed':'❌ failed',
-    'task.review':'👀 review','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online',
+    'task.review':'👀 review','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online','project.renamed':'🏷 project renamed',
     'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','knowledge.written':'🧠 brain write' }[e.type] || e.type;
   return `${label} · <b>${esc(who)}</b> ${esc(String(what).slice(0,120))}`;
 }
@@ -172,7 +177,7 @@ function connectSSE() {
   es.onerror = () => { document.getElementById('conndot').classList.remove('on'); document.getElementById('conntext').textContent = 'reconnecting…'; };
   es.onmessage = refresh;
   ['task.created','task.claimed','task.done','task.failed','task.review','task.blocked','task.requeued','task.updated',
-   'agent.registered','agent.heartbeat','message.posted','knowledge.written']
+   'agent.registered','agent.heartbeat','message.posted','knowledge.written','project.renamed']
     .forEach(t => es.addEventListener(t, refresh));
 }
 // Task detail panel: full log and artifacts, review actions when parked in review.
@@ -200,7 +205,7 @@ async function openTask(id) {
     <div class="actions"><button class="ghost" onclick="reviewTask('${t.id}','queued')">↩️ Re-queue</button></div>` : '';
   el.innerHTML = `
     <h3>${esc(t.title)}</h3>
-    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
+    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(t.project)} <a href="#" onclick="renameProject('${esc(t.project)}');return false" title="rename project">✏️</a>` : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
     ${t.body ? `<div class="body">${esc(t.body)}</div>` : ''}
     ${arts}
     <div style="margin-top:8px">${logs}</div>
@@ -218,12 +223,21 @@ async function reviewTask(id, status) {
 document.getElementById('overlay').addEventListener('click', e => {
   if (e.target.id === 'overlay') e.target.classList.remove('open');
 });
+async function renameProject(from) {
+  const to = (prompt(`Rename project "${from}" to:`, from) || '').trim();
+  if (!to || to === from) return;
+  const r = await api('/api/projects/rename', { method: 'POST', body: JSON.stringify({ from, to }) });
+  if (r.error) { alert(r.error); return; }
+  document.getElementById('overlay').classList.remove('open');
+  refresh();
+}
 
 document.getElementById('newtask').addEventListener('submit', async e => {
   e.preventDefault();
   const title = document.getElementById('nt-title').value.trim();
   if (!title) return;
-  await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, priority: +document.getElementById('nt-prio').value, created_by: 'human' }) });
+  const project = document.getElementById('nt-project').value.trim();
+  await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title, ...(project ? { project } : {}), priority: +document.getElementById('nt-prio').value, created_by: 'human' }) });
   document.getElementById('nt-title').value = '';
   refresh();
 });
