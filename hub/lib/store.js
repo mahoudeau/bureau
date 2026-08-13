@@ -44,6 +44,28 @@ function nextId(prefix) {
 
 function nowISO() { return new Date().toISOString(); }
 
+// ---- Startup lock ----
+// One process owns a data dir, ever. Two hubs sharing state.json would break
+// the single-writer guarantee silently; refusing to boot is the honest failure.
+const LOCK_FILE = path.join(DATA_DIR, 'hub.lock');
+function acquireLock() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
+    if (pid && pid !== process.pid) {
+      try {
+        process.kill(pid, 0); // throws if the process is gone
+        return { error: `data dir is owned by a live hub process (pid ${pid}); refusing to boot` };
+      } catch { /* stale lock from a dead process: take over */ }
+    }
+  } catch { /* no lock file yet */ }
+  fs.writeFileSync(LOCK_FILE, String(process.pid));
+  const release = () => { try { if (parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(LOCK_FILE); } catch { } };
+  process.on('exit', release);
+  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+  return {};
+}
+
 // ---- Activity log (ring buffer) ----
 function logEvent(type, data) {
   const s = load();
@@ -215,7 +237,7 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat,
+  load, save, logEvent, upsertAgent, heartbeat, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
 };

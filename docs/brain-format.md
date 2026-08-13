@@ -31,7 +31,7 @@ version: 1
 ---
 
 - [step] Push to main; CI runs the conformance script #deploy
-- [step] alwaysdata restarts the Node site on git pull #deploy
+- [step] The host restarts the Node site on git pull #deploy
 - [gotcha] The IPv6 bind fails on some hosts; the server falls back to IPv4 (source: [[journal/2026-08-11]])
 
 ## Relations

@@ -1,15 +1,16 @@
 // Bureau: coordination hub for AI agents. Zero-dependency Node server.
-// API + SSE event stream + dashboard. Deployable on alwaysdata (Node.js site).
+// API + SSE event stream + dashboard. Runs on minimal shared Node hosting.
 'use strict';
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
 const discord = require('./lib/discord');
 
 const PORT = process.env.PORT || 8100;
-const HOST = process.env.HOST || '::';           // alwaysdata expects IPv6 bind
+const HOST = process.env.HOST || '::';           // some shared hosts expect an IPv6 bind
 const TOKEN = process.env.BUREAU_TOKEN || '';
 if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set it in production.');
 
@@ -60,11 +61,19 @@ function reviewForm(task, action, token, err) {
   return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><form method="POST" action="/r/${token}">${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
 }
 
+// Constant-time comparison via digests: no timing oracle on the single secret,
+// and equal-length inputs for timingSafeEqual whatever the caller sent.
+function tokenMatch(candidate) {
+  if (typeof candidate !== 'string' || !candidate) return false;
+  const a = crypto.createHash('sha256').update(candidate).digest();
+  const b = crypto.createHash('sha256').update(TOKEN).digest();
+  return crypto.timingSafeEqual(a, b);
+}
 function authed(req, url) {
   if (!TOKEN) return true;
   const h = req.headers['authorization'] || '';
-  if (h === `Bearer ${TOKEN}`) return true;
-  if (url.searchParams.get('token') === TOKEN) return true; // for SSE/browser
+  if (h.startsWith('Bearer ') && tokenMatch(h.slice(7))) return true;
+  if (tokenMatch(url.searchParams.get('token'))) return true; // for SSE/browser (EventSource cannot set headers)
   return false;
 }
 
@@ -238,8 +247,10 @@ setInterval(() => {
   for (const t of store.expireLeases()) broadcast('task.requeued', t);
 }, 60_000);
 
+const lock = store.acquireLock();
+if (lock.error) { console.error(lock.error); process.exit(1); }
 knowledge.ensureRepo();
-// Prefer the configured host (alwaysdata wants '::'); fall back to IPv4 where IPv6 is absent.
+// Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
     console.log('IPv6 unavailable, falling back to 0.0.0.0');
