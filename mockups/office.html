@@ -218,11 +218,11 @@ function drawSprite(a, t) {
 
 // ---------- agents & scripted choreography ----------
 const AGENTS = [
-  { name: 'Nova',   colors: { hair: '#3a3153', skin: '#f0c8a0', shirt: '#5a7ad0', shirtHi: '#7e9ae6', pants: '#2b2440' },
+  { name: 'Bettik',   colors: { hair: '#3a3153', skin: '#f0c8a0', shirt: '#5a7ad0', shirtHi: '#7e9ae6', pants: '#2b2440' },
     desk: DESKS[0], state: 'active', pos: { x: 84, y: 124 }, walking: false, carry: null },
-  { name: 'Scout',  colors: { hair: '#d05a2a', skin: '#e8b088', shirt: '#f0a05a', shirtHi: '#f6bc82', pants: '#41395c' },
+  { name: 'Severn',  colors: { hair: '#d05a2a', skin: '#e8b088', shirt: '#f0a05a', shirtHi: '#f6bc82', pants: '#41395c' },
     desk: DESKS[1], state: 'active', pos: { x: 60, y: 40 }, walking: false, carry: P.cardQ },
-  { name: 'Archie', colors: { hair: '#2b2440', skin: '#c89264', shirt: '#5ad07a', shirtHi: '#84e0a0', pants: '#2b2440' },
+  { name: 'Kassad', colors: { hair: '#2b2440', skin: '#c89264', shirt: '#5ad07a', shirtHi: '#84e0a0', pants: '#2b2440' },
     desk: DESKS[2], state: 'idle', pos: { x: 56, y: 90 }, walking: false, carry: null },
 ];
 
@@ -257,18 +257,18 @@ function say(agent, html, ms = 4200) {
 function tick(msg) { document.getElementById('ticker').innerHTML = '▸ ' + msg; }
 
 const SCRIPT = [
-  { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>patch the roof pixels'); tick('🏃 <b>Nova</b> claimed t-42 · patch the roof pixels (P1)'); } },
-  { at: 1200,  run: () => walkTo(AGENTS[1], 140, 124) },                     // Scout carries card from board to desk
-  { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it, scraping<br>3 sources'); tick('📥 <b>Scout</b> picked t-45 from the board'); } },
-  { at: 7500,  run: () => { say(AGENTS[0], 'tests green ✓'); tick('✏️ <b>Nova</b> · t-42: tests green'); } },
-  { at: 9000,  run: () => walkTo(AGENTS[2], 28, 88) },                        // Archie to the shelf
-  { at: 12000, run: () => { say(AGENTS[2], 'filing STATE.md 🧠'); tick('🧠 <b>Archie</b> wrote projects/trace/STATE.md'); } },
-  { at: 15000, run: () => { walkTo(AGENTS[0], 224, 140); AGENTS[0].carry = P.cardR; } },   // Nova takes work to review door
-  { at: 19500, run: () => { say(AGENTS[0], '<b>t-42</b> ready for<br>your review 👀'); tick('👀 <b>Nova</b> parked t-42 at your door, review needed'); } },
+  { at: 1000,  run: () => { say(AGENTS[0], 'claimed <b>t-42</b><br>patch the roof pixels'); tick('🏃 <b>Bettik</b> claimed t-42 · patch the roof pixels (P1)'); } },
+  { at: 1200,  run: () => walkTo(AGENTS[1], 140, 124) },                     // Severn carries card from board to desk
+  { at: 4200,  run: () => { AGENTS[1].carry = null; say(AGENTS[1], 'on it, scraping<br>3 sources'); tick('📥 <b>Severn</b> picked t-45 from the board'); } },
+  { at: 7500,  run: () => { say(AGENTS[0], 'tests green ✓'); tick('✏️ <b>Bettik</b> · t-42: tests green'); } },
+  { at: 9000,  run: () => walkTo(AGENTS[2], 28, 88) },                        // Kassad to the shelf
+  { at: 12000, run: () => { say(AGENTS[2], 'filing STATE.md 🧠'); tick('🧠 <b>Kassad</b> wrote projects/trace/STATE.md'); } },
+  { at: 15000, run: () => { walkTo(AGENTS[0], 224, 140); AGENTS[0].carry = P.cardR; } },   // Bettik takes work to review door
+  { at: 19500, run: () => { say(AGENTS[0], '<b>t-42</b> ready for<br>your review 👀'); tick('👀 <b>Bettik</b> parked t-42 at your door, review needed'); } },
   { at: 23000, run: () => { AGENTS[0].carry = null; walkTo(AGENTS[0], 84, 124); } },
   { at: 24000, run: () => walkTo(AGENTS[2], 196, 124) },
-  { at: 26000, run: () => walkTo(AGENTS[1], 250, 60) },                       // Scout to conference
-  { at: 29500, run: () => { say(AGENTS[1], 'syncing with HQ<br>in the meet room'); tick('✉️ <b>Scout</b> → <b>Nova</b>: found the schema change'); } },
+  { at: 26000, run: () => walkTo(AGENTS[1], 250, 60) },                       // Severn to conference
+  { at: 29500, run: () => { say(AGENTS[1], 'syncing with HQ<br>in the meet room'); tick('✉️ <b>Severn</b> → <b>Bettik</b>: found the schema change'); } },
   { at: 33000, run: () => { walkTo(AGENTS[1], 140, 124); } },
   { at: 36000, run: () => { say(AGENTS[2], 'back at my desk'); tick('💓 heartbeats · 3 agents active · queue: 3 · review: 1'); } },
   { at: 39000, run: () => { walkTo(AGENTS[2], 24, 158, 0.03); say(AGENTS[2], 'coffee ☕', 2500); } },
