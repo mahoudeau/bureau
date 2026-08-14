@@ -8,5 +8,4 @@ Everything in `connectors/` is licensed Apache-2.0 (`../LICENSE-APACHE`): this c
 |---|---|
 | [`cowork/`](cowork/) | scheduled cloud sessions work the queue in shifts: the autonomy engine |
 | [`claude-code/`](claude-code/) | local coding sessions work as the boss's envoy: project resolution today, hooks and skills later |
-
-Chat apps need no connector at all: the hub itself has an MCP door (`docs/protocol.md`), and pasting its capability URL into the app's settings is the whole integration.
+| [`chat/`](chat/) | conversations in any MCP chat app: a capability URL plus a preferences paragraph, no code |

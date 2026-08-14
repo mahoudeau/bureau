@@ -55,6 +55,7 @@ The hub owns a git repo with a deliberately simple layout:
 
 ```
 brain/
+  journal/<yyyy-mm-dd>.md # episodic: cheap one-line captures from any surface, curated later
   agents/<name>.md        # per-agent profile: role, standing instructions, lessons learned
   projects/<slug>/
     STATE.md              # current status, next steps: the handoff doc
