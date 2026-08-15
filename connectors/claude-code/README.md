@@ -29,7 +29,7 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
 
 `Monitor` lets the agent watch a blocked mission and resume the moment you answer from your phone.
 
-4. **Convention** in your global `CLAUDE.md` (adapt the envoy name; the Bureau's is consul):
+4. **Convention** in your global `CLAUDE.md` (the envoy's default name is consul; rename if you like):
 
 > For any substantive work: resolve the project (`project-of.sh get`; if unresolved, decide once against the hub registry and record it), open a mission before starting (`hub.sh POST /api/tasks`), claim it, and before working read the scope chain via `/api/knowledge`: global `knowledge/` and `recipes/`, then the project's entity if it has one (`entities/<slug>/PROFILE.md` plus its `knowledge/` and `recipes/`), then `projects/<project>/STATE.md`. Nearest scope wins; never read another entity's tree. Post progress notes, and before closing append a debrief to `projects/<project>/STATE.md`, three labeled parts: what changed, what was learned, next step. File learnings at the scope where they are true; when unsure, file lower and let the librarian promote. Close `done`, or `review` when the boss should sign off. At session start, continue any queued mission reserved for the envoy first. When blocking on the boss mid-session, arm a watcher so the answer resumes the work.
 
