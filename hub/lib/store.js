@@ -130,12 +130,14 @@ function slugify(label) {
     .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 40);
 }
 
-function createProject(label, id) {
+function createProject(label, id, entity) {
   const s = load();
   id = id || slugify(label);
   if (!PROJECT_RE.test(id)) return { error: 'label produces an empty or invalid id' };
+  if (entity && !PROJECT_RE.test(entity)) return { error: 'bad entity slug: letters, digits, dot, dash, underscore, max 40' };
   if (s.projects.some(p => p.id === id)) return { exists: true, project: s.projects.find(p => p.id === id) };
-  const project = { id, label: String(label || id), capacity: 1 };
+  // entity: the scope wall this project sits behind (entities/<slug>/ in the brain); optional
+  const project = { id, label: String(label || id), capacity: 1, ...(entity ? { entity } : {}) };
   s.projects.push(project);
   s.projects.sort((a, b) => a.id.localeCompare(b.id));
   save();
@@ -153,7 +155,7 @@ function deleteProject(id) {
   return { deleted: true };
 }
 
-function updateProject(id, { label, capacity }) {
+function updateProject(id, { label, capacity, entity }) {
   const s = load();
   const p = s.projects.find(x => x.id === id);
   if (!p) return null;
@@ -161,6 +163,11 @@ function updateProject(id, { label, capacity }) {
   if (capacity !== undefined) {
     if (!Number.isInteger(+capacity) || +capacity < 1 || +capacity > 9) return { error: 'capacity must be an integer from 1 to 9' };
     p.capacity = +capacity;
+  }
+  if (entity !== undefined) {
+    if (entity === '' || entity === null) delete p.entity; // clearing the wall is explicit
+    else if (!PROJECT_RE.test(entity)) return { error: 'bad entity slug: letters, digits, dot, dash, underscore, max 40' };
+    else p.entity = entity;
   }
   save();
   return p;
@@ -209,7 +216,13 @@ function expireLeases() {
   const expired = [];
   for (const t of s.tasks) {
     if ((t.status === 'claimed' || t.status === 'in_progress') && t.lease_until && t.lease_until < now) {
-      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue` });
+      // Shift workers are interchangeable; the envoy is not (same rule as
+      // reservation-on-answer). A non-cowork assignee usually has local work in
+      // progress that the pool cannot see, so the mission waits for its owner.
+      const holder = s.agents.find(a => a.name === t.assignee);
+      const reserve = t.assignee && (!holder || holder.kind !== 'cowork');
+      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue${reserve ? `, reserved for ${t.assignee}` : ''}` });
+      if (reserve) t.reserved_for = t.assignee;
       t.status = 'queued';
       t.assignee = null;
       t.lease_until = null;
@@ -253,11 +266,36 @@ function claimTask({ id, agent, lease_minutes }) {
   return { task: t };
 }
 
-function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body }) {
+function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
   const prevStatus = t.status, prevAssignee = t.assignee;
+  // Itemized review: a worker files proposal items; the boss files per-item
+  // verdicts (approved/rejected + comment). Verdicts persist on the mission so
+  // the next shift reads exactly what was accepted and what needs rework.
+  if (Array.isArray(items)) {
+    t.items = t.items || [];
+    let added = 0;
+    for (const it of items) {
+      if (!it || !it.title) continue;
+      t.items.push({ id: `i${t.items.length + 1}`, title: String(it.title).slice(0, 200), body: String(it.body || '').slice(0, 20000), verdict: 'proposed', comment: null });
+      added++;
+    }
+    if (added && !note && !status) note = `filed ${added} review item(s)`;
+  }
+  if (Array.isArray(verdicts) && t.items) {
+    const lines = [];
+    for (const v of verdicts) {
+      const it = t.items.find(x => x.id === v.id);
+      if (!it) continue;
+      if (v.verdict === 'approved' || v.verdict === 'rejected') it.verdict = v.verdict;
+      if (v.comment) it.comment = String(v.comment).slice(0, 2000);
+      lines.push(`${it.id} ${it.verdict}${it.comment ? ` (${it.comment})` : ''}`);
+    }
+    // Verdicts get their own log entry: the worker's apply pass reads them here too
+    if (lines.length) t.log.push({ ts: nowISO(), by: agent || 'human', note: `verdicts: ${lines.join(' · ')}` });
+  }
   if (status) {
     if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;

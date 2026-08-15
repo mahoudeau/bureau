@@ -12,9 +12,23 @@ const fs = require('fs');
 const path = require('path');
 
 const AUTHORITATIVE = ['knowledge', 'recipes'];
-const COMPARTMENTS = ['journal', 'knowledge', 'recipes', 'archive', 'attic'];
+const KNOWN_TOP = ['journal', 'meetings', 'import', 'knowledge', 'recipes', 'entities', 'projects', 'agents', 'daily', 'archive', 'attic'];
 const REQUIRED_FRONT = ['title', 'compartment', 'permalink', 'version'];
 const ATTIC_FRONT = ['retired', 'retired_by', 'retired_reason', 'superseded_by'];
+
+// The v0.2 layout has two axes: memory type and scope. entities/<slug>/knowledge
+// is the knowledge compartment at entity scope, held to the same strictness as
+// the global one; everything else under entities/ (PROFILE.md) is lenient.
+function effective(rel) {
+  const segs = rel.split(path.sep);
+  if (segs[0] === 'entities') {
+    if (segs.length >= 4 && AUTHORITATIVE.includes(segs[2]))
+      return { compartment: segs[2], scope: `entity:${segs[1]}` };
+    return { compartment: 'entities', scope: segs[1] ? `entity:${segs[1]}` : 'global' };
+  }
+  const scope = segs[0] === 'projects' && segs[1] ? `project:${segs[1]}` : 'global';
+  return { compartment: segs[0], scope };
+}
 
 // ---- minimal frontmatter parser: "key: value" lines, inline [a, b] lists ----
 function parseFrontmatter(text) {
@@ -51,7 +65,8 @@ function lint(brainDir) {
     const rel = path.relative(brainDir, abs);
     const raw = fs.readFileSync(abs, 'utf8');
     const { front, body } = parseFrontmatter(raw);
-    return { abs, rel, raw, front, body, compartment: rel.split(path.sep)[0] };
+    const eff = effective(rel);
+    return { abs, rel, raw, front, body, compartment: eff.compartment, scope: eff.scope };
   });
 
   // Link resolution: a wikilink resolves to a permalink, a relative path (with or
@@ -83,6 +98,11 @@ function lint(brainDir) {
         if (f.front[k] === undefined) errors.push(`${f.rel}: frontmatter missing "${k}"`);
       if (authoritative && f.front.compartment && f.front.compartment !== f.compartment.replace(/s$/, '') && f.front.compartment !== f.compartment)
         errors.push(`${f.rel}: compartment "${f.front.compartment}" does not match folder "${f.compartment}"`);
+      // scope: required from version 2 on in authoritative compartments, and it must match the folder
+      if (authoritative && Number(f.front.version) >= 2 && f.front.scope === undefined)
+        errors.push(`${f.rel}: frontmatter missing "scope" (required from version 2)`);
+      if (authoritative && f.front.scope !== undefined && f.front.scope !== f.scope)
+        errors.push(`${f.rel}: scope "${f.front.scope}" does not match location "${f.scope}"`);
     }
 
     // Observations: "- [category] statement ..." need provenance in authoritative compartments
@@ -120,9 +140,12 @@ function lint(brainDir) {
         warnings.push(`${f.rel}: belief is validated but no source link found in the body`);
       if (f.front.volatility === 'volatile' && f.front.verified === undefined)
         warnings.push(`${f.rel}: volatile fact without a "verified" date`);
-      if (f.front.compartment && !COMPARTMENTS.includes(f.compartment) && f.rel.includes(path.sep))
-        warnings.push(`${f.rel}: unknown compartment folder "${f.compartment}"`);
     }
+
+    // Unknown top-level folder: the layout is a contract too
+    const top = f.rel.split(path.sep)[0];
+    if (f.rel.includes(path.sep) && !KNOWN_TOP.includes(top))
+      warnings.push(`${f.rel}: unknown compartment folder "${top}"`);
   }
   return { errors, warnings, count: files.length };
 }

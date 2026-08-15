@@ -191,11 +191,14 @@ function render() {
   pr.className = ids.length ? '' : 'empty';
   pr.innerHTML = ids.length ? ids.map(n => {
     const b = byProj[n];
+    const pj = state.projects.find(x => x.id === n) || {};
     return `<div class="proj${projectFilter === n ? ' active' : ''}" onclick="toggleProjectFilter('${esc(n)}')">
-      <span class="pname">${esc(projLabel(n))}</span>
+      <span class="pname">${esc(projLabel(n))}</span>${pj.entity ? `<span style="color:#888;font-size:11px;margin-left:6px" title="entity (scope wall)">@${esc(pj.entity)}</span>` : ''}
       <a href="#" class="pedit" title="edit label" onclick="event.stopPropagation();editProjectLabel('${esc(n)}');return false">✏️</a>
+      <a href="#" class="pedit" title="entity (scope wall; empty clears)" onclick="event.stopPropagation();editProjectEntity('${esc(n)}');return false">🏛</a>
+      <a href="#" class="pedit" title="capacity (parallel desks)" onclick="event.stopPropagation();editProjectCapacity('${esc(n)}');return false">🪑</a>
       <a href="#" class="pedit" title="delete (needs no open missions)" onclick="event.stopPropagation();deleteProject('${esc(n)}');return false">🗑</a>
-      <span class="pcounts">${b.queued}q · ${b.active}w · ${b.review}r · ${b.closed}✓</span></div>`;
+      <span class="pcounts">${pj.capacity > 1 ? `🪑${pj.capacity} · ` : ''}${b.queued}q · ${b.active}w · ${b.review}r · ${b.closed}✓</span></div>`;
   }).join('') : 'No projects yet.';
 
   const br = document.getElementById('brain');
@@ -251,10 +254,20 @@ async function openTask(id) {
     <div class="actions"><button onclick="reviewTask('${t.id}','queued')">💬 Answer &amp; re-queue</button></div>` :
   t.status === 'failed' ? `
     <div class="actions"><button class="ghost" onclick="reviewTask('${t.id}','queued')">↩️ Re-queue</button></div>` : '';
+  // Itemized review: each proposal gets its own verdict; "Later" leaves it proposed.
+  const itemRow = it => `<div style="border:1px solid rgba(128,128,128,.35);border-radius:8px;padding:8px;margin:8px 0">
+    <b>${esc(it.id)} · ${esc(it.title)}</b>${it.body ? `<pre style="white-space:pre-wrap;background:rgba(128,128,128,.12);padding:6px;border-radius:6px;font-size:12px;overflow-x:auto">${esc(it.body)}</pre>` : ''}`;
+  const items = (t.items || []).map(it => t.status === 'review' ? `${itemRow(it)}
+    <label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label>
+    <label style="margin-left:10px"><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label>
+    <label style="margin-left:10px"><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label>
+    <input id="c_${it.id}" placeholder="Comment (optional)" value="${esc(it.comment || '')}" style="width:100%;box-sizing:border-box;margin-top:6px"></div>`
+    : `${itemRow(it)}<span class="ts">${esc(it.verdict)}${it.comment ? ': ' + esc(it.comment) : ''}</span></div>`).join('');
   el.innerHTML = `
     <h3>${esc(t.title)}</h3>
     <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(projLabel(t.project))}` : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
     ${t.body ? `<div class="body">${esc(t.body)}</div>` : ''}
+    ${items}
     ${arts}
     <div style="margin-top:8px">${logs}</div>
     ${reviewActions}${requeue}`;
@@ -264,7 +277,14 @@ async function reviewTask(id, status) {
   const note = (document.getElementById('rv-note') || {}).value || '';
   // A note is required to send back from review; re-queue from blocked/failed has no input and needs none.
   if (status === 'queued' && document.getElementById('rv-note') && !note) { alert('Add a note so the agent knows what to change.'); return; }
-  await api('/api/tasks/' + id, { method: 'PATCH', body: JSON.stringify({ agent: 'human', status, note: note || (status === 'done' ? 'approved' : '') }) });
+  // Per-item verdicts ride along ("" = Later, stays proposed)
+  const verdicts = [];
+  for (const r of document.querySelectorAll('#detail input[type=radio]:checked')) {
+    const iid = r.name.slice(2);
+    const c = ((document.getElementById('c_' + iid) || {}).value || '').trim();
+    if (r.value || c) verdicts.push({ id: iid, ...(r.value ? { verdict: r.value } : {}), ...(c ? { comment: c } : {}) });
+  }
+  await api('/api/tasks/' + id, { method: 'PATCH', body: JSON.stringify({ agent: 'human', status, note: note || (status === 'done' ? 'approved' : ''), ...(verdicts.length ? { verdicts } : {}) }) });
   document.getElementById('overlay').classList.remove('open');
   refresh();
 }
@@ -290,6 +310,22 @@ async function deleteProject(id) {
   const r = await api('/api/projects/' + id, { method: 'DELETE' });
   if (r.error) { alert(r.error); return; }
   if (projectFilter === id) projectFilter = null;
+  refresh();
+}
+async function editProjectEntity(id) {
+  const cur = (state.projects.find(x => x.id === id) || {}).entity || '';
+  const entity = prompt(`Entity for "${projLabel(id)}" (scope wall; empty clears):`, cur);
+  if (entity === null || entity.trim() === cur) return;
+  const r = await api('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify({ entity: entity.trim() }) });
+  if (r.error) { alert(r.error); return; }
+  refresh();
+}
+async function editProjectCapacity(id) {
+  const cur = (state.projects.find(x => x.id === id) || {}).capacity || 1;
+  const capacity = prompt(`Capacity for "${projLabel(id)}" (parallel desks, 1-9):`, cur);
+  if (capacity === null || +capacity === cur) return;
+  const r = await api('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify({ capacity: +capacity }) });
+  if (r.error) { alert(r.error); return; }
   refresh();
 }
 async function editProjectLabel(id) {

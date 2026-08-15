@@ -55,15 +55,20 @@ The hub owns a git repo with a deliberately simple layout:
 
 ```
 brain/
-  journal/<yyyy-mm-dd>.md # episodic: cheap one-line captures from any surface, curated later
-  agents/<name>.md        # per-agent profile: role, standing instructions, lessons learned
+  journal/<yyyy-mm-dd>.md    # episodic: cheap one-line captures from any surface, curated later
+  meetings/, import/         # episodic staging: meeting digests, cold-start imports
+  knowledge/, recipes/       # semantic + procedural, GLOBAL scope: curated, authoritative
+  entities/<slug>/           # entity scope: PROFILE.md (policies, tone, walls) + knowledge/ + recipes/
   projects/<slug>/
-    STATE.md              # current status, next steps: the handoff doc
-    decisions.md          # append-only decision log (dated entries)
-    learnings.md          # append-only "things we found out"
-  recipes/<topic>.md      # reusable how-tos that emerged from work
-  daily/<yyyy-mm-dd>.md   # auto-generated daily digest
+    STATE.md                 # current status, next steps: the handoff doc
+    decisions.md             # append-only decision log (dated entries)
+    learnings.md             # append-only "things we found out"
+  agents/<name>.md           # per-agent profile: role, standing instructions, lessons learned
+  daily/<yyyy-mm-dd>.md      # the librarian's digest
+  archive/, attic/           # digested raw; retired beliefs with lineage
 ```
+
+Two axes organize this: **scope** (whose knowledge: global > entity > project, nearest wins, walls between entities) and **memory type** (episodic, semantic, procedural, cold, retired). The full contract, including the curation law (who writes where, who may rewrite), is `brain-format.md`.
 
 Agents write through `POST /api/knowledge` (path + content + append/replace + commit message); the hub validates the path, writes the file, and commits with the agent's name as author. You get history, blame, diffs, and rollback for free, and the entire brain is `git clone`-able to anywhere, forever.
 
@@ -73,7 +78,7 @@ Two conventions do a lot of heavy lifting: every task completion **must** append
 
 A single HTML page served by the hub at `/` (behind the same token, passed once and kept in memory). Server-Sent Events push every event (task changes, heartbeats, messages, knowledge commits) so the page is live without polling. Three panes: agent cards, task board by status, scrolling activity feed. Works on a phone.
 
-The dashboard's task detail panel is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction).
+The dashboard's task detail panel is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
 
 ### 3.6 Adapters
 

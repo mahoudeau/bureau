@@ -25,6 +25,9 @@ check "dangling wikilink caught" "$INVALID" 'dangling wikilink'
 check "missing frontmatter caught" "$INVALID" 'missing frontmatter'
 check "attic lineage gap caught" "$INVALID" 'missing "retired_reason"'
 check "unresolved superseded_by caught" "$INVALID" 'superseded_by does not resolve'
+check "scope-location mismatch caught" "$INVALID" 'does not match location'
+check "missing scope on v2 note caught" "$INVALID" 'missing "scope"'
+check "unknown compartment folder warned" "$INVALID" 'unknown compartment folder'
 
 echo
 echo "passed $PASS, failed $FAIL"

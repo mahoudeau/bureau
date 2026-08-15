@@ -79,6 +79,11 @@ check "duplicate project refused" "$(curl -s -o /dev/null -w '%{http_code}' -X P
 check "empty project listed with zero tasks" "$(api GET /api/projects)" '"id": "garden"'
 check "free-text label slugifies" "$(api POST /api/projects '{"label":"Chasse aux Trésors"}')" '"id": "chasse-aux-tresors"'
 check "relabel keeps the id" "$(api PATCH /api/projects/garden '{"label":"Le Jardin"}')" '"label": "Le Jardin"'
+check "entity settable on create" "$(api POST /api/projects '{"label":"Acme Site","entity":"acme"}')" '"entity": "acme"'
+check "entity patchable" "$(api PATCH /api/projects/acme-site '{"entity":"acme-corp"}')" '"entity": "acme-corp"'
+check "bad entity slug rejected" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/projects/acme-site" -H "$AUTH" -H "$JSON" -d '{"entity":"../evil"}')" '400'
+check "empty entity clears the wall" "$(api PATCH /api/projects/acme-site '{"entity":""}' | grep -c '"entity"' || true)" '0'
+api DELETE /api/projects/acme-site > /dev/null
 check "delete refused with open missions" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/projects/demo" -H "$AUTH")" '409'
 check "delete empty project" "$(api DELETE /api/projects/garden)" '"deleted": true'
 check "deleted project gone" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/projects/garden" -H "$AUTH")" '404'
@@ -107,12 +112,38 @@ check "approve via link" "$(curl -s -X POST "$BUREAU_URL/r/$AP_TOKEN")" 'Approve
 check "task is done" "$(api GET "/api/tasks/$TID")" '"done"'
 check "used link is dead" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$AP_TOKEN")" '410'
 
+echo "7b. itemized review: proposals filed, per-item verdicts via capability link"
+TI=$(api POST /api/tasks '{"title":"Curation proposals","project":"ops","priority":2}')
+TIID=$(echo "$TI" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TIID\"}" > /dev/null
+check "items filed with server ids" "$(api PATCH "/api/tasks/$TIID" '{"agent":"menace","items":[{"title":"Promote the coffee fact","body":"- [fact] the beans are pixels"},{"title":"Compact the ops STATE"}]}')" '"id": "i2"'
+api PATCH "/api/tasks/$TIID" '{"agent":"menace","status":"review","note":"proposal set ready"}' > /dev/null
+IT_AP=$(api GET "/api/tasks/$TIID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "review page renders the items" "$(curl -s "$BUREAU_URL/r/$IT_AP")" 'Promote the coffee fact'
+check "verdicts ride the approve" "$(curl -s -X POST "$BUREAU_URL/r/$IT_AP" --data 'v_i1=approved&v_i2=rejected&c_i2=not+yet+convinced')" 'Approved'
+IT_DETAIL=$(api GET "/api/tasks/$TIID")
+check "approval persisted on the item" "$IT_DETAIL" '"verdict": "approved"'
+check "rejection comment persisted" "$IT_DETAIL" 'not yet convinced'
+check "verdicts reached the log" "$IT_DETAIL" 'verdicts: i1 approved'
+
 echo "8. lease expiry re-queues abandoned work"
 T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3}')
 T2ID=$(echo "$T2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minutes\":0.03}" > /dev/null
 sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
+check "non-cowork expiry keeps the reservation" "$(api GET "/api/tasks/$T2ID")" '"reserved_for": "menace"'
+api POST /api/agents/register '{"name":"shifty","kind":"cowork"}' > /dev/null
+T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":3}')
+T3ID=$(echo "$T3" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\",\"lease_minutes\":0.03}" > /dev/null
+sleep 3
+api GET /api/tasks > /dev/null
+check "cowork expiry returns to the open pool" "$(api GET "/api/tasks/$T3ID" | grep -c reserved_for || true)" '0'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\"}" > /dev/null
+api PATCH "/api/tasks/$T2ID" '{"agent":"menace","status":"done","note":"plant watered"}' > /dev/null
+api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\"}" > /dev/null
+api PATCH "/api/tasks/$T3ID" '{"agent":"shifty","status":"done","note":"plants straightened"}' > /dev/null
 
 echo "8b. project capacity: one desk per project, spillover, all_busy, by-id bypass"
 api POST /api/projects '{"label":"Busy Corner"}' > /dev/null
@@ -146,6 +177,8 @@ check "mission created over MCP" "$MC" 'Check the MCP door hinges'
 MID=$(echo "$MC" | grep -o 't-[0-9]*' | head -1)
 check "mission started over MCP" "$(mcp "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"start_mission\",\"arguments\":{\"id\":\"$MID\",\"note\":\"testing hinges\"}}}")" 'in_progress'
 check "knowledge written over MCP" "$(mcp '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"write_knowledge","arguments":{"file":"projects/general/STATE.md","content":"- MCP door checked (fake)","mode":"append","message":"general: mcp check"}}}')" 'STATE.md'
+mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"items\":[{\"title\":\"Oil the hinges\"}]}}}" > /dev/null
+check "items filed over MCP" "$(api GET "/api/tasks/$MID")" 'Oil the hinges'
 mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"status\":\"done\",\"note\":\"hinges fine\"}}}" > /dev/null
 check "bad capability token is 404" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "${MURL%/*}/000000000000000000000000000000000000000000000000" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":9,"method":"ping"}')" '404'
 
