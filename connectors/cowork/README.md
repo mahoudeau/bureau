@@ -10,12 +10,15 @@ A session is a shift, not the queue. The worker clocks in, works missions one at
 
 This shape exists for a reason: scheduled runs on consumer AI subscriptions are a supported, human-configured feature, each run its own bounded session. The connector never spawns unattended CLI loops on anyone's credentials. If you run agents on API keys or local models, the same prompt works there too.
 
-## The roles
+## The roles and the default staff
 
-- **`CLOCK-IN.md`**: the builder. Works the queue, delivers PRs or brain deliverables, self-checks the mission's acceptance bar, lingers for review verdicts within its shift.
-- **`UMMON-SHIFT.md`**: the lead. Decomposes the boss's `goal:` missions into the smallest separately judgeable pieces, each with an `## Acceptance` bar; monitors and re-scopes; never builds, never reviews.
-- **`MONETA-SHIFT.md`**: the critic. Judges `gate: critic` reviews against their stated bar by inspecting the actual output; passes or sends back with concrete gaps; never judges its own work.
-- **`SOL-SHIFT.md`**: the librarian. A night cycle that digests the day's episodic capture into curated knowledge, propose-then-apply under the boss's itemized review.
+Bureau ships with a default roster, named after the Hyperion Cantos; every name is just a string in a template, so rename freely, but a fresh office comes staffed:
+
+- **`CLOCK-IN.md`**: the builders, by default **Bettik** (the tireless doer), **Severn** (the observer and researcher), and **Kassad** (the hard missions). They work the queue, deliver PRs or brain deliverables, self-check the mission's acceptance bar, and linger for review verdicts within their shift.
+- **`UMMON-SHIFT.md`**: the lead, by default **Ummon**. Decomposes the boss's `goal:` missions into the smallest separately judgeable pieces, each with an `## Acceptance` bar; monitors and re-scopes; never builds, never reviews.
+- **`MONETA-SHIFT.md`**: the critic, by default **Moneta**. Judges `gate: critic` reviews against their stated bar by inspecting the actual output; passes or sends back with concrete gaps; never judges its own work.
+- **`SOL-SHIFT.md`**: the librarian, by default **Sol**. A night cycle that digests the day's episodic capture into curated knowledge, propose-then-apply under the boss's itemized review.
+- The interactive envoy (your editor and chat sessions, see the claude-code and chat connectors) is **Consul** by default.
 
 Builder, lead, and critic together form the gauntlet loop (goal in, judged work out, human at the irreversible gate); the loop is optional, and a lone builder on a schedule is still a complete Bureau. Goals marked `## Mode: perpetual` keep improving in releasable tranches with assessment cycles between them, until the human rules the result good enough.
 
