@@ -372,7 +372,8 @@ function openGoalForm() {
     <div class="meta">The lead (ummon) decomposes this into missions with acceptance bars. Concrete references beat adjectives.</div>
     <div class="actions" style="margin-top:10px"><input id="g-title" placeholder="Destination, one line (goal: is added for you)" style="flex:1"></div>
     <div class="actions"><select id="g-project" style="flex:1">${opts}</select>
-      <select id="g-prio"><option value="1">P1</option><option value="2" selected>P2</option><option value="3">P3</option></select></div>
+      <select id="g-prio"><option value="1">P1</option><option value="2" selected>P2</option><option value="3">P3</option></select>
+      <input id="g-loops" type="number" min="1" max="999" placeholder="Loops (blank = until you stop)" title="Round budget per mission: at round N the critic escalates best-so-far to you" style="flex:0 1 210px"></div>
     <textarea id="g-dest" placeholder="What does done look like? A stranger should be able to tell." style="width:100%;min-height:80px;box-sizing:border-box;margin-top:8px"></textarea>
     <textarea id="g-bar" placeholder="The bar, one reference or criterion per line: URLs, brain paths, hard rules." style="width:100%;min-height:80px;box-sizing:border-box;margin-top:8px"></textarea>
     <div class="actions" style="margin-top:8px"><input type="file" id="g-files" multiple accept=".png,.jpg,.jpeg,.gif,.svg,.pdf"></div>
@@ -400,7 +401,8 @@ async function submitGoal() {
     uploaded.push(path);
   }
   const barLines = [...bar.split('\n').map(s => s.trim()).filter(Boolean), ...uploaded.map(p => `${p} (in the brain)`)];
-  const body = `${dest}${barLines.length ? `\n\n## Bar\n${barLines.map(l => `- ${l}`).join('\n')}` : ''}`;
+  const loops = +(document.getElementById('g-loops') || {}).value || 0;
+  const body = `${dest}${barLines.length ? `\n\n## Bar\n${barLines.map(l => `- ${l}`).join('\n')}` : ''}${loops ? `\n\n## Loops: ${loops}` : ''}`;
   const r = await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title: `goal: ${title.replace(/^goal:\s*/i, '')}`, body, project, priority: +document.getElementById('g-prio').value, created_by: 'human' }) });
   if (r.error) { status.textContent = r.error; return; }
   document.getElementById('overlay').classList.remove('open');
