@@ -17,7 +17,7 @@ This shape exists for a reason: scheduled runs on consumer AI subscriptions are 
 - **`MONETA-SHIFT.md`**: the critic. Judges `gate: critic` reviews against their stated bar by inspecting the actual output; passes or sends back with concrete gaps; never judges its own work.
 - **`SOL-SHIFT.md`**: the librarian. A night cycle that digests the day's episodic capture into curated knowledge, propose-then-apply under the boss's itemized review.
 
-Builder, lead, and critic together form the gauntlet loop (goal in, judged work out, human at the irreversible gate); the loop is optional, and a lone builder on a schedule is still a complete Bureau.
+Builder, lead, and critic together form the gauntlet loop (goal in, judged work out, human at the irreversible gate); the loop is optional, and a lone builder on a schedule is still a complete Bureau. Goals marked `## Mode: perpetual` keep improving in releasable tranches with assessment cycles between them, until the human rules the result good enough.
 
 ## Setup
 
