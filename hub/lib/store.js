@@ -130,14 +130,19 @@ function slugify(label) {
     .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 40);
 }
 
-function createProject(label, id, entity) {
+// A project's repo is where its code lives (https clone URL); agents that build
+// need the address, not a guess. Optional, like the entity wall.
+const REPO_RE = /^https:\/\/[\w.-]+\/[\w.\/~-]+$/;
+
+function createProject(label, id, entity, repo) {
   const s = load();
   id = id || slugify(label);
   if (!PROJECT_RE.test(id)) return { error: 'label produces an empty or invalid id' };
   if (entity && !PROJECT_RE.test(entity)) return { error: 'bad entity slug: letters, digits, dot, dash, underscore, max 40' };
+  if (repo && !REPO_RE.test(repo)) return { error: 'repo must be an https clone URL' };
   if (s.projects.some(p => p.id === id)) return { exists: true, project: s.projects.find(p => p.id === id) };
   // entity: the scope wall this project sits behind (entities/<slug>/ in the brain); optional
-  const project = { id, label: String(label || id), capacity: 1, ...(entity ? { entity } : {}) };
+  const project = { id, label: String(label || id), capacity: 1, ...(entity ? { entity } : {}), ...(repo ? { repo } : {}) };
   s.projects.push(project);
   s.projects.sort((a, b) => a.id.localeCompare(b.id));
   save();
@@ -155,7 +160,7 @@ function deleteProject(id) {
   return { deleted: true };
 }
 
-function updateProject(id, { label, capacity, entity }) {
+function updateProject(id, { label, capacity, entity, repo }) {
   const s = load();
   const p = s.projects.find(x => x.id === id);
   if (!p) return null;
@@ -169,11 +174,16 @@ function updateProject(id, { label, capacity, entity }) {
     else if (!PROJECT_RE.test(entity)) return { error: 'bad entity slug: letters, digits, dot, dash, underscore, max 40' };
     else p.entity = entity;
   }
+  if (repo !== undefined) {
+    if (repo === '' || repo === null) delete p.repo;
+    else if (!REPO_RE.test(repo)) return { error: 'repo must be an https clone URL' };
+    else p.repo = repo;
+  }
   save();
   return p;
 }
 
-function createTask({ title, body, priority, project, created_by }) {
+function createTask({ title, body, priority, project, created_by, gate }) {
   const t = {
     id: nextId('t'),
     title: String(title || 'untitled'),
@@ -181,6 +191,10 @@ function createTask({ title, body, priority, project, created_by }) {
     status: 'queued',
     priority: Number.isFinite(+priority) ? +priority : 3, // 1 = highest
     project: project || 'general', // always named: the brain files under projects/<project>/
+    // Two-tier review: 'boss' (default; only the human moves it out of review)
+    // or 'critic' (the critic agent may rule on it). The irreversible list is
+    // always boss-gate by law (docs/protocol.md).
+    gate: gate === 'critic' ? 'critic' : 'boss',
     created_by: created_by || 'human',
     created_at: nowISO(),
     assignee: null,
@@ -216,13 +230,11 @@ function expireLeases() {
   const expired = [];
   for (const t of s.tasks) {
     if ((t.status === 'claimed' || t.status === 'in_progress') && t.lease_until && t.lease_until < now) {
-      // Shift workers are interchangeable; the envoy is not (same rule as
-      // reservation-on-answer). A non-cowork assignee usually has local work in
-      // progress that the pool cannot see, so the mission waits for its owner.
-      const holder = s.agents.find(a => a.name === t.assignee);
-      const reserve = t.assignee && (!holder || holder.kind !== 'cowork');
-      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue${reserve ? `, reserved for ${t.assignee}` : ''}` });
-      if (reserve) t.reserved_for = t.assignee;
+      // Unified reservations: the expired holder gets first claim on its own
+      // mission. claimTask lets cowork reservations lapse after the TTL, so a
+      // dead shift's mission returns to the pool; the envoy's waits for him.
+      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}` });
+      if (t.assignee) { t.reserved_for = t.assignee; t.reserved_at = nowISO(); }
       t.status = 'queued';
       t.assignee = null;
       t.lease_until = null;
@@ -244,19 +256,33 @@ function claimTask({ id, agent, lease_minutes }) {
   } else {
     // Projects are the unit of concurrency: claim-without-id serves only projects
     // with free capacity (active = claimed or in_progress, whoever holds them).
-    // blocked and review missions do not occupy a slot. Claim-by-id bypasses this.
+    // blocked and review missions do not occupy a slot, and neither do goal
+    // missions: a goal is coordination held open by the lead for its whole life,
+    // and it must not starve its own children of the desk. Claim-by-id bypasses.
     const active = {};
     for (const x of s.tasks)
-      if (x.status === 'claimed' || x.status === 'in_progress') active[x.project] = (active[x.project] || 0) + 1;
+      if ((x.status === 'claimed' || x.status === 'in_progress') && !/^goal:/i.test(x.title)) active[x.project] = (active[x.project] || 0) + 1;
     const capOf = pid => { const pj = s.projects.find(x => x.id === pid); return (pj && pj.capacity) || 1; };
+    // Reservations hold a mission for the agent with context. A cowork holder's
+    // reservation lapses after the TTL (its shift may be over; the pool takes
+    // the mission); a non-cowork holder's never lapses (the envoy's context
+    // lives outside any session and keeps).
+    const ttlMs = (+process.env.BUREAU_RESERVATION_TTL_MIN || 30) * 60000;
+    const claimable = x => {
+      if (!x.reserved_for || x.reserved_for === agent) return true;
+      const holder = s.agents.find(a => a.name === x.reserved_for);
+      if (!holder || holder.kind !== 'cowork') return false;
+      return !x.reserved_at || (Date.now() - Date.parse(x.reserved_at)) > ttlMs;
+    };
     const queued = s.tasks
-      .filter(x => x.status === 'queued' && (!x.reserved_for || x.reserved_for === agent))
+      .filter(x => x.status === 'queued' && claimable(x))
       .sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at));
     if (!queued.length) return { error: 'queue_empty' };
     t = queued.find(x => (active[x.project] || 0) < capOf(x.project));
     if (!t) return { error: 'all_busy' };
   }
   delete t.reserved_for; // any claim (owner, or explicit by id) clears the reservation
+  delete t.reserved_at;
   t.status = 'claimed';
   t.assignee = agent;
   const mins = Number.isFinite(+lease_minutes) ? +lease_minutes : 120;
@@ -266,11 +292,22 @@ function claimTask({ id, agent, lease_minutes }) {
   return { task: t };
 }
 
-function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts }) {
+function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
   const prevStatus = t.status, prevAssignee = t.assignee;
+  // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
+  if (gate !== undefined) {
+    if (gate === 'boss') t.gate = 'boss';
+    else if (gate === 'critic' && (agent === 'human' || agent === 'ummon')) t.gate = 'critic';
+    else return { error: 'gate: anyone may raise to boss; only the boss or ummon set critic' };
+  }
+  // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
+  // (done or back to queued) only by the human's hand. Missions without a gate
+  // predate the field and are boss-gate by definition.
+  if ((status === 'done' || status === 'queued') && t.status === 'review' && (t.gate || 'boss') === 'boss' && agent !== 'human')
+    return { error: 'boss-gate: only the boss moves this mission out of review' };
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
   // the next shift reads exactly what was accepted and what needs rework.
@@ -308,11 +345,13 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
     // Same pattern for blocked: an answer link, so the boss can reply from any channel.
     if (status === 'blocked') t.answer_link = { token: crypto.randomBytes(16).toString('hex'), exp: new Date(Date.now() + 7 * 86400_000).toISOString() };
     else delete t.answer_link;
-    // Shift workers are interchangeable; the envoy is not. An answered mission
-    // whose asker was not a cowork worker re-queues reserved for that asker.
-    if (status === 'queued' && prevStatus === 'blocked' && prevAssignee) {
-      const asker = s.agents.find(a => a.name === prevAssignee);
-      if (!asker || asker.kind !== 'cowork') t.reserved_for = prevAssignee;
+    // Unified reservations: an answer or a send-back returns the mission to its
+    // previous holder, who has the context (a lingering builder claims it back
+    // within its shift). claimTask lets cowork reservations lapse after a TTL;
+    // non-cowork holders (the envoy) keep theirs until they claim.
+    if (status === 'queued' && (prevStatus === 'blocked' || prevStatus === 'review') && prevAssignee) {
+      t.reserved_for = prevAssignee;
+      t.reserved_at = nowISO();
     }
   }
   if (lease_minutes) t.lease_until = new Date(Date.now() + (+lease_minutes) * 60000).toISOString();

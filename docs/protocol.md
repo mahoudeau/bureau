@@ -27,7 +27,15 @@ Projects are the unit of concurrency: each has a `capacity` (default 1), and cla
 
 A project can also carry an `entity` (a slug, optional, settable on create and PATCH, cleared with an empty string): the scope wall it sits behind in the brain (`entities/<slug>/`, see `brain-format.md`). The hub stores and serves the field; the walls themselves are enforced by the standing prompts in v1.
 
-Missions support itemized review: `PATCH /api/tasks/:id` with `{"items": [{title, body}]}` appends proposal items (server-assigned ids), and the review capability page and dashboard render each with Accept / Reject / Later plus a comment. Verdicts (`{"verdicts": [{id, verdict, comment}]}` on the same PATCH, or the review form) persist on the mission and land in its log, so a later session applies exactly what was approved. Reservations protect context: a mission that leaves `blocked` via an answer, or whose lease expires while a non-`cowork` agent held it, re-queues `reserved_for` that agent; pool claims skip it, any claim clears it.
+A project can also carry a `repo` (an https clone URL, optional like `entity`): where its code lives, so building agents clone the address instead of guessing it.
+
+Missions support itemized review: `PATCH /api/tasks/:id` with `{"items": [{title, body}]}` appends proposal items (server-assigned ids), and the review capability page and dashboard render each with Accept / Reject / Later plus a comment. Verdicts (`{"verdicts": [{id, verdict, comment}]}` on the same PATCH, or the review form) persist on the mission and land in its log, so a later session applies exactly what was approved.
+
+**Two-tier review: the `gate`.** Every mission carries `gate: "boss"` (default) or `"critic"`. A boss-gate mission in `review` moves out (`done` or `queued`) only when `agent` is `human`; the hub refuses anyone else. Anyone may raise a gate to `boss`; only the boss or the lead agent set `critic`. The irreversible list (deploys, merges to main, external sends, purchases, doctrine changes, credentials) is boss-gate by law. Discord review pings fire only for boss-gate missions.
+
+**Unified reservations.** Any transition out of `review` or `blocked` back to `queued`, and any lease expiry, re-queues the mission `reserved_for` its previous holder (with a `reserved_at` stamp): the agent with context gets first claim. Pool claims skip reservations, with one expiry: a `cowork` holder's reservation lapses after `BUREAU_RESERVATION_TTL_MIN` minutes (default 30; its shift may be over), a non-`cowork` holder's never lapses. Any claim clears the reservation.
+
+**Brain attachments.** The knowledge API also accepts small binaries (`.png .jpg .jpeg .gif .svg .pdf`, 5MB cap): `POST /api/knowledge` with `encoding: "base64"` (replace-only), read back as `content_base64` or raw bytes with `&raw=1`. Convention: goal-bar references under `projects/<p>/references/`, review-evidence screenshots under `deliverables/`.
 
 Session guidance for connectors: a session is a shift, not the queue. Make every task self-contained (claim, work, write knowledge, update status, claim next) and keep state in the hub, never in session context. Leases turn dead sessions into requeued work; fresh sessions resume from the hub, not from memory.
 

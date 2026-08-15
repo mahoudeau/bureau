@@ -42,7 +42,7 @@ function send(res, code, obj) {
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', c => { data += c; if (data.length > 2e6) { reject(new Error('body too large')); req.destroy(); } });
+    req.on('data', c => { data += c; if (data.length > 8e6) { reject(new Error('body too large')); req.destroy(); } });
     req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('invalid JSON')); } });
     req.on('error', reject);
   });
@@ -67,7 +67,17 @@ function reviewForm(task, action, token, err, kind) {
       }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
-  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
+  // Review evidence: artifacts that point at brain images render inline, served
+  // through this link's own capability (never the hub token).
+  const imgOf = a => {
+    const m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+    return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
+  };
+  const evidence = (task.artifacts || []).map(a => {
+    const f = imgOf(a);
+    return f ? `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(decodeURIComponent(f))}" alt="${escHtml(a.label || f)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(a.label || f)}</figcaption></figure>` : '';
+  }).join('');
+  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
 }
 
 // Constant-time comparison via digests: no timing oracle on the single secret,
@@ -99,6 +109,18 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
     }
     if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
+
+    // Capability-scoped image serving: a valid review link may render the brain
+    // attachments its mission cites, without ever exposing the hub token.
+    const mReviewImg = p.match(/^\/r\/([a-f0-9]{32})\/img$/);
+    if (mReviewImg && req.method === 'GET') {
+      const found = store.findByReviewToken(mReviewImg[1]);
+      if (!found) return send(res, 404, { error: 'not found' });
+      const r = knowledge.readKnowledgeRaw(url.searchParams.get('file') || '');
+      if (r === null || !r.binary) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
+      return res.end(r.buf);
+    }
 
     // ----- review capability links (the token IS the auth; GET renders, POST acts) -----
     // GET must never mutate: chat clients unfurl links, and a side-effecting GET
@@ -249,7 +271,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const label = b.label || b.name;
       if (!label) return send(res, 400, { error: 'label required' });
-      const r = store.createProject(label, b.id, b.entity);
+      const r = store.createProject(label, b.id, b.entity, b.repo);
       if (r.error) return send(res, 400, r);
       if (r.exists) return send(res, 409, { error: 'project already exists', project: r.project });
       broadcast('project.created', { note: `${r.project.label} (${r.project.id})` });
@@ -258,7 +280,7 @@ const server = http.createServer(async (req, res) => {
     const mProj = p.match(/^\/api\/projects\/([A-Za-z0-9._-]+)$/);
     if (req.method === 'PATCH' && mProj) {
       const b = await readBody(req);
-      if (b.label === undefined && b.capacity === undefined && b.entity === undefined) return send(res, 400, { error: 'label, capacity or entity required' });
+      if (b.label === undefined && b.capacity === undefined && b.entity === undefined && b.repo === undefined) return send(res, 400, { error: 'label, capacity, entity or repo required' });
       const pj = store.updateProject(mProj[1], b);
       if (!pj) return send(res, 404, { error: 'not_found' });
       if (pj.error) return send(res, 400, pj);
@@ -332,11 +354,26 @@ const server = http.createServer(async (req, res) => {
       broadcast('knowledge.written', { ...r, author: b.author || 'agent' });
       return send(res, 200, r);
     }
+    // Immediate intake sweep (the 5-minute interval covers the normal case)
+    if (req.method === 'POST' && p === '/api/knowledge/sweep') {
+      const r = knowledge.intakeSweep();
+      if (r.committed) broadcast('knowledge.written', { file: r.files.join(', '), author: 'human' });
+      return send(res, 200, r);
+    }
     if (req.method === 'GET' && p === '/api/knowledge') {
       const file = url.searchParams.get('file');
       if (file) {
-        const content = knowledge.readKnowledge(file);
-        return content === null ? send(res, 404, { error: 'not found' }) : send(res, 200, { file, content });
+        // raw=1 serves bytes with the right content-type (browsers, curl -o);
+        // otherwise JSON: utf8 for text, content_base64 for binary attachments.
+        const r = knowledge.readKnowledgeRaw(file);
+        if (r === null) return send(res, 404, { error: 'not found' });
+        if (url.searchParams.get('raw') === '1') {
+          res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
+          return res.end(r.buf);
+        }
+        return r.binary
+          ? send(res, 200, { file, content_base64: r.buf.toString('base64') })
+          : send(res, 200, { file, content: r.buf.toString('utf8') });
       }
       return send(res, 200, { files: knowledge.listKnowledge(url.searchParams.get('dir') || '') });
     }
@@ -356,12 +393,12 @@ function mcpToken() {
 
 const MCP_TOOLS = [
   { name: 'whoami', description: 'Identify this connector: who you are at the Bureau and what is on the board.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-  { name: 'list_projects', description: 'List Bureau projects (id, label, capacity, entity, mission counts). Choose projects from this list; ids are never invented. A project\'s entity names its scope wall: entities/<slug>/ in the brain.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'list_projects', description: 'List Bureau projects (id, label, capacity, entity, repo, mission counts). Choose projects from this list; ids are never invented. A project\'s entity names its scope wall (entities/<slug>/ in the brain); its repo is where the code lives.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, done, failed.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
-  { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' } }, required: ['title', 'project'], additionalProperties: false } },
+  { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } } }, required: ['id'], additionalProperties: false } },
-  { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' } }, required: ['file', 'content'], additionalProperties: false } },
+  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['id'], additionalProperties: false } },
+  { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
 ];
 
@@ -386,7 +423,7 @@ function mcpToolCall(name, a = {}) {
     case 'create_mission': {
       const wanted = a.project;
       if (!s.projects.some(pj => pj.id === wanted)) throw new Error(`unknown project: ${wanted}. Existing: ${s.projects.map(pj => pj.id).join(', ')}. Pick one or create it first.`);
-      const t = store.createTask({ title: a.title, body: a.body, priority: a.priority, project: wanted, created_by: 'consul' });
+      const t = store.createTask({ title: a.title, body: a.body, priority: a.priority, project: wanted, created_by: 'consul', gate: a.gate });
       broadcast('task.created', t);
       return { id: t.id, title: t.title, project: t.project, status: t.status };
     }
@@ -399,14 +436,14 @@ function mcpToolCall(name, a = {}) {
       return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until };
     }
     case 'update_mission': {
-      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items });
+      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate });
       if (r.error) throw new Error(r.error);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[a.status] || 'task.updated';
       broadcast(evt, { ...r.task, note: a.note });
       return { id: r.task.id, status: r.task.status };
     }
     case 'write_knowledge': {
-      const r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message });
+      const r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message, encoding: a.encoding });
       broadcast('knowledge.written', { ...r, author: 'consul' });
       return r;
     }
@@ -466,9 +503,19 @@ setInterval(() => {
   for (const t of store.expireLeases()) broadcast('task.requeued', t);
 }, 60_000);
 
+// Periodic intake sweep: files the boss dropped over SFTP or edited by hand
+// become commits (author human) without anyone asking.
+setInterval(() => {
+  try {
+    const r = knowledge.intakeSweep();
+    if (r.committed) broadcast('knowledge.written', { file: r.files.join(', '), author: 'human' });
+  } catch (e) { console.error('[intake] sweep failed:', e.message); }
+}, 300_000);
+
 const lock = store.acquireLock();
 if (lock.error) { console.error(lock.error); process.exit(1); }
 knowledge.ensureRepo();
+try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {

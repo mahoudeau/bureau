@@ -19,6 +19,9 @@ function fmt(type, data) {
     case 'task.created':  return `📥 **New task** ${data.id}: ${data.title}`;
     case 'task.claimed':  return `🏃 **${data.assignee}** claimed ${data.id}: ${data.title}`;
     case 'task.review': {
+      // Critic-gate reviews are the critic's desk, not the boss's phone: they
+      // stay on the dashboard feed and never ping.
+      if ((data.gate || 'boss') !== 'boss') return null;
       let msg = `👀 **Review needed** · ${data.id}: ${data.title} (by ${data.assignee || '?'})`;
       if (base && data.review_links)
         msg += `\n✅ Approve: ${base}/r/${data.review_links.approve.token}\n↩️ Send back: ${base}/r/${data.review_links.sendback.token}`;
