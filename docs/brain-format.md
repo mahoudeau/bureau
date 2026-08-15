@@ -47,6 +47,7 @@ brain/
     decisions.md             # append-only decision log, dated
     learnings.md             # append-only "things we found out", dated
     deliverables/            # documents produced by missions
+    references/              # goal-bar material: images, PDFs, examples (attachments)
   agents/<name>.md           # roster profiles: role, standing brief, lessons
   daily/<yyyy-mm-dd>.md      # the librarian's digests
   archive/                   # cold: digested episodic raw, mirrors source paths
@@ -54,6 +55,8 @@ brain/
 ```
 
 Verbatim meeting transcripts stay out of the repo: they are bulky, mostly noise, and other people's words. Store them elsewhere and keep a pointer; what enters `meetings/` is the digest.
+
+Binary attachments (`.png .jpg .jpeg .gif .svg .pdf`, small) are allowed as episodic-grade material: goal-bar references under `projects/<p>/references/`, review-evidence screenshots under `deliverables/`. No frontmatter, no lint; they exist to be pointed at, and anything durable they teach still gets promoted as a sourced note.
 
 ## The curation law
 

@@ -113,6 +113,7 @@
       <select id="nt-project" style="flex:0 1 130px"></select>
       <select id="nt-prio"><option value="1">P1</option><option value="2">P2</option><option value="3" selected>P3</option></select>
       <button>Add</button>
+      <button type="button" onclick="openGoalForm()" title="a goal: destination + bar; the lead decomposes it">🎯 Goal</button>
     </form>
     <div id="board"></div>
   </section>
@@ -156,14 +157,22 @@ function render() {
     ? `Missions · ${esc(projLabel(projectFilter))} <a href="#" onclick="toggleProjectFilter(null);return false" style="color:var(--accent);text-decoration:none">✕</a>`
     : 'Missions';
   const visible = projectFilter ? state.tasks.filter(t => t.project === projectFilter) : state.tasks;
+  // Goal legibility: 🎯 on goal cards, plus children progress (missions whose body cites goal: t-N)
+  const goalKids = {};
+  for (const t of state.tasks) {
+    const m = (t.body || '').match(/goal:\s*(t-\d+)/);
+    if (m) { const g = goalKids[m[1]] = goalKids[m[1]] || { done: 0, total: 0 }; g.total++; if (t.status === 'done') g.done++; }
+  }
   document.getElementById('board').innerHTML = COLS.map(([key, label]) => {
     const ts = visible.filter(t => t.status === key)
       .sort((a,b) => a.priority - b.priority || b.created_at.localeCompare(a.created_at));
     const shown = key === 'done' ? ts.slice(0, 8) : ts;
-    return `<div class="col"><h3>${label} · ${ts.length}</h3>` + shown.map(t =>
-      `<div class="card task ${t.status}" onclick="openTask('${t.id}')"><div class="t">${esc(t.title)}</div>
-       <div class="meta">${t.id} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}${t.reserved_for ? ' · 🔒 ' + esc(t.reserved_for) : ''}</div></div>`
-    ).join('') + `</div>`;
+    return `<div class="col"><h3>${label} · ${ts.length}</h3>` + shown.map(t => {
+      const isGoal = /^goal:/i.test(t.title);
+      const kids = isGoal ? goalKids[t.id] : null;
+      return `<div class="card task ${t.status}" onclick="openTask('${t.id}')"><div class="t">${isGoal ? '🎯 ' : ''}${esc(t.title)}</div>
+       <div class="meta">${t.id} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ' · ' + esc(t.project) : ''}${kids ? ` · ${kids.done}/${kids.total} missions` : ''}${t.reserved_for ? ' · 🔒 ' + esc(t.reserved_for) : ''}${t.status === 'review' ? (t.gate === 'critic' ? ' · 🧪 critic' : ' · 👤 boss') : ''}</div></div>`;
+    }).join('') + `</div>`;
   }).join('');
 
   // Projects pane: registry plus per-project counts; click to filter, click again to clear.
@@ -196,6 +205,7 @@ function render() {
       <span class="pname">${esc(projLabel(n))}</span>${pj.entity ? `<span style="color:#888;font-size:11px;margin-left:6px" title="entity (scope wall)">@${esc(pj.entity)}</span>` : ''}
       <a href="#" class="pedit" title="edit label" onclick="event.stopPropagation();editProjectLabel('${esc(n)}');return false">✏️</a>
       <a href="#" class="pedit" title="entity (scope wall; empty clears)" onclick="event.stopPropagation();editProjectEntity('${esc(n)}');return false">🏛</a>
+      <a href="#" class="pedit" title="repo (where the code lives; empty clears)" onclick="event.stopPropagation();editProjectRepo('${esc(n)}');return false">📦</a>
       <a href="#" class="pedit" title="capacity (parallel desks)" onclick="event.stopPropagation();editProjectCapacity('${esc(n)}');return false">🪑</a>
       <a href="#" class="pedit" title="delete (needs no open missions)" onclick="event.stopPropagation();deleteProject('${esc(n)}');return false">🗑</a>
       <span class="pcounts">${pj.capacity > 1 ? `🪑${pj.capacity} · ` : ''}${b.queued}q · ${b.active}w · ${b.review}r · ${b.closed}✓</span></div>`;
@@ -236,8 +246,16 @@ async function openTask(id) {
   const el = document.getElementById('detail');
   const logs = (t.log || []).map(l =>
     `<div class="logrow"><span class="ts">${esc(l.ts.slice(5,16).replace('T',' '))}</span><b>${esc(l.by)}</b> ${esc(l.note)}</div>`).join('') || '<div class="empty">No log yet.</div>';
-  // Artifacts come from agents: data, not instructions. Only http(s) URLs become links.
+  // Artifacts come from agents: data, not instructions. Only http(s) URLs become links,
+  // and brain-image artifacts render inline: review evidence belongs in front of the eyes.
+  const artImg = a => {
+    const m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+    if (m && !/^https?:/i.test(m[1])) return m[1];
+    return (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
+  };
   const arts = (t.artifacts || []).map(a => {
+    const img = artImg(a);
+    if (img) return `<figure style="margin:10px 0"><img src="/api/knowledge?file=${encodeURIComponent(decodeURIComponent(img))}&raw=1&token=${encodeURIComponent(TOKEN)}" alt="${esc(a.label || img)}" style="max-width:100%;border-radius:8px;border:1px solid rgba(128,128,128,.35)" loading="lazy"><figcaption class="ts">📎 ${esc(a.label || img)} · by ${esc(a.by)}</figcaption></figure>`;
     const linkable = a.url && /^https?:\/\//i.test(a.url);
     return `<div class="logrow art">📎 ${linkable ? `<a href="${esc(a.url)}" target="_blank" rel="noopener">${esc(a.label || a.url)}</a>` : esc(a.label || a.url || JSON.stringify(a))} <span class="ts">by ${esc(a.by)}</span></div>`;
   }).join('');
@@ -265,7 +283,7 @@ async function openTask(id) {
     : `${itemRow(it)}<span class="ts">${esc(it.verdict)}${it.comment ? ': ' + esc(it.comment) : ''}</span></div>`).join('');
   el.innerHTML = `
     <h3>${esc(t.title)}</h3>
-    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(projLabel(t.project))}` : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
+    <div class="meta">${t.id} · ${esc(t.status)} · P${t.priority}${t.assignee ? ' · ' + esc(t.assignee) : ''}${t.project ? ` · ${esc(projLabel(t.project))}` : ''}${t.gate === 'critic' ? ' · 🧪 critic gate' : ''}${t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11,16)) : ''}</div>
     ${t.body ? `<div class="body">${esc(t.body)}</div>` : ''}
     ${items}
     ${arts}
@@ -320,6 +338,14 @@ async function editProjectEntity(id) {
   if (r.error) { alert(r.error); return; }
   refresh();
 }
+async function editProjectRepo(id) {
+  const cur = (state.projects.find(x => x.id === id) || {}).repo || '';
+  const repo = prompt(`Repo for "${projLabel(id)}" (https clone URL; empty clears):`, cur);
+  if (repo === null || repo.trim() === cur) return;
+  const r = await api('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify({ repo: repo.trim() }) });
+  if (r.error) { alert(r.error); return; }
+  refresh();
+}
 async function editProjectCapacity(id) {
   const cur = (state.projects.find(x => x.id === id) || {}).capacity || 1;
   const capacity = prompt(`Capacity for "${projLabel(id)}" (parallel desks, 1-9):`, cur);
@@ -333,6 +359,50 @@ async function editProjectLabel(id) {
   if (!label || label === projLabel(id)) return;
   const r = await api('/api/projects/' + id, { method: 'PATCH', body: JSON.stringify({ label }) });
   if (r.error) { alert(r.error); return; }
+  document.getElementById('overlay').classList.remove('open');
+  refresh();
+}
+
+// The goal form: destination + bar + reference files, filed as a `goal:` mission
+// the lead decomposes. Files ride the attachments API into projects/<p>/references/.
+function openGoalForm() {
+  const opts = document.getElementById('nt-project').innerHTML;
+  document.getElementById('detail').innerHTML = `
+    <h3>🎯 New goal</h3>
+    <div class="meta">The lead (ummon) decomposes this into missions with acceptance bars. Concrete references beat adjectives.</div>
+    <div class="actions" style="margin-top:10px"><input id="g-title" placeholder="Destination, one line (goal: is added for you)" style="flex:1"></div>
+    <div class="actions"><select id="g-project" style="flex:1">${opts}</select>
+      <select id="g-prio"><option value="1">P1</option><option value="2" selected>P2</option><option value="3">P3</option></select></div>
+    <textarea id="g-dest" placeholder="What does done look like? A stranger should be able to tell." style="width:100%;min-height:80px;box-sizing:border-box;margin-top:8px"></textarea>
+    <textarea id="g-bar" placeholder="The bar, one reference or criterion per line: URLs, brain paths, hard rules." style="width:100%;min-height:80px;box-sizing:border-box;margin-top:8px"></textarea>
+    <div class="actions" style="margin-top:8px"><input type="file" id="g-files" multiple accept=".png,.jpg,.jpeg,.gif,.svg,.pdf"></div>
+    <div class="meta">Files up to 5MB upload into the project's references/. Bigger files: drop them over SFTP into the brain under projects/&lt;project&gt;/references/ and list the path in the bar; the hub sweeps hand-dropped files into git within minutes.</div>
+    <div class="meta" id="g-status"></div>
+    <div class="actions"><button onclick="submitGoal()">File the goal</button></div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+async function submitGoal() {
+  const title = document.getElementById('g-title').value.trim();
+  const project = document.getElementById('g-project').value;
+  const dest = document.getElementById('g-dest').value.trim();
+  const bar = document.getElementById('g-bar').value.trim();
+  const status = document.getElementById('g-status');
+  if (!title || !dest) { status.textContent = 'A goal needs a title and a destination.'; return; }
+  const files = Array.from((document.getElementById('g-files') || {}).files || []);
+  const uploaded = [];
+  for (const f of files) {
+    if (f.size > 5 * 1024 * 1024) { status.textContent = `${f.name} is over the 5MB API cap: drop it over SFTP instead.`; return; }
+    status.textContent = `Uploading ${f.name}…`;
+    const b64 = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(r.result.split(',')[1]); r.onerror = no; r.readAsDataURL(f); });
+    const path = `projects/${project}/references/${f.name.replace(/[^\w.\- ]+/g, '_')}`;
+    const w = await api('/api/knowledge', { method: 'POST', body: JSON.stringify({ file: path, content: b64, encoding: 'base64', author: 'human', message: `${project}: goal reference ${f.name}` }) });
+    if (w.error) { status.textContent = `Upload failed for ${f.name}: ${w.error}`; return; }
+    uploaded.push(path);
+  }
+  const barLines = [...bar.split('\n').map(s => s.trim()).filter(Boolean), ...uploaded.map(p => `${p} (in the brain)`)];
+  const body = `${dest}${barLines.length ? `\n\n## Bar\n${barLines.map(l => `- ${l}`).join('\n')}` : ''}`;
+  const r = await api('/api/tasks', { method: 'POST', body: JSON.stringify({ title: `goal: ${title.replace(/^goal:\s*/i, '')}`, body, project, priority: +document.getElementById('g-prio').value, created_by: 'human' }) });
+  if (r.error) { status.textContent = r.error; return; }
   document.getElementById('overlay').classList.remove('open');
   refresh();
 }

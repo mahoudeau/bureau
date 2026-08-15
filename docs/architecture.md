@@ -72,6 +72,8 @@ Two axes organize this: **scope** (whose knowledge: global > entity > project, n
 
 Agents write through `POST /api/knowledge` (path + content + append/replace + commit message); the hub validates the path, writes the file, and commits with the agent's name as author. You get history, blame, diffs, and rollback for free, and the entire brain is `git clone`-able to anywhere, forever.
 
+The owner's hands are a write path too: files dropped straight into the brain directory (SFTP, a mounted disk) or edited in place are swept into git every few minutes as author `human`, so hand edits and big reference files (beyond the API's 5MB attachment cap) become first-class brain material without touching the API. A drop into `import/` or `meetings/` is the cold-start intake path: the librarian digests it from there.
+
 Two conventions do a lot of heavy lifting: every task completion **must** append to the relevant `STATE.md` (so any future session can resume cold), and decisions/learnings are **append-only with dates** (so nothing is ever silently rewritten).
 
 ### 3.5 Dashboard + activity feed
@@ -80,7 +82,11 @@ A single HTML page served by the hub at `/` (behind the same token, passed once 
 
 The dashboard's task detail panel is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
 
-### 3.6 Adapters
+### 3.6 The gauntlet (optional roles over the same queue)
+
+With two named roles on schedules, the queue becomes a self-driving loop, patterned on the Gauntlet Loop (somethingbig.ai/gauntlet-loop): the human states a **goal** with a concrete bar (reference URLs, files under `projects/<p>/references/`), a **lead** agent decomposes it into the smallest missions that can be built and judged separately (each with an `## Acceptance` section and a `gate`), the worker pool builds, and a **critic** agent with fresh context judges each review-parked mission against its stated bar: pass, or send back with the exact gaps (the mission re-queues reserved for its builder, who lingers and fixes warm). The builder never grades itself; the lead never builds or judges; the critic never builds or decomposes. The human keeps the irreversible gate (boss-gate reviews are hub-enforced human-only) and rules on goal completion. Pausing the two role schedules switches the loop off; everything else keeps working.
+
+### 3.7 Adapters
 
 Every hub event flows through one internal `events` bus. Adapters subscribe to it. The scaffold ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. Later candidates: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
 

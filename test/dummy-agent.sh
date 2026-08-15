@@ -83,6 +83,8 @@ check "entity settable on create" "$(api POST /api/projects '{"label":"Acme Site
 check "entity patchable" "$(api PATCH /api/projects/acme-site '{"entity":"acme-corp"}')" '"entity": "acme-corp"'
 check "bad entity slug rejected" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/projects/acme-site" -H "$AUTH" -H "$JSON" -d '{"entity":"../evil"}')" '400'
 check "empty entity clears the wall" "$(api PATCH /api/projects/acme-site '{"entity":""}' | grep -c '"entity"' || true)" '0'
+check "repo settable" "$(api PATCH /api/projects/acme-site '{"repo":"https://github.com/acme/site"}')" '"repo": "https://github.com/acme/site"'
+check "bad repo url refused" "$(api PATCH /api/projects/acme-site '{"repo":"git@github.com:acme/site.git"}')" 'https clone URL'
 api DELETE /api/projects/acme-site > /dev/null
 check "delete refused with open missions" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/projects/demo" -H "$AUTH")" '409'
 check "delete empty project" "$(api DELETE /api/projects/garden)" '"deleted": true'
@@ -133,17 +135,73 @@ api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minute
 sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
 check "non-cowork expiry keeps the reservation" "$(api GET "/api/tasks/$T2ID")" '"reserved_for": "menace"'
+# Unified reservations: cowork holders keep their mission only for the TTL.
+# The lapse check needs a hub started with a tiny BUREAU_RESERVATION_TTL_MIN (the
+# local runner sets 0.02 = 1.2s); against a default hub it would wait 30 minutes.
 api POST /api/agents/register '{"name":"shifty","kind":"cowork"}' > /dev/null
-T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":3}')
+T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":1}')
 T3ID=$(echo "$T3" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\",\"lease_minutes\":0.03}" > /dev/null
 sleep 3
 api GET /api/tasks > /dev/null
-check "cowork expiry returns to the open pool" "$(api GET "/api/tasks/$T3ID" | grep -c reserved_for || true)" '0'
+check "cowork expiry reserves for the shift worker too" "$(api GET "/api/tasks/$T3ID")" '"reserved_for": "shifty"'
+sleep 2
+check "lapsed cowork reservation returns to the pool" "$(api POST /api/tasks/claim '{"agent":"worker-x"}')" "\"id\": \"$T3ID\""
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\"}" > /dev/null
 api PATCH "/api/tasks/$T2ID" '{"agent":"menace","status":"done","note":"plant watered"}' > /dev/null
-api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\"}" > /dev/null
-api PATCH "/api/tasks/$T3ID" '{"agent":"shifty","status":"done","note":"plants straightened"}' > /dev/null
+api PATCH "/api/tasks/$T3ID" '{"agent":"worker-x","status":"done","note":"plants straightened"}' > /dev/null
+
+echo "8c. the gate: boss-gate reviews move only by the boss's hand"
+TG=$(api POST /api/tasks '{"title":"Gate check mission","project":"ops","priority":2}')
+TGID=$(echo "$TG" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+check "gate defaults to boss" "$TG" '"gate": "boss"'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TGID\"}" > /dev/null
+api PATCH "/api/tasks/$TGID" '{"agent":"menace","status":"review","note":"parked"}' > /dev/null
+check "agent cannot close a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done"}')" 'boss-gate'
+check "agent cannot set critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","gate":"critic"}')" 'only the boss or ummon'
+check "ummon sets critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"ummon","gate":"critic"}')" '"gate": "critic"'
+check "critic closes a critic-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done","note":"passes the bar"}')" '"done"'
+TC=$(api POST /api/tasks '{"title":"Critic sendback mission","project":"ops","priority":2,"gate":"critic"}')
+TCID=$(echo "$TC" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+check "gate settable on create" "$TC" '"gate": "critic"'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TCID\"}" > /dev/null
+api PATCH "/api/tasks/$TCID" '{"agent":"menace","status":"review","note":"parked"}' > /dev/null
+check "critic send-back reserves for the builder" "$(api PATCH "/api/tasks/$TCID" '{"agent":"moneta","status":"queued","note":"gaps: the bar is not met"}')" '"reserved_for": "menace"'
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TCID\"}" > /dev/null
+api PATCH "/api/tasks/$TCID" '{"agent":"menace","status":"done","note":"fixed"}' > /dev/null
+
+echo "8d. brain attachments: base64 in, raw bytes out, whitelist enforced"
+PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+# JSON with escaped quotes inside a double-quoted $() trips macOS bash 3.2's
+# parser (fragments the argument); building the body in a variable is immune.
+PNG_BODY="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"author\":\"menace\",\"message\":\"ops: bar reference\"}"
+check "base64 attachment accepted" "$(api POST /api/knowledge "$PNG_BODY")" '"bytes"'
+check "binary read returns base64" "$(api GET '/api/knowledge?file=projects/ops/references/pixel.png')" 'content_base64'
+check "raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/knowledge?file=projects/ops/references/pixel.png&raw=1" -H "$AUTH" | tr -d '\r')" 'content-type: image/png'
+check "off-whitelist extension refused" "$(api POST /api/knowledge '{"file":"projects/ops/references/tool.exe","content":"x","author":"menace"}')" 'only .md'
+PNG_APPEND="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
+check "base64 append refused" "$(api POST /api/knowledge "$PNG_APPEND")" 'replace-only'
+TE=$(api POST /api/tasks '{"title":"Evidence renders inline","project":"ops","priority":2}')
+TEID=$(echo "$TE" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TEID\"}" > /dev/null
+api PATCH "/api/tasks/$TEID" '{"agent":"menace","artifact":{"label":"screenshot","url":"projects/ops/references/pixel.png"},"status":"review","note":"evidence attached"}' > /dev/null
+EV_TOKEN=$(api GET "/api/tasks/$TEID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "review page renders evidence inline" "$(curl -s "$BUREAU_URL/r/$EV_TOKEN")" '<img src="/r/'
+check "capability image route serves the bytes" "$(curl -si "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/ops/references/pixel.png" | tr -d '\r')" 'content-type: image/png'
+check "bad capability gets no image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000/img?file=projects/ops/references/pixel.png")" '404'
+curl -s -X POST "$BUREAU_URL/r/$EV_TOKEN" > /dev/null
+
+echo "8e. intake sweep: hand-dropped brain files become commits (needs CONF_BRAIN_DIR)"
+if [ -n "${CONF_BRAIN_DIR:-}" ]; then
+  mkdir -p "$CONF_BRAIN_DIR/import"
+  echo "- dropped by hand, fake" > "$CONF_BRAIN_DIR/import/dropped-note.md"
+  check "sweep commits the drop" "$(api POST /api/knowledge/sweep)" '"committed": 1'
+  check "dropped file readable via the API" "$(api GET '/api/knowledge?file=import/dropped-note.md')" 'dropped by hand'
+  check "intake commit authored by the human hand" "$(api GET /api/state)" 'intake: files dropped or edited by hand'
+  check "clean sweep is a no-op" "$(api POST /api/knowledge/sweep)" '"committed": 0'
+else
+  echo "  skip: CONF_BRAIN_DIR not set (sweep checks need filesystem access to the hub's brain)"
+fi
 
 echo "8b. project capacity: one desk per project, spillover, all_busy, by-id bypass"
 api POST /api/projects '{"label":"Busy Corner"}' > /dev/null
@@ -158,6 +216,14 @@ check "first worker takes the busy corner" "$(api POST /api/tasks/claim '{"agent
 check "second worker spills to the next project" "$(api POST /api/tasks/claim '{"agent":"worker-b"}')" 'Dust the pixel plants'
 check "third worker finds every desk taken" "$(api POST /api/tasks/claim '{"agent":"worker-c"}')" 'all_busy'
 check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "{\"agent\":\"worker-c\",\"id\":\"$BBID\"}")" '"claimed"'
+GOAL=$(api POST /api/tasks '{"title":"goal: tidy the corner","project":"busy-corner","priority":1}')
+GOALID=$(echo "$GOAL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+GKID=$(api POST /api/tasks '{"title":"Sweep under the goal","project":"busy-corner","priority":1}')
+GKIDID=$(echo "$GKID" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api PATCH "/api/tasks/$BAID" '{"agent":"worker-a","status":"done","note":"sign polished"}' > /dev/null
+api PATCH "/api/tasks/$BBID" '{"agent":"worker-c","status":"done","note":"floor waxed"}' > /dev/null
+api POST /api/tasks/claim "{\"agent\":\"lead-x\",\"id\":\"$GOALID\"}" > /dev/null
+check "a held goal does not occupy the desk" "$(api POST /api/tasks/claim '{"agent":"worker-d"}')" "\"id\": \"$GKIDID\""
 
 echo "9. the event stream speaks"
 EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
