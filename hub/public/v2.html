@@ -4,7 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bureau · v2</title>
+<!-- t-92: cascade order matters — tokens define the custom-property values,
+     components/molecules/organisms consume them via var(--v2-color-*) etc.
+     Loading out of this order doesn't break anything (custom properties
+     resolve at use-time, not link-time) but this is the order the three
+     sibling missions (t-66/t-77/t-78) were each written and approved
+     against, so it's kept explicit rather than relying on that fact. -->
 <link rel="stylesheet" href="v2/tokens.css">
+<link rel="stylesheet" href="v2/components.css">
+<link rel="stylesheet" href="v2/molecules.css">
+<link rel="stylesheet" href="v2/organisms.css">
 <!--
   ============================================================================
   DASHBOARD V2 — FOUNDATION CONTRACT (t-62, goal: t-53)
