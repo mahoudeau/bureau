@@ -6,9 +6,14 @@
 //
 // Ports every i11-baseline function living in this surface:
 //   - live agent cards
-//   - project list (read-only here: label/entity/repo/capacity/counts +
+//   - project list (read-only here: label/entity/repo/capacity/open-count +
 //     click-to-filter; INLINE EDITING belongs to project-edit.js, i10 —
-//     out of scope for this file, see t-64's body)
+//     out of scope for this file, see t-64's body). t-133 (goal: t-53):
+//     rebuilt the row per the boss's "not clean, raw clone URL in the row"
+//     report — repo is now a host-derived icon (repoIconName() below) with
+//     a hover/focus tooltip and a real link, entity/capacity/open-mission-
+//     count render as quiet .v2-project-row__chip pills (crop-ux-labels-
+//     chips grammar) instead of the old 4-way "3q · 2w · 1r · 5✓" string.
 //   - board columns from live task data
 //   - a minimal title-only quick-add (project + priority), the "today's
 //     function" baseline — the richer goal form (destination + bar +
@@ -54,6 +59,22 @@ import { icon } from './components.js';
     var ids = (state.projects || []).map(function (p) { return typeof p === 'string' ? p : p && p.id; });
     var i = ids.indexOf(id);
     return PCOLORS[(i < 0 ? 0 : i) % PCOLORS.length];
+  }
+
+  // t-133 (goal: t-53): host-agnostic by construction — the ONLY hostname
+  // that maps to the branded "github" glyph is an exact 'github.com'
+  // (bare or www.-prefixed); every other host (gitlab.com, bitbucket.org,
+  // a self-hosted gitea/forgejo instance, anything) falls through to the
+  // generic "git-branch" glyph already used elsewhere in this app. A
+  // malformed/unparseable repo string (new URL() throws) degrades to the
+  // generic glyph too rather than a broken icon or a thrown render error.
+  function repoIconName(url) {
+    try {
+      var host = new URL(url).hostname.replace(/^www\./, '').toLowerCase();
+      return host === 'github.com' ? 'github' : 'git-branch';
+    } catch (e) {
+      return 'git-branch';
+    }
   }
 
   function ready(cb) {
@@ -230,25 +251,38 @@ import { icon } from './components.js';
       }
 
       // t-86: per-field data-field hooks for project-edit.js (i10) to bind
-      // inline edit UI to, replacing prompt(). All four fields render
-      // UNCONDITIONALLY now (entity/repo used to render only when already
-      // set, capacity was folded into the opaque counts string, repo
-      // wasn't rendered at all) — an editable field needs a stable DOM
-      // node to attach to even when its value is empty. Empty entity/repo
-      // render as an empty span with a data-empty="true" flag project-edit.js
-      // can use for its own "empty" placeholder styling/text, since this
-      // file renders no visible placeholder copy itself (out of scope —
-      // board.js owns structure/hooks only, per this mission's own
-      // instruction not to touch anything beyond the project-card path).
+      // inline edit UI to, replacing prompt(). label/entity/capacity render
+      // UNCONDITIONALLY (an editable field needs a stable DOM node to
+      // attach to even when its value is empty); empty entity renders as
+      // an empty span with a data-empty="true" flag project-edit.js's own
+      // CSS turns into a "—" placeholder, since this file renders no
+      // visible placeholder copy itself (out of scope — board.js owns
+      // structure/hooks only, per this mission's own instruction not to
+      // touch anything beyond the project-card path).
+      //
+      // t-133 (goal: t-53): repo keeps its own data-field="repo" hook (the
+      // CRUD contract survives) but its VIEW state is no longer plain
+      // text — see repoIconName() below and the .v2-repo-link/-editbtn
+      // styles in injectStyle() for the interaction split this required.
       var body = ids.length ? ids.map(function (id) {
         var b = byProj[id];
         var pj = b.meta || {};
+        var openCount = b.queued + b.active + b.review;
+        var repoHost = pj.repo ? repoIconName(pj.repo) : null;
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
           '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
-          '<span class="v2-project-row__entity" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)">' + (pj.entity ? '@' + esc(pj.entity) : '') + '</span>' +
-          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + ' title="repo (clone URL)">' + (pj.repo ? esc(pj.repo) : '') + '</span>' +
-          '<span class="v2-project-row__cap" data-field="capacity" title="capacity (parallel desks)">🪑<span class="v2-project-row__cap-n">' + (pj.capacity || 1) + '</span></span>' +
-          '<span class="v2-project-row__counts">' + b.queued + 'q · ' + b.active + 'w · ' + b.review + 'r · ' + b.closed + '✓</span>' +
+          '<span class="v2-project-row__chips">' +
+            '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
+            '<span class="v2-project-row__chip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
+            '<span class="v2-project-row__chip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
+          '</span>' +
+          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + '>' + (pj.repo ?
+            '<a class="v2-repo-link v2-hit44" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" title="' + esc(pj.repo) + '" aria-label="Open repository (' + esc(pj.repo) + ') in a new tab">' +
+              icon(repoHost, 'v2-icon--xs') +
+              '<span class="v2-repo-link__tip">' + esc(pj.repo) + '</span>' +
+            '</a>' +
+            '<button type="button" class="v2-repo-editbtn v2-hit44" aria-label="Edit repository URL" title="Edit repository URL">' + icon('square-pen', 'v2-icon--xs') + '</button>'
+            : '') + '</span>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
@@ -475,12 +509,66 @@ import { icon } from './components.js';
       '.v2-fleet[open] summary::before { content: "▾ "; }',
       '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted, #999); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
       '.v2-fleet__subagent:last-child { border-bottom: none; }',
-      '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
+      '.v2-project-row { display: flex; align-items: center; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       '.v2-project-row__name { font-weight: 600; }',
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
-      '.v2-project-row__entity { color: var(--v2-muted, #999); font-size: 11px; }',
-      '.v2-project-row__counts { color: var(--v2-ink-2, #888); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }',
+      // t-133 (goal: t-53): entity/capacity/open-count as quiet pill chips
+      // — crop-ux-labels-chips.png's own grammar (hairline 1px border,
+      // pill radius, leading dot-or-glyph, tight padding, small muted
+      // type), scoped to this row rather than reusing .v2-mchip (the
+      // board-card chip already converged/judged borderless in t-93 — a
+      // different, already-settled component this mission has no reason
+      // to touch). [data-field]:hover's highlight (project-edit.js's own
+      // generic rule) still applies for free since these stay data-field
+      // elements.
+      '.v2-project-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
+      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; }',
+      '.v2-project-row__chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; flex: none; }',
+      // Empty entity already gets its "—" placeholder from project-edit.js's
+      // shared `[data-field][data-empty="true"]::before` rule; the dot
+      // above is a value marker and reads as visual noise stacked right
+      // next to that dash when there is no value to mark.
+      '.v2-project-row__chip[data-empty="true"] .v2-project-row__chip-dot { display: none; }',
+      // Repo: icon-only view (host-derived glyph + hover/focus tooltip +
+      // real link) plus a quiet, row-hover-revealed edit affordance —
+      // replaces the old raw-clone-URL text entirely (the boss's own
+      // "not clean" report). Pinned to the row's trailing edge.
+      '.v2-project-row__repo { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-height: 20px; }',
+      '.v2-repo-link { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--v2-radius-xs, 4px); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); position: relative; }',
+      '.v2-repo-link:hover, .v2-repo-link:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
+      '.v2-repo-link:focus-visible, .v2-repo-editbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring, rgba(63,111,224,.4)); }',
+      // Tooltip: the SAME dark-chip register as keyboard.js's .v2-kbd-hint
+      // (STUDY-lead.md: "shortcuts are taught, not chrome" — this is that
+      // rule applied to a data value instead of a shortcut). Hover AND
+      // focus-visible both reveal it, so Tab-to-the-link is a real,
+      // screenshottable "reachable some way at 390px" path for anyone who
+      // can't hover; a real <a href> with no click-hijacking JS also gets
+      // a native long-press preview/context menu on touch for free (not
+      // independently screenshot-able from a headless run, but structural
+      // by construction — there is no onclick here to race a long-press).
+      '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: var(--v2-color-text-primary, #17181a); color: var(--v2-color-text-on-accent, var(--v2-on-accent, #fff)); font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
+      '.v2-repo-link:hover .v2-repo-link__tip, .v2-repo-link:focus .v2-repo-link__tip, .v2-repo-link:focus-visible .v2-repo-link__tip { display: block; }',
+      '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted, #999)); cursor: pointer; opacity: 0; }',
+      // No chrome at rest (bar rule): the edit affordance only appears
+      // once you're already looking at this field, on hover OR keyboard
+      // focus. See the (hover:none) rule below for the touch fallback —
+      // without SOME baseline visibility there, this control would be
+      // reachable-by-luck only, which fails the parity law's "operable,
+      // not merely visible" bar for a real (if secondary) CRUD action.
+      '.v2-project-row__repo:hover .v2-repo-editbtn, .v2-project-row__repo:focus-within .v2-repo-editbtn { opacity: 1; }',
+      '.v2-repo-editbtn:hover, .v2-repo-editbtn:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
+      // (hover: none): baseline-visible edit affordance (see comment
+      // above) PLUS a wider gap between the two icons — each carries a
+      // 44px .v2-hit44 halo (components.css/t-115) centered on a 22px
+      // glyph; at the 2px desktop gap those halos overlap in the middle
+      // and a touch tap landing there would resolve to whichever sibling
+      // paints last (DOM order), silently stealing taps meant for the
+      // link. 24px keeps both halos' centers >=44px apart (11+24+11) so
+      // they never overlap — verified empirically below, not just math.
+      // Desktop keeps the tight 2px gap: the 44px floor is the bar's own
+      // touch-target rule, named "at 390px", and a mouse is precise.
+      '@media (hover: none) { .v2-repo-editbtn { opacity: .55; } .v2-project-row__repo { gap: 24px; } }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
       // violation) — .v2-project-row is `display:flex` with no wrap, so
       // entering inline edit (project-edit.js swapping __name for a wider
@@ -495,7 +583,7 @@ import { icon } from './components.js';
       // look t-111 screenshotted) — letting the ROW wrap instead lets each
       // field claim its natural width on its own line, a cleaner result
       // from the same one-rule fix, not a second layout mechanism.
-      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { overflow-wrap: anywhere; } }',
+      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { margin-left: 0; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
       // t-110: archive toggle — same tap-target treatment as the quick-add
