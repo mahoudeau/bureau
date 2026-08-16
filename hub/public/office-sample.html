@@ -42,7 +42,7 @@
     <span class="hint">idle = the "idle" heartbeat verb · typing = the "editing" verb (docs/protocol.md)</span>
   </div>
   <details open>
-    <summary>About this sample — round 23: rebuilt through the rectifier (the beads-system foundation)</summary>
+    <summary>About this sample — round 26: chair, window, and furniture bridging (moneta's round-25 send-back)</summary>
     <div class="body" id="about"></div>
   </details>
 </main>
@@ -81,12 +81,21 @@ function layout() {
     // pane alone sits high on the wall where it unambiguously reads as a
     // window, not floating furniture.
     window: { x: 18, y: 8 },
-    // Second desk anchored right at the wall/floor seam (a desk pushed
-    // against the back wall, not floating mid-floor) with its own chair
-    // pulled up in front of it — round 23 shipped the desk alone, which
-    // read as "an unidentified device on open floor" (consul's send-back).
-    deskTidy: { x: 178, y: FLOOR_Y + 4 },
-    chair: { x: 186, y: FLOOR_Y + 20 },
+    // Second desk pulled in right beside the character's own (integrated)
+    // desk footprint — round 25's critic pass found the round-24 spacing
+    // (this cluster at x178 against a character at x84) read as "two
+    // disconnected pieces of furniture in a mostly-empty room": an 84px
+    // gap of bare floor between them. Character sprites run up to x~123
+    // at their widest (typing-1); the second desk now starts at x128, a
+    // few px clear of that, so the whole run (window, character+desk,
+    // second desk+chair) reads as one continuous wall-hugging cluster.
+    deskTidy: { x: 128, y: FLOOR_Y + 4 },
+    // Chair repositioned beside desk-tidy, not under/behind it — round
+    // 24's chair sat right where the desk's own support leg is drawn,
+    // reading as "melds into the leg." This also switched to a wider,
+    // front-facing chair sprite (see round26Fixes.chair in frames.json)
+    // so it reads as a chair on its own, not just relative to the desk.
+    chair: { x: 168, y: FLOOR_Y + 2 },
     character: { x: 84, y: FLOOR_Y - 45 },
   };
 }
@@ -168,44 +177,39 @@ Promise.all([
 render();
 
 document.getElementById('about').innerHTML = `
-<p><b>Round 24 — consul's send-back on round 23 (2026-08-16T20:00), confirmed by the boss.</b> Round 23 built the rectifier and rebuilt the corner through it, but the boss's fresh-eyes pass (relayed via consul) found real gaps in the served render: chroma-key fringe halos on nearly every sprite edge, key-tinted speckles across the tiled wall, a window that read as "a floating monitor with a baked shadow," a second desk that read as "a random device on open floor," and coarse face fidelity. Per consul's new standing rule (t-54 protocol amendment, same log entry): reworks now clear the critic before returning to the boss's door — this round is parked for that pass, not self-promoted.</p>
+<p><b>Round 26 — moneta's round-25 critic pass (2026-08-16T21:31), three named gaps, all addressed this round.</b> Rounds 20-22 built and hardened the rectifier itself; rounds 23-25 rebuilt the corner through it and closed a string of rectifier-level bugs (chroma-key fringe, palette drift, an accent-color exemption swallowing JPEG-ringing noise). Round 25's own accent-artifact fix was independently verified clean by moneta, but she found three gaps rounds 20-25 hadn't reached: the second desk's chair melded into the desk's own support leg and didn't read as a chair at matched zoom (plus a residual (21,2,25) edge-blend pixel); the window sprite had no visible frame, sill, or mullion — a noisy dark-teal rectangle; and the character+desk cluster sat isolated from the second desk across a mostly-empty floor, not yet "one room corner." Gate stays critic per the mission's standing infinite-loop discipline — not raised or touched here.</p>
 
-<p><b>The two real rectifier bugs round 23's fix missed, root-caused this round:</b></p>
-<ul>
-<li><b>Hard-threshold chroma key.</b> Round 23's fix raised <code>key_tolerance</code> to swallow near-magenta blotches, but a single hard threshold is the wrong model for real anti-aliased edge pixels — genuine blends of foreground and background — which either survived as opaque near-magenta fringe or vanished as a hard, aliased edge depending which side of the line they landed on. Rebuilt as a soft two-band key: alpha ramps linearly across an inner/outer distance band, and edge pixels are <b>color-decontaminated</b> (solving <code>observed = alpha_frac·fg + (1-alpha_frac)·bg</code> for <code>fg</code>) instead of shipped as a flat blend with the key color baked in.</li>
-<li><b>Palette-averaging drift.</b> This surfaced a second, subtler bug: the shared-palette builder averages votes within a coarse bucket, and that average — a convex combination of individually-safe colors — could itself drift back into key-adjacent territory (two genuine but differently-shifted skin-tone votes straddling the magenta axis can average toward it) and then get handed out by the palette-snap step as if it were a safe color. This is what actually caused round 23's recurring magenta-tinted blotches, even after the tolerance fix. Fixed with an explicit safety filter: any palette candidate whose OWN distance to the background falls under the outer tolerance is rejected outright, never becomes a snap target.</li>
-</ul>
-<p>Verified, not assumed: a full per-pixel distance-to-background scan of every sprite in this round's atlas (idle, all 4 typing frames, wall tile, window, desk, chair) finds <b>zero</b> pixels — opaque or semi-transparent — within key tolerance of the background color. Determinism re-checked after both fixes: every manifest run twice, byte-identical PNG output (sha256-matched) both times.</p>
+<p><b>Gap 1 — the chair, root-caused to the SOURCE REGION, not another rectifier bug.</b> Rounds 24-25's chair region sampled the SIDE-VIEW chair in <code>props/sheet-desks-workstations-v2.jpg</code> row 3 (x515 y513) — thin, diagonal, low-contrast, and at this sheet's fixed 9.27px/output-px pitch it mode-votes down into a ~19x19 blob with no clear chair read. Switched to the FRONT-FACING chair at the start of the same row (x55 y519 w159 h239, tight-cropped to its own connected component so no neighbor chair or divider line bleeds in) — wide, symmetrical, high-contrast (backrest / seat / armrests / 5-star base), and it survives the same mode-vote as a legible 17x25 chair icon. Checked the old region's report for what actually caused the residual purple pixel moneta found: its palette carried faint dark-magenta-HUED entries — (21,2,25), (38,0,39), (70,2,70), all R≈B with G≈0 — that clear the existing bg-distance safety filter (their Euclidean distance to pure magenta is large) but are still visibly off-hue. Scanned the NEW region's own palette the same way, by hue rather than just bg-distance: one residual 1px hit remains, at (15,15)=(22,1,23) alpha 255, sitting on the silhouette's own right edge next to the outline color. Disclosing, not hiding: confirmed invisible at rendered scale by direct 10x-zoom crop, but a real, precisely-named finding for whoever next tunes the mode-vote/decontamination boundary in rectify.py itself.</p>
 
-<p><b>Composition fixes:</b></p>
-<ul>
-<li><b>Window:</b> the BLUE NIGHT cell in <code>scenes/scene-window-states.jpg</code> is a window pane PLUS a separate floor-light-pool graphic below it, with a visible gap between them at this sheet's scale — that gap and the pool's flat parallelogram shape is exactly what read as a floating monitor with a baked shadow. Dropped the pool half entirely; the window sprite is now the pane + frame only, repositioned higher on the wall band, clear of the floor line.</li>
-<li><b>Second desk:</b> added a chair (same sheet, same light register, <code>props/sheet-desks-workstations-v2.jpg</code> row 3) pulled up in front of it. An unaccompanied small object on open floor read as unidentifiable; a desk with its own chair reads as a workstation.</li>
-</ul>
+<p><b>Gap 2 — the window, same class of root cause.</b> The shipped crop since round 20 (x215 y435 w273 h172) clipped BOTH the window's top and bottom frame rails — the tight connected-component bbox of the same BLUE NIGHT cell is x207-464 y420-639, meaning the old crop started 15px too low and ended 32px too early. Cutting the two highest-contrast structural lines in the source object is exactly what left "a noisy dark-teal rectangle" once only the lower-contrast, finer-pitched blind-slat texture remained to mode-vote. Re-cropped to the full tight bbox: the outer frame border and the center mullion between the two panes both now survive as visibly darker, continuous lines (36x31 vs the old 38x24 — taller because the bottom rail is now included), confirmed by direct pixel sampling at the frame/interior boundary.</p>
 
-<p><b>Face fidelity — checked, not "fixed," and why:</b> the character sprite is 20px wide at the mandated 48px-tall canonical scale (pitch is fixed by the sheet's own measured anchor figure, never a free parameter — "the grid pitch is the scaling knob," not a resize). At that pitch the face resolves into roughly ten source-cell-widths by construction, the same order of coarseness any 48px-tall pixel-art character's face carries. Checked the phase-search score for this specific region against the sprite's other regions — unremarkable, not a bad-alignment outlier, so this isn't a fixable vote/alignment defect. A materially crisper face would need either a larger on-screen character scale (a scene-design choice, not a rectifier fix) or a dedicated face-only crop at a different logical size (breaking the one-pitch-per-sheet rule this manifest currently follows) — raised as an open question for the critic/boss to weigh, not assumed away.</p>
+<p><b>Gap 3 — furniture bridging, a composition fix in <code>layout()</code>, not the rectifier.</b> Round 24 placed the second desk+chair cluster at x178 against a 240px-wide canvas, with the character (whose own desk is baked into its typing sprites) at x84 — an 84px gap of bare floor between the two groups, reading as two disconnected pieces of furniture in an empty room. Character sprites run up to x~123 at their widest; the second desk now starts at x128, a few px clear of that, with its chair at x168 beside it (not under/behind the desk's own leg, closing the same read that made round 24's chair placement melt into the furniture). The full run — window (x18-54), character+desk (x84-123), second desk+chair (x128-185) — now reads as one continuous wall-hugging cluster, with a single open-floor margin on the right rather than furniture stranded on both ends of the canvas.</p>
+
+<p><b>Determinism and chroma-key cleanliness, re-verified after all three fixes:</b> every manifest re-run twice (window, desk+chair, tiles, typing/idle) — byte-identical sha256 output both times on every sprite, including the five UNCHANGED sprites (idle, typing-0..3, floor, wall), confirmed against this atlas's own committed report hashes before repacking. Zero key-adjacent pixels (scanned at the manifest's own outer tolerance) in both the new chair and new window sprites.</p>
+
+<p><b>Face fidelity — unchanged this round,</b> still the open item from round 24: the character is 20px wide at the mandated 48px-tall canonical scale (pitch fixed by the sheet's own anchor figure, never a free parameter), so the face resolves into roughly ten source-cell-widths by construction. No sheet-scale or scene-scale change was attempted this round; still an open question for the critic/boss, not assumed away.</p>
 
 <p><b>Per-sprite citations (source sheet, exact region):</b></p>
 <ul>
-<li><b>Character (idle + typing, 5 frames):</b> <code>cast/sheet-agent-undercut-typing.jpg</code>, row 1 of its 5x2 grid: column 0 is the anchor figure (reused as idle — HONEST FLAG, unchanged since round 21: no sheet yet shows a true seated-idle pose, kit prompt 28 is still open), columns 1-4 are the seated typing frames with their own integrated desk/monitor/lamp.</li>
-<li><b>Floor:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 1 (wood plank tile), tiled across the floor band.</li>
-<li><b>Wall:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 4 (cracked plaster) — cool register per the boss's spy-HQ addendum.</li>
-<li><b>Window:</b> <code>scenes/scene-window-states.jpg</code>, row 2 column 1, BLUE NIGHT — pane + frame only this round.</li>
-<li><b>Second desk:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 2 column 3 (already dressed with a folder + keyboard in the source art).</li>
-<li><b>Chair:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 3 — new this round, same sheet as the desk.</li>
+<li><b>Character (idle + typing, 5 frames):</b> <code>cast/sheet-agent-undercut-typing.jpg</code>, row 1 of its 5x2 grid — unchanged this round. Column 0 is the anchor figure (reused as idle — HONEST FLAG, unchanged since round 21: no sheet yet shows a true seated-idle pose, kit prompt 28 is still open), columns 1-4 are the seated typing frames with their own integrated desk/monitor/lamp.</li>
+<li><b>Floor:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 1 (wood plank tile) — unchanged.</li>
+<li><b>Wall:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 4 (cracked plaster) — unchanged, cool register per the boss's spy-HQ addendum.</li>
+<li><b>Window:</b> <code>scenes/scene-window-states.jpg</code>, row 2 column 1, BLUE NIGHT — round 26: re-cropped to the full tight bbox (x207 y420 w257 h219) so both frame rails and the center mullion survive.</li>
+<li><b>Second desk:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 2 column 3 (already dressed with a folder + keyboard) — unchanged.</li>
+<li><b>Chair:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 3 — round 26: switched from the side-view chair to the front-facing chair at the start of the row (x55 y519 w159 h239).</li>
 </ul>
 
-<p><b>Open interpretation, unchanged from round 23, flagged not assumed:</b> the mission text names <code>sheet-desks-workstations-v2</code> as THE desk source, but the typing sheet's character is inseparably drawn WITH its own desk/monitor/lamp. Rather than merge two differently-lit sheets' desks under one seated figure (the two-light-sources violation that sent round 20 back), this round keeps sourcing both: the character's own integrated desk, plus a second, separately-extracted desk (now with a chair) elsewhere in the corner.</p>
+<p><b>Open interpretation, unchanged from round 23, flagged not assumed:</b> the mission text names <code>sheet-desks-workstations-v2</code> as THE desk source, but the typing sheet's character is inseparably drawn WITH its own desk/monitor/lamp. Rather than merge two differently-lit sheets' desks under one seated figure (the two-light-sources violation that sent round 20 back), this sample keeps sourcing both: the character's own integrated desk, plus a second, separately-extracted desk (with its own chair) placed close beside it in the corner.</p>
 
 <p><b>Mechanical floors, self-checked:</b></p>
 <ul>
-<li>Every shipped sprite came out of <code>hub/tools/rectify.py</code>, none hand-edited: confirmed by construction.</li>
-<li>Zero key-adjacent pixels anywhere in the atlas (scanned, not assumed) — chroma-key cleanliness is now a stated mechanical floor per consul's amendment, and this round is the first to actually verify it that way rather than by eye.</li>
-<li>Determinism: every manifest re-run twice this round, byte-identical (sha256-matched) both times, after both bug fixes.</li>
+<li>Every shipped sprite came out of <code>hub/tools/rectify.py</code>, none hand-edited: confirmed by construction — the two changed sprites (chair, window) are fresh rectifier output against new manifest regions; the eight unchanged sprites are byte-identical re-runs of the existing manifests, not atlas crops.</li>
+<li>Zero key-adjacent pixels in every sprite touched this round (scanned, not assumed).</li>
+<li>Determinism: every manifest re-run twice this round, byte-identical (sha256-matched) both times.</li>
 <li>No live route touched, no build step, no external runtime request, no reference (Sea of Stars) filename anywhere in the shipped assets.</li>
 </ul>
 
-<p><b>Not yet independently critic-verified — that is the explicit next step, not self-declared here.</b> Per consul's amendment this round is parked for Moneta's (the critic's) own render and clearance before it goes back to the boss; the gate field on the mission record still reads <code>boss</code> after the rejection, which I've flagged on the mission log as something I'm not authorized to change myself (only the boss or lead agent set the critic gate) — noted for whoever routes this next, not silently worked around.</p>
+<p><b>Not yet independently critic-verified — that is the explicit next step, not self-declared here.</b> Per the mission's standing infinite-loop discipline, gate stays <code>critic</code> and this round is parked for moneta's own render and clearance, not self-promoted or self-approved.</p>
 
 <p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12).</p>
 `;

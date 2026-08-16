@@ -19,11 +19,12 @@
  "regions": [
   {
    "name": "window-blue-night",
-   "x": 215,
-   "y": 435,
-   "w": 273,
-   "h": 172,
-   "group": "window"
+   "x": 207,
+   "y": 420,
+   "w": 257,
+   "h": 219,
+   "group": "window",
+   "_round26": "Re-cropped to the BLUE NIGHT cell's full tight connected-component bbox (was x215 y435 w273 h172, which clipped both the top and bottom frame rails). See frames.json's round26Fixes.window for why."
   }
  ],
  "anchor_source_px_height": 335,
