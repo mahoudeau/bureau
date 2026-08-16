@@ -1,6 +1,8 @@
-// v2/board.js — t-64 (goal: t-53). Owns #v2-agents-rail, #v2-projects-rail
-// and #v2-board. Reads window.BureauV2 (contract: v2.html top comment,
-// section 2) exclusively — no own SSE/fetch-auth plumbing.
+// v2/board.js — t-64 (goal: t-53). Owns #v2-agents-rail, #v2-projects-rail,
+// #v2-brain-entry (its live "recent" list — brain-browser.js owns the full
+// panel that opens on click, t-93) and #v2-board. Reads window.BureauV2
+// (contract: v2.html top comment, section 2) exclusively — no own
+// SSE/fetch-auth plumbing.
 //
 // Ports every i11-baseline function living in this surface:
 //   - live agent cards
@@ -18,6 +20,15 @@
 // card, selection broadcast on 'v2:batch:selection' for batch-verdicts.js
 // (t-69) to consume — this file does not apply verdicts itself.
 //
+// t-93 round 3: converges board-card anatomy and the Brain rail on the
+// approved t-58 sample (id/avatar top row, chips row with a goal flag chip
+// + colored project-dot chip + priority chip; a real "Brain · recent" list
+// off state.knowledge.recent instead of a static "Browse the knowledge
+// tree →" line). Also fixes t-90 finding (a) at its root in setRegionBody()
+// itself (see that function) instead of only in the two rails it was
+// originally spotted in — brainEntry uses the exact same first-render path
+// and would have hit the identical bug the moment it got live content.
+//
 // Emits (see v2.html contract for the full list this file participates in):
 //   'v2:mission:open'      { id }   — any board card, single source for
 //                                     "open detail" across the whole app.
@@ -26,9 +37,24 @@
 //
 // No modals, no prompt()/confirm()/alert() — validation and errors render
 // inline. No hardcoded hex colors: every visual value reads var(--v2-...)
-// (declared as placeholders in v2.html §5; tokens.css/t-63 repaints them).
+// (tokens.css/t-63; project-dot colors are the one deliberate exception,
+// same as the sample's own PCOLORS — a categorical per-project palette
+// isn't a semantic token, see projColor() below).
+import { icon } from './components.js';
+
 (function () {
   'use strict';
+
+  // Categorical per-project accent, ported verbatim from the approved
+  // sample (t-58-v2-sample.html.txt, PCOLORS) — assigned by each project's
+  // index in the registry, same as the sample, so the dot on a board card
+  // matches the dot in the sidebar's own project row for the same project.
+  var PCOLORS = ['#5e6ad2', '#f2a30f', '#8b5cf6', '#29a36a', '#eb5757', '#93949c', '#f16565', '#6c6d76'];
+  function projColor(state, id) {
+    var ids = (state.projects || []).map(function (p) { return typeof p === 'string' ? p : p && p.id; });
+    var i = ids.indexOf(id);
+    return PCOLORS[(i < 0 ? 0 : i) % PCOLORS.length];
+  }
 
   function ready(cb) {
     if (window.BureauV2 && window.BureauV2.state) return cb();
@@ -115,6 +141,7 @@
     var esc = window.BureauV2Esc || function (s) {
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
     };
+    function initials(name) { return (name || '?').slice(0, 2).toUpperCase(); }
 
     function renderAgents(state) {
       var agents = state.agents || [];
@@ -234,17 +261,29 @@
           var checkbox = key === 'review'
             ? '<input type="checkbox" class="v2-task-card__select" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
             : '';
+          // Chips: goal (flag) + project (colored dot) + priority, the
+          // sample's own three (t-58-v2-sample.html.txt, .card .chips).
+          // Everything the sample's narrow demo data never needed to show
+          // — assignee reservation, gate, goal children progress — rides
+          // as additional chips in the SAME visual language instead of
+          // being dropped; this is a chrome convergence, not a feature cut.
+          var chips = '' +
+            (isGoal ? '<span class="v2-mchip v2-mchip--goal">' + icon('flag', 'v2-icon--xs') + 'Goal</span>' : '') +
+            (t.project ? '<span class="v2-mchip"><span class="v2-mchip__dot" style="background:' + projColor(state, t.project) + '"></span>' + esc(t.project) + '</span>' : '') +
+            '<span class="v2-mchip v2-tabular-nums">P' + t.priority + '</span>' +
+            (kids ? '<span class="v2-mchip v2-tabular-nums">' + icon('git-branch', 'v2-icon--xs') + kids.done + '/' + kids.total + '</span>' : '') +
+            (t.reserved_for ? '<span class="v2-mchip">' + icon('user', 'v2-icon--xs') + esc(t.reserved_for) + '</span>' : '') +
+            (t.status === 'review' ? '<span class="v2-mchip">' + icon('tag', 'v2-icon--xs') + (t.gate === 'critic' ? 'critic' : 'boss') + '</span>' : '');
           return '<div class="v2-task-card v2-task-card--' + esc(t.status) + '" data-id="' + esc(t.id) + '">' +
             checkbox +
             '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
-            '<div class="v2-task-card__title">' + (isGoal ? '🎯 ' : '') + esc(t.title) + '</div>' +
-            '<div class="v2-task-card__meta">' + esc(t.id) + ' · P' + t.priority +
-            (t.assignee ? ' · ' + esc(t.assignee) : '') +
-            (t.project ? ' · ' + esc(t.project) : '') +
-            (kids ? ' · ' + kids.done + '/' + kids.total + ' missions' : '') +
-            (t.reserved_for ? ' · 🔒 ' + esc(t.reserved_for) : '') +
-            (t.status === 'review' ? (t.gate === 'critic' ? ' · 🧪 critic' : ' · 👤 boss') : '') +
-            '</div></div></div>';
+            '<div class="v2-task-card__top">' +
+            '<span class="v2-task-card__id v2-tabular-nums">' + esc(t.id) + '</span><span class="v2-task-card__sp"></span>' +
+            (t.assignee ? '<span class="v2-avatar" title="' + esc(t.assignee) + '">' + esc(initials(t.assignee)) + '</span>' : '') +
+            '</div>' +
+            '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
+            '<div class="v2-task-card__chips">' + chips + '</div>' +
+            '</div></div>';
         }).join('');
         return '<div class="v2-board__column"><h3 class="v2-board__column-title">' + esc(label) + ' · ' + ts.length + '</h3>' + (cards || '<div class="v2-empty">Nothing here.</div>') + '</div>';
       }).join('');
@@ -264,11 +303,48 @@
 
     function setRegionBody(mount, html) {
       var existing = mount.querySelector('.v2-region-body');
-      if (existing) { existing.innerHTML = html; return; }
-      var div = document.createElement('div');
-      div.className = 'v2-region-body';
-      div.innerHTML = html;
-      mount.appendChild(div);
+      if (!existing) {
+        // t-90 finding (a), fixed at the root: the first render for ANY
+        // mount using this helper never finds a `.v2-region-body` (only
+        // v2.html's static initial markup — a `.v2-empty` "Loading…"/
+        // placeholder line — exists yet), so the old code appended a new
+        // body div and left that placeholder sitting above it forever.
+        // Drop any stray `.v2-empty` DIRECT children before mounting the
+        // real body, once, here — every current and future caller of this
+        // helper (agents rail, projects rail, and now the Brain rail) is
+        // fixed by construction instead of needing its own one-off patch.
+        Array.prototype.slice.call(mount.children).forEach(function (child) {
+          if (child.classList && child.classList.contains('v2-empty')) child.remove();
+        });
+        existing = document.createElement('div');
+        existing.className = 'v2-region-body';
+        mount.appendChild(existing);
+      }
+      existing.innerHTML = html;
+    }
+
+    function timeShort(iso) {
+      // Matches the approved sample's own timeShort() granularity (MM-DD
+      // HH:MM) but works from git's `--date=iso` format (knowledge.js's
+      // recentCommits), not the mission-log ISO-8601 the sample assumed.
+      var d = new Date(iso);
+      if (isNaN(d)) return '';
+      function pad(n) { return String(n).padStart(2, '0'); }
+      return pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+
+    function renderBrainRecent(state) {
+      var commits = (state.knowledge && state.knowledge.recent) || [];
+      var body = commits.length
+        ? commits.slice(0, 6).map(function (c) {
+            return '<div class="v2-commit-row">' +
+              '<span class="v2-commit-row__ts v2-tabular-nums">' + esc(timeShort(c.date)) + '</span>' +
+              '<span class="v2-commit-row__who">' + esc(c.author) + '</span>' +
+              '<span class="v2-commit-row__msg">' + esc(c.message) + '</span>' +
+              '</div>';
+          }).join('')
+        : '<div class="v2-empty">No brain activity yet.</div>';
+      setRegionBody(mounts.brainEntry, body);
     }
 
     function render() {
@@ -276,6 +352,7 @@
       if (!state) return;
       renderAgents(state);
       renderProjects(state);
+      renderBrainRecent(state);
       renderBoard(state);
     }
 
@@ -315,16 +392,47 @@
       '.v2-quickadd__err { color: var(--v2-critical, #c23434); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
       '.v2-board__columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--v2-space-3, 12px); align-items: start; }',
       '.v2-board__column-title { font-size: 12px; color: var(--v2-ink-2, #888); margin: 0 0 var(--v2-space-2, 8px); font-weight: 600; }',
-      '.v2-task-card { background: var(--v2-surface, transparent); border: 1px solid var(--v2-hairline, rgba(128,128,128,.25)); border-left: 3px solid var(--v2-muted, #999); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); display: flex; gap: var(--v2-space-1, 4px); align-items: flex-start; }',
+      /* t-93 round 3: card anatomy converged on the approved sample
+         (t-58-v2-sample.html.txt: .card/.chips/.mchip/.avatar) — a bordered
+         card (border appears on hover, matching the sample's own
+         `.card:hover{border-color:var(--border)}`), an id+avatar top row,
+         a clamped title, and a chip row (goal flag / colored project dot /
+         priority, plus this file's own extra fields folded into the same
+         chip language rather than dropped). These rules read the REAL
+         tokens.css custom properties (--v2-color-*, --v2-radius-*,
+         --v2-space-*) — the surrounding pre-existing rules in this file
+         were written against placeholder names (--v2-surface, --v2-ink,
+         --v2-hairline, --v2-radius…) that tokens.css never actually
+         defines, so they have silently run on hardcoded fallback values
+         only, un-themed, since t-64. Left AS-IS here (a file-wide token-
+         name audit is a bigger change than this round\'s two named gaps),
+         flagged plainly on the mission log rather than silently ignored
+         or silently fixed out of scope. */
+      '.v2-task-card { background: var(--v2-color-surface, transparent); border: 1px solid transparent; border-left: 3px solid var(--v2-color-text-muted, #999); border-radius: var(--v2-radius-sm, 6px); padding: var(--v2-space-4, 8px) var(--v2-space-5, 10px); margin-bottom: var(--v2-space-3, 6px); display: flex; gap: var(--v2-space-2, 4px); align-items: flex-start; }',
+      '.v2-task-card:hover { border-color: var(--v2-color-border, rgba(128,128,128,.25)); background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); }',
       '.v2-task-card__body { cursor: pointer; flex: 1; min-width: 0; }',
-      '.v2-task-card--queued { border-left-color: var(--v2-muted, #999); }',
-      '.v2-task-card--claimed, .v2-task-card--in_progress { border-left-color: var(--v2-accent, #3f6fe0); }',
-      '.v2-task-card--blocked { border-left-color: var(--v2-serious, #b5540a); }',
-      '.v2-task-card--review { border-left-color: var(--v2-warning, #b5790a); }',
-      '.v2-task-card--done { border-left-color: var(--v2-good, #17845a); }',
-      '.v2-task-card--failed { border-left-color: var(--v2-critical, #c23434); }',
-      '.v2-task-card__title { font-weight: 600; font-size: 13px; overflow-wrap: break-word; }',
-      '.v2-task-card__meta { font-size: 11.5px; color: var(--v2-ink-2, #888); margin-top: 3px; font-variant-numeric: tabular-nums; }'
+      '.v2-task-card--queued { border-left-color: var(--v2-color-text-muted, #999); }',
+      '.v2-task-card--claimed, .v2-task-card--in_progress { border-left-color: var(--v2-color-status-at-risk, #f2a30f); }',
+      '.v2-task-card--blocked { border-left-color: var(--v2-color-status-bug, #eb5757); }',
+      '.v2-task-card--review { border-left-color: var(--v2-color-status-in-progress, #8b5cf6); }',
+      '.v2-task-card--done { border-left-color: var(--v2-color-status-done, #29a36a); }',
+      '.v2-task-card--failed { border-left-color: var(--v2-color-status-bug, #eb5757); }',
+      '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
+      '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; font-variant-numeric: tabular-nums; }',
+      '.v2-task-card__sp { flex: 1; }',
+      '.v2-avatar { width: 18px; height: 18px; border-radius: 50%; background: var(--v2-color-surface-raised, #f4f4f6); border: 1px solid var(--v2-color-border, rgba(128,128,128,.2)); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--v2-color-text-secondary, #62636c); flex: none; }',
+      '.v2-task-card__title { font-weight: 450; font-size: 12.5px; line-height: 1.4; color: var(--v2-color-text-primary, inherit); overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: var(--v2-space-3, 6px); }',
+      '.v2-task-card__chips { display: flex; align-items: center; gap: var(--v2-space-3, 6px); flex-wrap: wrap; }',
+      '.v2-mchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--v2-color-text-secondary, #62636c); }',
+      '.v2-mchip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }',
+      '.v2-mchip--goal { color: var(--v2-color-status-bug, #eb5757); font-weight: 600; }',
+      /* Brain · recent (t-93 round 3) — same commit-row anatomy as the
+         sample, fed from the real state.knowledge.recent (git log over the
+         brain repo), not a placeholder link. */
+      '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
+      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
+      '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
+      '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }'
     ].join('\n');
     document.head.appendChild(style);
   }
