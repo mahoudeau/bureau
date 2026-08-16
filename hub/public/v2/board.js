@@ -121,9 +121,23 @@
       mounts.agentsRail.querySelector('.v2-region-title') && null; // title stays static markup in v2.html
       var body = agents.length ? agents.map(function (a) {
         var st = agentStatus(a);
+        // Sub-agent fleet (t-109, goal: t-60; ports t-80's already-verified
+        // index.html pattern onto this rail). Live only, per the same rule
+        // t-80 shipped — a stale fleet reads as a lie, so it's gated on the
+        // SAME `active` status (heartbeat <5min) the roster badge already
+        // uses, and disappears entirely the moment the parent goes
+        // idle/offline, same v2:state re-render, no separate liveness check.
+        var fleet = st === 'active' && Array.isArray(a.sub_agents) ? a.sub_agents : [];
+        var fleetBadge = fleet.length ? ' <span class="v2-badge v2-badge--fleet">🧵 ' + fleet.length + '</span>' : '';
+        var fleetFoldout = fleet.length
+          ? '<details class="v2-fleet"><summary>' + fleet.length + ' sub-agent' + (fleet.length === 1 ? '' : 's') + '</summary>' +
+            fleet.map(function (s) { return '<div class="v2-fleet__subagent">' + esc(s.label) + (s.activity ? ' · ' + esc(s.activity) : '') + '</div>'; }).join('') +
+            '</details>'
+          : '';
         return '<div class="v2-agent-card">' +
-          '<div class="v2-agent-card__name">' + esc(a.name) + '<span class="v2-badge v2-badge--' + st + '"><span class="v2-badge__dot"></span>' + st + '</span></div>' +
+          '<div class="v2-agent-card__name">' + esc(a.name) + '<span class="v2-badge v2-badge--' + st + '"><span class="v2-badge__dot"></span>' + st + '</span>' + fleetBadge + '</div>' +
           '<div class="v2-agent-card__meta">' + esc(a.kind) + (a.activity ? ' · ' + esc(a.activity) : '') + ' · seen ' + ago(a.last_seen) + ' ago' + (a.note ? ' · ' + esc(a.note) : '') + '</div>' +
+          fleetFoldout +
           '</div>';
       }).join('') : '<div class="v2-empty">No agents yet.</div>';
       setRegionBody(mounts.agentsRail, body);
@@ -298,6 +312,22 @@
       '.v2-badge--active .v2-badge__dot { background: var(--v2-good, #17845a); }',
       '.v2-badge--idle .v2-badge__dot { background: var(--v2-warning, #b5790a); }',
       '.v2-badge--offline .v2-badge__dot { background: var(--v2-muted, #999); }',
+      // Sub-agent fleets (t-109, goal: t-60). The count badge reuses the
+      // existing .v2-badge shell (same precedent t-80 set on index.html)
+      // but carries no dot of its own — a fleet is not a roster agent with
+      // a heartbeat history. The fold-out rows below go further: plain
+      // text at the .v2-task-card__meta scale, muted only, no accent, no
+      // badge-pill shape — that visual language specifically means "this
+      // has its own heartbeat history," which is exactly untrue of a
+      // sub-agent, so it is withheld by construction, not by convention.
+      '.v2-badge--fleet { color: var(--v2-ink-2, #888); }',
+      '.v2-fleet { margin-top: 4px; }',
+      '.v2-fleet summary { cursor: pointer; font-size: 11px; color: var(--v2-muted, #999); list-style: none; }',
+      '.v2-fleet summary::-webkit-details-marker { display: none; }',
+      '.v2-fleet summary::before { content: "▸ "; }',
+      '.v2-fleet[open] summary::before { content: "▾ "; }',
+      '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted, #999); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
+      '.v2-fleet__subagent:last-child { border-bottom: none; }',
       '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       '.v2-project-row__name { font-weight: 600; }',
