@@ -1,0 +1,150 @@
+/*
+ * Dashboard v2 — visual organisms (t-78, goal: t-53)
+ *
+ * PURELY ADDITIVE: new file, owned only by this mission. Zero edits to
+ * board.js, peek-panel.js, or media.js — every rule below hooks a v2-
+ * prefixed class name those three modules already render. Covers the
+ * three organism surfaces named in the mission body: board columns, peek
+ * panel chrome (header/close/MEDIA section), and card-like layouts
+ * inside the panel (artifact previews, log rows).
+ *
+ * SAME WIRING GAP as t-65 round 4's components.css and t-77's
+ * molecules.css: this file must be linked from v2.html
+ * (`<link rel="stylesheet" href="v2/organisms.css">`) to take effect at
+ * all, and v2.html is not owned by this mission — flagging again rather
+ * than assuming a sibling mission covers it. Four sibling CSS files now
+ * share this exact gap (components.css, molecules.css, this file, plus
+ * the always-open question of load ORDER once several are linked —
+ * see the specificity note below).
+ *
+ * SAME CASCADE-CONFLICT PATTERN as t-77's molecules.css, confirmed
+ * again here (fourth and fifth independent sightings of the t-87-
+ * tracked token-namespace gap, this time in board.js's column rule and
+ * peek-panel's/media.js's own injected styles): several classes below
+ * use a doubled-class selector (.v2-board__column-title.v2-board__
+ * column-title) to win the specificity fight against those modules' own
+ * JS-injected <style> blocks, which read the older placeholder
+ * namespace (--v2-ink-2, --v2-hairline, --v2-muted, --v2-radius — never
+ * --v2-color-*) and would otherwise win cascade ties by virtue of being
+ * inserted into <head> after this file's own <link>.
+ */
+
+/* ============================================================
+   1. BOARD COLUMNS
+   Sample citation (t-58-v2-sample.html.txt): .col (padding 8px,
+   border-right hairline) / .col-head (padding 6px 4px, gap 6px) /
+   .col-head .name (13px, weight 600, Fraunces) / .col-head .cnt (11.5px,
+   muted, weight 500). board.js's own column-title rule is close on
+   size (12px vs sample's 13px) but wrong on color source (--v2-ink-2
+   fallback, never the real --v2-color-text-secondary) and carries no
+   type-scale distinction between the column NAME and its COUNT (the
+   sample deliberately weights/sizes them differently — name heavier and
+   larger, count lighter and smaller/muted — board.js's markup renders
+   both inside one .v2-board__column-title text node with no sub-span,
+   so this rule can only correct the whole title's color/weight, not
+   split name from count — flagged below, not silently ignored).
+   ============================================================ */
+.v2-board__columns { gap: var(--v2-space-4); }
+.v2-board__column-title.v2-board__column-title {
+  font-size: var(--v2-font-size-base);
+  font-weight: var(--v2-weight-semibold);
+  color: var(--v2-color-text-primary);
+  font-family: var(--v2-font-serif);
+  padding: var(--v2-space-3) var(--v2-space-2);
+  margin: 0 0 var(--v2-space-2);
+}
+/* MISSING HOOK, flagged not invented: the sample splits its column
+   header into .col-head .name (heavy, larger) and .col-head .cnt
+   (light, muted, smaller) as two separate elements — board.js renders
+   the column title as one plain text string with no such split (grepped
+   its source: no .v2-board__column-count or equivalent sub-span
+   anywhere). This rule can match the NAME's own register (serif,
+   semibold, primary color) but can't recreate the sample's two-tone
+   name+count contrast without a markup change this mission doesn't own. */
+
+/* ============================================================
+   2. PEEK PANEL CHROME (title, close, MEDIA section)
+   Sample citation for the panel shell overall (#peek .phead, cited in
+   t-75/t-76): sticky header, id text muted+11.5px, h2 title 17px/
+   Fraunces/weight 600. peek-panel.js's own title/close rules read the
+   old namespace throughout.
+   ============================================================ */
+.v2-panel__title.v2-panel__title {
+  font-family: var(--v2-font-serif);
+  font-weight: var(--v2-weight-semibold);
+  font-size: var(--v2-font-size-lg);
+  color: var(--v2-color-text-primary);
+}
+.v2-panel__close.v2-panel__close {
+  color: var(--v2-color-text-muted);
+  border-radius: var(--v2-radius-xs);
+  width: var(--v2-row-height);
+  height: var(--v2-row-height);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--v2-font-size-lg);
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease), color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-panel__close.v2-panel__close:hover {
+  background: var(--v2-color-surface-raised);
+  color: var(--v2-color-text-primary);
+}
+/* MISSING HOOK, flagged not invented: components.css's own header
+   comment cites SCR-20260816-cums.png for "compact header (avatar/name/
+   model tag, minimize/expand/close glyphs)" — peek-panel.js implements
+   only close (.v2-panel__close, styled above); grepped its source for
+   minimize/maximize/expand hooks (components.js's own ICONS set even
+   already vendors minimize-2/maximize-2 specifically for this, per its
+   own header comment: "peek-panel minimize/maximize" among the 5 icons
+   added beyond t-58's original 24) — the icons exist, the panel-header
+   buttons that would use them do not. Nothing to style; noted rather
+   than inventing markup peek-panel.js doesn't render or editing that
+   file to add it.
+
+   MEDIA section (media.js, t-67): matched to this file's own established
+   card/thumbnail register (--v2-radius-sm for individual thumbnails,
+   --v2-color-border hairlines, --v2-color-text-muted captions) — the
+   sample itself never renders a media grid to cite directly (same
+   honest gap t-75 disclosed for anything the sample doesn't show), so
+   this section is built from this schema's own already-sample-traced
+   tokens rather than a literal sample pixel, consistent with how STUDY's
+   general register (near-neutral, hairline structure, no card fills)
+   already governs everything else in this file. ============================================================ */
+.v2-media.v2-media { border-top-color: var(--v2-color-border); padding-top: var(--v2-space-4); margin-top: var(--v2-space-5); }
+.v2-media__head.v2-media__head {
+  font-size: var(--v2-font-size-xs);
+  font-weight: var(--v2-weight-semibold);
+  color: var(--v2-color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.v2-media__count.v2-media__count { color: var(--v2-color-text-muted); font-weight: var(--v2-weight-regular); }
+.v2-media__thumb.v2-media__thumb {
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-color-surface-raised);
+  transition: border-color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-media__thumb.v2-media__thumb:hover { border-color: var(--v2-color-border-strong); }
+.v2-media__cap.v2-media__cap { color: var(--v2-color-text-muted); font-size: var(--v2-font-size-2xs); }
+.v2-media__history.v2-media__history summary { color: var(--v2-color-text-muted); font-size: var(--v2-font-size-xs); }
+
+/* ============================================================
+   3. CARD-LIKE LAYOUTS INSIDE THE PANEL (artifact previews, log rows)
+   ============================================================ */
+.v2-panel__artifact.v2-panel__artifact img {
+  border-radius: var(--v2-radius-sm);
+  border-color: var(--v2-color-border);
+}
+.v2-panel__artifact.v2-panel__artifact figcaption { color: var(--v2-color-text-muted); font-size: var(--v2-font-size-xs); }
+.v2-panel__logrow.v2-panel__logrow {
+  border-bottom-color: var(--v2-color-border);
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-secondary);
+}
+.v2-panel__body.v2-panel__body {
+  font-size: var(--v2-font-size-sm);
+  line-height: var(--v2-line-height-base);
+  color: var(--v2-color-text-secondary);
+}

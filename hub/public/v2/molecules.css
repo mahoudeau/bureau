@@ -1,0 +1,229 @@
+/*
+ * Dashboard v2 — visual molecules (t-77, goal: t-53)
+ *
+ * PURELY ADDITIVE: this is a new file, owned only by this mission. Zero
+ * Wave-1 JS logic file is edited — every rule below hooks a v2- prefixed
+ * class name a JS module already renders (t-64 board.js/peek-panel.js,
+ * t-65 keyboard.js/palette.js, t-72 quick-add.js), per this mission's own
+ * instruction. Covers the five molecule surfaces named in the mission
+ * body: rows/list-items, the filter/token-pill pattern, the cmd-K
+ * palette chrome, the quick-add/template popover, and the hover-tooltip
+ * shortcut chip.
+ *
+ * A REAL WIRING GAP, flagged up front rather than discovered by a critic
+ * later: this file must be linked from v2.html (`<link rel="stylesheet"
+ * href="v2/molecules.css">`) for any of it to take effect at all — v2.html
+ * is not owned by this mission ("own only... molecules.css"), so that
+ * link cannot be added here. This is the same class of gap t-65 round 4
+ * found and documented for components.css (created, never linked) —
+ * flagging it again here rather than assuming a sibling mission already
+ * covers it.
+ *
+ * A SECOND, related fact worth stating plainly: several classes below
+ * (.v2-task-card, .v2-panel__item) are ALSO styled by their owning JS
+ * file's own self-injected <style> block, and that block reads an
+ * entirely different, OLDER placeholder variable namespace (--v2-accent,
+ * --v2-hairline, --v2-muted, --v2-radius — never --v2-color-*, the real
+ * schema t-75 repainted) — the t-87-tracked gap. Since a JS-injected
+ * <style> tag is appended to <head> at runtime, AFTER this file's own
+ * <link> (present in the original HTML), it wins ties on equal
+ * specificity — a plain single-class rule here would lose to board.js's
+ * own rule for the same class. The rules below for those two classes use
+ * a doubled class selector (.v2-task-card.v2-task-card) specifically to
+ * win that specificity fight without !important — a deliberate, narrow
+ * exception to this file's otherwise-plain selectors, called out at each
+ * use so it doesn't read as an accident.
+ */
+
+/* ============================================================
+   1. ROWS / LIST ITEMS
+   board.js's .v2-task-card and peek-panel.js's .v2-panel__item, both
+   restyled to the sample's own .card / .item-row (t-58-v2-sample.html.txt):
+   flat hairline box, no drop shadow, border-radius var(--radius)=8px
+   (this schema's --v2-radius-md, from t-75), no colored left-border
+   accent stripe (the sample's own card has NO status-color edge at all —
+   status reads through the glyph+text inside, per STUDY's own "glyph +
+   color, never color alone" rule, not a card border) — the pre-existing
+   colored left-border-per-status treatment is dropped as a result. Uses
+   the doubled-class specificity technique described above to win over
+   board.js's/peek-panel.js's own injected (and token-mismatched) rules.
+   ============================================================ */
+/* round 2 (critic-directed): the sample's own .card rule reads
+   `border: 1px solid transparent` at rest, revealing var(--border) only
+   on :hover — a deliberate airier default (STUDY's "near-neutral
+   canvas, hairline structure" carried further: structure appears on
+   interaction, not permanently) that also reserves the 1px box so
+   hovering never shifts layout. Round 1 gave this class a permanently
+   visible border, collapsing .card's own at-rest/hover-reveal pattern
+   into .item-row's genuinely different always-bordered one (both were
+   cited together in round 1 as if interchangeable; they aren't — see
+   .v2-panel__item below, correctly still always-bordered, matching
+   .item-row's own distinct treatment, not touched this round). */
+.v2-task-card.v2-task-card {
+  background: var(--v2-color-bg);
+  border: 1px solid transparent;
+  border-radius: var(--v2-radius-md);
+  padding: var(--v2-space-5) var(--v2-space-4);
+  margin-bottom: var(--v2-space-3);
+  display: flex;
+  gap: var(--v2-space-3);
+  align-items: flex-start;
+  transition: border-color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-task-card.v2-task-card:hover { border-color: var(--v2-color-border); }
+.v2-task-card__title.v2-task-card__title {
+  font-weight: var(--v2-weight-medium);
+  font-size: var(--v2-font-size-sm);
+  line-height: var(--v2-line-height-base);
+  color: var(--v2-color-text-primary);
+}
+.v2-task-card__meta.v2-task-card__meta {
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-muted);
+  margin-top: var(--v2-space-2);
+  font-variant-numeric: var(--v2-tabular-nums);
+}
+
+.v2-panel__item.v2-panel__item {
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-md);
+  padding: var(--v2-space-5) var(--v2-space-4);
+  margin: var(--v2-space-3) 0;
+  background: var(--v2-color-bg);
+}
+.v2-panel__item.v2-panel__item label {
+  margin-right: var(--v2-space-3);
+  font-size: var(--v2-font-size-sm);
+  color: var(--v2-color-text-secondary);
+}
+
+/* ============================================================
+   2. FILTER / TOKEN-PILL PATTERN
+   palette.js's project filter (.v2-palette__pill etc.) already reads the
+   correct --v2-color-* namespace (built with tokens.css in mind from the
+   start, unlike board.js/peek-panel.js above) and already carries a
+   round-3 boss ruling to use --v2-radius-sm, not -full, for this exact
+   pattern ("the reference's own filter token... uses the same tight
+   radius as every other bordered element, never a fully rounded pill for
+   a rectangular chip"). Nothing here contradicts that; these rules only
+   ADD the density polish the sample's own .tag-adjacent filter chips
+   carry that palette.js's own injected style doesn't yet: a slightly
+   tighter vertical density and the tabular-nums the mechanical floor
+   requires on any numeric content inside a pill. Plain selectors (no
+   doubling needed) since there's no competing rule to out-specificity —
+   this only adds, it doesn't fight palette.js's own style for these
+   classes.
+   ============================================================ */
+.v2-palette__pill { font-variant-numeric: var(--v2-tabular-nums); }
+.v2-palette__pills { padding-bottom: var(--v2-space-2); }
+
+/* ============================================================
+   3. CMD-K PALETTE CHROME
+   Matches the sample's own #palette shell exactly: border-radius
+   var(--radius-lg)=12px (this schema's --v2-radius-lg, from t-75) and a
+   real elevation shadow (--v2-shadow-overlay, t-75's own addition,
+   documented there as citing the sample's #palette/#peek/tooltip shadow
+   usage directly). palette.js's own JS-injected style has neither, but
+   v2.html's OWN inline <style> block (t-62's skeleton baseline) DOES
+   already set both on this exact selector — `border-radius: var(--v2-
+   radius)` and `box-shadow: 0 12px 40px rgba(0,0,0,.22)` — using the
+   same old placeholder namespace as board.js/peek-panel.js (never
+   --v2-color-*), and verified live to win the cascade tie against a
+   plain selector here (v2.html's inline block sits after this file's
+   own <link> in the document). Same doubled-class specificity technique
+   as section 1 above, for the same reason — a third, independent sighting
+   of the t-87-tracked namespace gap, this time inside v2.html itself
+   rather than a JS module's injected style.
+   ============================================================ */
+.v2-palette.v2-palette {
+  border-radius: var(--v2-radius-lg);
+  box-shadow: var(--v2-shadow-overlay);
+  overflow: hidden;
+}
+.v2-palette__input { font-size: var(--v2-font-size-md); }
+.v2-palette__row { border-radius: var(--v2-radius-sm); }
+.v2-palette__row-id { font-variant-numeric: var(--v2-tabular-nums); }
+/* MISSING HOOK, not silently invented: the sample's #palette has its own
+   .foot row (a small footer strip of muted meta text under the results
+   list) — palette.js never renders an equivalent element/class at all
+   (grepped its source: no "foot" hook of any kind). Nothing to style
+   here; noting the gap per this mission's own instruction rather than
+   adding dead CSS for a class that doesn't exist, or editing palette.js
+   to invent one. */
+
+/* ============================================================
+   4. QUICK-ADD / TEMPLATE POPOVER
+   quick-add.js ships deliberately unstyled DOM ("no injected <style>
+   block, only v2- prefixed class hooks for future composition to
+   style" — its own header comment) — this is that composition, the
+   single biggest gap this mission closes since nothing here had ANY
+   styling before. Matched to the sample's own .quickadd / .inline-edit
+   register: an inset panel (surface-raised background, hairline border,
+   --v2-radius-md) holding a template-picker row of small pill buttons
+   above a body textarea.
+   ============================================================ */
+.v2-quickadd__templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--v2-space-3);
+  margin: var(--v2-space-3) 0;
+}
+.v2-quickadd__template-btn {
+  font: inherit;
+  font-size: var(--v2-font-size-xs);
+  font-weight: var(--v2-weight-medium);
+  padding: var(--v2-space-2) var(--v2-space-4);
+  border-radius: var(--v2-radius-sm);
+  border: 1px solid var(--v2-color-border);
+  background: var(--v2-color-surface-raised);
+  color: var(--v2-color-text-secondary);
+  cursor: pointer;
+  transition: border-color var(--v2-motion-fast) var(--v2-motion-ease),
+              color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-quickadd__template-btn:hover {
+  border-color: var(--v2-color-accent);
+  color: var(--v2-color-accent);
+}
+.v2-quickadd__template-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v2-color-bg), 0 0 0 4px var(--v2-color-focus-ring);
+}
+.v2-quickadd__body {
+  display: block;
+  width: 100%;
+  min-height: calc(var(--v2-row-height) * 2.2);
+  margin: var(--v2-space-3) 0;
+  padding: var(--v2-space-4) var(--v2-space-5);
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-color-bg);
+  color: var(--v2-color-text-primary);
+  font: inherit;
+  font-size: var(--v2-font-size-sm);
+  line-height: var(--v2-line-height-base);
+  resize: vertical;
+}
+.v2-quickadd__body::placeholder { color: var(--v2-color-text-muted); }
+.v2-quickadd__body:focus-visible, .v2-quickadd__body:focus {
+  outline: none;
+  border-color: var(--v2-color-accent);
+  box-shadow: 0 0 0 3px var(--v2-color-focus-ring);
+}
+
+/* ============================================================
+   5. HOVER-TOOLTIP SHORTCUT CHIP
+   keyboard.js's .v2-kbd-hint and palette.js's own .v2-palette__hint
+   already implement the STUDY-required pattern correctly (a small
+   circular trigger, tooltip hidden until :hover/:focus, real icon()
+   glyphs since t-65 round 4) — this file adds one thing both already-
+   correct implementations are still missing: --v2-shadow-overlay on the
+   tooltip itself, matching the sample's own dark floating tooltip
+   (t-75's citation: "a tooltip-style popup, line ~265" in the sample,
+   using the same var(--shadow) as #peek/#palette). Neither JS file's own
+   injected style sets a shadow on its tip element, so this is a plain
+   addition, not a specificity fight.
+   ============================================================ */
+.v2-kbd-hint__tip, .v2-palette__hint-tip {
+  box-shadow: var(--v2-shadow-overlay);
+}
