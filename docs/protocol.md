@@ -95,7 +95,7 @@ A connector is any glue that (a) reports a runtime's activity into the protocol 
 | `n8n` | HTTP nodes | n8n schedule triggers |
 | future: codex / gemini / cursor / ... | map their events → verbs | their schedulers |
 
-Wake-up is legitimately runtime-specific: the hub guarantees a durable queue (and later, optional outbound webhook "pokes"); *how* each runtime wakes is connector business.
+Wake-up is legitimately runtime-specific: the hub guarantees a durable queue, and optionally emits outbound webhook **pokes** so a runtime's own wake mechanism can fire the moment work changes hands instead of waiting for a schedule. Set `BUREAU_POKES` to a JSON array of subscriptions: `[{"url": "…", "headers": {…}, "events": ["task.review"], "filter": {"gate": "critic"}}]`. On each matching hub event the hub POSTs a trimmed JSON payload (`{event, ts, task: {id, title, status, gate, project, priority, assignee, reserved_for}, by, prev_status, note}`) to the subscription's URL, fire-and-forget. `events` matches the hub's event types (`task.review`, `task.requeued`, `task.done`, `task.created`, `task.blocked`, …; empty = all); `filter` keys must strictly equal the same key in the payload (top level first, then inside `task`). Payloads never carry capability links or tokens: a poke is a wake-up bell, not an authenticated surface, and the woken agent still authenticates normally and reads fresh state from the hub. Unset the variable and the hub behaves exactly as before; the mechanism is testable with curl and a one-line HTTP sink. *What* each runtime does when poked stays connector business.
 
 ## Conformance: the dummy agent
 

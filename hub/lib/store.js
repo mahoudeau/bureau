@@ -406,7 +406,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (artifact) t.artifacts.push({ ts: nowISO(), by: agent || 'unknown', ...artifact });
   t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
   save();
-  return { task: t };
+  return { task: t, prev_status: prevStatus };
 }
 
 // ---- Review capability links ----
