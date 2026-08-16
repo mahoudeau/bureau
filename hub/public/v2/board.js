@@ -130,6 +130,19 @@
     }
 
     function renderProjects(state) {
+      // t-86: an in-progress inline edit (project-edit.js) lives entirely
+      // inside a row this function is about to innerHTML-replace. Rather
+      // than diff-patch the list (a bigger change than this mission's own
+      // narrow scope calls for), skip the WHOLE rebuild for one cycle
+      // whenever any row is mid-edit — project-edit.js marks its row
+      // data-editing="true" for exactly this check, and clears it on
+      // confirm/cancel. The next v2:state event after the edit ends
+      // rebuilds normally and picks up the fresh value. This is the fix
+      // for the root cause t-74 hit: any unrelated v2:state refresh
+      // (another agent's heartbeat, a message, a task update) used to
+      // wipe an in-progress prompt()-free edit mid-keystroke.
+      if (mounts.projectsRail.querySelector('[data-editing="true"]')) return;
+
       var byProj = {};
       (state.projects || []).forEach(function (pj) {
         var id = typeof pj === 'string' ? pj : pj && pj.id;
@@ -160,13 +173,26 @@
         filterChip.hidden = true; filterChip.innerHTML = '';
       }
 
+      // t-86: per-field data-field hooks for project-edit.js (i10) to bind
+      // inline edit UI to, replacing prompt(). All four fields render
+      // UNCONDITIONALLY now (entity/repo used to render only when already
+      // set, capacity was folded into the opaque counts string, repo
+      // wasn't rendered at all) — an editable field needs a stable DOM
+      // node to attach to even when its value is empty. Empty entity/repo
+      // render as an empty span with a data-empty="true" flag project-edit.js
+      // can use for its own "empty" placeholder styling/text, since this
+      // file renders no visible placeholder copy itself (out of scope —
+      // board.js owns structure/hooks only, per this mission's own
+      // instruction not to touch anything beyond the project-card path).
       var body = ids.length ? ids.map(function (id) {
         var b = byProj[id];
         var pj = b.meta || {};
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
-          '<span class="v2-project-row__name">' + esc(projLabel(state, id)) + '</span>' +
-          (pj.entity ? '<span class="v2-project-row__entity" title="entity (scope wall)">@' + esc(pj.entity) + '</span>' : '') +
-          '<span class="v2-project-row__counts">' + (pj.capacity > 1 ? '🪑' + pj.capacity + ' · ' : '') + b.queued + 'q · ' + b.active + 'w · ' + b.review + 'r · ' + b.closed + '✓</span>' +
+          '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
+          '<span class="v2-project-row__entity" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)">' + (pj.entity ? '@' + esc(pj.entity) : '') + '</span>' +
+          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + ' title="repo (clone URL)">' + (pj.repo ? esc(pj.repo) : '') + '</span>' +
+          '<span class="v2-project-row__cap" data-field="capacity" title="capacity (parallel desks)">🪑<span class="v2-project-row__cap-n">' + (pj.capacity || 1) + '</span></span>' +
+          '<span class="v2-project-row__counts">' + b.queued + 'q · ' + b.active + 'w · ' + b.review + 'r · ' + b.closed + '✓</span>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
