@@ -23,12 +23,12 @@ check_absent() { # label haystack needle
 cd "$(dirname "$0")/.."
 
 # Preflight: these ports must be free (a crashed earlier run may have left orphans).
-for port in 8197 "$HUB_PORT" "$SINK_PORT"; do
+for port in 8196 8197 "$HUB_PORT" "$SINK_PORT"; do
   pid=$(lsof -ti tcp:"$port" 2>/dev/null || true)
   [ -n "$pid" ] && { echo "  (killing orphan pid $pid on :$port)"; kill $pid 2>/dev/null; }
 done
 sleep 0.3
-cleanup() { kill ${HUB_PID:-} ${HUB2_PID:-} ${SINK_PID:-} 2>/dev/null; rm -rf "$DIR"; }
+cleanup() { kill ${HUB_PID:-} ${HUB2_PID:-} ${HUB3_PID:-} ${SINK_PID:-} 2>/dev/null; rm -rf "$DIR"; }
 trap cleanup EXIT INT TERM
 
 echo "1. start poke sink on :$SINK_PORT"
@@ -36,7 +36,7 @@ node -e "
 const http = require('http'); const fs = require('fs');
 http.createServer((req, res) => {
   let b = ''; req.on('data', c => b += c);
-  req.on('end', () => { fs.appendFileSync('$SINK_FILE', b + '\n'); res.end('ok'); });
+  req.on('end', () => { fs.appendFileSync('$SINK_FILE', req.url + ' ' + b + '\n'); res.end('ok'); });
 }).listen($SINK_PORT, '127.0.0.1');
 " &
 SINK_PID=$!
@@ -97,5 +97,39 @@ sleep 1
 UP=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8197/api/state" -H "Authorization: Bearer $TOKEN")
 check "hub serves with broken config" "$UP" '200'
 check "disable logged" "$(cat "$DIR/hub2.log")" 'pokes disabled'
+echo "8. standing work rings the second bell (sweep-driven)"
+STANDING_POKES="[
+ {\"url\":\"http://127.0.0.1:$SINK_PORT/standing\",\"events\":[\"work.waiting\"],\"filter\":{\"status\":\"queued\",\"gate\":\"critic\"},\"every_min\":0},
+ {\"url\":\"http://127.0.0.1:$SINK_PORT/standing-guarded\",\"events\":[\"work.waiting\"],\"filter\":{\"status\":\"queued\",\"gate\":\"critic\"},\"every_min\":0,\"unless_seen\":{\"agents\":[\"sleeper\"],\"within_min\":10}},
+ {\"url\":\"http://127.0.0.1:$SINK_PORT/standing-cooled\",\"events\":[\"work.waiting\"],\"filter\":{\"status\":\"queued\",\"gate\":\"critic\"},\"every_min\":60}
+]"
+BUREAU_TOKEN=$TOKEN PORT=8196 BUREAU_DATA_DIR="$DIR/data3" BUREAU_BRAIN_DIR="$DIR/brain3" \
+BUREAU_SWEEP_MS=400 BUREAU_POKES="$STANDING_POKES" node hub/server.js >"$DIR/hub3.log" 2>&1 &
+HUB3_PID=$!
+sleep 1
+api3() {
+  m=$1; pth=$2; shift 2
+  if [ $# -gt 0 ]; then curl -s -X "$m" "http://127.0.0.1:8196$pth" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d "$1";
+  else curl -s -X "$m" "http://127.0.0.1:8196$pth" -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json'; fi
+}
+api3 POST /api/projects '{"id":"pk","label":"poke test"}' >/dev/null
+api3 POST /api/tasks '{"title":"standing critic work","project":"pk","gate":"critic"}' >/dev/null
+sleep 1.4
+SINK=$(cat "$SINK_FILE")
+check "standing ring arrived" "$SINK" '/standing {"event":"work.waiting"'
+check "ring carries waiting count" "$SINK" '"waiting":1'
+check "guard rings while nobody is awake" "$SINK" '/standing-guarded '
+COOLED=$(grep -c '/standing-cooled ' "$SINK_FILE")
+check "cooldown rings exactly once" "$COOLED" '^1$'
+api3 POST /api/agents/register '{"name":"sleeper","kind":"cowork"}' >/dev/null
+GUARDED_BEFORE=$(grep -c '/standing-guarded ' "$SINK_FILE")
+UNGUARDED_BEFORE=$(grep -c '/standing {' "$SINK_FILE")
+sleep 1.4
+GUARDED_AFTER=$(grep -c '/standing-guarded ' "$SINK_FILE")
+UNGUARDED_AFTER=$(grep -c '/standing {' "$SINK_FILE")
+check "unguarded keeps ringing" "$([ "$UNGUARDED_AFTER" -gt "$UNGUARDED_BEFORE" ] && echo grew)" 'grew'
+check "guarded goes silent once the agent is awake" "$([ "$GUARDED_AFTER" -eq "$GUARDED_BEFORE" ] && echo silent)" 'silent'
+kill $HUB3_PID 2>/dev/null
+
 echo "passed $PASS, failed $FAIL"
 exit $FAIL
