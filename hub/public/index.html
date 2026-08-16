@@ -216,7 +216,7 @@ function render() {
     if (!b) continue;
     if (t.status === 'queued') b.queued++;
     else if (t.status === 'review') b.review++;
-    else if (t.status === 'done' || t.status === 'failed') b.closed++;
+    else if (t.status === 'done' || t.status === 'failed' || t.status === 'discarded') b.closed++;
     else b.active++;
   }
   if (projectFilter && !byProj[projectFilter]) projectFilter = null;
