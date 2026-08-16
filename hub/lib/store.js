@@ -337,6 +337,23 @@ function claimTask({ id, agent, lease_minutes }) {
   return { task: t };
 }
 
+// Generic role check (t-119): "the lead" and "the critic" are roles, not
+// names, and the roster is exactly where an agent already self-declares
+// what it is (kind/capabilities, both free text since register's own
+// beginning). An agent holds a role here if it registered with that literal
+// tag in its capabilities array - no agent NAME is ever compared, so the
+// role can move to a different agent (a new shift, a different session)
+// just by that agent registering with the tag, with no hub code change.
+// 'human' is not a roster lookup: it is the existing sentinel the review
+// capability-link handlers already pass for boss actions (see server.js),
+// itself a role word, not an individual's name.
+function agentHasCapability(s, agentName, cap) {
+  const a = s.agents.find(x => x.name === agentName);
+  return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
+}
+function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
+function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+
 function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
@@ -345,9 +362,19 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
   if (gate !== undefined) {
     if (gate === 'boss') t.gate = 'boss';
-    else if (gate === 'critic' && (agent === 'human' || agent === 'ummon')) t.gate = 'critic';
-    else return { error: 'gate: anyone may raise to boss; only the boss or ummon set critic' };
+    else if (gate === 'critic' && isLead(s, agent)) t.gate = 'critic';
+    else return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
   }
+  // Boss-gate review entry, hub-enforced (t-119, boss ruling 2026-08-16 after
+  // t-59 rounds 22-23 reached his door with no critic pass): a mission with
+  // gate:boss may be PARKED into review only by an agent authorized to clear
+  // boss-gate work - the critic, the lead, or the boss himself. This is what
+  // makes "the boss never sees an uncritiqued round" true by construction,
+  // not by convention a builder has to remember. Critic-gate missions are
+  // unaffected: any agent parks those exactly as before (see the plain
+  // `status === 'review'` handling below, unguarded).
+  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent))
+    return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.

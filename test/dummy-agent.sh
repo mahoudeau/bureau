@@ -34,7 +34,13 @@ check "rejects unknown verb" "$(api POST /api/agents/heartbeat '{"name":"menace"
 echo "3. tasks: create, claim, progress, artifact"
 check "unknown project refused with the registry" "$(api POST /api/tasks '{"title":"x","project":"nonexistent"}')" '"projects"'
 api POST /api/projects '{"name":"demo"}' > /dev/null
-T1=$(api POST /api/tasks '{"title":"Refill the coffee machine","body":"The beans are decorative pixels. Replace them.","priority":2,"project":"demo"}')
+T1=$(api POST /api/tasks '{"title":"Refill the coffee machine","body":"The beans are decorative pixels. Replace them.","priority":2,"project":"demo","gate":"critic"}')
+# gate:critic here deliberately (t-119): section 7 below exercises the
+# capability-link review mechanism itself (park/sendback/approve links),
+# not gate authorization - that's section 8c's own dedicated job. A
+# gate:critic mission is parked into review by any agent exactly as always
+# (the acceptance's own no-regression clause), so this keeps section 7
+# testing what it always tested.
 check "create" "$T1" '"status": "queued"'
 TID=$(echo "$T1" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 CLAIM=$(api POST /api/tasks/claim '{"agent":"menace"}')
@@ -149,7 +155,7 @@ check "task is done" "$(api GET "/api/tasks/$TID")" '"done"'
 check "used link is dead" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$AP_TOKEN")" '410'
 
 echo "7b. itemized review: proposals filed, per-item verdicts via capability link"
-TI=$(api POST /api/tasks '{"title":"Curation proposals","project":"ops","priority":2}')
+TI=$(api POST /api/tasks '{"title":"Curation proposals","project":"ops","priority":2,"gate":"critic"}')
 TIID=$(echo "$TI" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TIID\"}" > /dev/null
 check "items filed with server ids" "$(api PATCH "/api/tasks/$TIID" '{"agent":"menace","items":[{"title":"Promote the coffee fact","body":"- [fact] the beans are pixels"},{"title":"Compact the ops STATE"}]}')" '"id": "i2"'
@@ -190,11 +196,32 @@ TG=$(api POST /api/tasks '{"title":"Gate check mission","project":"ops","priorit
 TGID=$(echo "$TG" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 check "gate defaults to boss" "$TG" '"gate": "boss"'
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TGID\"}" > /dev/null
-api PATCH "/api/tasks/$TGID" '{"agent":"menace","status":"review","note":"parked"}' > /dev/null
+
+# t-119: boss-gate review ENTRY is hub-enforced, generically (no agent name
+# is ever compared - "the critic" and "the lead" are whichever registered
+# agent's own capabilities[] includes that literal tag).
+check "plain agent cannot park a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","status":"review","note":"parked"}')" 'only the critic, the lead, or the boss'
+check "refused park leaves the mission untouched, not half-applied" "$(api GET "/api/tasks/$TGID")" '"status": "claimed"'
+api POST /api/agents/register '{"name":"moneta","kind":"cowork","capabilities":["review","critic"]}' > /dev/null
+check "critic-capability agent parks a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"review","note":"parked by critic"}')" '"status": "review"'
+
 check "agent cannot close a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done"}')" 'boss-gate'
-check "agent cannot set critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","gate":"critic"}')" 'only the boss or ummon'
-check "ummon sets critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"ummon","gate":"critic"}')" '"gate": "critic"'
+check "agent cannot set critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","gate":"critic"}')" 'only the boss or the lead'
+api POST /api/agents/register '{"name":"consul","kind":"claude-code","capabilities":["code","lead"]}' > /dev/null
+check "lead-capability agent sets critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"consul","gate":"critic"}')" '"gate": "critic"'
 check "critic closes a critic-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done","note":"passes the bar"}')" '"done"'
+
+TL=$(api POST /api/tasks '{"title":"Gate check mission 2 (lead parks)","project":"ops","priority":2}')
+TLID=$(echo "$TL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TLID\"}" > /dev/null
+check "lead-capability agent also parks a boss-gate review" "$(api PATCH "/api/tasks/$TLID" '{"agent":"consul","status":"review","note":"parked by lead"}')" '"status": "review"'
+check "human closes it" "$(api PATCH "/api/tasks/$TLID" '{"agent":"human","status":"done","note":"approved"}')" '"done"'
+
+TH=$(api POST /api/tasks '{"title":"Gate check mission 3 (human parks)","project":"ops","priority":2}')
+THID=$(echo "$TH" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$THID\"}" > /dev/null
+check "human (the boss himself) can always park a boss-gate review" "$(api PATCH "/api/tasks/$THID" '{"agent":"human","status":"review","note":"self-parked"}')" '"status": "review"'
+api PATCH "/api/tasks/$THID" '{"agent":"human","status":"done"}' > /dev/null
 TC=$(api POST /api/tasks '{"title":"Critic sendback mission","project":"ops","priority":2,"gate":"critic"}')
 TCID=$(echo "$TC" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 check "gate settable on create" "$TC" '"gate": "critic"'
@@ -215,7 +242,7 @@ check "raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/know
 check "off-whitelist extension refused" "$(api POST /api/knowledge '{"file":"projects/ops/references/tool.exe","content":"x","author":"menace"}')" 'only .md'
 PNG_APPEND="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
 check "base64 append refused" "$(api POST /api/knowledge "$PNG_APPEND")" 'replace-only'
-TE=$(api POST /api/tasks '{"title":"Evidence renders inline","project":"ops","priority":2}')
+TE=$(api POST /api/tasks '{"title":"Evidence renders inline","project":"ops","priority":2,"gate":"critic"}')
 TEID=$(echo "$TE" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TEID\"}" > /dev/null
 api PATCH "/api/tasks/$TEID" '{"agent":"menace","artifact":{"label":"screenshot","url":"projects/ops/references/pixel.png"},"status":"review","note":"evidence attached"}' > /dev/null
