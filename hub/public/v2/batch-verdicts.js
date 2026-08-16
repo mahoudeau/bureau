@@ -31,6 +31,29 @@
 // Both checks run against the LIVE task record at confirm time, not a
 // snapshot taken when the checkbox was ticked — a mission that flips into
 // either condition after selection drops out of the batch automatically.
+//
+// t-89: the two ✅ "Approve"/"Accept all" button prefixes (below) are
+// swapped for t-66's vendored 'check' icon — an exact semantic match.
+// Three other symbols in this file are deliberately left as-is, all
+// checked live (not just by codepoint) before this call was made:
+//   - ✖ ("Reject all") and → (the "Review & apply →" phrase) both
+//     render as plain monochrome glyphs, not colorful emoji — U+2716 and
+//     U+2192 have no default emoji presentation and carry no variation
+//     selector forcing one here, same register as a plain "x" or arrow
+//     character, not what this mission's emoji-as-icon sweep targets.
+//   - ↩️ ("Send back all") DOES render as a real colorful emoji (forced
+//     via its own variation selector) and IS being used as an icon here
+//     — but t-66's vendored set has no undo/return-arrow shape to swap
+//     it for, and components.js is out of this mission's scope to
+//     extend with a new one. Left in place and flagged here as a real
+//     gap for whoever next touches that file, rather than either
+//     leaving it silently or reaching for an unrelated icon shape that
+//     would misrepresent the action.
+//   - 🧪/👤 in this file's own header comment above (not shown in this
+//     diff) are source commentary, never rendered to a user — out of
+//     scope by the mission's own "rendered UI" framing, not a miss.
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -119,7 +142,7 @@
         '<input class="v2-batch-confirm__note" id="v2-batch-note" placeholder="Note (optional on approve, required to send back)">' +
         '<p class="v2-batch-confirm__err" id="v2-batch-err" hidden></p>' +
         '<div class="v2-batch-confirm__actions">' +
-        '<button type="button" class="v2-batch-bar__btn" id="v2-batch-approve" disabled>✅ Approve all</button>' +
+        '<button type="button" class="v2-batch-bar__btn" id="v2-batch-approve" disabled>' + icon('check') + ' Approve all</button>' +
         '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-sendback" disabled>↩️ Send back all</button>' +
         '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-cancel">Cancel</button>' +
         '</div></div>';
@@ -253,7 +276,7 @@
         el.innerHTML =
           '<span class="v2-batch-bar__count">' + itemSelection.size + ' items selected</span>' +
           '<label class="v2-batch-confirm__ack"><input type="checkbox" id="v2-batch-item-ack"> I’ve reviewed these ' + itemSelection.size + ' items</label>' +
-          '<button type="button" class="v2-batch-bar__btn" id="v2-batch-item-approve" disabled>✅ Accept all</button>' +
+          '<button type="button" class="v2-batch-bar__btn" id="v2-batch-item-approve" disabled>' + icon('check') + ' Accept all</button>' +
           '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-item-reject" disabled>✖ Reject all</button>';
         // Anchor at the end of the item list, inline in the panel — never a
         // modal/overlay, matches the mission's own phone-usable requirement.
