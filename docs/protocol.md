@@ -8,12 +8,13 @@
 
 Anything that can make HTTP calls. No SDK, no library, no framework. The reference connector is **curl**. Everything below is the complete integration surface.
 
-## The six calls (+ the stream)
+## The seven calls (+ the stream)
 
 | Call | Purpose |
 |---|---|
 | `POST /api/agents/register` | join the roster: `{name, kind, capabilities[]}` |
 | `POST /api/agents/heartbeat` | I'm alive: `{name, note?, activity?, sub_agents?}` |
+| `DELETE /api/agents/:name` | leave the roster: curation, not a ban. Clears the roster entry only - missions keep their historical assignee strings and logs untouched, and the bare name may freely re-register later. Refused (409) while the name holds a live lease (a `claimed`/`in_progress` mission): release or finish it first, so curation can never strand claimed work. `404` if the name isn't on the roster. |
 | `POST /api/tasks/claim` | claim by id, or highest-priority queued from a project with free capacity; returns lease |
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |

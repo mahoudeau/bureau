@@ -160,6 +160,24 @@ function heartbeat(name, note, activity, subAgents) {
   return a;
 }
 
+// Roster curation, not a ban: removing a name clears its roster entry only.
+// Missions keep their historical assignee strings and logs untouched (they
+// are never rewritten), and the bare name is free to register again later -
+// upsertAgent just creates a fresh entry since none matches by name anymore.
+// A name holding a live lease is refused so curation can never strand
+// claimed work; blocked/review missions hold no lease (see updateTask) so
+// only claimed/in_progress count.
+function deleteAgent(name) {
+  const s = load();
+  if (!s.agents.some(a => a.name === name)) return { error: 'not_found' };
+  expireLeases(); // a lease that already expired is not "live"
+  const held = s.tasks.filter(t => t.assignee === name && (t.status === 'claimed' || t.status === 'in_progress'));
+  if (held.length) return { error: `${name} holds a live lease on ${held.map(t => t.id).join(', ')}; release the mission(s) first` };
+  s.agents = s.agents.filter(a => a.name !== name);
+  save();
+  return { removed: true };
+}
+
 // ---- Tasks ----
 const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed', 'discarded'];
 
@@ -478,7 +496,7 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat, acquireLock,
+  load, save, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
