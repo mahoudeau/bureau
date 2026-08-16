@@ -35,6 +35,22 @@
   /* Agents */
   .agent .name { font-weight: 600; }
   .agent .meta { color: var(--ink2); font-size: 12px; margin-top: 2px; }
+  /* Sub-agent fleets (t-80, goal: t-60): nested inside the parent's own
+     .card.agent, never a separate card/pane. The count badge reuses the
+     .badge shell (see t-61 item i3's own approved markup) but carries no
+     status dot of its own — a fleet is not a roster agent with a heartbeat
+     history. The fold-out rows below go further: plain text at the .evt/
+     .logrow scale, muted only, no accent, no badge-pill shape — that
+     visual language specifically means "this has its own heartbeat
+     history," which is exactly untrue of a sub-agent, so it's withheld by
+     construction, not by convention. */
+  details.fleet { margin-top: 4px; }
+  details.fleet summary { cursor: pointer; font-size: 11px; color: var(--muted); list-style: none; }
+  details.fleet summary::-webkit-details-marker { display: none; }
+  details.fleet summary::before { content: '▸ '; }
+  details.fleet[open] summary::before { content: '▾ '; }
+  details.fleet .subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--muted); border-bottom: 1px solid var(--hairline); }
+  details.fleet .subagent:last-child { border-bottom: none; }
   /* Projects */
   .proj { display: flex; align-items: baseline; gap: 8px; padding: 6px 2px; border-bottom: 1px solid var(--hairline);
           font-size: 13px; cursor: pointer; }
@@ -148,9 +164,21 @@ function render() {
   ag.className = state.agents.length ? '' : 'empty';
   ag.innerHTML = state.agents.length ? state.agents.map(a => {
     const st = agentStatus(a);
+    // Sub-agent fleet (t-80, goal: t-60): live only, per t-61 item i3 — a
+    // stale fleet reads as a lie, so it's gated on the SAME `active`
+    // status (heartbeat <5min) the roster badge already uses, and
+    // disappears entirely the moment the parent goes idle/offline, same
+    // refresh cycle, no separate liveness check.
+    const fleet = st === 'active' && Array.isArray(a.sub_agents) ? a.sub_agents : [];
+    const fleetBadge = fleet.length ? ` <span class="badge fleet">🧵 ${fleet.length}</span>` : '';
+    const fleetFoldout = fleet.length
+      ? `<details class="fleet"><summary>${fleet.length} sub-agent${fleet.length === 1 ? '' : 's'}</summary>${
+          fleet.map(s => `<div class="subagent">${esc(s.label)}${s.activity ? ' · ' + esc(s.activity) : ''}</div>`).join('')
+        }</details>`
+      : '';
     return `<div class="card agent"><div class="name">${esc(a.name)}
-      <span class="badge ${st}"><span class="dot"></span>${st}</span></div>
-      <div class="meta">${esc(a.kind)}${a.activity ? ' · ' + esc(a.activity) : ''} · seen ${ago(a.last_seen)} ago${a.note ? ' · ' + esc(a.note) : ''}</div></div>`;
+      <span class="badge ${st}"><span class="dot"></span>${st}</span>${fleetBadge}</div>
+      <div class="meta">${esc(a.kind)}${a.activity ? ' · ' + esc(a.activity) : ''} · seen ${ago(a.last_seen)} ago${a.note ? ' · ' + esc(a.note) : ''}</div>${fleetFoldout}</div>`;
   }).join('') : 'No agents yet.';
 
   document.getElementById('missions-title').innerHTML = projectFilter
