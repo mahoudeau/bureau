@@ -78,11 +78,19 @@ import { icon } from './components.js';
 
     var projectFilter = null;
     var selectedReviewIds = new Set();
+    var archiveOpen = false; // t-110: off by default — discarded stays out of the six live columns until toggled
 
     // ---- board toolbar: quick-add trigger + active-filter chip (built once) ----
     mounts.board.innerHTML =
       '<div class="v2-board__toolbar">' +
       '<button type="button" class="v2-board__quickadd-btn" id="v2-qa-trigger">+ Quick add</button>' +
+      // t-110: discarded (fixtures/duplicates/re-scope tombstones, per
+      // protocol.md's terminal-status doctrine) never renders in the six
+      // live columns — but the count stays visible here even while the
+      // toggle is off, so the number itself is never hidden, only the
+      // list. Phone-usable: same tap-target treatment as the quick-add
+      // button next to it, no hover-only affordance.
+      '<button type="button" class="v2-board__archive-toggle" id="v2-archive-toggle" aria-pressed="false">🗄 <span id="v2-archive-count">0</span> archived</button>' +
       '<span class="v2-board__filter-chip" id="v2-board-filter-chip" hidden></span>' +
       '</div>' +
       '<form class="v2-quickadd" id="v2-quickadd-form" hidden>' +
@@ -102,10 +110,17 @@ import { icon } from './components.js';
     var qaPrio = document.getElementById('v2-qa-prio');
     var qaErr = document.getElementById('v2-qa-err');
     var filterChip = document.getElementById('v2-board-filter-chip');
+    var archiveToggle = document.getElementById('v2-archive-toggle');
+    var archiveCountEl = document.getElementById('v2-archive-count');
 
     qaTrigger.addEventListener('click', function () {
       qaForm.hidden = !qaForm.hidden;
       if (!qaForm.hidden) qaTitle.focus();
+    });
+    archiveToggle.addEventListener('click', function () {
+      archiveOpen = !archiveOpen;
+      archiveToggle.setAttribute('aria-pressed', String(archiveOpen));
+      render();
     });
     qaForm.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -256,6 +271,33 @@ import { icon } from './components.js';
     ];
     function statusOf(col, t) { return col === 'working' ? (t.status === 'claimed' || t.status === 'in_progress') : t.status === col; }
 
+    function taskCard(t, key, goalKids) {
+      var isGoal = /^goal:/i.test(t.title);
+      var isDiscarded = t.status === 'discarded';
+      var kids = isGoal ? goalKids[t.id] : null;
+      var checkbox = key === 'review'
+        ? '<input type="checkbox" class="v2-task-card__select" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
+        : '';
+      return '<div class="v2-task-card v2-task-card--' + esc(t.status) + '" data-id="' + esc(t.id) + '">' +
+        checkbox +
+        '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
+        // t-110: glyph + text, never color alone, per the Bar's own "status is
+        // glyph + color" register rule — deliberately NOT relying only on the
+        // border-left-color system (molecules.css/t-77 already flattens
+        // .v2-task-card's border to 1px solid transparent at rest via a
+        // higher-specificity doubled-class rule, so a color-only signal here
+        // would be invisible in the live app for EVERY status, not just this
+        // one; a glyph+label survives that regardless of border cascade).
+        '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
+        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + esc(t.id) + ' · P' + t.priority +
+        (t.assignee ? ' · ' + esc(t.assignee) : '') +
+        (t.project ? ' · ' + esc(t.project) : '') +
+        (kids ? ' · ' + kids.done + '/' + kids.total + ' missions' : '') +
+        (t.reserved_for ? ' · reserved: ' + esc(t.reserved_for) : '') +
+        (t.status === 'review' ? (t.gate === 'critic' ? ' · critic gate' : ' · boss gate') : '') +
+        '</div></div></div>';
+    }
+
     function renderBoard(state) {
       var all = state.tasks || [];
       var visible = projectFilter ? all.filter(function (t) { return t.project === projectFilter; }) : all;
@@ -306,7 +348,31 @@ import { icon } from './components.js';
         return '<div class="v2-board__column"><h3 class="v2-board__column-title">' + esc(label) + ' · ' + ts.length + '</h3>' + (cards || '<div class="v2-empty">Nothing here.</div>') + '</div>';
       }).join('');
 
-      columnsEl.querySelectorAll('[data-open]').forEach(function (el) {
+      // t-110: discarded (fixtures, duplicates, re-scope tombstones — protocol.md's
+      // terminal-status doctrine) never occupies one of the six live columns above,
+      // matching current daily-view behavior. Its count stays visible on the toggle
+      // itself regardless of toggle state (never hidden, only the list is); the list
+      // renders as its own clearly-labeled strip, distinct from Failed at a glance
+      // (dashed muted border via .v2-task-card--discarded, not the solid critical-red
+      // Failed uses), only while the toggle is on.
+      var discarded = visible.filter(function (t) { return t.status === 'discarded'; })
+        .sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
+      archiveCountEl.textContent = String(discarded.length);
+      var archiveEl = document.getElementById('v2-board-archive');
+      if (archiveEl) archiveEl.remove();
+      if (archiveOpen) {
+        var strip = document.createElement('div');
+        strip.className = 'v2-board__archive';
+        strip.id = 'v2-board-archive';
+        strip.innerHTML = '<h3 class="v2-board__column-title">Archived · ' + discarded.length + '</h3>' +
+          (discarded.length ? discarded.map(function (t) { return taskCard(t, 'discarded', goalKids); }).join('') : '<div class="v2-empty">Nothing archived.</div>');
+        columnsEl.parentNode.insertBefore(strip, columnsEl.nextSibling);
+      }
+
+      var openTargets = columnsEl.querySelectorAll('[data-open]');
+      var archiveEl2 = document.getElementById('v2-board-archive');
+      if (archiveEl2) openTargets = Array.prototype.concat.call(Array.prototype.slice.call(openTargets), Array.prototype.slice.call(archiveEl2.querySelectorAll('[data-open]')));
+      Array.prototype.forEach.call(openTargets, function (el) {
         el.addEventListener('click', function () { V2.emit('v2:mission:open', { id: el.getAttribute('data-open') }); });
       });
       columnsEl.querySelectorAll('.v2-task-card__select').forEach(function (cb) {
@@ -432,6 +498,23 @@ import { icon } from './components.js';
       '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { overflow-wrap: anywhere; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
+      // t-110: archive toggle — same tap-target treatment as the quick-add
+      // button beside it (phone-usable, no hover-only affordance). The
+      // count text lives INSIDE the button itself so it is visible whether
+      // the toggle is on or off — only the list below is gated by state.
+      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink-2, #888); cursor: pointer; font-variant-numeric: tabular-nums; }',
+      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink, inherit); border-color: var(--v2-accent, #3f6fe0); }',
+      // The archived strip sits below the six live columns (not mixed into
+      // the grid), full-width, so it reads as a distinct, clearly-labeled
+      // zone rather than a 7th equal column competing for the same grid
+      // track — legible at 390px without the auto-fit grid squeezing it.
+      // grid-column spans every track: this strip is a sibling of both the
+      // toolbar and #v2-board-columns inside #v2-board, which is ITSELF a
+      // grid (v2.html's own #v2-board rule, separate from board.js's own
+      // .v2-board__columns grid one level down) — without this, the strip
+      // would land as an ordinary same-row grid item next to the toolbar
+      // instead of a full-width band below the six columns.
+      '.v2-board__archive { grid-column: 1 / -1; margin-top: var(--v2-space-3, 12px); padding-top: var(--v2-space-3, 12px); border-top: 1px dashed var(--v2-hairline, rgba(128,128,128,.3)); }',
       '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2, #888); display: flex; align-items: center; gap: 4px; }',
       '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent, #3f6fe0); cursor: pointer; font: inherit; }',
       '.v2-quickadd { display: flex; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-3, 12px); flex-wrap: wrap; }',
@@ -481,7 +564,15 @@ import { icon } from './components.js';
       '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
       '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
-      '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }'
+      '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      // Discarded cards (t-110): dashed border + reduced opacity, distinguishable
+      // from Failed at a glance without a new color token. Tripled class beats
+      // molecules.css's doubled-class border reset (its documented technique),
+      // so the dashed border genuinely renders; the word "archived" on the card
+      // stays the primary signal per the glyph+label-never-color-alone rule.
+      '.v2-task-card.v2-task-card.v2-task-card--discarded { border-style: dashed; border-color: var(--v2-color-border, rgba(128,128,128,.4)); opacity: .75; }',
+      // Meta line used by the archive-strip cards (taskCard).
+      '.v2-task-card__meta { font-size: 11.5px; color: var(--v2-color-text-secondary, #62636c); margin-top: 3px; font-variant-numeric: tabular-nums; }'
     ].join('\n');
     document.head.appendChild(style);
   }
