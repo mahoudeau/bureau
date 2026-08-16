@@ -43,7 +43,7 @@ SINK_PID=$!
 
 echo "2. start scratch hub on :$HUB_PORT (pokes: task.review+critic only)"
 BUREAU_TOKEN=$TOKEN PORT=$HUB_PORT BUREAU_DATA_DIR="$DIR/data" BUREAU_BRAIN_DIR="$DIR/brain" \
-BUREAU_POKES="[{\"url\":\"http://127.0.0.1:$SINK_PORT/wake\",\"headers\":{\"X-Poke-Test\":\"1\"},\"events\":[\"task.review\"],\"filter\":{\"gate\":\"critic\"}}]" \
+BUREAU_POKES="[{\"url\":\"http://127.0.0.1:$SINK_PORT/wake\",\"headers\":{\"X-Poke-Test\":\"1\"},\"events\":[\"task.review\"],\"filter\":{\"gate\":\"critic\"}},{\"url\":\"http://127.0.0.1:$SINK_PORT/wake-text\",\"events\":[\"task.review\"],\"filter\":{\"gate\":\"critic\"},\"wrap\":\"text\"}]" \
 node hub/server.js >"$DIR/hub.log" 2>&1 &
 HUB_PID=$!
 sleep 1
@@ -73,6 +73,8 @@ check "payload has gate" "$SINK" '"gate":"critic"'
 check "payload has by" "$SINK" '"by":"builder-a"'
 check "payload has prev_status" "$SINK" '"prev_status":"claimed"'
 check_absent "no capability links leak" "$SINK" 'view_token\|review_links\|answer_link'
+check "wrap:text subscription got a text turn" "$SINK" '{"text":"poke: task.review'
+check "text line carries the routing facts" "$SINK" 'gate=critic · by=builder-a · prev=claimed'
 
 echo "5. filtered-out transition does not poke (review + gate boss)"
 api POST /api/tasks/claim "{\"agent\":\"builder-b\",\"id\":\"$T2\"}" >/dev/null
