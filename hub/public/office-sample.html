@@ -39,7 +39,7 @@
     <span class="hint">idle = the "idle"/low-activity heartbeat state · typing = the "editing" verb (docs/protocol.md)</span>
   </div>
   <details>
-    <summary>About this sample — what calibrated it (round 15 of an intentionally open-ended loop — not a finished piece)</summary>
+    <summary>About this sample — what calibrated it (round 16 of an intentionally open-ended loop — not a finished piece)</summary>
     <div class="body" id="about"></div>
   </details>
 </main>
@@ -92,8 +92,9 @@ const PAL = {
   skinShadow: '#8a5648', skinMid:'#c48657', skinHi:'#e8ae7c', skinCheek:'#e08a6e', eye:'#0d0f14', catchlight:'#eaf6ff',
   iris: '#4a90b8', // tinted iris — a flat neutral-gray sclera read as a dead doll stare
   browShadow: '#6a4230', browLine:'#3a241a',
-  hairShadow: '#12161c', hairMid:'#232a33', hairHi:'#333e49', hairFade:'#1a2027', specular:'#d8f4ff', rim:'#bfe8ff',
-  shirtShadow:'#8f9aa3', shirtMid:'#d6dee4', shirtHi:'#f4f8fa', trim:'#1f2933',
+  hairShadow: '#12161c', hairMid:'#232a33', hairHi:'#333e49', hairFade:'#1a2027', hairStrand:'#4a5c6c', specular:'#d8f4ff', rim:'#bfe8ff',
+  shirtShadow:'#7c8894', shirtMid:'#c5cfd8', shirtHi:'#f8fbfc', shirtPatch:'#ffffff', trim:'#1f2933',
+  jawShadow:'#6e4638',
   tieShadow:'#1a2c40', tieMid:'#284060', tieHi:'#3a5a82', badgeCard:'#e8dfa0', badgeStripe:'#3fa0c2', lanyard:'#1f2933',
   pantsShadow:'#141a22', pantsMid:'#212a34', shoe:'#0a0c0f',
   outline:    '#000000', shadowSoft:'rgba(2,3,5,.55)',
@@ -741,6 +742,22 @@ function drawCharacter(t, typing){
   // expressed as width FRACTIONS per row (trap3Shade) instead of absolute
   // x-offsets (diag3Shade), since the row width itself now changes. ----
   trap3Shade(0,2,23,21,15, 0.68,0.60, 0.86,0.80, PAL.shirtHi, PAL.shirtMid, PAL.shirtShadow);
+  // round 16: a discrete highlight PATCH, not just a wider lit band. A
+  // critic pass on round 15 found the torso "reads as one broad soft
+  // light-to-shadow blend running left to right... not the references'
+  // discrete flat-tone material blocking," naming character-Brugaves_
+  // Compendium_Sprite_3.gif's jacket specifically: "3-4 hard-edged flat
+  // color regions with a clean highlight patch, not a gradient." The
+  // three-band trap3Shade above already IS discrete (hard per-row rects,
+  // no blend) — the "soft" read came from the bands sitting too close in
+  // value (fixed this round in PAL: shirtShadow darkened, shirtHi
+  // brightened, wider steps) plus nothing on the surface breaking the
+  // band shape itself. This adds that break: a small square of the
+  // brightest tone in the whole file (shirtPatch, pure white) sitting
+  // fully inside the lit band near the collar — a fold/seam catching the
+  // downlight straight-on — the same "one small square patch reads as
+  // fabric" trick the reference actually uses, not a bigger gradient.
+  R(-7,4,3,3,PAL.shirtPatch);
   // round 15: a short rim-light accent at the shoulder — first attempt ran
   // this as a continuous full-height 1px stripe down the whole silhouette
   // edge and it read as a scan-line/glitch cutting across the face and
@@ -805,6 +822,12 @@ function drawCharacter(t, typing){
   R(-7,-10,1,1,PAL.rim);
   // warm cheek tint sits on the LIT side only (asymmetric, not mirrored)
   R(-5,-9,2,2,PAL.skinCheek);
+  // round 16: a genuine highlight PATCH above the cheek tint (skinHi, the
+  // same bright tone the nose bridge uses) — the cheek tint alone is a
+  // color wash, not a plane change; pairing it with a brighter patch just
+  // above the cheekbone is what reads as the cheekbone's own highlight
+  // catching the lamp, structure rather than a rosy dot
+  R(-6,-11,1,1,PAL.skinHi);
   // eyes: a tinted iris + a distinct near-black pupil + one catchlight
   // pixel strictly brighter than the surrounding skin, offset upper-left
   // to agree with the established lamp-left key light
@@ -828,6 +851,18 @@ function drawCharacter(t, typing){
   // block) — "references all carry a nose highlight or shadow chip"
   R(-1,-9,1,3,PAL.skinShadow);
   R(-2,-9,1,2,PAL.skinHi); // bridge highlight, lamp side
+  // round 16: JAW/CHEEK STRUCTURE. A critic pass on round 15 found the face
+  // "close to a single flat skin tone plus the new brow/nose/mouth
+  // linework; there's not yet the cheek/jaw modeling (a highlight patch +
+  // a shadow patch reading actual facial structure) that both Erlina and
+  // Zale show." The existing skinCheek dot (below) is a warm TINT, not
+  // structure — it doesn't read as a plane change. Added: a distinct jaw
+  // shadow chip (a new jawShadow tone, warmer/darker than skinShadow so it
+  // doesn't fight the lamp/monitor lit-shadow split) along the shadow-side
+  // jawline, where the head's curve turns under toward the neck — the
+  // concrete cue that separates "a shape with a face painted on it" from
+  // "a face with an actual jaw."
+  R(3,-6,2,1,PAL.jawShadow); R(4,-5,1,1,PAL.jawShadow);
   // mouth: a slight downward set at the shadow-side corner (asymmetric,
   // same register as the brows) instead of one flat centered line — a
   // focused, closed-mouth set rather than a slack neutral line
@@ -849,6 +884,19 @@ function drawCharacter(t, typing){
   // fade, drawn in the darkest hair tone — this is the one line that turns
   // "a rounded mass" into "a side part"
   R(1,-24,1,3,PAL.hairShadow); R(2,-21,1,3,PAL.hairShadow); R(3,-18,1,2,PAL.hairShadow);
+  // round 16: STRAND HIGHLIGHTS. A critic pass on round 15 put this crop
+  // next to character-Zale_Running.gif / sprite-Zale.png and character-
+  // Erlina_Compendium_Sprite_2.gif and found the hair still read as "one
+  // near-flat dark mass with a single highlight pixel" — both references
+  // carry 3+ distinct tones with DIRECTIONAL streaks reading as individual
+  // locks, not a silhouette fill. A single specular pixel (round 8) can't
+  // carry that; these are short 2-3px hard strokes following the crown's
+  // own sweep direction (lamp-side, upper-left to lower-right), in the new
+  // mid-bright hairStrand tone — between hairHi and hairMid, so they read
+  // as light catching individual strands, not a second solid highlight
+  // patch competing with the fringe blob.
+  R(-5,-22,2,1,PAL.hairStrand); R(-3,-19,2,1,PAL.hairStrand); R(-1,-17,2,1,PAL.hairStrand);
+  R(0,-25,1,1,PAL.hairStrand); // one more on the top tuft
   R(-6,-24,1,1,PAL.specular); // catch-light on the crown, lamp-side
   ctx.restore(); // end head-dip translate
 
@@ -918,7 +966,8 @@ document.getElementById('btn-typing').addEventListener('click', ()=>{
 });
 
 document.getElementById('about').innerHTML = `
-<p><b>Round 15 of a deliberately open-ended loop</b> — the boss's standing instruction on this mission: "assume the references win — they are shipped professional game art; the job is closing the distance round after round, not declaring arrival." This page is a snapshot of that loop, not a finished piece; every round has been judged by a fresh critic against the actual files in <code>projects/bureau/references/office/</code>. Summary of what's changed and why so far, by reference file:</p>
+<p><b>Round 16 of a deliberately open-ended loop</b> — the boss's standing instruction on this mission: "assume the references win — they are shipped professional game art; the job is closing the distance round after round, not declaring arrival." This page is a snapshot of that loop, not a finished piece; every round has been judged by a fresh critic against the actual files in <code>projects/bureau/references/office/</code>. Summary of what's changed and why so far, by reference file:</p>
+<p><b>Round 16 (shading detail/resolution)</b>, against <b>character-Zale_Running.gif</b>, <b>sprite-Zale.png</b>, <b>character-Erlina_Compendium_Sprite_2.gif</b> and <b>character-Brugaves_Compendium_Sprite_3.gif</b>: a critic pass on round 15 credited the thematic reframe and expression/haircut work as real, then confirmed round 15's own honest deferral — the boss's first-listed craft item, shading detail/resolution, was still live. Three concrete misses, each independently re-checked against a named reference: <b>hair</b> read as "one near-flat dark mass with a single highlight pixel" against Zale's/Erlina's 3+ distinct tones with directional strand streaks — added short hard strokes in a new mid-bright <code>hairStrand</code> tone following the crown's own sweep direction, between the existing hairHi/hairMid values so they read as light catching individual locks rather than a second competing highlight patch; <b>shirt/jacket</b> read as "one broad soft light-to-shadow blend" against Brugaves' "3-4 hard-edged flat color regions with a clean highlight patch, not a gradient" — the three-band shading was already discrete (hard per-row rects, no blend) but the bands sat too close in value, so widened the steps (shirtShadow darkened, shirtHi brightened) and added a small pure-white highlight patch at the collar fold, the same "one small square patch reads as fabric" convention the reference itself uses; <b>face</b> had "a single flat skin tone plus brow/nose/mouth linework... not yet the cheek/jaw modeling" both references show — added a distinct jaw-shadow chip (a new <code>jawShadow</code> tone, warmer than the ambient skinShadow so it reads as structure, not just the lamp/monitor split) and a genuine highlight patch above the existing cheek tint (the tint alone was a color wash, not a plane change). Silhouette-diff palette count: 35 (round 15 was 32) — a small, expected, and named increase from adding real tonal detail on the specific axis this round targeted, not a regression; still close to the references' own 27-33 whole-sprite range.</p>
 <p><b>Round 15 (the boss's fresh verdict — craft gap + thematic reframe)</b>: after round 14 raised gate to boss, the boss's 2026-08-16T09:32 send-back named two distinct, binding things (recorded in full on the mission's own "## Bar addendum"). <b>Craft</b>: shading still isn't at the references' detail/resolution, the face carried no expression, and the hair read as no distinct/realistic haircut — all three addressed this round without touching the palette-discipline or shape-language work rounds 8-14 already closed. <b>Thematic reframe</b> (new, binding on every later office build too, not just this sample): "Bureau" carries the double meaning of a spy agency's headquarters — agents get briefed and go on missions, register FBI-office / "Le Bureau des Legendes" (the DGSE-officers show), not a fantasy-adventurer guild hall — with a cool pixel-16-bit aesthetic and modern shading/lighting, reconciled against the Sea of Stars craft bar by keeping its pixel-art TECHNIQUE (banded light, hard pixel edges, multi-tone material blocking) while pulling the palette/mood toward a cool-toned register with sharper, more directional light. <b>What changed, concretely</b>: (1) the entire environment palette re-picked cool — graphite-blue walls, slate floor tile, charcoal mat, a cool-cyan night skyline behind new venetian blinds (the single most legible "agency office, not tavern" cue a window can carry) — while the character's own skin tone stayed warm by design (a face split into an unrelated hue reads as a rendering glitch, not lighting, so only the room's palette pivots); (2) the warm desk lamp's glow recolored to a cool white-blue LED, and a brand-new ceiling <b>downlight</b> added over the desk — a sharp-edged, banded cone distinct in both shape and hue from the corner lamp's soft pool, the boss's own named cue ("briefing-room downlight... not just the existing warm desk lamp"); (3) a hard 1px <b>rim-light</b> strip added along the character's lit-side silhouette on both the torso and head, riding on top of the existing three-band shading rather than replacing it — a crisp technical highlight is the concrete difference between the references' soft painterly banding and the "modern shading" the verdict separately asked for; (4) the shirt recolored from a teal top to a white dress shirt with a knotted <b>tie</b> and an <b>ID badge on a lanyard</b> — the cheapest, most legible "credentialed agency staff" read at this resolution; (5) the <b>haircut</b> rebuilt from round 13/14's four same-size round lobes (which still read as a generic mop, not a cut) into an asymmetric side part — a fuller swept crown/fringe on the lit side, a short straight-edged fade taper on the shadow side, and a hard part-line seam between them, the one detail that reads "styled" rather than "hair-shaped blob"; (6) the <b>face</b> gained real expression — the two brows now sit at different angles/heights (the near one angled down toward the nose, the far one level and higher) with a single furrow pixel between them, plus a nose bridge highlight and an asymmetric, slightly downturned mouth, replacing the flat mirrored brow-bar-plus-line that a fresh-eyes critic had credited as present but neutral. Palette-discipline and shape-language (rounds 8-14) were re-checked, not re-touched: the silhouette-diff measurement, environment recolors aside, still isolates the same character-only shape and tone-count structure those rounds established.</p>
 <p><b>Round 12 (the ground shadow's alpha blend)</b>: round 11's critic named a methodology gap, not a fresh visual defect — a bounding-box crop of the character necessarily includes real scene background (wall, lamp glow, rug edge) in the gaps around limbs, so comparing a full-scene crop's color count directly against an isolated reference sprite's count has a floor no character-only cleanup can close, and she suggested a true silhouette isolation instead (render with vs. without the character, diff the two, count colors only where they differ — no crop, no background contamination). Built exactly that as a measurement tool this round: the true silhouette diff came back at 44 distinct colors, and breaking it down by frequency showed the character's own flat PAL tones were already down to ~19 (rounds 8–11 holding up, genuinely close to <b>sprite-Zale.png</b>'s 28 and <b>character-Erlina_Compendium_Sprite_2.gif</b>'s 27) — but a tail of ~25 near-unique low-count colors, every one in the same warm-dark family, sat entirely inside the ground-shadow ellipse. Root cause: round 11's <code>pixelOval</code> fixed the shadow's anti-aliased EDGE, but its FILL still used <code>ctx.globalAlpha</code> over a single semi-transparent tone (<code>PAL.shadowSoft</code>) — genuine alpha compositing, which produces a new blended RGB for every distinct pixel underneath, and the floor underneath deliberately varies (round 9's four plank tones plus grain streaks plus wear). Same class of bug as every prior round's fix in this file (an analog/continuous technique standing in for a discrete one) — quad()'s anti-aliased fill, the sub-pixel translate, ctx.ellipse()'s soft edge, now the alpha blend itself. Fixed with a new <code>pixelOvalBanded</code> helper: two flat, pre-mixed, fully <i>opaque</i> tones in concentric radial bands, the same "discrete steps, not a blend" register <code>bandedGlow</code> and the frame vignette already use elsewhere in this file — whatever floor pixel sits underneath no longer matters, exactly 2 new colors, always. Re-measured with the identical silhouette-diff method: <b>44 → 33 distinct colors</b>, now inside the references' own 27–33 range for a whole sprite. Residual, named rather than chased further this round: ~3 one-off colors where the frame vignette's multiply-blend rings happen to overlap the shadow at the canvas's bottom edge (the shadow sits close to <code>H</code>); small (≤20px each), a plausible next-round target, not attempted here so this round stays independently judgeable against the one gap it targets.</p>
 <p><b>Round 13 (silhouette / shape language)</b>, against <b>sprite-Zale.png</b>, <b>character-Erlina_Compendium_Sprite_2.gif</b>, and <b>character-Brugaves_Compendium_Sprite_3.gif</b>: a critic put the round-12 character next to all three at matched pixel-grid scale and found the real gap was never palette — every prior round (8–12) had worked the character's colors while the underlying SHAPE stayed a union of flat rectangles and hard 90° corners, where every reference builds its silhouette from soft, curved, overlapping forms. The critic also caught a still-uncorrected claim in this very citation panel's earlier text ("references run ~4-5 heads vs. the mockup's ~2.5, out of scope to match") — false: Zale measures roughly 2.4 heads tall, exactly as chibi as this sprite already was; the real mismatch was never proportion, just shape language. Five concrete misses were named and addressed this round: <b>hair</b> — replaced 4 hard rectangular spikes with 4 overlapping rounded lobes (a new <code>pixelBlob</code> helper: filled circles rasterized scanline-by-scanline, same no-antialiasing discipline as every other shape in this file, never <code>ctx.arc()</code>); <b>neck</b> — the head previously sat flush on the collar with zero gap; added a small tapered neck fill between them; <b>torso</b> — was one straight-sided rectangle top to bottom; rebuilt as a genuine trapezoid (shoulders wider than waist) via a new <code>trap3Shade</code> helper that generalizes the existing <code>diag3Shade</code> to a per-row-width shape instead of a fixed-width rect; <b>arms</b> — were flat rectangles with no elbow and no hand; added a 1px inward bend at the elbow and a rounded hand (<code>pixelBlob</code> again) at the end of each forearm; <b>face</b> — added a single nose-shadow chip below the eyes (the old face had eyes and a mouth line only, no nose, against every reference's own nose highlight/shadow at this same resolution). The head itself is now an oval (<code>ovalShade</code>, the same per-row-width generalization applied to an ellipse) instead of a rectangle, for the rounded jaw/cranium curve the critic named directly. The old per-rect "expand 1px" outline pass couldn't hug any of these curved shapes, so it's replaced by <code>outlinePass()</code>: every silhouette shape (rects, trapezoids, blobs alike) is stamped in outline color at each of the 8 surrounding pixel offsets as a union, then the real fills draw on top — whatever the fills don't cover stays outline-colored, giving a true 1px silhouette rim around curves the same way the old approach did for boxes. Palette discipline carries forward unaffected: the same silhouette-diff measurement used in round 12 reads 31 distinct colors on this round's character (was 33), still inside the cited references' 27–33 whole-sprite range.</p>
