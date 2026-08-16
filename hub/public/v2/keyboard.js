@@ -19,6 +19,21 @@
 // hint into the panel, decorative-only, rebuilt on every panel render
 // (since peek-panel.js's innerHTML replace on each open would otherwise
 // wipe it) — never a resting/always-visible shortcut list.
+//
+// Round 4 (this mission's own reference-must-win loop): the hint trigger
+// itself was a literal '⌨' (U+2328 KEYBOARD) character — the boss caught
+// this directly ("I see emojis in available screenshots while we agreed
+// on an icon library"), and t-89 (the sibling sweep mission for every
+// OTHER already-shipped Wave-1 file) explicitly carves this file out with
+// "t-65 is handling its own fix as part of its own loop" — this is that
+// fix. Swapped for t-66's vendored Lucide `icon('command')` glyph, the
+// same component every other approved Wave-1 file composes with for a
+// keyboard/shortcut affordance (there's no dedicated "keyboard" shape in
+// the 30-icon vendored set; `command` is the closest semantic fit and is
+// already the established glyph this codebase uses for keyboard-triggered
+// affordances generally).
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -90,7 +105,7 @@
       hintTip.type = 'button';
       hintTip.className = 'v2-kbd-hint';
       hintTip.setAttribute('aria-label', 'Keyboard shortcuts for this item list');
-      hintTip.innerHTML = '⌨<span class="v2-kbd-hint__tip">' +
+      hintTip.innerHTML = icon('command') + '<span class="v2-kbd-hint__tip">' +
         '<kbd>1</kbd>–<kbd>9</kbd> focus item · <kbd>A</kbd> accept · <kbd>R</kbd> reject · <kbd>L</kbd> later · <kbd>Enter</kbd> submit' +
         '</span>';
       var r = panel.getBoundingClientRect();
@@ -154,10 +169,23 @@
          computed off panel.getBoundingClientRect()) — it lives in
          document.body, not inside #v2-peek-panel, on purpose (see the
          comment on rebuildHint()); z-index still comes from the token set. */
-      '.v2-kbd-hint { z-index: var(--v2-z-popover, 60); width: 20px; height: 20px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); background: var(--v2-color-surface, var(--v2-surface, transparent)); color: var(--v2-color-text-muted, var(--v2-muted, #999)); font-size: 11px; line-height: 18px; cursor: default; padding: 0; }',
+      '.v2-kbd-hint { z-index: var(--v2-z-popover, 60); width: 20px; height: 20px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); background: var(--v2-color-surface, var(--v2-surface, transparent)); color: var(--v2-color-text-muted, var(--v2-muted, #999)); font-size: 11px; line-height: 18px; cursor: default; padding: 0; display: inline-flex; align-items: center; justify-content: center; }',
       '.v2-kbd-hint__tip { display: none; position: absolute; top: 26px; right: 0; white-space: nowrap; background: var(--v2-color-text-primary, #17181a); color: var(--v2-color-text-on-accent, var(--v2-on-accent, #fff)); font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
       '.v2-kbd-hint:hover .v2-kbd-hint__tip, .v2-kbd-hint:focus .v2-kbd-hint__tip, .v2-kbd-hint:focus-visible .v2-kbd-hint__tip { display: block; }',
-      '.v2-kbd-hint__tip kbd { display: inline-block; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; padding: 0 4px; font: inherit; font-variant-numeric: tabular-nums; }'
+      '.v2-kbd-hint__tip kbd { display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; padding: 0 4px; font: inherit; font-variant-numeric: tabular-nums; }',
+      // round 4: components.css (t-66) is the source of record for .v2-icon
+      // sizing, but v2.html never links it (verified: grepped v2.html for
+      // "components.css" — zero matches; components.js loads as a script
+      // module, its CSS sibling does not) — the icon() helper's returned
+      // <svg class="v2-icon"> was rendering unsized (browser-default
+      // intrinsic box) everywhere in the whole v2 tranche, not just here.
+      // Every OTHER module in this codebase already carries its own
+      // self-injected <style> (this function is that pattern) rather than
+      // depending on an external stylesheet link, so the in-scope fix is
+      // the same pattern, not a v2.html edit this mission does not own: a
+      // local fallback rule, matching components.css's own values exactly,
+      // scoped to this file's own injected sheet.
+      '.v2-icon { display: inline-block; width: var(--v2-icon-size-sm, 14px); height: var(--v2-icon-size-sm, 14px); vertical-align: -0.15em; color: currentColor; flex: none; }'
     ].join('\n');
     document.head.appendChild(style);
   }
