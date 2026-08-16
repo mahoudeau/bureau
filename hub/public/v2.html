@@ -260,35 +260,72 @@
   */
   :root {
     color-scheme: light;
-    --v2-bg: #f7f7f6; --v2-surface: #ffffff; --v2-ink: #0c0c0d; --v2-ink-2: #55565c; --v2-muted: #8a8b91;
-    --v2-hairline: rgba(12,12,13,.12); --v2-border: rgba(12,12,13,.16);
-    --v2-accent: #3f6fe0; --v2-on-accent: #fff;
-    --v2-good: #17845a; --v2-warning: #b5790a; --v2-serious: #b5540a; --v2-critical: #c23434;
-    --v2-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
-    --v2-font-size: 13px; --v2-line: 1.45;
-    --v2-space-1: 4px; --v2-space-2: 8px; --v2-space-3: 12px; --v2-space-4: 16px; --v2-space-5: 24px;
-    --v2-row-h: 36px; --v2-radius: 6px;
+    /* t-87: aliased to v2/tokens.css's real --v2-color- and --v2-space-
+       prefixed schema (t-63 structure, t-75 real values) so every name t-64's
+       board.js/peek-panel.js and t-65's keyboard.js/palette.js already
+       depend on keeps resolving, without editing any of that shipped
+       code — see t-87's closing note for the full table. The fallback
+       hex after each var() is this placeholder's old hardcoded value,
+       kept only as a belt-and-braces default if tokens.css ever fails
+       to load; it is never the value actually used today, since
+       tokens.css is always linked above this block. */
+    --v2-bg: var(--v2-color-bg, #f7f7f6);
+    --v2-surface: var(--v2-color-surface, #ffffff);
+    --v2-ink: var(--v2-color-text-primary, #0c0c0d);
+    --v2-ink-2: var(--v2-color-text-secondary, #55565c);
+    --v2-muted: var(--v2-color-text-muted, #8a8b91);
+    --v2-hairline: var(--v2-color-border, rgba(12,12,13,.12));
+    --v2-border: var(--v2-color-border-strong, rgba(12,12,13,.16));
+    --v2-accent: var(--v2-color-accent, #3f6fe0);
+    --v2-on-accent: var(--v2-color-text-on-accent, #fff);
+    /* Status severity has no 1:1 match: this schema's old 4-tier scale
+       (good/warning/serious/critical, a mission-LIFECYCLE severity
+       ramp) doesn't share an axis with tokens.css's 5-tier GOAL-HEALTH
+       scale (bug/at-risk/on-track/in-progress/done — tokens.css's own
+       header comment names this exact mismatch for board.js's mission
+       colors too). Mapped by closest register: good->on-track (success
+       green), warning->at-risk (caution amber). serious and critical
+       both land on the schema's one red (-status-bug) — there is no
+       real third/fourth alert hue to draw a distinct "serious" from, so
+       the two-orange distinction this placeholder used to draw between
+       them collapses to one red rather than this file inventing an
+       uncited color-mix blend. Flagged here plainly for whoever gives
+       board.js's task-card severity its own dedicated palette one day —
+       out of this mission's v2.html-only scope. */
+    --v2-good: var(--v2-color-status-on-track, #17845a);
+    --v2-warning: var(--v2-color-status-at-risk, #b5790a);
+    --v2-serious: var(--v2-color-status-bug, #b5540a);
+    --v2-critical: var(--v2-color-status-bug, #c23434);
+    --v2-font: var(--v2-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+    --v2-font-size: var(--v2-font-size-base, 13px); --v2-line: var(--v2-line-height-base, 1.45);
+    /* --v2-space-1..5 intentionally NOT redefined here (they were,
+       before this fix): tokens.css already defines --v2-space-1..8
+       under these exact same names (2/4/6/8/12/16/24/32px) via the
+       <link> above this block. This placeholder used to REDEFINE 1..5
+       with different numbers (4/8/12/16/24px), silently shadowing
+       tokens.css's real scale for every consumer reading --v2-space-1
+       through -5 by name — same-specificity tie, later rule in source
+       order wins. Removing the shadowing redefinition, not aliasing it,
+       is the correct fix: same name already, no indirection needed. */
+    --v2-row-h: var(--v2-row-height, 36px); --v2-radius: var(--v2-radius-sm, 6px);
     --v2-rail-w: 240px; --v2-side-w: 320px; --v2-panel-w: 380px;
     --v2-bp-phone: 720px;
   }
+  /* t-87: color-scheme is a native CSS property (UA hint for form-control
+     theming), not one of the aliased custom properties above — kept as
+     its own toggle, unrelated to the token-schema fix. The hardcoded
+     --v2-bg/-surface/-ink/... reassignments that used to live in these
+     three blocks are gone: every one of those names is now a live alias
+     to tokens.css's real --v2-color-* tokens (above), and tokens.css
+     already carries its own complete light/dark/[data-theme] handling
+     for every one of them — redefining them again here would just
+     shadow tokens.css's real dark values with this file's old hardcoded
+     ones, defeating the alias. */
   @media (prefers-color-scheme: dark) {
-    :root {
-      color-scheme: dark;
-      --v2-bg: #0b0b0c; --v2-surface: #141416; --v2-ink: #f4f4f5; --v2-ink-2: #b7b8bd; --v2-muted: #86878d;
-      --v2-hairline: rgba(255,255,255,.10); --v2-border: rgba(255,255,255,.14);
-      --v2-accent: #6f93ec; --v2-on-accent: #fff;
-    }
+    :root:not([data-theme="light"]) { color-scheme: dark; }
   }
-  :root[data-theme="light"] {
-    color-scheme: light;
-    --v2-bg: #f7f7f6; --v2-surface: #ffffff; --v2-ink: #0c0c0d; --v2-ink-2: #55565c; --v2-muted: #8a8b91;
-    --v2-hairline: rgba(12,12,13,.12); --v2-border: rgba(12,12,13,.16); --v2-accent: #3f6fe0; --v2-on-accent: #fff;
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --v2-bg: #0b0b0c; --v2-surface: #141416; --v2-ink: #f4f4f5; --v2-ink-2: #b7b8bd; --v2-muted: #86878d;
-    --v2-hairline: rgba(255,255,255,.10); --v2-border: rgba(255,255,255,.14); --v2-accent: #6f93ec; --v2-on-accent: #fff;
-  }
+  :root[data-theme="light"] { color-scheme: light; }
+  :root[data-theme="dark"] { color-scheme: dark; }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -622,24 +659,39 @@
     toasts: document.getElementById('v2-toasts')
   };
 
-  window.BureauV2 = Object.freeze({
-    get state() { return liveState; },
-    get token() { return TOKEN; },
-    get live() { return sseLive; },
-    api: apiCall,
-    refresh: refresh,
-    on: on,
-    emit: emit,
-    bus: bus,
-    mounts: mounts
-  });
-
   // topbar wiring that belongs to this shell, not a sibling module: the search
   // entry point opens the palette mount; palette.js/search.js do the rest.
   mounts.searchEntry.addEventListener('click', function () { emit('v2:palette:open', null); });
   mounts.brainEntry.addEventListener('click', function () { emit('v2:brain:open', {}); });
 
+  // t-87: window.BureauV2 is assigned HERE, inside boot(), not at module-
+  // init time above — boot() only ever runs after the token gate has
+  // passed (see the two call sites below: immediately, if a token was
+  // already in localStorage, or from the gate form's own submit handler).
+  // Before this fix the freeze happened unconditionally at module scope,
+  // so a sibling module's bare `if (window.BureauV2)` readiness check
+  // (keyboard.js, palette.js, peek-panel.js, media.js and others all use
+  // this exact pattern) could see a truthy-but-not-ready BureauV2 and
+  // fire init() before boot() had ever run — .token was still '' and
+  // .state still null. t-68 hit this directly as a reproducible pre-gate
+  // 401 reload loop. Each of those modules' own ready() helper already
+  // polls (`if (window.BureauV2) return cb(); ... else setTimeout(poll,
+  // 50)`), so moving the assignment here — rather than editing every
+  // sibling's own check — is the clean fix: window.BureauV2 now simply
+  // does not exist until the gate is behind us, and their existing poll
+  // naturally waits it out instead of firing early.
   function boot() {
+    window.BureauV2 = Object.freeze({
+      get state() { return liveState; },
+      get token() { return TOKEN; },
+      get live() { return sseLive; },
+      api: apiCall,
+      refresh: refresh,
+      on: on,
+      emit: emit,
+      bus: bus,
+      mounts: mounts
+    });
     updateViewport();
     refresh().then(function () { emit('v2:ready', undefined); });
     connectSSE();
