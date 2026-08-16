@@ -39,7 +39,7 @@
     <span class="hint">idle = the "idle"/low-activity heartbeat state · typing = the "editing" verb (docs/protocol.md)</span>
   </div>
   <details>
-    <summary>About this sample — what calibrated it (round 18 of an intentionally open-ended loop — not a finished piece)</summary>
+    <summary>About this sample — what calibrated it (round 19 of an intentionally open-ended loop — not a finished piece)</summary>
     <div class="body" id="about"></div>
   </details>
 </main>
@@ -92,7 +92,17 @@ const PAL = {
   skinShadow: '#8a5648', skinMid:'#c48657', skinHi:'#e8ae7c', skinCheek:'#e08a6e', eye:'#0d0f14', catchlight:'#eaf6ff',
   iris: '#4a90b8', // tinted iris — a flat neutral-gray sclera read as a dead doll stare
   browShadow: '#6a4230', browLine:'#3a241a',
-  hairShadow: '#12161c', hairMid:'#232a33', hairHi:'#333e49', hairFade:'#1a2027', hairStrand:'#4a5c6c', hairHi2:'#7f95a6', hairDeep:'#0a0c10', specular:'#d8f4ff', rim:'#bfe8ff',
+  // round 19: hairShadow/hairDeep RAISED from #12161c/#0a0c10, and kept
+  // BELOW hairMid so the lit>mid>shadow ordering within each lock still
+  // holds — a critic pixel-sampled the scene and found the shadow-side
+  // hair locks' own tones sat only ~15-20 points per channel below the
+  // dark wall/vignette behind them, well under the threshold that reads
+  // as a visible seam at this resolution, regardless of how correct the
+  // underlying lock geometry was. This alone is a partial fix (see the
+  // hairLock() rim-edge addition below for the decisive one — the critic
+  // named both as viable, this round does both rather than betting on
+  // either alone).
+  hairShadow: '#1c222c', hairMid:'#232a33', hairHi:'#333e49', hairFade:'#1a2027', hairStrand:'#4a5c6c', hairHi2:'#7f95a6', hairDeep:'#10141c', specular:'#d8f4ff', rim:'#bfe8ff',
   shirtShadow:'#7c8894', shirtMid:'#c5cfd8', shirtHi:'#f8fbfc', shirtPatch:'#ffffff', trim:'#1f2933',
   jawShadow:'#6e4638',
   tieShadow:'#1a2c40', tieMid:'#284060', tieHi:'#3a5a82', badgeCard:'#e8dfa0', badgeStripe:'#3fa0c2', lanyard:'#1f2933',
@@ -328,9 +338,22 @@ function ovalShade(cx,cy,rx,ry,aFrac,bFrac,colorLit,colorMid,colorShadow){
 // the references get from tracing every spike separately, without this
 // file needing per-shape boolean geometry. Cheap, and matches how the
 // character's own outlinePass() already reuses "stamp wide, fill on top."
-function hairLock(cx,cy,r,colorLit,colorMid,colorShadow){
+function hairLock(cx,cy,r,colorLit,colorMid,colorShadow,rimEdge){
   pixelBlob(cx,cy,r+0.8,PAL.hairDeep);
   ovalShade(cx,cy,r,r,0.42,0.76,colorLit,colorMid,colorShadow);
+  // round 19: a critic pixel-sampled the scene and found the shadow-side
+  // locks' own tones sat only ~15-20 points per channel below the dark
+  // wall/vignette behind them — below the threshold that reads as a
+  // visible seam, independent of how correctly the seam-ring geometry
+  // was drawn. Raising the hairShadow/hairDeep floor (this PAL change)
+  // is a partial fix; the decisive one, her own suggested alternative,
+  // is a thin rim-light edge — the SAME cool-monitor-rim convention
+  // already used on the torso/head (see those PAL.rim call sites) —
+  // along a shadow-side lock's own outer edge, so its silhouette reads
+  // against the dark backdrop even where the fill tone alone is close
+  // to the wall's own value. Optional per-lock: the two already-
+  // confirmed-legible lit locks (A/B) don't need it.
+  if(rimEdge) R(Math.round(cx-r*0.75),Math.round(cy-r*0.6),1,1,PAL.rim);
 }
 // flat (single-tone) trapezoid fill — for silhouette-only shapes (the neck)
 // and for the outline-stamp pass below.
@@ -939,12 +962,12 @@ function drawCharacter(t, typing){
   // hairDeep seam ring before its own internally-shaded fill, so locks
   // that touch or overlap read as separately outlined without any new
   // per-shape geometry code.
-  hairLock(6,-18,2.8,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep);  // lockE, rightmost, shadow side — darkest
-  hairLock(4,-22,3.2,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep);  // lockD, upper-right
-  hairLock(1,-25,3,    PAL.hairHi,   PAL.hairMid,    PAL.hairShadow);// lockC, top tuft
-  hairLock(-2,-18,3,   PAL.hairHi,   PAL.hairMid,    PAL.hairShadow);// lockF, lower-center, fills the forehead gap
-  hairLock(-3,-23,3.6, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);   // lockB, crown peak — brightest, tallest
-  hairLock(-6,-19,3.4, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);   // lockA, leftmost, lit side
+  hairLock(6,-18,2.8,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep,   true); // lockE, rightmost, shadow side — darkest, rim edge added
+  hairLock(4,-22,3.2,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep,   true); // lockD, upper-right, rim edge added
+  hairLock(1,-25,3,    PAL.hairHi,   PAL.hairMid,    PAL.hairShadow, true); // lockC, top tuft, rim edge added
+  hairLock(-2,-18,3,   PAL.hairHi,   PAL.hairMid,    PAL.hairShadow, true); // lockF, lower-center, rim edge added
+  hairLock(-3,-23,3.6, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);          // lockB, crown peak — brightest, already legible, no rim needed
+  hairLock(-6,-19,3.4, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);          // lockA, leftmost, lit side — already legible, no rim needed
   R(4,-19,4,7,PAL.hairFade);          // straight-edged fade taper — flat, tight, unshaded (a razor fade has almost no visible tonal range, unlike the locks above it)
   patchDither(4,-19,4,7,PAL.hairShadow,26,2); // a few close-cropped texture flecks, not a smooth fill
   // part line: a single hard diagonal seam where the crown locks meet the
@@ -1020,7 +1043,8 @@ document.getElementById('btn-typing').addEventListener('click', ()=>{
 });
 
 document.getElementById('about').innerHTML = `
-<p><b>Round 18 of a deliberately open-ended loop</b> — the boss's standing instruction on this mission: "assume the references win — they are shipped professional game art; the job is closing the distance round after round, not declaring arrival." This page is a snapshot of that loop, not a finished piece; every round has been judged by a fresh critic against the actual files in <code>projects/bureau/references/office/</code>. Summary of what's changed and why so far, by reference file:</p>
+<p><b>Round 19 of a deliberately open-ended loop</b> — the boss's standing instruction on this mission: "assume the references win — they are shipped professional game art; the job is closing the distance round after round, not declaring arrival." This page is a snapshot of that loop, not a finished piece; every round has been judged by a fresh critic against the actual files in <code>projects/bureau/references/office/</code>. Summary of what's changed and why so far, by reference file:</p>
+<p><b>Round 19 (hair, shadow-lock contrast)</b>: a critic pass on round 18 confirmed the two lit-side locks read as genuinely distinct spikes, then pixel-sampled the scene and found WHY the four shadow-side locks (C/D/E/F) didn't: their own tones sat only ~15-20 points per channel below the dark wall/vignette behind them — a value-contrast problem underneath the geometry fix, not a residual geometry problem, regardless of how correctly each lock's seam ring was drawn. Did both of her two suggested fixes rather than betting on either alone: raised the hairShadow/hairDeep floor (kept strictly below hairMid so the lit&gt;mid&gt;shadow ordering within each lock still holds), and added a thin rim-light edge — the same cool-monitor-rim convention already used on the torso/head — along each shadow-side lock's own outer edge, so its silhouette reads against the dark backdrop even where the fill tone alone is close to the wall's value. The two already-legible lit locks (A/B) were left untouched.</p>
 <p><b>Round 18 (hair, silhouette lock count)</b>, against <b>sprite-Zale.png</b>: a critic pass on round 17 confirmed the per-lock internal banding that round built was real and closed, then found the gap one level deeper: the hair silhouette was still one continuous crown/cap outline holding 3-4 large tonal zones, where the reference's hair is built from 5-6 independently outlined spike/lock shapes, each with its own highlight-to-shadow run. Replaced the crown/fringe/shadow-lobe trio (rounds 13-17) with six smaller locks fanned across the top of the head, each drawn with a new <code>hairLock()</code> helper — a small seam ring in the hair's darkest tone stamped before the lock's own internally-shaded fill, so locks that touch or overlap read as separately outlined without any new per-shape boolean geometry. Locks are drawn shadow-side first, lit-side last, so the lamp-lit locks nearest the face sit visually on top of the shadow-side ones behind them.</p>
 <p><b>Round 17 (hair, technique not quantity)</b>, against <b>sprite-Zale.png</b> and <b>character-Erlina_Compendium_Sprite_2.gif</b>: a fresh critic pass on round 16 found its fix — adding a handful of 1-2px hairStrand accent pixels — was the wrong shape of fix for the right diagnosis: "the build's hair is still the wrong technique, not just insufficient quantity of the right one... the actual gap is that the shadow/mid tones themselves need to carry the strand geometry," the same restructuring rounds 9-10 already gave the floor and torso (hard per-row bands replacing a flat/gradient fill), just never applied to hair. Rebuilt every hair lock (crown, fringe, shadow-lobe) with the existing <code>ovalShade</code> helper — already used for the head itself, and it degenerates cleanly to a circular blob when its two radii are equal, so no new geometry code was needed — giving each lock its own internal lit/mid/shadow gradient along the same lamp-left convention as the rest of the character, instead of one flat fill per lock. Each lock kept a distinct dominant tone from its neighbors (a new <code>hairHi2</code> peak-highlight and <code>hairDeep</code> shadow-rim tone were added at the bright/dark ends) so the four-lock composition from round 13 still reads as separate locks, not a single melted mass, while each lock individually now carries the tonal range the references show.</p>
 <p><b>Round 16 (shading detail/resolution)</b>, against <b>character-Zale_Running.gif</b>, <b>sprite-Zale.png</b>, <b>character-Erlina_Compendium_Sprite_2.gif</b> and <b>character-Brugaves_Compendium_Sprite_3.gif</b>: a critic pass on round 15 credited the thematic reframe and expression/haircut work as real, then confirmed round 15's own honest deferral — the boss's first-listed craft item, shading detail/resolution, was still live. Three concrete misses, each independently re-checked against a named reference: <b>hair</b> read as "one near-flat dark mass with a single highlight pixel" against Zale's/Erlina's 3+ distinct tones with directional strand streaks — added short hard strokes in a new mid-bright <code>hairStrand</code> tone following the crown's own sweep direction, between the existing hairHi/hairMid values so they read as light catching individual locks rather than a second competing highlight patch; <b>shirt/jacket</b> read as "one broad soft light-to-shadow blend" against Brugaves' "3-4 hard-edged flat color regions with a clean highlight patch, not a gradient" — the three-band shading was already discrete (hard per-row rects, no blend) but the bands sat too close in value, so widened the steps (shirtShadow darkened, shirtHi brightened) and added a small pure-white highlight patch at the collar fold, the same "one small square patch reads as fabric" convention the reference itself uses; <b>face</b> had "a single flat skin tone plus brow/nose/mouth linework... not yet the cheek/jaw modeling" both references show — added a distinct jaw-shadow chip (a new <code>jawShadow</code> tone, warmer than the ambient skinShadow so it reads as structure, not just the lamp/monitor split) and a genuine highlight patch above the existing cheek tint (the tint alone was a color wash, not a plane change). Silhouette-diff palette count: 35 (round 15 was 32) — a small, expected, and named increase from adding real tonal detail on the specific axis this round targeted, not a regression; still close to the references' own 27-33 whole-sprite range.</p>
