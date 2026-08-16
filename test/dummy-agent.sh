@@ -43,6 +43,40 @@ check "claim carries a lease" "$CLAIM" '"lease_until"'
 check "progress note" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"in_progress","note":"located the machine"}')" '"in_progress"'
 check "artifact" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","artifact":{"label":"bean report","url":"https://example.com/beans"},"note":"filed the bean report"}')" 'bean report'
 
+echo "3b. sub-agent fleets: heartbeat sub_agents, fleet history, roster exclusion"
+check "heartbeat with a 3-entry fleet accepted" "$(api POST /api/agents/heartbeat '{"name":"menace","activity":"editing","sub_agents":[{"label":"variant A of t-58","activity":"editing"},{"label":"variant B of t-58","activity":"thinking"},{"label":"inner critic round 4","activity":"reading"}]}')" '"label": "variant A of t-58"'
+STATE1=$(api GET /api/state)
+check "fleet nested under the parent's own agent record" "$STATE1" '"label": "variant B of t-58"'
+check "fleet never inserted into the top-level roster (no name entry for it)" "$(echo "$STATE1" | grep -c '"name": "variant A of t-58"')" '^0$'
+check "fleet composition change logged on the active mission" "$(api GET "/api/tasks/$TID")" 'fleet: 3 running - variant A of t-58 (editing), variant B of t-58 (thinking), inner critic round 4 (reading)'
+LOGLEN1=$(api GET "/api/tasks/$TID" | grep -c '"note"')
+api POST /api/agents/heartbeat '{"name":"menace","activity":"editing","sub_agents":[{"label":"variant A of t-58","activity":"editing"},{"label":"variant B of t-58","activity":"thinking"},{"label":"inner critic round 4","activity":"reading"}]}' > /dev/null
+LOGLEN2=$(api GET "/api/tasks/$TID" | grep -c '"note"')
+check "identical composition repeated: no new log line" "$([ "$LOGLEN1" -eq "$LOGLEN2" ] && echo unchanged)" 'unchanged'
+api POST /api/agents/heartbeat '{"name":"menace","activity":"editing","sub_agents":[{"label":"variant A of t-58","activity":"editing"},{"label":"variant B of t-58","activity":"thinking"},{"label":"inner critic round 4","activity":"reading"},{"label":"variant C of t-58"}]}' > /dev/null
+LOGLEN3=$(api GET "/api/tasks/$TID" | grep -c '"note"')
+check "composition change (4th entry) adds exactly one new log line" "$([ "$LOGLEN3" -eq $((LOGLEN2+1)) ] && echo grew_by_one)" 'grew_by_one'
+check "label-only entry (no activity) renders with no parens" "$(api GET "/api/tasks/$TID")" 'variant C of t-58"'
+api POST /api/agents/heartbeat '{"name":"menace","activity":"editing","sub_agents":[]}' > /dev/null
+check "fleet dropping to zero writes the closing line" "$(api GET "/api/tasks/$TID")" 'fleet: 0 - cleared'
+SUBS=""; for i in $(seq 1 30); do [ -n "$SUBS" ] && SUBS="$SUBS,"; SUBS="$SUBS{\"label\":\"w$i\"}"; done
+api POST /api/agents/heartbeat "{\"name\":\"menace\",\"sub_agents\":[$SUBS]}" > /dev/null
+check "fleet array capped at 24 entries server-side, not rejected" "$(api GET /api/state | grep -c '"label": "w')" '^24$'
+# Isolate the roster array from the rest of /api/state: the ring-buffer
+# activity log also carries agent names on every register/heartbeat event, so
+# a plain grep over the whole snapshot over-counts. Slice out just "agents".
+agents_section () { api GET /api/state | sed -n '/"agents": \[/,/"tasks": \[/p'; }
+api POST /api/agents/heartbeat '{"name":"menace","sub_agents":[{"label":"menace"}]}' > /dev/null
+check "fleet label matching a real registered agent name stays inert data" "$(agents_section | grep -c '"name": "menace"')" '^1$'
+check "a fleet-only label is absent from the roster before ever registering" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
+api POST /api/agents/heartbeat '{"name":"menace","sub_agents":[{"label":"phantom-crew-1"}]}' > /dev/null
+check "still absent from the roster after being reported as a sub-agent label" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
+GHOST=$(api POST /api/tasks '{"title":"Ghost errand","priority":5}')
+GHOSTID=$(echo "$GHOST" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+check "claiming under that same string only works via the normal claim path" "$(api POST /api/tasks/claim "{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}")" '"claimed"'
+check "it is now an independent roster agent, unrelated to menace's fleet" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^1$'
+api PATCH "/api/tasks/$GHOSTID" '{"agent":"phantom-crew-1","status":"done","note":"closed - was only a claim-path identity-blur proof"}' > /dev/null
+
 echo "4. blocked pauses the lease; the boss answers via capability link; work resumes"
 check "blocked" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"blocked","note":"waiting on: bean delivery"}')" '"blocked"'
 check "blocked clears lease" "$(api GET "/api/tasks/$TID")" '"lease_until": null'
