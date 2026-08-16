@@ -48,10 +48,20 @@
    the doubled-class specificity technique described above to win over
    board.js's/peek-panel.js's own injected (and token-mismatched) rules.
    ============================================================ */
+/* round 2 (critic-directed): the sample's own .card rule reads
+   `border: 1px solid transparent` at rest, revealing var(--border) only
+   on :hover — a deliberate airier default (STUDY's "near-neutral
+   canvas, hairline structure" carried further: structure appears on
+   interaction, not permanently) that also reserves the 1px box so
+   hovering never shifts layout. Round 1 gave this class a permanently
+   visible border, collapsing .card's own at-rest/hover-reveal pattern
+   into .item-row's genuinely different always-bordered one (both were
+   cited together in round 1 as if interchangeable; they aren't — see
+   .v2-panel__item below, correctly still always-bordered, matching
+   .item-row's own distinct treatment, not touched this round). */
 .v2-task-card.v2-task-card {
   background: var(--v2-color-bg);
-  border: 1px solid var(--v2-color-border);
-  border-left: 1px solid var(--v2-color-border);
+  border: 1px solid transparent;
   border-radius: var(--v2-radius-md);
   padding: var(--v2-space-5) var(--v2-space-4);
   margin-bottom: var(--v2-space-3);
@@ -60,7 +70,7 @@
   align-items: flex-start;
   transition: border-color var(--v2-motion-fast) var(--v2-motion-ease);
 }
-.v2-task-card.v2-task-card:hover { border-color: var(--v2-color-border-strong); }
+.v2-task-card.v2-task-card:hover { border-color: var(--v2-color-border); }
 .v2-task-card__title.v2-task-card__title {
   font-weight: var(--v2-weight-medium);
   font-size: var(--v2-font-size-sm);
