@@ -89,13 +89,28 @@ function layout() {
     // at their widest (typing-1); the second desk now starts at x128, a
     // few px clear of that, so the whole run (window, character+desk,
     // second desk+chair) reads as one continuous wall-hugging cluster.
-    deskTidy: { x: 128, y: FLOOR_Y + 4 },
+    //
+    // Round 26 inner-critic follow-up: closing the X gap exposed a real Y
+    // (depth/baseline) mismatch the round-26 note hadn't checked. Measured
+    // it directly rather than eyeballing: every sprite here has its own
+    // "feet"/base drawn on its OWN bottom-most pixel row (checked typing-0,
+    // desk-tidy, chair — all three carry opaque content all the way to
+    // their sprite's last row, no baked-in ground margin), so the scene's
+    // shared floor plane is "sprite bottom edge sits near FLOOR_Y." The
+    // character's own bottom (25+48=73) sits 3px past FLOOR_Y — that's the
+    // grounded reference. desk-tidy/chair were bottoming out at 94/97
+    // (21-24px further into the floor than the character), which is what
+    // read as "two different depths shoved together," not a fixed camera
+    // angle. Moved both up so their own bottoms land close to the same
+    // line: desk-tidy bottom 74 (y=54), chair bottom 82 (y=57, a few px
+    // further "forward" than the desk — pulled out, in front of it).
+    deskTidy: { x: 128, y: 54 },
     // Chair repositioned beside desk-tidy, not under/behind it — round
     // 24's chair sat right where the desk's own support leg is drawn,
     // reading as "melds into the leg." This also switched to a wider,
     // front-facing chair sprite (see round26Fixes.chair in frames.json)
     // so it reads as a chair on its own, not just relative to the desk.
-    chair: { x: 168, y: FLOOR_Y + 2 },
+    chair: { x: 168, y: 57 },
     character: { x: 84, y: FLOOR_Y - 45 },
   };
 }
