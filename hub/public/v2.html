@@ -1,0 +1,675 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · v2</title>
+<link rel="stylesheet" href="v2/tokens.css">
+<!--
+  ============================================================================
+  DASHBOARD V2 — FOUNDATION CONTRACT (t-62, goal: t-53)
+  ============================================================================
+  This file is the ONLY thing every other Wave-1/Wave-2 mission in the v2
+  tranche needs to read. It is not touched again once its siblings land —
+  they plug into the mounts, classes and window.BureauV2 API documented
+  here. If you are building a sibling module, read this block, then stop
+  reading this file and go write v2/<yours>.js / v2/tokens.css.
+
+  Reference study: projects/bureau/references/ux-v2/STUDY-lead.md, final
+  section ("what this implies for the tranche"). This mission carries no
+  reference-art bar of its own (structure/plumbing, not skin) — every
+  color/spacing/type value below is a NEUTRAL PLACEHOLDER, replaced in
+  place by v2/tokens.css (Wave 2) without editing this file or any module.
+
+  ---------------------------------------------------------------------------
+  1. INFORMATION ARCHITECTURE — where each t-55 system lives
+  ---------------------------------------------------------------------------
+  Region element id      Lives in grid area   Owning system(s)
+  ----------------------------------------------------------------------
+  #v2-topbar             top, full width      i11 baseline (conn/token
+                                               status) · search entry (i7)
+                                               · cmd-K trigger (i2)
+  #v2-search-entry        (in topbar)          i7 search entry point —
+                                               opens #v2-palette
+  #v2-agents-rail         rail (left)          i11 baseline (live agent
+                                               cards, unchanged)
+  #v2-projects-rail       rail (left)          i11 baseline (project list)
+                                               + i10 inline edit (replaces
+                                               prompt() dialogs, in place)
+  #v2-brain-entry         rail (left)          i5 entry point — opens
+                                               #v2-brain-panel
+  #v2-insights-strip      main (top)           i8 activity insights
+  #v2-goals               main                 i11 baseline (goal cards +
+                                               children progress) — opens
+                                               #v2-goal-progress
+  #v2-board               main                 i9 working-column merge
+                                               (claimed+in_progress → one
+                                               "Working" column) · i3 batch
+                                               select origin (checkboxes on
+                                               review-state cards)
+  #v2-needs-me-now        side (right, top)    i1 needs-me-now surface
+  #v2-activity-feed       side (right, below)  i11 baseline (raw activity
+                                               feed, unchanged, demoted
+                                               under needs-me-now)
+  #v2-peek-panel          overlay, right       i11 baseline (mission detail:
+  (slide-in, not modal)                        log/artifacts/itemized
+                                               verdicts+comment) · i2
+                                               (number+a/r/l keyboard layer
+                                               over the item list)
+  #v2-brain-panel         overlay, right       i5 read-only brain browser
+  (slide-in, not modal)                        (file tree + rendered md)
+  #v2-palette             overlay, centered    i2 cmd-K chrome/keyboard nav
+  (cmd-K, not modal)                           · i7 search results render
+                                               inside it (jump-to-mission,
+                                               filter-by-project, full-text
+                                               search across missions+brain)
+  #v2-quick-add           overlay, anchored    i11 baseline (title+project+
+  (popover, not modal)                         priority quick-add, + 🎯
+                                               goal form w/ reference
+                                               uploads) · i6 templates
+                                               (canned starting shapes,
+                                               picked before typing)
+  #v2-goal-progress       overlay, right       i4 goal/cycle progress view
+  (slide-in, not modal)                        (full child list + tranche
+                                               trail, opened from a goal
+                                               card instead of the plain
+                                               peek panel)
+  #v2-batch-bar           fixed, bottom        i3 batch verdicts (floating
+                                               action bar, appears once ≥1
+                                               card is selected; confirm
+                                               step before applying)
+  #v2-toasts              fixed, corner        cross-cutting (non-blocking
+                                               confirmations; part of the
+                                               zero-modal, zero-prompt()
+                                               floor — nothing here ever
+                                               blocks with alert()/confirm())
+  #v2-gate                full-screen, pre-app i11 baseline (Bearer-token
+                                               gate) — see §3 below.
+
+  Phone width (≤720px, see v2/tokens.css --v2-bp-phone and the layout rules
+  in this file's <style>): #v2-shell collapses from a 3-column grid to a
+  single column, stacked in this order — topbar, needs-me-now, goals,
+  board, insights-strip, agents-rail, projects-rail, activity-feed. Every
+  right-side overlay (peek-panel, brain-panel, goal-progress, quick-add)
+  switches from a right-edge slide-in to a bottom sheet (full width, slides
+  up from the bottom edge) so it stays reachable with a thumb; the palette
+  goes full-screen; the batch bar stays pinned to the bottom edge above any
+  open sheet. This rule lives once, here, in the shared stylesheet section
+  below (`.v2-app[data-viewport=phone]` / the max-width media query) — no
+  sibling needs its own breakpoint logic, only its own module-scoped rules
+  driven by the same custom properties.
+
+  ---------------------------------------------------------------------------
+  2. window.BureauV2 — the shared bus/state singleton
+  ---------------------------------------------------------------------------
+  Every module reads from this instead of opening its own SSE connection or
+  rolling its own fetch/auth. Set up before any v2/*.js module tag runs.
+
+    BureauV2.state            Current /api/state snapshot (tasks, agents,
+                               projects, messages — whatever the hub
+                               returns). Re-read this property fresh each
+                               time you need it; it is REASSIGNED (not
+                               mutated) on every refresh, so do not cache a
+                               reference across an `await`.
+    BureauV2.token             Getter, current Bearer token string. Use it
+                               to build authenticated asset URLs (e.g.
+                               brain image src) the same way index.html
+                               does today (`&token=...`); never persist it
+                               yourself, it already lives in localStorage
+                               under 'bureau_token'.
+    BureauV2.live               Getter, boolean — true while the SSE stream
+                               is open, false while running on the 60s poll
+                               fallback. Read it, don't cache it stale.
+    BureauV2.api(path, opts)    Authenticated fetch helper. Same
+                               Bearer-header + 401 handling as index.html's
+                               `api()`. Returns parsed JSON, or null on a
+                               401 (which also clears the stored token and
+                               reloads the page — the gate reappears).
+    BureauV2.refresh()          Force an immediate /api/state re-fetch
+                               (normally you don't need this — the SSE
+                               handler and the 60s poll both call it for
+                               you — but a module that just POSTed a change
+                               it wants reflected NOW may call it directly).
+    BureauV2.on(type, cb)       Subscribe. cb(detail) fires whenever `type`
+                               is emitted on the bus (see below). Returns
+                               an unsubscribe function. `type` is either a
+                               raw server SSE event name (task.created,
+                               task.claimed, task.done, task.failed,
+                               task.review, task.blocked, task.requeued,
+                               task.updated, agent.registered,
+                               agent.heartbeat, message.posted,
+                               knowledge.written, project.renamed,
+                               project.created, project.deleted — detail is
+                               the event payload) or a synthetic v2:-
+                               prefixed lifecycle/UI event (below).
+    BureauV2.emit(type, detail) Dispatch. Use a `v2:`-prefixed name for
+                               cross-module UI events (server event names
+                               are reserved for the real SSE feed). This is
+                               the ONLY channel modules should use to talk
+                               to each other — never reach into another
+                               module's DOM or globals.
+    BureauV2.bus                 The underlying EventTarget. `.on`/`.emit`
+                               are sugar over `bus.addEventListener` /
+                               `bus.dispatchEvent(new CustomEvent(...))` —
+                               use the raw bus directly if you need
+                               `{ once: true }` or capture-phase listening.
+    BureauV2.mounts               Plain object of region id → live DOM node
+                               (see the table in §1), e.g.
+                               `BureauV2.mounts.board`,
+                               `BureauV2.mounts.peekPanel`. Read a mount
+                               once at module-init time; the nodes
+                               themselves are stable (never replaced).
+
+  Synthetic events emitted by this file (v2:-prefixed, always fire, every
+  module may rely on them):
+    'v2:ready'        detail: undefined — fires once, after the gate has
+                       passed and BureauV2 is fully wired (state fetched at
+                       least once, SSE/poll running). Modules that need
+                       BureauV2.state to be non-null on first paint should
+                       wait for this rather than assuming load order.
+    'v2:state'         detail: the new snapshot — fires after every
+                       refresh (SSE-triggered or the 60s poll).
+    'v2:connection'    detail: { live: boolean } — fires on SSE open/error
+                       and is also the signal the topbar conn dot listens
+                       to; a module never needs to open its own EventSource
+                       to know liveness.
+    'v2:viewport'      detail: { phone: boolean } — fires once at boot and
+                       again on any resize crossing the phone breakpoint.
+
+  Cross-module UI events other modules are expected to emit/listen for
+  (documented here since this file owns the mounts they target, even
+  though this file does not implement the behavior itself):
+    'v2:mission:open'   detail: { id } — board.js / needs-me-now.js /
+                         search.js emit this; peek-panel.js listens and
+                         opens #v2-peek-panel with that mission (or
+                         goal-progress.js opens #v2-goal-progress instead,
+                         when the mission title matches /^goal:/i — same
+                         event, the listener decides which surface).
+    'v2:palette:open'    detail: none — emitted by the topbar search entry,
+                         keyboard.js's shortcut handler, and quick-add's
+                         "browse templates" affordance; palette.js listens.
+    'v2:batch:selection' detail: { ids: string[] } — board.js emits on
+                         every selection change; batch-verdicts.js listens
+                         to show/hide/populate #v2-batch-bar.
+    'v2:brain:open'      detail: { file?: string } — brain-entry button
+                         (wired below) and search.js (brain-content hits)
+                         emit this; brain-browser.js listens.
+
+  ---------------------------------------------------------------------------
+  3. TOKEN GATE (unchanged function, zero prompt() per t-53's mechanical
+     floor — the whole tranche bans prompt()/confirm()/alert() dialogs, so
+     the gate is an inline form over #v2-gate instead of window.prompt())
+  ---------------------------------------------------------------------------
+  Same localStorage key as today ('bureau_token') and the same 401-reprompt
+  behavior (clear + reload), so a token already stored for the v1 dashboard
+  keeps working here with no re-entry. First-time entry uses the small
+  inline form below instead of a JS prompt() dialog.
+
+  ---------------------------------------------------------------------------
+  4. SSE PLUMBING
+  ---------------------------------------------------------------------------
+  Connects to GET /api/events (same endpoint, same query-string token auth
+  EventSource requires, same event-type list as index.html today). The 60s
+  poll (`setInterval(refresh, 60000)`) is NOT conditional — it is the
+  existing always-on backstop, unchanged, and doubles as the "fall back to
+  poll on stream drop" behavior the mission asks for: when SSE is down,
+  BureauV2.live is false and every state update still arrives, just on the
+  slower 60s cadence instead of instantly.
+
+  ---------------------------------------------------------------------------
+  5. CLASS-HOOK CONVENTION
+  ---------------------------------------------------------------------------
+  Every component root/part class is `v2-`-prefixed (v2-board,
+  v2-board__column, v2-chip, v2-status-glyph, v2-panel, v2-panel__header,
+  ...). Anything color/spacing/type reads a `var(--v2-...)` custom property
+  defined in v2/tokens.css, with an inline neutral fallback
+  (`var(--v2-space-3, 12px)`) so the shell renders sanely today and Wave 2
+  repaints it by only changing v2/tokens.css — no JS or markup edit, ever,
+  for a value that is purely visual. Pure structural layout (grid-
+  template-areas, position, z-index, overflow) is NOT token-driven — that
+  IS the information architecture in §1 and belongs to this file.
+
+  ---------------------------------------------------------------------------
+  6. STATIC SERVING
+  ---------------------------------------------------------------------------
+  hub/server.js served only '/' and '/index.html' before this mission.
+  Added: GET /v2 → hub/public/v2.html, and GET /v2/<name>.(css|js) →
+  hub/public/v2/<name>.(css|js) (single path segment only, no traversal
+  possible — the route regex has no '/' or '.' repeat in it). A missing
+  sibling file 404s from that route the same as any other static 404:
+  harmless, does not throw, does not affect other <script type=module>
+  tags on this page (each loads independently; a load failure surfaces
+  only as a browser network-log entry, never a thrown JS exception).
+
+  ---------------------------------------------------------------------------
+  7. LIVE-VS-REPO DRIFT CHECK (t-19/t-41/t-52/t-55/t-56/t-58/t-59 pattern)
+  ---------------------------------------------------------------------------
+  Checked before writing this file: `curl https://bureau.mathieu.dev/` vs
+  hub/public/index.html on this clone's main — byte-identical (424 lines
+  both sides) as of this mission's build time. No drift found this pass;
+  nothing to reconcile. Recheck this diff before trusting index.html as
+  the baseline again in a future mission — the drift has recurred before.
+  ============================================================================
+-->
+<style>
+  /*
+    Placeholder token set. Every value below is neutral and provisional —
+    v2/tokens.css (loaded above, Wave 2) redefines these same custom
+    property names with the real PURE LINEAR values; nothing in this file
+    or any sibling module needs to change when that happens.
+  */
+  :root {
+    color-scheme: light;
+    --v2-bg: #f7f7f6; --v2-surface: #ffffff; --v2-ink: #0c0c0d; --v2-ink-2: #55565c; --v2-muted: #8a8b91;
+    --v2-hairline: rgba(12,12,13,.12); --v2-border: rgba(12,12,13,.16);
+    --v2-accent: #3f6fe0;
+    --v2-good: #17845a; --v2-warning: #b5790a; --v2-serious: #b5540a; --v2-critical: #c23434;
+    --v2-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --v2-font-size: 13px; --v2-line: 1.45;
+    --v2-space-1: 4px; --v2-space-2: 8px; --v2-space-3: 12px; --v2-space-4: 16px; --v2-space-5: 24px;
+    --v2-row-h: 36px; --v2-radius: 6px;
+    --v2-rail-w: 240px; --v2-side-w: 320px; --v2-panel-w: 380px;
+    --v2-bp-phone: 720px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --v2-bg: #0b0b0c; --v2-surface: #141416; --v2-ink: #f4f4f5; --v2-ink-2: #b7b8bd; --v2-muted: #86878d;
+      --v2-hairline: rgba(255,255,255,.10); --v2-border: rgba(255,255,255,.14);
+      --v2-accent: #6f93ec;
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --v2-bg: #f7f7f6; --v2-surface: #ffffff; --v2-ink: #0c0c0d; --v2-ink-2: #55565c; --v2-muted: #8a8b91;
+    --v2-hairline: rgba(12,12,13,.12); --v2-border: rgba(12,12,13,.16); --v2-accent: #3f6fe0;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --v2-bg: #0b0b0c; --v2-surface: #141416; --v2-ink: #f4f4f5; --v2-ink-2: #b7b8bd; --v2-muted: #86878d;
+    --v2-hairline: rgba(255,255,255,.10); --v2-border: rgba(255,255,255,.14); --v2-accent: #6f93ec;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body.v2-app {
+    margin: 0; background: var(--v2-bg); color: var(--v2-ink);
+    font: var(--v2-font-size)/var(--v2-line) var(--v2-font);
+    font-variant-numeric: tabular-nums;
+  }
+  .v2-skip-link {
+    position: absolute; left: -9999px; top: 0; z-index: 100;
+    background: var(--v2-surface); color: var(--v2-ink); padding: var(--v2-space-2) var(--v2-space-3);
+  }
+  .v2-skip-link:focus { left: var(--v2-space-2); top: var(--v2-space-2); }
+
+  /* ---- topbar (§1) ---- */
+  .v2-topbar {
+    display: flex; align-items: center; gap: var(--v2-space-3);
+    padding: var(--v2-space-2) var(--v2-space-4);
+    border-bottom: 1px solid var(--v2-hairline);
+    height: calc(var(--v2-row-h) + var(--v2-space-2));
+  }
+  .v2-topbar__brand { font-weight: 600; }
+  .v2-topbar__badge {
+    font-size: 10px; font-weight: 600; color: var(--v2-muted);
+    border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
+    padding: 1px 5px; margin-left: var(--v2-space-1);
+  }
+  .v2-search-entry {
+    flex: 1; max-width: 420px; display: flex; align-items: center; gap: var(--v2-space-2);
+    background: var(--v2-surface); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
+    color: var(--v2-muted); font: inherit; padding: 0 var(--v2-space-3); height: var(--v2-row-h); cursor: pointer;
+  }
+  .v2-search-entry__label { flex: 1; text-align: left; }
+  .v2-search-entry__hint {
+    border: 1px solid var(--v2-hairline); border-radius: 4px; padding: 0 5px; font-size: 11px;
+  }
+  .v2-conn { margin-left: auto; font-size: 12px; color: var(--v2-ink-2); display: flex; align-items: center; gap: 6px; }
+  .v2-conn__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--v2-muted); }
+  .v2-conn__dot.v2-on { background: var(--v2-good); }
+
+  /* ---- shell grid (§1 IA) ---- */
+  .v2-shell {
+    display: grid;
+    grid-template-columns: var(--v2-rail-w) 1fr var(--v2-side-w);
+    grid-template-areas: "rail main side";
+    gap: var(--v2-space-4);
+    max-width: 1600px; margin: 0 auto; padding: var(--v2-space-4);
+    align-items: start;
+  }
+  .v2-rail { grid-area: rail; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
+  .v2-main { grid-area: main; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
+  .v2-side { grid-area: side; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
+
+  .v2-region-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--v2-muted);
+    font-weight: 600; margin: 0 0 var(--v2-space-2);
+  }
+  .v2-card {
+    background: var(--v2-surface); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
+    padding: var(--v2-space-3);
+  }
+  .v2-empty { color: var(--v2-muted); font-size: 12px; padding: var(--v2-space-2) 0; }
+
+  #v2-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--v2-space-3); align-items: start; }
+
+  /* ---- phone breakpoint (§1) ---- */
+  @media (max-width: 720px) {
+    .v2-shell {
+      grid-template-columns: 1fr;
+      grid-template-areas: "main" "rail" "side";
+    }
+    .v2-main { order: 1; }
+    #v2-needs-me-now { order: -1; } /* promoted to the top of .v2-side, but .v2-side itself sorts after .v2-main below */
+    .v2-rail { order: 2; }
+    .v2-side { order: 3; }
+    .v2-panel, .v2-brain-panel, .v2-goal-progress-panel { width: 100%; right: 0; left: 0; top: auto; bottom: 0; height: 80vh; border-radius: var(--v2-radius) var(--v2-radius) 0 0; }
+    .v2-quick-add { left: var(--v2-space-2); right: var(--v2-space-2); bottom: var(--v2-space-2); width: auto; }
+  }
+
+  /* ---- overlays: peek panel / brain panel / goal progress — slide-in, never a modal (§1, §5) ---- */
+  .v2-panel, .v2-brain-panel, .v2-goal-progress-panel {
+    position: fixed; top: 0; right: 0; height: 100vh; width: var(--v2-panel-w);
+    background: var(--v2-surface); border-left: 1px solid var(--v2-hairline);
+    box-shadow: -8px 0 24px rgba(0,0,0,.12);
+    transform: translateX(100%); transition: transform .18s ease;
+    z-index: 40; overflow-y: auto; padding: var(--v2-space-4);
+  }
+  .v2-panel:not([hidden]), .v2-brain-panel:not([hidden]), .v2-goal-progress-panel:not([hidden]) { transform: translateX(0); }
+  #v2-peek-panel { z-index: 42; }
+  #v2-brain-panel { z-index: 41; }
+  #v2-goal-progress { z-index: 41; }
+
+  /* ---- cmd-K palette: centered overlay, not a <dialog> modal — no backdrop click-trap semantics ---- */
+  .v2-palette {
+    position: fixed; top: 12vh; left: 50%; transform: translateX(-50%);
+    width: min(560px, 92vw); max-height: 60vh; overflow-y: auto;
+    background: var(--v2-surface); border: 1px solid var(--v2-border); border-radius: var(--v2-radius);
+    box-shadow: 0 12px 40px rgba(0,0,0,.22); z-index: 50; padding: var(--v2-space-2);
+  }
+  @media (max-width: 720px) { .v2-palette { top: 0; left: 0; transform: none; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }
+
+  /* ---- quick-add: small anchored popover, not a form page ---- */
+  .v2-quick-add {
+    position: fixed; right: var(--v2-space-4); bottom: var(--v2-space-4); width: 340px;
+    background: var(--v2-surface); border: 1px solid var(--v2-border); border-radius: var(--v2-radius);
+    box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 45; padding: var(--v2-space-3);
+  }
+
+  /* ---- batch verdicts bar ---- */
+  .v2-batch-bar {
+    position: fixed; left: 50%; bottom: var(--v2-space-4); transform: translateX(-50%);
+    background: var(--v2-ink); color: var(--v2-bg); border-radius: var(--v2-radius);
+    padding: var(--v2-space-2) var(--v2-space-3); display: flex; gap: var(--v2-space-3); align-items: center;
+    z-index: 46; font-size: 12px;
+  }
+
+  /* ---- toasts: non-blocking, replaces alert()/confirm() everywhere in v2 ---- */
+  .v2-toasts { position: fixed; right: var(--v2-space-3); bottom: var(--v2-space-3); z-index: 60; display: flex; flex-direction: column; gap: var(--v2-space-2); }
+  .v2-toast {
+    background: var(--v2-ink); color: var(--v2-bg); border-radius: var(--v2-radius);
+    padding: var(--v2-space-2) var(--v2-space-3); font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  }
+
+  /* ---- token gate: inline form, zero prompt() (§3) ---- */
+  .v2-gate {
+    position: fixed; inset: 0; z-index: 90; display: flex; align-items: center; justify-content: center;
+    background: var(--v2-bg);
+  }
+  .v2-gate__form {
+    display: flex; flex-direction: column; gap: var(--v2-space-2); width: min(320px, 90vw);
+    background: var(--v2-surface); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
+    padding: var(--v2-space-4);
+  }
+  .v2-gate__label { font-size: 12px; color: var(--v2-ink-2); }
+  .v2-gate__input {
+    font: inherit; padding: var(--v2-space-2); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
+    background: var(--v2-bg); color: var(--v2-ink);
+  }
+  .v2-gate__submit {
+    font: inherit; font-weight: 600; padding: var(--v2-space-2); border: none; border-radius: var(--v2-radius);
+    background: var(--v2-accent); color: #fff; cursor: pointer;
+  }
+  .v2-gate__err { color: var(--v2-critical); font-size: 12px; margin: 0; }
+
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body class="v2-app">
+<a class="v2-skip-link" href="#v2-board">Skip to board</a>
+
+<!-- §3 token gate: shown only until a token is present; zero prompt() -->
+<div class="v2-gate" id="v2-gate" hidden>
+  <form class="v2-gate__form" id="v2-gate-form">
+    <label class="v2-gate__label" for="v2-gate-input">Bureau token</label>
+    <input class="v2-gate__input" id="v2-gate-input" type="password" autocomplete="off" placeholder="Paste your Bearer token" required>
+    <button class="v2-gate__submit" type="submit">Enter</button>
+    <p class="v2-gate__err" id="v2-gate-err" hidden>Rejected — check the token and try again.</p>
+  </form>
+</div>
+
+<header class="v2-topbar" id="v2-topbar">
+  <div class="v2-topbar__brand">Bureau<span class="v2-topbar__badge">v2</span></div>
+  <button class="v2-search-entry" id="v2-search-entry" type="button" aria-label="Search missions and brain (opens the command palette)">
+    <span class="v2-search-entry__label">Search or jump to…</span>
+    <span class="v2-search-entry__hint">⌘K</span>
+  </button>
+  <div class="v2-conn" id="v2-conn"><span class="v2-conn__dot" id="v2-conn-dot"></span><span id="v2-conn-text">connecting…</span></div>
+</header>
+
+<div class="v2-shell" id="v2-shell">
+  <aside class="v2-rail" id="v2-rail">
+    <section class="v2-card" id="v2-agents-rail" aria-label="Agent roster">
+      <h2 class="v2-region-title">Agents</h2>
+      <div class="v2-empty">Loading…</div>
+    </section>
+    <section class="v2-card" id="v2-projects-rail" aria-label="Projects">
+      <h2 class="v2-region-title">Projects</h2>
+      <div class="v2-empty">Loading…</div>
+    </section>
+    <button class="v2-card" id="v2-brain-entry" type="button" style="text-align:left;cursor:pointer" aria-label="Open the brain browser">
+      <h2 class="v2-region-title">Brain</h2>
+      <div class="v2-empty">Browse the knowledge tree →</div>
+    </button>
+  </aside>
+
+  <main class="v2-main" id="v2-main">
+    <section class="v2-card" id="v2-insights-strip" aria-label="Activity insights">
+      <h2 class="v2-region-title">Insights</h2>
+      <div class="v2-empty">Loading…</div>
+    </section>
+    <section id="v2-goals" aria-label="Goals">
+      <h2 class="v2-region-title">Goals</h2>
+      <div class="v2-empty">No goals yet.</div>
+    </section>
+    <section aria-label="Mission board">
+      <h2 class="v2-region-title">Board</h2>
+      <div id="v2-board"><div class="v2-empty">Loading…</div></div>
+    </section>
+  </main>
+
+  <aside class="v2-side" id="v2-side-rail">
+    <section class="v2-card" id="v2-needs-me-now" aria-label="Needs me now">
+      <h2 class="v2-region-title">Needs me now</h2>
+      <div class="v2-empty">Nothing waiting on you.</div>
+    </section>
+    <section class="v2-card" id="v2-activity-feed" aria-label="Activity">
+      <h2 class="v2-region-title">Activity</h2>
+      <div class="v2-empty">Nothing yet.</div>
+    </section>
+  </aside>
+</div>
+
+<!-- overlays: not part of the grid flow, all hidden by default, all non-modal -->
+<aside class="v2-panel" id="v2-peek-panel" hidden aria-label="Mission detail"></aside>
+<aside class="v2-brain-panel" id="v2-brain-panel" hidden aria-label="Brain browser"></aside>
+<aside class="v2-goal-progress-panel" id="v2-goal-progress" hidden aria-label="Goal progress"></aside>
+<div class="v2-palette" id="v2-palette" hidden role="dialog" aria-modal="false" aria-label="Command palette"></div>
+<div class="v2-quick-add" id="v2-quick-add" hidden aria-label="Quick add"></div>
+<div class="v2-batch-bar" id="v2-batch-bar" hidden aria-label="Batch verdicts"></div>
+<div class="v2-toasts" id="v2-toasts" aria-live="polite"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- §3 token gate: same localStorage key + 401-reprompt as index.html,
+  // zero window.prompt() (t-53 mechanical floor bans prompt()/confirm()/alert()) ----
+  let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('bureau_token') || '';
+  const gate = document.getElementById('v2-gate');
+  const gateForm = document.getElementById('v2-gate-form');
+  const gateInput = document.getElementById('v2-gate-input');
+  const gateErr = document.getElementById('v2-gate-err');
+
+  function showGate(err) {
+    gate.hidden = false;
+    gateErr.hidden = !err;
+    gateInput.focus();
+  }
+  gateForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    const v = gateInput.value.trim();
+    if (!v) return;
+    TOKEN = v;
+    localStorage.setItem('bureau_token', TOKEN);
+    gate.hidden = true;
+    boot();
+  });
+
+  // ---- BureauV2 singleton (§2) ----
+  const bus = new EventTarget();
+  let liveState = null;
+  let sseLive = false;
+  let phoneMode = window.matchMedia('(max-width: 720px)').matches;
+
+  function on(type, cb) {
+    const h = e => cb(e.detail);
+    bus.addEventListener(type, h);
+    return () => bus.removeEventListener(type, h);
+  }
+  function emit(type, detail) { bus.dispatchEvent(new CustomEvent(type, { detail })); }
+
+  async function apiCall(p, opts) {
+    opts = opts || {};
+    const r = await fetch(p, Object.assign({}, opts, {
+      headers: Object.assign({ authorization: 'Bearer ' + TOKEN, 'content-type': 'application/json' }, opts.headers || {})
+    }));
+    if (r.status === 401) {
+      localStorage.removeItem('bureau_token');
+      location.reload();
+      return null;
+    }
+    return r.json();
+  }
+
+  async function refresh() {
+    const snap = await apiCall('/api/state');
+    if (snap) { liveState = snap; emit('v2:state', snap); }
+  }
+
+  function setConn(live) {
+    sseLive = live;
+    const dot = document.getElementById('v2-conn-dot');
+    const text = document.getElementById('v2-conn-text');
+    if (dot) dot.classList.toggle('v2-on', live);
+    if (text) text.textContent = live ? 'live' : 'polling…';
+    emit('v2:connection', { live });
+  }
+
+  function connectSSE() {
+    let es;
+    try { es = new EventSource('/api/events?token=' + encodeURIComponent(TOKEN)); }
+    catch (err) { setConn(false); return; } // constructor throw (e.g. no EventSource) — 60s poll below still covers state
+    es.onopen = function () { setConn(true); };
+    es.onerror = function () { setConn(false); }; // the 60s poll interval is unconditional, so state still arrives
+    [
+      'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.blocked', 'task.requeued', 'task.updated',
+      'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'project.renamed', 'project.created', 'project.deleted'
+    ].forEach(function (type) {
+      es.addEventListener(type, function (e) {
+        let payload = null;
+        try { payload = JSON.parse(e.data); } catch (err) { /* malformed payload: still trigger a refresh below */ }
+        emit(type, payload);
+        refresh();
+      });
+    });
+  }
+
+  function updateViewport() {
+    const next = window.matchMedia('(max-width: 720px)').matches;
+    if (next !== phoneMode) { phoneMode = next; emit('v2:viewport', { phone: phoneMode }); }
+  }
+  window.addEventListener('resize', updateViewport);
+
+  const mounts = {
+    topbar: document.getElementById('v2-topbar'),
+    searchEntry: document.getElementById('v2-search-entry'),
+    agentsRail: document.getElementById('v2-agents-rail'),
+    projectsRail: document.getElementById('v2-projects-rail'),
+    brainEntry: document.getElementById('v2-brain-entry'),
+    insightsStrip: document.getElementById('v2-insights-strip'),
+    goals: document.getElementById('v2-goals'),
+    board: document.getElementById('v2-board'),
+    needsMeNow: document.getElementById('v2-needs-me-now'),
+    activityFeed: document.getElementById('v2-activity-feed'),
+    peekPanel: document.getElementById('v2-peek-panel'),
+    brainPanel: document.getElementById('v2-brain-panel'),
+    goalProgress: document.getElementById('v2-goal-progress'),
+    palette: document.getElementById('v2-palette'),
+    quickAdd: document.getElementById('v2-quick-add'),
+    batchBar: document.getElementById('v2-batch-bar'),
+    toasts: document.getElementById('v2-toasts')
+  };
+
+  window.BureauV2 = Object.freeze({
+    get state() { return liveState; },
+    get token() { return TOKEN; },
+    get live() { return sseLive; },
+    api: apiCall,
+    refresh: refresh,
+    on: on,
+    emit: emit,
+    bus: bus,
+    mounts: mounts
+  });
+
+  // topbar wiring that belongs to this shell, not a sibling module: the search
+  // entry point opens the palette mount; palette.js/search.js do the rest.
+  mounts.searchEntry.addEventListener('click', function () { emit('v2:palette:open', null); });
+  mounts.brainEntry.addEventListener('click', function () { emit('v2:brain:open', {}); });
+
+  function boot() {
+    updateViewport();
+    refresh().then(function () { emit('v2:ready', undefined); });
+    connectSSE();
+    setInterval(refresh, 60000); // unconditional poll backstop — survives an SSE drop unchanged
+  }
+
+  if (TOKEN) { boot(); } else { showGate(false); }
+})();
+</script>
+
+<!--
+  Module load order is a committed contract (§1/§2 above) — do not reorder,
+  do not add a build step. components.js first (shared primitives: chip,
+  status-glyph, tabular-number formatting, panel chrome helpers other
+  modules import), then each i1-i10 module. A 404 here is expected and
+  harmless until that sibling mission lands (see §6).
+-->
+<script type="module" src="v2/components.js"></script>
+<script type="module" src="v2/keyboard.js"></script>
+<script type="module" src="v2/palette.js"></script>
+<script type="module" src="v2/media.js"></script>
+<script type="module" src="v2/needs-me-now.js"></script>
+<script type="module" src="v2/batch-verdicts.js"></script>
+<script type="module" src="v2/goal-progress.js"></script>
+<script type="module" src="v2/brain-browser.js"></script>
+<script type="module" src="v2/quick-add.js"></script>
+<script type="module" src="v2/templates.js"></script>
+<script type="module" src="v2/search.js"></script>
+<script type="module" src="v2/project-edit.js"></script>
+<script type="module" src="v2/board.js"></script>
+<script type="module" src="v2/peek-panel.js"></script>
+</body>
+</html>
