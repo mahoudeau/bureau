@@ -186,12 +186,21 @@
    ~11-11.5px muted text at font-weight:500) already matched this file's
    size/color; only font-weight was missing (this file had no explicit
    weight, inheriting whatever ambient regular/400 weight surrounded it —
-   the sample's id text reads slightly heavier than that, medium/500). */
+   the sample's id text reads slightly heavier than that, medium/500).
+   t-112, lead ruling 2026-08-16: font-family added — this is a real,
+   already-rendered live consumer of --v2-font-mono (every mission-id
+   badge on every card/peek header), precisely the "id" context the
+   boss's own typography verdict named ("JBMono carries every number/id/
+   timestamp AND every tag"), unlike .v2-chip below (also reads the same
+   token, but chip()/.v2-chip has no call site anywhere yet — dead
+   markup, correctly out of this mission's own font-only scope to wire
+   up). Stays in-file, in-scope: no third file touched, no JS edited. */
 .v2-id-badge {
   font-size: var(--v2-font-size-xs);
   font-weight: var(--v2-weight-medium);
   color: var(--v2-color-text-muted);
   font-variant-numeric: var(--v2-tabular-nums);
+  font-family: var(--v2-font-mono);
 }
 
 /* ---- avatar / agent tag ------------------------------------------------
