@@ -20,6 +20,22 @@
 // picks up the styling; this file's job is correct structure and
 // behavior only. Do not add a <style> tag here even if the result looks
 // bare in the meantime — that bareness is intentional at this stage.
+//
+// t-89: the 👀/✉️ emoji section-header prefixes (below) are swapped for
+// t-66's vendored icon set. Neither has an exact-name match in that set
+// (no "eye" icon; no "mail"/"envelope" icon) — picked closest available
+// semantic register instead of leaving true emoji in place or inventing
+// a new icon (components.js is out of this mission's scope to extend):
+// "flag" for the review groups (same needs-attention register
+// components.js's own STATUS_HUES already uses flag for), "message-
+// square" for the messages-to-boss group (a literal message icon).
+// The blocked group's own ⏸ prefix is left as-is, deliberately: rendered
+// (checked live, not just by codepoint), it's a plain monochrome glyph,
+// not a colorful emoji — U+23F8 has no default emoji presentation and no
+// variation selector forcing one here, same register as a plain "x" or
+// arrow character, not what this mission's emoji-as-icon sweep targets.
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -84,8 +100,17 @@
     }
 
     function group(key, title, rowsHtml, count) {
+      // t-89: title is NOT esc()'d — every call site below passes a fixed
+      // string literal (never state/user data), and two of them now embed
+      // icon()'s own raw SVG markup rather than plain text (the emoji-swap
+      // this mission makes). esc()'ing it, as this used to do
+      // unconditionally, was always redundant for a hardcoded literal and
+      // would now HTML-entity-escape the SVG tags into visible text
+      // instead of rendering an icon. If a future caller ever needs to
+      // pass real user/state-derived text here, that caller must esc() it
+      // itself before calling group() — this function no longer does it.
       return '<section class="v2-needs-me-now__group" data-group="' + key + '">' +
-        '<h3 class="v2-needs-me-now__group-title">' + esc(title) + ' · ' + count + '</h3>' +
+        '<h3 class="v2-needs-me-now__group-title">' + title + ' · ' + count + '</h3>' +
         '<div class="v2-list">' + (rowsHtml || '<div class="v2-empty">Nothing here.</div>') + '</div>' +
         '</section>';
     }
@@ -109,10 +134,10 @@
         '</div>' +
         (total === 0
           ? '<div class="v2-empty">Nothing waiting on you.</div>'
-          : group('review-critic', '👀 Review · critic', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
-          group('review-boss', '👀 Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
+          : group('review-critic', icon('flag') + ' Review · critic', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
+          group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
           group('blocked', '⏸ Blocked, awaiting an answer', blocked.map(function (t) { return missionRow(t, state); }).join(''), blocked.length) +
-          group('messages', '✉️ Messages to boss', toBoss.map(messageRow).join(''), toBoss.length));
+          group('messages', icon('message-square') + ' Messages to boss', toBoss.map(messageRow).join(''), toBoss.length));
 
       var sortBtn = document.getElementById('v2-nmn-sort');
       if (sortBtn) sortBtn.addEventListener('click', function () { sortOldestFirst = !sortOldestFirst; render(); });
