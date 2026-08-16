@@ -5,27 +5,22 @@
 // the loop turns — "evidence parity: what the boss sees is always the
 // round being judged."
 //
-// COORDINATION GAP, logged here per this mission's own instruction rather
-// than by editing peek-panel.js: t-64's peek-panel.js does not (yet)
-// expose a documented extension point (e.g. a
-// `window.BureauV2.peekPanel.registerSection(name, renderFn)` hook). Its
-// own header comment documents two narrower, purpose-built extension
-// points (data-item-index for t-65, the 'v2:goal-progress:open' event for
-// t-70) but nothing generic for "add a section to the panel body." Rather
-// than touch peek-panel.js myself (explicitly out of scope per this
-// mission's body) or block on a hook that doesn't exist yet, this module
-// treats #v2-peek-panel as an append target it can safely add a trailing
-// child to, and re-asserts that child via a MutationObserver every time
-// peek-panel.js replaces `panel.innerHTML` wholesale (its own render()
-// does a full string replace on every open — confirmed by reading the
-// file directly, not assumed). This is deliberately observer-based, not
-// event-order-based: media.js's own <script> tag loads before
-// peek-panel.js's in t-62's fixed module order, so if this module instead
-// raced peek-panel.js on the same 'v2:mission:open' event, it would render
-// first and immediately get wiped out by peek-panel's own innerHTML
-// replace. Observing the DOM mutation itself sidesteps that ordering
-// hazard entirely and stays correct even if peek-panel.js's internals
-// change later.
+// t-93 round 4: peek-panel.js now exposes the real extension hook this
+// file's header comment had been asking for since t-67 first wrote it —
+// `window.BureauV2.peekPanel.registerSection('after-body', renderFn)`.
+// This module registers there instead of its old MutationObserver +
+// trailing-append workaround: peek-panel.js calls every registered
+// 'after-body' renderFn INLINE, in the sample's own body->Media->Log->
+// Itemized-review->Artifacts order, every time it rebuilds the panel —
+// so this module no longer needs to detect and out-race peek-panel's own
+// innerHTML replace. registerSection's renderFn signature is synchronous
+// (returns an HTML string), but this module's own data arrives async (a
+// fetch per mission open) — reconciled below by registering a renderFn
+// that reads from this module's own currentArtifacts cache (already
+// fetched by the existing v2:mission:open handler) and re-triggering a
+// panel-level re-render via V2.refresh()-adjacent state once that fetch
+// resolves, the same re-render-on-data-arrival shape the old code already
+// had, just without the DOM-mutation detection step.
 //
 // Known follow-on for whoever next owns peek-panel.js: its own
 // renderArtifacts() already inline-figures every image artifact,
@@ -47,10 +42,20 @@ import { icon } from './components.js';
 (function () {
   'use strict';
 
+  // t-93 round 4: waits for BOTH window.BureauV2 (the usual gate) AND
+  // peek-panel.js's own registerSection hook to exist — module load order
+  // is a committed contract in v2.html (§ "do not reorder") and this
+  // file's own <script> tag loads BEFORE peek-panel.js's, so on a cold
+  // load this file's init() can genuinely run before peek-panel.js's own
+  // ready(init) has attached registerSection to V2.peekPanel. Polling the
+  // compound condition (rather than a one-shot check-and-bail) makes this
+  // correct regardless of which of the two ready-polls actually resolves
+  // first, without needing to reorder anything.
   function ready(cb) {
-    if (window.BureauV2) return cb();
+    if (window.BureauV2 && window.BureauV2.peekPanel && window.BureauV2.peekPanel.registerSection) return cb();
     document.addEventListener('DOMContentLoaded', function poll() {
-      if (window.BureauV2) cb(); else setTimeout(poll, 50);
+      if (window.BureauV2 && window.BureauV2.peekPanel && window.BureauV2.peekPanel.registerSection) cb();
+      else setTimeout(poll, 50);
     });
   }
 
@@ -68,6 +73,7 @@ import { icon } from './components.js';
     var V2 = window.BureauV2;
     var panel = V2.mounts.peekPanel;
     if (!panel) return;
+    if (!V2.peekPanel || !V2.peekPanel.registerSection) return; // peek-panel.js (t-64) missing its section hook; nothing to attach to
     injectStyle();
 
     var esc = function (s) {
@@ -76,23 +82,26 @@ import { icon } from './components.js';
 
     var currentId = null;
     var currentArtifacts = null; // null = not yet fetched for currentId
-    var renderedFor = null;
 
-    // Re-assert the MEDIA section every time peek-panel.js swaps
-    // panel.innerHTML (its render() and the "Loading…" placeholder both
-    // count as childList mutations).
-    var mo = new MutationObserver(function () { tryRender(); });
-    mo.observe(panel, { childList: true });
+    // Registered once. peek-panel.js calls this synchronously, inline, at
+    // the sample's own body->Media->Log->Itemized-review->Artifacts
+    // position, every time it rebuilds the panel — including once from
+    // its OWN openPanel() fetch (before this module's fetch below has
+    // necessarily resolved, in which case this returns '' and the section
+    // is simply absent until the re-render triggered once it does).
+    V2.peekPanel.registerSection('after-body', function (t) {
+      if (t.id !== currentId || currentArtifacts === null) return '';
+      return renderSectionHtml(currentArtifacts);
+    });
 
     V2.on('v2:mission:open', function (detail) {
       if (!detail || !detail.id) return;
       currentId = detail.id;
       currentArtifacts = null;
-      renderedFor = null;
       V2.api('/api/tasks/' + detail.id).then(function (r) {
         if (!r || !r.task || currentId !== detail.id) return; // superseded by a newer open
         currentArtifacts = r.task.artifacts || [];
-        tryRender();
+        if (V2.peekPanel.refreshSections) V2.peekPanel.refreshSections();
       });
     });
 
@@ -105,19 +114,9 @@ import { icon } from './components.js';
       V2.on(evt, function (payload) {
         if (!payload || payload.id !== currentId) return;
         currentArtifacts = payload.artifacts || [];
-        renderedFor = null; // force a re-render even though the panel's own DOM may not have changed
-        tryRender();
+        if (V2.peekPanel.refreshSections) V2.peekPanel.refreshSections();
       });
     });
-
-    function tryRender() {
-      if (panel.hidden) return;
-      if (!panel.querySelector('.v2-panel__title')) return; // peek-panel still showing "Loading…"
-      if (!currentId || currentArtifacts === null) return; // our own fetch hasn't resolved yet
-      if (renderedFor === currentId && panel.querySelector('#v2-media-section')) return;
-      renderSection(currentId, currentArtifacts);
-      renderedFor = currentId;
-    }
 
     function artImg(a) {
       var m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
@@ -163,22 +162,22 @@ import { icon } from './components.js';
         '</a>';
     }
 
-    function renderSection(id, artifacts) {
-      var old = panel.querySelector('#v2-media-section');
-      if (old) old.remove();
-
+    // Returns an HTML string (no DOM writes of its own — peek-panel.js
+    // concatenates this into its own innerHTML rebuild, at the position
+    // its render() decides, per the registerSection contract). Wrapped in
+    // the same `.v2-panel__callout` box Log/Itemized-review already use
+    // (t-93 round 2/4), matching the sample's own visually-set-apart
+    // treatment for MEDIA even though the sample's fixed demo never
+    // renders a real thumbnail grid inside it.
+    function renderSectionHtml(artifacts) {
       var groups = classify(artifacts);
-      var section = document.createElement('div');
-      section.id = 'v2-media-section';
-      section.className = 'v2-media';
+      var head = '<div class="v2-panel__callout-head">' + icon('paperclip', 'v2-icon--xs') + ' Media' + (groups ? ' <span class="v2-tabular-nums">' + groups.current.length + '</span>' : '') + '</div>';
 
       if (!groups) {
-        section.innerHTML = '<div class="v2-media__head">' + icon('paperclip') + ' Media</div><div class="v2-empty">No visual evidence attached yet.</div>';
-        panel.appendChild(section);
-        return;
+        return '<div class="v2-panel__callout">' + head + '<div class="v2-empty">No visual evidence attached yet.</div></div>';
       }
 
-      var html = '<div class="v2-media__head">' + icon('paperclip') + ' Media <span class="v2-media__count">' + groups.current.length + '</span></div>';
+      var html = head;
       html += groups.current.length
         ? '<div class="v2-media__grid">' + groups.current.map(thumb).join('') + '</div>'
         : '<div class="v2-empty">No current-round evidence — only older history below.</div>';
@@ -190,8 +189,7 @@ import { icon } from './components.js';
           '</details>';
       }
 
-      section.innerHTML = html;
-      panel.appendChild(section);
+      return '<div class="v2-panel__callout">' + html + '</div>';
     }
   }
 
@@ -200,9 +198,10 @@ import { icon } from './components.js';
     var style = document.createElement('style');
     style.id = 'v2-media-style';
     style.textContent = [
-      '.v2-media { margin-top: var(--v2-space-4, 16px); padding-top: var(--v2-space-3, 12px); border-top: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
-      '.v2-media__head { font-size: 12px; font-weight: 600; color: var(--v2-ink-2, #888); margin-bottom: var(--v2-space-2, 8px); display: flex; align-items: center; gap: var(--v2-space-1, 4px); }',
-      '.v2-media__count { font-variant-numeric: tabular-nums; color: var(--v2-muted, #999); font-weight: 400; }',
+      // t-93 round 4: the section head/wrapper is now peek-panel.js's own
+      // `.v2-panel__callout`/`.v2-panel__callout-head` (registerSection
+      // renders inline into that file's own markup) — only the grid/thumb
+      // styling below is still this file's own.
       '.v2-media__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--v2-space-2, 8px); }',
       '.v2-media__thumb { display: block; text-decoration: none; color: inherit; border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); overflow: hidden; background: var(--v2-bg, rgba(128,128,128,.06)); }',
       '.v2-media__thumb img { display: block; width: 100%; height: 64px; object-fit: cover; background: rgba(128,128,128,.15); }',

@@ -454,6 +454,26 @@
     .v2-rail { order: 2; }
     .v2-side { order: 3; }
     .v2-panel, .v2-brain-panel, .v2-goal-progress-panel { width: 100%; right: 0; left: 0; top: auto; bottom: 0; height: 80vh; border-radius: var(--v2-radius) var(--v2-radius) 0 0; }
+    /* t-93 round 4: the mission-detail panel specifically (not the brain
+       browser or goal-progress panels, which this round's own critic
+       finding didn't touch) becomes a true full-viewport takeover on
+       phone, matching the sample's own phone mockup (t-58-current-phone.png
+       — nothing else visible behind it) instead of an 80vh sheet leaving
+       the board's tail columns visible underneath. */
+    /* width: 100% here is NOT redundant with the shared rule above: this
+       file's later, unconditional `.v2-panel, .v2-brain-panel, ...{width:
+       var(--v2-panel-w)}` base rule (outside any media query) sits AFTER
+       this @media block in source order, and wins the cascade on width at
+       EQUAL class-selector specificity regardless of the media query still
+       matching — a real pre-existing ordering bug, confirmed live (the
+       panel measured 380px, the desktop width, at a 390px viewport before
+       this line was added). #v2-peek-panel's ID selector reliably beats
+       that later class rule on every property this ruleset sets, so
+       repeating width:100% here is the scoped fix rather than reordering
+       the whole stylesheet (which would need auditing brain-panel/goal-
+       progress-panel too — both still carry the same latent bug, flagged
+       here rather than silently worked around only for peek-panel). */
+    #v2-peek-panel { top: 0; height: 100dvh; width: 100%; border-radius: 0; }
     .v2-quick-add { left: var(--v2-space-2); right: var(--v2-space-2); bottom: var(--v2-space-2); width: auto; }
     /* t-93: the ⌘K hint means nothing without a keyboard, and the
        mode-switch's three buttons are the least essential topbar element
@@ -808,7 +828,15 @@
       on: on,
       emit: emit,
       bus: bus,
-      mounts: mounts
+      mounts: mounts,
+      // t-93 round 4: a mutable contract slot, same shape as `mounts` —
+      // Object.freeze is shallow, so this plain object's OWN properties
+      // stay assignable even though BureauV2 itself can never gain or lose
+      // a top-level key. peek-panel.js (t-64) fills this in with
+      // { registerSection, refreshSections } once it boots; sibling
+      // modules (media.js today) attach a panel section here instead of
+      // fighting peek-panel.js's own innerHTML rebuilds from outside.
+      peekPanel: {}
     });
     updateViewport();
     refresh().then(function () { emit('v2:ready', undefined); });
