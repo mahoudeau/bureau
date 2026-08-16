@@ -758,6 +758,7 @@
      101
     ]
    ],
+   "rejected_key_adjacent_candidates": [],
    "regions": {
     "idle-anchor": {
      "w": 20,
@@ -774,7 +775,7 @@
      ],
      "grid_agreement": 0.5084,
      "file": "idle-anchor.png",
-     "sha256": "82ea8ae66fcd219a8f95b87dc403cd7b9ec1021d15ff7e931f7670ac606c9e0a"
+     "sha256": "fd9e4d51728da67d1da51b22459b568894a9e3a2f777cf35fce190b987ab1f6f"
     },
     "typing-0": {
      "w": 38,
@@ -791,7 +792,7 @@
      ],
      "grid_agreement": 0.537,
      "file": "typing-0.png",
-     "sha256": "2f77772a820fb8a961e63527fbac26e7c0c82c828e3931f46dc1565cf386870e"
+     "sha256": "951ea493589aadad9b9a69c6a056c8df139b7f977bbab2dbaef1ee4d927409ee"
     },
     "typing-1": {
      "w": 39,
@@ -808,7 +809,7 @@
      ],
      "grid_agreement": 0.5365,
      "file": "typing-1.png",
-     "sha256": "51bad40239929d1805f7d8fbeb0727b8fac8a4c36f4659e8f359acdfdea20052"
+     "sha256": "f44d4ed4f27e05309ea8dd88191f3111c6d6ff16d5017197305f5a629f103c2f"
     },
     "typing-2": {
      "w": 37,
@@ -825,7 +826,7 @@
      ],
      "grid_agreement": 0.5264,
      "file": "typing-2.png",
-     "sha256": "9e48fa6534c28e25ad95ee12dba9fda0445a458f6be3a875f6e533446a6003ef"
+     "sha256": "7fb56bc93d600ae65aa390b3a5d8cf91cf479939666cf8ceb58f2e3f06984f6b"
     },
     "typing-3": {
      "w": 38,
@@ -842,7 +843,7 @@
      ],
      "grid_agreement": 0.5367,
      "file": "typing-3.png",
-     "sha256": "3b5394f824b4374ed0640de3719decc175c99f92ab96a348b314b8eeac49cce9"
+     "sha256": "690bae85f221a40803f257a7d5307a6112e9c39c7d591adb248414b9f71b09d6"
     }
    }
   }

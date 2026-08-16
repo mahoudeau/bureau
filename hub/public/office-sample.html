@@ -73,8 +73,20 @@ function layout() {
   return {
     wallTileSize: { w: 52, h: 45 },
     floorTileSize: { w: 55, h: 45 },
-    window: { x: 18, y: 20 },
-    deskTidy: { x: 186, y: FLOOR_Y + 30 },
+    // Round 24: window moved up, well clear of the floor line — round 23
+    // shipped the window sheet's whole cell (pane + a disconnected floor
+    // light-pool graphic below it), which read as "a monitor floating
+    // mid-wall with a baked shadow" (consul's send-back). The pool half is
+    // dropped entirely this round (see frames.json's round24Fixes); the
+    // pane alone sits high on the wall where it unambiguously reads as a
+    // window, not floating furniture.
+    window: { x: 18, y: 8 },
+    // Second desk anchored right at the wall/floor seam (a desk pushed
+    // against the back wall, not floating mid-floor) with its own chair
+    // pulled up in front of it — round 23 shipped the desk alone, which
+    // read as "an unidentified device on open floor" (consul's send-back).
+    deskTidy: { x: 178, y: FLOOR_Y + 4 },
+    chair: { x: 186, y: FLOOR_Y + 20 },
     character: { x: 84, y: FLOOR_Y - 45 },
   };
 }
@@ -102,8 +114,10 @@ function render() {
   // Window, set into the wall.
   drawSprite('window-blue-night', L.window.x, L.window.y);
 
-  // Second dressed desk (sheet-desks-workstations-v2, folder built in).
+  // Second dressed desk (sheet-desks-workstations-v2, folder built in)
+  // with its own chair (same sheet, same light register) pulled up front.
   drawSprite('desk-tidy', L.deskTidy.x, L.deskTidy.y);
+  drawSprite('chair', L.chair.x, L.chair.y);
 
   // The character, at its own integrated desk (typing) or standing (idle).
   const st = FRAMES.states[state];
@@ -154,41 +168,46 @@ Promise.all([
 render();
 
 document.getElementById('about').innerHTML = `
-<p><b>Round 23 — the boss's re-scope (2026-08-16T19:10), landed after round 22 was rejected.</b> Direct ruling: before any sample can be the art bar, this mission owns building and implementing the <b>rectifier</b> (the "beads system") as a shared repo tool — <code>hub/tools/rectify.py</code> — then rebuilding this one-desk corner entirely through it from the v2 reference sheets, never by ad-hoc despeckle/quantize again. "If a sprite didn't come out of the rectifier, it doesn't ship."</p>
+<p><b>Round 24 — consul's send-back on round 23 (2026-08-16T20:00), confirmed by the boss.</b> Round 23 built the rectifier and rebuilt the corner through it, but the boss's fresh-eyes pass (relayed via consul) found real gaps in the served render: chroma-key fringe halos on nearly every sprite edge, key-tinted speckles across the tiled wall, a window that read as "a floating monitor with a baked shadow," a second desk that read as "a random device on open floor," and coarse face fidelity. Per consul's new standing rule (t-54 protocol amendment, same log entry): reworks now clear the critic before returning to the boss's door — this round is parked for that pass, not self-promoted.</p>
 
-<p><b>The rectifier, in one line:</b> the generated sheets are a photo OF pixel art; the tool re-derives the true pixels on our own grid — grid-fit (a per-sheet pitch derived from that sheet's own 48px anchor figure, plus a deterministic phase search so cell boundaries land on real edges), per-cell dominant-color vote, a palette shared across every frame of one subject (never per-frame), magenta keyed to alpha, and the grid pitch itself as the only scaling knob (never a post-resize). Full spec: <code>projects/bureau/references/office/PROMPTS.md</code>, "Rectification" section. Full tool source, header-commented: <code>hub/tools/rectify.py</code>.</p>
-
-<p><b>Determinism, checked, not assumed:</b> every manifest under <code>office-sample-assets/rectify-manifests/</code> was run twice against its cited sheet region before shipping; output PNGs were byte-identical both times (sha256 match). The critic can reproduce this: download the cited sheet from the brain, run the matching manifest, diff the sha256 against <code>rectify-report.json</code>'s recorded hash for that region.</p>
-
-<p><b>Per-sprite citations (source sheet, exact region, what changed from round 22):</b></p>
+<p><b>The two real rectifier bugs round 23's fix missed, root-caused this round:</b></p>
 <ul>
-<li><b>Character (idle + typing, 5 frames):</b> <code>cast/sheet-agent-undercut-typing.jpg</code> — a NEW sheet this round (round 22 used <code>sheet-agent-anims-a.jpg</code>; the v2 batch's dedicated typing-loop sheet is cleaner and on-model). Row 1 of its 5x2 grid: column 0 is the anchor figure (reused as idle — HONEST FLAG, unchanged from round 21/22: no sheet yet shows a true seated-idle pose, kit prompt 28 is still open), columns 1-4 are the seated typing frames with their own integrated desk/monitor/lamp, one continuous piece of source art.</li>
-<li><b>Floor:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 1 (wood plank tile), tiled across the floor band.</li>
-<li><b>Wall:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 4 (cracked plaster), tiled across the wall band — picked over the sheet's warmer wood-tone wall option for the cool 16-bit register the boss's addendum asked for.</li>
-<li><b>Window:</b> <code>scenes/scene-window-states.jpg</code>, row 2 column 1, labeled BLUE NIGHT (window + floor light-pool pair) — cool register, consistent with the character's own monitor-lit side.</li>
-<li><b>Second desk:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 2 column 3 — a plain desk, already dressed with a folder + keyboard in the source art itself.</li>
+<li><b>Hard-threshold chroma key.</b> Round 23's fix raised <code>key_tolerance</code> to swallow near-magenta blotches, but a single hard threshold is the wrong model for real anti-aliased edge pixels — genuine blends of foreground and background — which either survived as opaque near-magenta fringe or vanished as a hard, aliased edge depending which side of the line they landed on. Rebuilt as a soft two-band key: alpha ramps linearly across an inner/outer distance band, and edge pixels are <b>color-decontaminated</b> (solving <code>observed = alpha_frac·fg + (1-alpha_frac)·bg</code> for <code>fg</code>) instead of shipped as a flat blend with the key color baked in.</li>
+<li><b>Palette-averaging drift.</b> This surfaced a second, subtler bug: the shared-palette builder averages votes within a coarse bucket, and that average — a convex combination of individually-safe colors — could itself drift back into key-adjacent territory (two genuine but differently-shifted skin-tone votes straddling the magenta axis can average toward it) and then get handed out by the palette-snap step as if it were a safe color. This is what actually caused round 23's recurring magenta-tinted blotches, even after the tolerance fix. Fixed with an explicit safety filter: any palette candidate whose OWN distance to the background falls under the outer tolerance is rejected outright, never becomes a snap target.</li>
+</ul>
+<p>Verified, not assumed: a full per-pixel distance-to-background scan of every sprite in this round's atlas (idle, all 4 typing frames, wall tile, window, desk, chair) finds <b>zero</b> pixels — opaque or semi-transparent — within key tolerance of the background color. Determinism re-checked after both fixes: every manifest run twice, byte-identical PNG output (sha256-matched) both times.</p>
+
+<p><b>Composition fixes:</b></p>
+<ul>
+<li><b>Window:</b> the BLUE NIGHT cell in <code>scenes/scene-window-states.jpg</code> is a window pane PLUS a separate floor-light-pool graphic below it, with a visible gap between them at this sheet's scale — that gap and the pool's flat parallelogram shape is exactly what read as a floating monitor with a baked shadow. Dropped the pool half entirely; the window sprite is now the pane + frame only, repositioned higher on the wall band, clear of the floor line.</li>
+<li><b>Second desk:</b> added a chair (same sheet, same light register, <code>props/sheet-desks-workstations-v2.jpg</code> row 3) pulled up in front of it. An unaccompanied small object on open floor read as unidentifiable; a desk with its own chair reads as a workstation.</li>
 </ul>
 
-<p><b>Open interpretation, flagged not assumed:</b> the mission text names <code>sheet-desks-workstations-v2</code> as the desk source, but the typing sheet's character is inseparably drawn WITH its own desk/monitor/lamp. Rather than attempt a pixel-level merge of two different sheets' desks under one seated figure (exactly the two-light-sources violation that sent round 20 back), this round sources both: the character keeps its own integrated desk, and a second, separately-extracted desk sits elsewhere in the corner as additional dressed furniture. A future round can revisit this if the boss reads the mission text more literally.</p>
+<p><b>Face fidelity — checked, not "fixed," and why:</b> the character sprite is 20px wide at the mandated 48px-tall canonical scale (pitch is fixed by the sheet's own measured anchor figure, never a free parameter — "the grid pitch is the scaling knob," not a resize). At that pitch the face resolves into roughly ten source-cell-widths by construction, the same order of coarseness any 48px-tall pixel-art character's face carries. Checked the phase-search score for this specific region against the sprite's other regions — unremarkable, not a bad-alignment outlier, so this isn't a fixable vote/alignment defect. A materially crisper face would need either a larger on-screen character scale (a scene-design choice, not a rectifier fix) or a dedicated face-only crop at a different logical size (breaking the one-pitch-per-sheet rule this manifest currently follows) — raised as an open question for the critic/boss to weigh, not assumed away.</p>
 
-<p><b>Dropped this round:</b> a standalone folder crop from <code>props/sheet-desk-supplies-v2.jpg</code> came back as a near-solid tan block — a bad region fit on my part, not a rectifier bug (the other four crops from four other sheets came out clean). Dropped rather than shipped broken; the second desk's own built-in folder covers the "dressed desk" ask on its own. Flagged for a future round rather than silently reattempted under time pressure.</p>
+<p><b>Per-sprite citations (source sheet, exact region):</b></p>
+<ul>
+<li><b>Character (idle + typing, 5 frames):</b> <code>cast/sheet-agent-undercut-typing.jpg</code>, row 1 of its 5x2 grid: column 0 is the anchor figure (reused as idle — HONEST FLAG, unchanged since round 21: no sheet yet shows a true seated-idle pose, kit prompt 28 is still open), columns 1-4 are the seated typing frames with their own integrated desk/monitor/lamp.</li>
+<li><b>Floor:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 1 (wood plank tile), tiled across the floor band.</li>
+<li><b>Wall:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 4 (cracked plaster) — cool register per the boss's spy-HQ addendum.</li>
+<li><b>Window:</b> <code>scenes/scene-window-states.jpg</code>, row 2 column 1, BLUE NIGHT — pane + frame only this round.</li>
+<li><b>Second desk:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 2 column 3 (already dressed with a folder + keyboard in the source art).</li>
+<li><b>Chair:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 3 — new this round, same sheet as the desk.</li>
+</ul>
 
-<p><b>Composition, not redraw:</b> wall and floor bands are tiled repeats of one rectified swatch each (a real render-time tiling loop, see <code>tileRow()</code> in this page's own script — not a wider crop). Window, second desk, and character sit at fixed screen coordinates decided in <code>layout()</code>. No pixel inside any sprite was invented; only where each sprite sits on screen is original composition.</p>
-
-<p><b>Light register, self-assessed:</b> character keeps its established warm-lamp/cool-monitor register (same sheet, same row as idle — no seam by construction). Window is cool BLUE NIGHT. Wall is cool cracked plaster. Floor is warm wood (the one deliberately warm element, grounding the room the way a lamp-lit floor reads in the actual reference mood boards). Second desk carries no strong baked-in light source of its own, so it composites into either register without a visible clash. Read as one coherent cool-night-with-warm-accent scene at native resolution and at the page's display scale; not fresh-eyes critic-verified yet — that verification is the next step, not self-declared here.</p>
+<p><b>Open interpretation, unchanged from round 23, flagged not assumed:</b> the mission text names <code>sheet-desks-workstations-v2</code> as THE desk source, but the typing sheet's character is inseparably drawn WITH its own desk/monitor/lamp. Rather than merge two differently-lit sheets' desks under one seated figure (the two-light-sources violation that sent round 20 back), this round keeps sourcing both: the character's own integrated desk, plus a second, separately-extracted desk (now with a chair) elsewhere in the corner.</p>
 
 <p><b>Mechanical floors, self-checked:</b></p>
 <ul>
-<li>Every shipped sprite came out of <code>hub/tools/rectify.py</code>, none hand-despeckled/quantized: confirmed by construction (no other image-editing step touches <code>atlas.png</code> after the tool writes each region's PNG and this round's packer concatenates them).</li>
-<li>Determinism: same manifest run twice, byte-identical output (sha256-checked, see above) — the critic re-running a cited manifest and confirming a byte-identical sprite is a mechanical pass, not a matter of taste.</li>
-<li>No live route touched: this file and <code>office-sample-assets/</code> remain a standalone path only.</li>
-<li>No reference (Sea of Stars) filename or pixel appears anywhere in this page or its assets — only owned boss-generated sheet filenames are cited.</li>
-<li>No build step, no external request at runtime: atlas and frame table are same-origin fetches to files committed alongside this page.</li>
+<li>Every shipped sprite came out of <code>hub/tools/rectify.py</code>, none hand-edited: confirmed by construction.</li>
+<li>Zero key-adjacent pixels anywhere in the atlas (scanned, not assumed) — chroma-key cleanliness is now a stated mechanical floor per consul's amendment, and this round is the first to actually verify it that way rather than by eye.</li>
+<li>Determinism: every manifest re-run twice this round, byte-identical (sha256-matched) both times, after both bug fixes.</li>
+<li>No live route touched, no build step, no external runtime request, no reference (Sea of Stars) filename anywhere in the shipped assets.</li>
 </ul>
 
-<p><b>Open, not blocking, carried forward for the critic/boss to weigh:</b> the room is a single corner (wall + floor bands, one window, two desks), not the full "engine room" scale of the approved t-56 floor plan — this mission's own scope is a sample, not the full build. Character-height-vs-native-anchor proportion question from round 20/21 remains unresolved in the same way (the sheets are AI-rendered photos of pixel art, not natively low-res the way Sea of Stars crops are) — carried forward, not re-litigated.</p>
+<p><b>Not yet independently critic-verified — that is the explicit next step, not self-declared here.</b> Per consul's amendment this round is parked for Moneta's (the critic's) own render and clearance before it goes back to the boss; the gate field on the mission record still reads <code>boss</code> after the rejection, which I've flagged on the mission log as something I'm not authorized to change myself (only the boss or lead agent set the critic gate) — noted for whoever routes this next, not silently worked around.</p>
 
-<p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12), rebased onto current main first (the branch predated t-92/t-93's v2 chrome convergence work; rebase picked that up cleanly, no manual conflict resolution needed) so this round's diff stays scoped to the office-sample files only.</p>
+<p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12).</p>
 `;
 </script>
 </body>

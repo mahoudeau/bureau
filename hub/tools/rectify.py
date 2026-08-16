@@ -60,7 +60,8 @@
 # {
 #   "sheet": "relative/path/to/sheet.jpg",
 #   "background_key": [255, 0, 255],       // magenta, the sheets' own key
-#   "key_tolerance": 60,                    // channel-distance to call "background"
+#   "key_tolerance": 60,                    // OUTER band edge: channel-distance beyond which a cell is fully opaque
+#   "key_inner_tolerance": 21,               // INNER band edge (default: 0.35 * key_tolerance): fully background within this distance. Between the two, alpha ramps and color is decontaminated — this is what kills fringe halos that a single hard threshold can't.
 #   "anchor_region": [x, y, w, h],          // rough box containing the sheet's
 #                                            // own 48px-tall anchor figure —
 #                                            // padding is fine, tight-cropped
@@ -142,7 +143,21 @@ def mode_color(pixels):
     return tuple(int(round(c)) for c in avg)
 
 
-def cell_vote_grid(img, region, pitch, dx, dy, bg_color, bg_tol):
+def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol):
+    # Soft chroma-key with decontamination, not a hard threshold. A cell
+    # voted color's distance to the background color puts it in one of
+    # three bands:
+    #   dist <= inner_tol            -> fully background (alpha 0)
+    #   dist >= outer_tol            -> fully foreground (alpha 255)
+    #   inner_tol < dist < outer_tol -> an EDGE cell: the source pixel is a
+    #     genuine anti-aliased blend of foreground and background (this is
+    #     exactly what a hard single threshold gets wrong — it either kept
+    #     these as opaque near-magenta ["fringe halo"] or discarded them as
+    #     background [a hard, aliased edge]). Alpha ramps linearly across
+    #     the band, and the color is DECONTAMINATED: solve
+    #     observed = alpha_frac*fg + (1-alpha_frac)*bg for fg, so the
+    #     magenta tint mixed into the edge blend is removed rather than
+    #     shipped as part of the sprite's own color.
     x, y, w, h = region
     n_cols = int((w - dx) // pitch)
     n_rows = int((h - dy) // pitch)
@@ -150,6 +165,7 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, bg_tol):
     alphas = [[0] * n_cols for _ in range(n_rows)]
     agree_sum = 0.0
     agree_n = 0
+    bg_arr = np.array(bg_color, dtype=np.float64)
     for r in range(n_rows):
         cy0 = y + dy + int(round(r * pitch))
         cy1 = y + dy + int(round((r + 1) * pitch))
@@ -160,10 +176,19 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, bg_tol):
             if cell.shape[0] == 0:
                 continue
             col = mode_color(cell)
-            colors[r][c] = col
-            d = color_dist(np.array([col]), bg_color)[0]
-            is_bg = d <= bg_tol
-            alphas[r][c] = 0 if is_bg else 255
+            d = float(color_dist(np.array([col]), bg_color)[0])
+            if d <= inner_tol:
+                alphas[r][c] = 0
+                colors[r][c] = col
+            elif d >= outer_tol:
+                alphas[r][c] = 255
+                colors[r][c] = col
+            else:
+                frac = (d - inner_tol) / (outer_tol - inner_tol)
+                alphas[r][c] = int(round(255 * frac))
+                fg = (np.array(col, dtype=np.float64) - (1 - frac) * bg_arr) / max(frac, 1e-6)
+                fg = np.clip(fg, 0, 255)
+                colors[r][c] = tuple(int(round(v)) for v in fg)
             # agreement score for phase search: fraction of the cell matching
             # the coarse bucket that won the vote (crisp cells -> high score)
             q = (cell // 16) * 16
@@ -175,7 +200,7 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, bg_tol):
     return colors, alphas, score, n_cols, n_rows
 
 
-def best_phase(img, region, pitch, bg_color, bg_tol, steps=6):
+def best_phase(img, region, pitch, bg_color, inner_tol, outer_tol, steps=6):
     # Exhaustive, deterministic search over a small grid of candidate phase
     # offsets (fractions of one pitch). Picks the offset whose cell-voted
     # grid has the highest average per-cell color agreement — the proxy for
@@ -186,7 +211,7 @@ def best_phase(img, region, pitch, bg_color, bg_tol, steps=6):
         dx = int(round(i * pitch / steps))
         for j in range(steps):
             dy = int(round(j * pitch / steps))
-            _, _, score, n_cols, n_rows = cell_vote_grid(img, region, pitch, dx, dy, bg_color, bg_tol)
+            _, _, score, n_cols, n_rows = cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol)
             if n_cols < 1 or n_rows < 1:
                 continue
             key = (score, -dx, -dy)  # deterministic tie-break: prefer smaller offsets
@@ -205,7 +230,7 @@ def hsv_saturation(rgb):
     return (mx - mn) / mx
 
 
-def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac):
+def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol):
     # all_votes: list of (color, count) already-collected non-background cell
     # colors across every region in a group, count = how many cells voted it.
     total = sum(c for _, c in all_votes)
@@ -224,8 +249,22 @@ def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_fr
 
     accents = []
     base = []
+    rejected = []
     for q, b in ranked:
         avg = tuple(round(b['sum'][i] / b['count']) for i in range(3))
+        # Safety net, independent of how a bucket got here: every vote that
+        # fed this bucket individually cleared outer_tol (only alpha==255
+        # cells are ever counted, see main()), but bucket AVERAGING is a
+        # convex combination — it can land closer to the background color
+        # than any single vote that produced it (e.g. two genuine but
+        # differently-shifted skin-highlight votes straddling the magenta
+        # axis and averaging toward it). A palette entry that's drifted
+        # back into key-adjacent territory is exactly what caused fringe-
+        # colored blotches in round 23: reject it outright rather than let
+        # snap_to_palette ever hand it out as a "safe" target.
+        if color_dist(np.array([avg]), bg_color)[0] < outer_tol:
+            rejected.append(avg)
+            continue
         frac = b['count'] / total if total else 0
         sat = hsv_saturation(avg)
         if sat >= accent_sat_min and frac <= accent_area_frac:
@@ -234,7 +273,7 @@ def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_fr
             base.append((avg, b['count']))
     base = base[:palette_size]
     palette = [c for c, _ in base] + accents
-    return palette
+    return palette, rejected
 
 
 def snap_to_palette(color, palette):
@@ -260,7 +299,14 @@ def main():
     sheet_path = (manifest_path.parent / m['sheet']) if not Path(m['sheet']).is_absolute() else Path(m['sheet'])
     img = load_rgb(sheet_path)
     bg = tuple(m.get('background_key', [255, 0, 255]))
-    bg_tol = m.get('key_tolerance', 60)
+    # Two-band soft key (see cell_vote_grid's own comment): outer_tol is the
+    # existing "key_tolerance" (fully foreground beyond this distance from
+    # the background color); inner_tol defaults to a fraction of it (fully
+    # background within this distance). The band between the two is where
+    # real anti-aliased edge pixels live — ramped alpha + decontamination,
+    # not a hard cutoff, is what actually kills fringe halos.
+    outer_tol = m.get('key_tolerance', 60)
+    inner_tol = m.get('key_inner_tolerance', outer_tol * 0.35)
     if 'anchor_source_px_height' in m:
         # Manual override (spec's "or manual parameter" alternative to
         # auto grid-fit) — for sheets where connected-component detection
@@ -269,7 +315,7 @@ def main():
         # gap between them). Measured by eye against a ruler overlay.
         anchor_h_px = m['anchor_source_px_height']
     else:
-        anchor_h_px, _ = measure_anchor_height(img, m['anchor_region'], bg, bg_tol)
+        anchor_h_px, _ = measure_anchor_height(img, m['anchor_region'], bg, outer_tol)
     anchor_logical_h = m.get('anchor_logical_height', 48)
     pitch = anchor_h_px / anchor_logical_h
 
@@ -291,28 +337,36 @@ def main():
         vote_counts = {}
         for r in regions:
             box = (r['x'], r['y'], r['w'], r['h'])
-            dx, dy = best_phase(img, box, pitch, bg, bg_tol)
-            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, bg_tol)
+            dx, dy = best_phase(img, box, pitch, bg, inner_tol, outer_tol)
+            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol)
             region_grids[r['name']] = {
                 'colors': colors, 'alphas': alphas, 'n_cols': n_cols, 'n_rows': n_rows,
                 'dx': dx, 'dy': dy, 'score': score, 'box': box,
             }
             for row in range(n_rows):
                 for col in range(n_cols):
-                    if alphas[row][col] == 0:
+                    # Only fully-opaque cells vote on the shared palette —
+                    # partial-alpha edge cells are decontaminated estimates,
+                    # noisier than an interior vote, and shouldn't skew what
+                    # the palette snaps everything else to.
+                    if alphas[row][col] != 255:
                         continue
                     c = colors[row][col]
                     vote_counts[c] = vote_counts.get(c, 0) + 1
 
-        palette = build_shared_palette(
+        palette, rejected = build_shared_palette(
             list(vote_counts.items()),
             m.get('palette_size', 28),
             m.get('accent_saturation_min', 0.5),
             m.get('accent_max_area_frac', 0.01),
+            bg, outer_tol,
         )
+        if rejected:
+            print(f'  [{group_name}] rejected {len(rejected)} key-adjacent palette candidate(s): {rejected}')
 
         report['groups'][group_name] = {
             'palette': [list(p) for p in palette],
+            'rejected_key_adjacent_candidates': [list(p) for p in rejected],
             'regions': {},
         }
 
@@ -322,11 +376,21 @@ def main():
             out = np.zeros((n_rows, n_cols, 4), dtype=np.uint8)
             for row in range(n_rows):
                 for col in range(n_cols):
-                    if g['alphas'][row][col] == 0:
+                    a = g['alphas'][row][col]
+                    if a == 0:
                         continue
-                    snapped = snap_to_palette(g['colors'][row][col], palette)
-                    out[row, col, 0:3] = snapped
-                    out[row, col, 3] = 255
+                    if a == 255:
+                        # Fully opaque: snap to the shared palette as before.
+                        out[row, col, 0:3] = snap_to_palette(g['colors'][row][col], palette)
+                    else:
+                        # Partial-alpha edge cell: ship the decontaminated
+                        # color as-is, not palette-snapped — it's meant to
+                        # blend toward transparency, and force-snapping it
+                        # to a palette entry derived from opaque interior
+                        # votes would just reintroduce a hard, wrong-colored
+                        # edge under a different name.
+                        out[row, col, 0:3] = g['colors'][row][col]
+                    out[row, col, 3] = a
             im = Image.fromarray(out, mode='RGBA')
             out_path = out_dir / f'{r["name"]}.png'
             im.save(out_path, optimize=False)

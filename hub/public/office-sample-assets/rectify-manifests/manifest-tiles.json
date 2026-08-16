@@ -34,5 +34,5 @@
    "group": "wall"
   }
  ],
- "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) \u2014 download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in rectify-report.json against this atlas's own sprite hashes."
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) \u2014 download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in the matching report-*.json against this atlas's own sprite hashes."
 }
