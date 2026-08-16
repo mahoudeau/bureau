@@ -15,7 +15,7 @@
   main { padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
   #stage-wrap { border: 1px solid var(--hairline); background: #000; line-height: 0; }
   canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-  .controls { display: flex; gap: 8px; align-items: center; }
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
   .controls button { font: 12px/1 system-ui, sans-serif; padding: 8px 14px; border-radius: 6px; border: 1px solid var(--hairline);
                       background: var(--panel2); color: var(--ink); cursor: pointer; font-weight: 700; }
   .controls button.on { background: var(--accent); color: #1a1206; border-color: var(--accent); }
@@ -25,21 +25,24 @@
   details .body { font-size: 12px; line-height: 1.6; color: #cfc7ba; margin-top: 8px; }
   details .body b { color: var(--ink); }
   details .body p { margin: 0 0 8px; }
+  details .body code { background: #0f0b0a; border: 1px solid var(--hairline); padding: 1px 5px; border-radius: 4px; color: #ffd9a0; }
+  details .body ul { margin: 4px 0 10px 18px; padding: 0; }
+  details .body li { margin: 3px 0; }
 </style>
 </head>
 <body>
 <header>
-  <b>BUREAU</b><span class="sep">·</span>office · sample scene (t-59)<span class="r">one desk · one sprite · one corner · static, no live events</span>
+  <b>BUREAU</b><span class="sep">·</span>office · sample scene (t-59)<span class="r">one desk · one extracted agent sprite · one corner · static, no live events</span>
 </header>
 <main>
-  <div id="stage-wrap"><canvas id="stage" width="180" height="112" style="width:900px;height:560px"></canvas></div>
+  <div id="stage-wrap"><canvas id="stage" width="740" height="684" style="width:555px;height:513px"></canvas></div>
   <div class="controls">
     <button id="btn-idle" class="on">Idle</button>
     <button id="btn-typing">Typing</button>
-    <span class="hint">idle = the "idle"/low-activity heartbeat state · typing = the "editing" verb (docs/protocol.md)</span>
+    <span class="hint">idle = the "idle" heartbeat verb · typing = the "editing" verb (docs/protocol.md)</span>
   </div>
-  <details>
-    <summary>About this sample — what calibrated it (round 19 of an intentionally open-ended loop — not a finished piece)</summary>
+  <details open>
+    <summary>About this sample — round 20: the extraction pivot (LAW amendment, boss ruling 2026-08-16T13:12)</summary>
     <div class="body" id="about"></div>
   </details>
 </main>
@@ -48,1023 +51,126 @@
 const cv = document.getElementById('stage');
 const ctx = cv.getContext('2d');
 ctx.imageSmoothingEnabled = false;
-const W = 180, H = 112;
 
-// ---- palette (all original — no reference pixels sampled or copied) ----
-// round 15: COOL RETHEME. Boss verdict 2026-08-16T09:32 (binding, see the
-// mission body's "## Bar addendum"): Bureau carries the double meaning of a
-// spy agency's HQ — agents get briefed and go on missions. Register: FBI /
-// "Le Bureau des Legendes" (DGSE officers), not a warm fantasy-adventurer
-// guild hall. Every tone below was re-picked around that: the OLD palette's
-// warm amber lamp + terracotta floor + maroon rug read as a tavern corner;
-// this one is built around a cool blue-grey shell (graphite wall, slate
-// floor tile, charcoal mat) lit by two COOL sources — the monitor's own
-// cyan glow promoted to a real key light, plus a new cool-white ceiling
-// downlight (a briefing-room spot, not a warm desk lamp) — with the old
-// warm lamp's ROLE (a secondary directional pool) kept but its HUE swapped
-// to a cool white-blue LED, so the pixel-art shading DISCIPLINE the Sea of
-// Stars references established (banded light, hard pixel edges, three/four
-// -tone material blocking) carries forward unchanged; only the mood/palette
-// pivots, per the boss's own reconciliation instruction.
-const PAL = {
-  wallDeep:   '#10161e', wallMid: '#182430', wallTrim: '#0d1218',
-  skyTop:     '#060a12', skyMid: '#0c1522', skyLow: '#16283a',
-  winFrame:   '#0a0d12', winLit: '#7fe0ff', winDark: '#0a1018', blindSlat: '#0c1015',
-  floorA:     '#232b34', floorB:'#1c232b', floorC:'#293240', floorD:'#171d24', floorSeam:'#0a0d12', floorGrain:'#0f151c', floorLit:'#33414f',
-  baseboard:  '#0a0d12', baseboardHi:'#1a222b', wear: '#0d1218',
-  rugMid:     '#1a2028', rugDark:'#10141a', rugEdge:'#2c3844', rugHi:'#41566a',
-  deskTop:    '#2a323c', deskTopHi:'#3c4753', deskFront:'#181e26', deskFrontDeep:'#0e1218', deskEdge:'#4a6070',
-  monBezel:   '#0a0c0f', monBezelHi:'#1c2229', screenIdle:'#2f9ecf', screenIdleHi:'#7fe0ff',
-  screenType1:'#c9f2ff', screenType2:'#5fc9ff', lampPole:'#232a30', lampShadeOut:'#3a4650', lampShadeIn:'#dff2ff',
-  lampBulb:   '#eaf9ff',
-  // round 15: kept the plant NATURAL green rather than retinting it cool —
-  // a real desk plant stays green in a cool-toned office same as a warm
-  // one; recoloring it blue-grey (tried first) read as an unlit server
-  // rack, not foliage, and lost the one organic color break the room needs
-  potA: '#26492e', potB:'#356336', potHi:'#5c9556', potPotA:'#1c2228', potPotB:'#242c34',
-  // shadow tones are hue-SHIFTED (toward deeper cool blue), not just
-  // darkened copies of the mid tone — flat-darkening-only is what made
-  // round 2's character read as a vector cutout even after the room got
-  // dithered. Skin shadow stays in the WARM skin family still (a face split
-  // into an unrelated hue reads as a rendering glitch, not lighting) — the
-  // cool retheme moves the ENVIRONMENT's palette, not the character's own
-  // flesh tone, which is the one place warmth still belongs by design.
-  skinShadow: '#8a5648', skinMid:'#c48657', skinHi:'#e8ae7c', skinCheek:'#e08a6e', eye:'#0d0f14', catchlight:'#eaf6ff',
-  iris: '#4a90b8', // tinted iris — a flat neutral-gray sclera read as a dead doll stare
-  browShadow: '#6a4230', browLine:'#3a241a',
-  // round 19: hairShadow/hairDeep RAISED from #12161c/#0a0c10, and kept
-  // BELOW hairMid so the lit>mid>shadow ordering within each lock still
-  // holds — a critic pixel-sampled the scene and found the shadow-side
-  // hair locks' own tones sat only ~15-20 points per channel below the
-  // dark wall/vignette behind them, well under the threshold that reads
-  // as a visible seam at this resolution, regardless of how correct the
-  // underlying lock geometry was. This alone is a partial fix (see the
-  // hairLock() rim-edge addition below for the decisive one — the critic
-  // named both as viable, this round does both rather than betting on
-  // either alone).
-  hairShadow: '#1c222c', hairMid:'#232a33', hairHi:'#333e49', hairFade:'#1a2027', hairStrand:'#4a5c6c', hairHi2:'#7f95a6', hairDeep:'#10141c', specular:'#d8f4ff', rim:'#bfe8ff',
-  shirtShadow:'#7c8894', shirtMid:'#c5cfd8', shirtHi:'#f8fbfc', shirtPatch:'#ffffff', trim:'#1f2933',
-  jawShadow:'#6e4638',
-  tieShadow:'#1a2c40', tieMid:'#284060', tieHi:'#3a5a82', badgeCard:'#e8dfa0', badgeStripe:'#3fa0c2', lanyard:'#1f2933',
-  pantsShadow:'#141a22', pantsMid:'#212a34', shoe:'#0a0c0f',
-  outline:    '#000000', shadowSoft:'rgba(2,3,5,.55)',
-  // round 12: two pre-mixed OPAQUE shadow tones (outer/inner), replacing the
-  // alpha-blended shadowSoft above wherever the shadow sits on top of
-  // material that itself varies (the floor's per-plank tone/grain/wear) —
-  // see pixelOvalBanded's own comment for why alpha blending was the bug.
-  shadowFlatOuter: '#12161c', shadowFlatInner: '#080a0d',
-};
+const atlasImg = new Image();
+let FRAMES = null;
+let atlasReady = false;
 
-function R(x,y,w,h,c){ ctx.fillStyle = c; ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h)); }
-function seeded(seed){ let s = seed; return () => { s = (s*9301+49297) % 233280; return s/233280; }; }
-// ordered-checkerboard dither: a hard-pixel transition strip between two flat
-// tones, instead of a band boundary snapping straight from one color to the
-// next. This is the technique the reference screenshots actually use at
-// their light/shade transitions (wood floor, cloth) — round 1 had none.
-function ditherH(x,y,w,colorA,colorB){
-  x=Math.round(x); y=Math.round(y); w=Math.round(w);
-  for(let i=0;i<w;i++) R(x+i,y,1,1,((x+i+y)%2===0)?colorA:colorB);
+let state = 'idle';
+let frameIdx = 0;
+let lastSwap = 0;
+
+function layout() {
+  // Composed room corner: the extracted desk/character cell on the left,
+  // the extracted floor lamp on the right (floor-aligned), the extracted
+  // wall terminal above it. All three are separate crops from the owned
+  // source sheets; this function is the only place their SCREEN POSITIONS
+  // are decided — no pixel inside any of them was redrawn or invented.
+  const stageH = 684;
+  return {
+    char: { x: 0, y: stageH - FRAMES.sprites['idle-0'].h },
+    lamp: { x: 548, y: stageH - FRAMES.sprites.lamp.h },
+    wallmon: { x: 560, y: 20, scale: 0.5 }
+  };
 }
-function ditherRect(x,y,w,h,colorA,colorB){
-  for(let j=0;j<h;j++) ditherH(x,y+j,w,colorA,colorB);
+
+function drawSprite(name, dx, dy, scale) {
+  const s = FRAMES.sprites[name];
+  const dw = scale ? s.w * scale : s.w;
+  const dh = scale ? s.h * scale : s.h;
+  ctx.drawImage(atlasImg, s.x, s.y, s.w, s.h, dx, dy, dw, dh);
 }
-// stepped (banded) glow: N discrete, NON-OVERLAPPING concentric annuli
-// (each ring drawn once, evenodd hole cut for the inner radius) instead of
-// one smooth analog gradient — so a light pool reads as retro banded
-// lighting rather than a CSS box-shadow blur. Non-overlapping matters: a
-// naive stack of filled circles under 'lighter' blend double- and
-// triple-counts the inner rings and blows the core out to solid white.
-// filled quadrilateral — used to cut a genuinely DIAGONAL, off-axis
-// light/shadow boundary (the boundary's x shifts per row) instead of a
-// single vertical x split, which — even when off-center — still reads as
-// a straight seam once it lines up with symmetric facial/torso features.
-function quad(pts,color){
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(Math.round(pts[0][0]),Math.round(pts[0][1]));
-  for(let i=1;i<pts.length;i++) ctx.lineTo(Math.round(pts[i][0]),Math.round(pts[i][1]));
-  ctx.closePath(); ctx.fill();
+
+function render() {
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  ctx.fillStyle = '#0c1116';
+  ctx.fillRect(0, 0, cv.width, cv.height);
+  if (!atlasReady) return;
+  const L = layout();
+  const st = FRAMES.states[state];
+  const name = st.frames[frameIdx % st.frames.length];
+  drawSprite(name, L.char.x, L.char.y);
+  drawSprite('lamp', L.lamp.x, L.lamp.y);
+  drawSprite('wallmon', L.wallmon.x, L.wallmon.y, L.wallmon.scale);
 }
-// a few dither flecks sampled along a diagonal boundary between two given
-// endpoints, approximating a dithered seam without a full scanline pass
-function ditherDiag(x0,y0,x1,y1,colorA,colorB){
-  const n = Math.max(Math.abs(y1-y0),1);
-  for(let i=0;i<=n;i++){
-    const t=i/n, x=Math.round(x0+(x1-x0)*t), y=Math.round(y0+(y1-y0)*t);
-    R(x,y,1,1,(i%2===0)?colorA:colorB);
-  }
-}
-// round 10: diagShade replaces ctx.fill()-on-a-quad() for every diagonal
-// light/shadow boundary. quad()'s path fill anti-aliases regardless of
-// ctx.imageSmoothingEnabled (that flag only governs drawImage scaling, not
-// path fills) — every diagonal edge was quietly blending dozens of
-// in-between shades along its length. This was the single biggest,
-// independently-confirmed source of the color-count gap two critics named
-// (233-328 measured colors in the character crop vs. 27 in the cited
-// references). diagShade fills row-by-row with axis-aligned rects (R()
-// itself rounds to whole pixels), so the boundary comes out as a genuine
-// hard pixel staircase — exactly how the reference sprites are actually
-// authored, not a smooth analog line.
-function diagShade(x,y,w,h,xSplitTop,xSplitBot,colorLit,colorShadow){
-  const rows = Math.round(h);
-  for(let row=0; row<rows; row++){
-    const t = rows<=1 ? 0 : row/(rows-1);
-    const splitPx = Math.round(x + xSplitTop + (xSplitBot-xSplitTop)*t);
-    const litW = Math.max(0, Math.min(w, splitPx-x));
-    if(litW>0) R(x, y+row, litW, 1, colorLit);
-    if(litW<w) R(x+litW, y+row, w-litW, 1, colorShadow);
-  }
-}
-// three-band variant of diagShade — the torso/head each split into lit /
-// base-mid / narrow-shadow-rim bands (two diagonal boundaries, not one),
-// same hard per-row rasterization.
-function diag3Shade(x,y,w,h,splitATop,splitABot,splitBTop,splitBBot,colorLit,colorMid,colorShadow){
-  const rows = Math.round(h);
-  for(let row=0; row<rows; row++){
-    const t = rows<=1 ? 0 : row/(rows-1);
-    const aPx = Math.round(x + splitATop + (splitABot-splitATop)*t);
-    const bPx = Math.round(x + splitBTop + (splitBBot-splitBTop)*t);
-    const aW = Math.max(0, Math.min(w, aPx-x));
-    const bW = Math.max(aW, Math.min(w, bPx-x));
-    if(aW>0) R(x, y+row, aW, 1, colorLit);
-    if(bW>aW) R(x+aW, y+row, bW-aW, 1, colorMid);
-    if(bW<w) R(x+bW, y+row, w-bW, 1, colorShadow);
-  }
-}
-// round 10: broad clustered dither, standing in for the references'
-// whole-plane texture (Zale's hair/cloak, Erlina's skirt/hair all carry
-// irregular multi-tone clusters across the ENTIRE shaded area, not just a
-// boundary seam) rather than the old boundary-only ditherDiag/ditherRect
-// seams. Clusters (a handful of nearby dots, not uniform per-pixel noise)
-// read as hand-placed texture at pixel-art scale; uniform noise reads as
-// a grain filter.
-function patchDither(x,y,w,h,color,seed,clusterCount){
-  const rnd = seeded(seed);
-  for(let c=0;c<clusterCount;c++){
-    const cx = x + rnd()*w, cy = y + rnd()*h;
-    const n = 2 + Math.floor(rnd()*3);
-    for(let i=0;i<n;i++){
-      const px = Math.round(cx + (rnd()-0.5)*3);
-      const py = Math.round(cy + (rnd()-0.5)*3);
-      if(px>=x && px<x+w && py>=y && py<y+h) R(px,py,1,1,color);
+
+function tick(ts) {
+  if (atlasReady) {
+    const st = FRAMES.states[state];
+    if (ts - lastSwap >= st.durationMs) {
+      frameIdx = (frameIdx + 1) % st.frames.length;
+      lastSwap = ts;
+      render();
     }
   }
-}
-// round 11: hard-edged oval, stacked per-row rects with a discrete
-// falloff curve instead of ctx.ellipse()/fill() — same class of bug as
-// round 10's quad()-shading fix: canvas curved-path fills anti-alias
-// unconditionally, and this shadow's soft edge was a real, measured
-// contributor to the leg/shoe region's still-high color count (found by
-// a critic's split-crop analysis after round 10 cleaned up the torso/
-// head but left the lower body untouched). Used for the character's own
-// ground shadow, which sits directly under the legs/feet.
-function pixelOval(cx,cy,rx,ry,color,alpha){
-  ctx.save();
-  if(alpha!=null) ctx.globalAlpha = alpha;
-  const rows = Math.max(1, Math.round(ry*2));
-  for(let i=0;i<rows;i++){
-    const y = Math.round(cy-ry) + i;
-    const t = (i - ry) / ry; // -1..1 across the oval's height
-    const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - t*t)) * 2);
-    if(w>0) R(Math.round(cx - w/2), y, w, 1, color);
-  }
-  ctx.restore();
+  requestAnimationFrame(tick);
 }
 
-// round 12: a critic-suggested silhouette isolation (diff a frame WITH the
-// character against one WITHOUT, at native 180x112 res — no crop, so no
-// background bleeds in) found the true character-only palette had already
-// come down to ~19 flat PAL tones (round 8-11's work holding up), but the
-// silhouette diff still carried ~25 EXTRA one-off colors, all in the warm-
-// dark family, all inside the ground-shadow ellipse. Root cause: pixelOval
-// (round 11) fixed the shadow's EDGE anti-aliasing, but the shadow itself
-// still used ctx.globalAlpha + PAL.shadowSoft — genuine alpha compositing,
-// which produces a NEW blended RGB for every distinct pixel it sits over.
-// The shadow sits on the floor, and the floor (round 9) deliberately varies
-// per-plank (4 tones + grain streaks + wear) — exactly the kind of varied
-// surface alpha blending is guaranteed to fragment into many near-unique
-// colors, one per floor pixel underneath. Same class of bug as every prior
-// round's fix (quad() antialiasing, sub-pixel translate, ctx.ellipse()):
-// a continuous/analog technique standing in for a discrete one. Fixed by
-// pixelOvalBanded below — two flat, pre-mixed, fully OPAQUE tones in
-// concentric radial bands, the same "discrete steps, not a blend" register
-// as bandedGlow/drawVignette use elsewhere in this file. Whatever floor
-// pixel sits underneath no longer matters: exactly 2 new colors, always.
-function pixelOvalBanded(cx,cy,rx,ry,colors){
-  const rows = Math.max(1, Math.round(ry*2));
-  for(let i=0;i<rows;i++){
-    const y = Math.round(cy-ry) + i;
-    const ty = (i - ry) / ry; // -1..1 across the oval's height
-    const w = Math.round(rx * Math.sqrt(Math.max(0, 1 - ty*ty)) * 2);
-    if(w<=0) continue;
-    const x0 = Math.round(cx - w/2);
-    for(let dx=0; dx<w; dx++){
-      const px = x0+dx;
-      const nx = (px-cx)/rx, ny = ty;
-      const dist = Math.sqrt(nx*nx + ny*ny); // ~0 center .. ~1 edge
-      const idx = Math.min(colors.length-1, Math.floor(dist*colors.length));
-      R(px,y,1,1,colors[idx]);
-    }
-  }
+function setState(next) {
+  state = next;
+  frameIdx = 0;
+  lastSwap = 0;
+  document.getElementById('btn-idle').classList.toggle('on', state === 'idle');
+  document.getElementById('btn-typing').classList.toggle('on', state === 'typing');
+  render();
 }
 
-// round 13: curved-silhouette primitives. A critic pass put the round-12
-// character next to sprite-Zale.png, character-Erlina_Compendium_Sprite_2.gif
-// and character-Brugaves_Compendium_Sprite_3.gif at matched scale and found
-// the palette/shading work (rounds 8-12) was real but irrelevant to the
-// biggest remaining gap: every reference builds its silhouette from soft,
-// curved, overlapping shapes (rounded hair lobes, a tapered torso, a bent
-// arm with a distinct hand) where this file built flat rectangles and hard
-// 90-degree corners throughout — "a blocky placeholder mascot" next to the
-// references' "rounded, anatomically-tapered chibi designs". These three
-// helpers are the curved equivalents of R()/diag3Shade(), same hard-pixel,
-// no-antialiasing discipline (scanline rasterization, not ctx.arc()/
-// ctx.fill(), which round 10 already proved silently reintroduces blended
-// edge colors regardless of imageSmoothingEnabled).
-function pixelBlob(cx,cy,r,color){
-  const rows = Math.max(1, Math.round(r*2));
-  for(let i=0;i<rows;i++){
-    const y = Math.round(cy-r) + i;
-    const ty = (i - r) / r;
-    const w = Math.round(r * Math.sqrt(Math.max(0, 1 - ty*ty)) * 2);
-    if(w<=0) continue;
-    R(Math.round(cx - w/2), y, w, 1, color);
-  }
-}
-// three-band shaded shape over an arbitrary per-row width — the trapezoid
-// (torso) and oval (head) below both reduce to "a width at every row, split
-// into lit/mid/shadow bands at given fractions of that row's own width",
-// so one function serves both instead of duplicating diag3Shade's per-row
-// loop for each shape.
-function rowShade3(y, rows, widthAt, splitAFracAt, splitBFracAt, colorLit, colorMid, colorShadow){
-  for(let row=0; row<rows; row++){
-    const w = Math.round(widthAt(row));
-    if(w<=0) continue;
-    const rowY = Math.round(y) + row;
-    const x0 = -Math.round(w/2); // caller's widthAt is centered on the shape's own cx=0 local axis
-    const aFrac = splitAFracAt(row), bFrac = splitBFracAt(row);
-    const aW = Math.max(0, Math.min(w, Math.round(w*aFrac)));
-    const bW = Math.max(aW, Math.min(w, Math.round(w*bFrac)));
-    if(aW>0) R(x0, rowY, aW, 1, colorLit);
-    if(bW>aW) R(x0+aW, rowY, bW-aW, 1, colorMid);
-    if(bW<w) R(x0+bW, rowY, w-bW, 1, colorShadow);
-  }
-}
-function trapWidthAt(wTop,wBot,rows){ return row => wTop + (wBot-wTop)*(row/(rows-1)); }
-function trap3Shade(cx,y,rows,wTop,wBot,aTop,aBot,bTop,bBot,colorLit,colorMid,colorShadow){
-  ctx.save(); ctx.translate(Math.round(cx),0);
-  const widthAt = trapWidthAt(wTop,wBot,rows);
-  rowShade3(y, rows, widthAt,
-    row => aTop + (aBot-aTop)*(row/(rows-1)),
-    row => bTop + (bBot-bTop)*(row/(rows-1)),
-    colorLit, colorMid, colorShadow);
-  ctx.restore();
-}
-function ovalShade(cx,cy,rx,ry,aFrac,bFrac,colorLit,colorMid,colorShadow){
-  ctx.save(); ctx.translate(Math.round(cx),0);
-  const rows = Math.max(1, Math.round(ry*2));
-  rowShade3(cy-ry, rows,
-    row => { const ty=(row-ry)/ry; return rx*Math.sqrt(Math.max(0,1-ty*ty))*2; },
-    () => aFrac, () => bFrac, colorLit, colorMid, colorShadow);
-  ctx.restore();
-}
-// round 18: a single hair "lock" — a small seam ring (pixelBlob at r+0.8 in
-// the hair's own darkest tone) drawn BEFORE the lock's real internally-
-// shaded fill (ovalShade at radius r). Where two locks sit apart, the ring
-// is simply overpainted by the next lock or the background and never
-// shows. Where two locks OVERLAP or sit edge-to-edge, the ring's sliver
-// that isn't covered by either lock's own fill stays visible as a thin
-// dark seam between them — the same "each independently outlined" read
-// the references get from tracing every spike separately, without this
-// file needing per-shape boolean geometry. Cheap, and matches how the
-// character's own outlinePass() already reuses "stamp wide, fill on top."
-function hairLock(cx,cy,r,colorLit,colorMid,colorShadow,rimEdge){
-  pixelBlob(cx,cy,r+0.8,PAL.hairDeep);
-  ovalShade(cx,cy,r,r,0.42,0.76,colorLit,colorMid,colorShadow);
-  // round 19: a critic pixel-sampled the scene and found the shadow-side
-  // locks' own tones sat only ~15-20 points per channel below the dark
-  // wall/vignette behind them — below the threshold that reads as a
-  // visible seam, independent of how correctly the seam-ring geometry
-  // was drawn. Raising the hairShadow/hairDeep floor (this PAL change)
-  // is a partial fix; the decisive one, her own suggested alternative,
-  // is a thin rim-light edge — the SAME cool-monitor-rim convention
-  // already used on the torso/head (see those PAL.rim call sites) —
-  // along a shadow-side lock's own outer edge, so its silhouette reads
-  // against the dark backdrop even where the fill tone alone is close
-  // to the wall's own value. Optional per-lock: the two already-
-  // confirmed-legible lit locks (A/B) don't need it.
-  if(rimEdge) R(Math.round(cx-r*0.75),Math.round(cy-r*0.6),1,1,PAL.rim);
-}
-// flat (single-tone) trapezoid fill — for silhouette-only shapes (the neck)
-// and for the outline-stamp pass below.
-function trapFill(cx,y,rows,wTop,wBot,color){
-  ctx.save(); ctx.translate(Math.round(cx),0);
-  const widthAt = trapWidthAt(wTop,wBot,rows);
-  for(let row=0; row<rows; row++){
-    const w = Math.round(widthAt(row));
-    if(w<=0) continue;
-    R(-Math.round(w/2), Math.round(y)+row, w, 1, color);
-  }
-  ctx.restore();
-}
-// round 13: the old outline pass expanded each part's bounding RECT by 1px
-// — correct for flat rectangles, wrong for anything curved (a circle's
-// bounding-box outline is a square, not a ring). Standard pixel-art trick
-// instead: stamp every silhouette shape in outline color at each of the 8
-// surrounding 1px offsets (a "thick brush" pass), THEN draw every shape's
-// real fill at zero offset on top — whatever the real fills don't cover
-// (the true 1px rim around the shapes' union) stays outline-colored;
-// everywhere the real fills DO reach is fully overwritten. Works for any
-// mix of shapes (rects, trapezoids, blobs) drawn as a union, unlike the
-// per-rect expand which only ever hugged axis-aligned boxes.
-const OUTLINE_OFFSETS = [[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
-function outlinePass(shapes){
-  for(const [dx,dy] of OUTLINE_OFFSETS){
-    for(const s of shapes){
-      if(s.k==='r') R(s.x+dx, s.y+dy, s.w, s.h, PAL.outline);
-      else if(s.k==='trap') trapFill(s.cx+dx, s.y+dy, s.rows, s.wTop, s.wBot, PAL.outline);
-      else if(s.k==='blob') pixelBlob(s.cx+dx, s.cy+dy, s.r, PAL.outline);
-    }
-  }
-}
+document.getElementById('btn-idle').addEventListener('click', () => setState('idle'));
+document.getElementById('btn-typing').addEventListener('click', () => setState('typing'));
 
-function bandedGlow(cx,cy,r,rgb,steps){
-  ctx.save(); ctx.globalCompositeOperation='lighter';
-  cx=Math.round(cx); cy=Math.round(cy);
-  for(let i=0;i<steps;i++){
-    const outerR = r*(steps-i)/steps;
-    const innerR = r*(steps-i-1)/steps;
-    const a = 0.07 + (i/(steps-1))*0.38;
-    ctx.beginPath();
-    ctx.arc(cx,cy,outerR,0,Math.PI*2);
-    ctx.moveTo(cx+innerR,cy);
-    ctx.arc(cx,cy,innerR,0,Math.PI*2,true);
-    ctx.closePath();
-    ctx.fillStyle = `rgba(${rgb},${a.toFixed(2)})`;
-    ctx.fill('evenodd');
-  }
-  ctx.restore();
-}
-
-// round 9: the wall and floor previously read as ONE continuous brick-grid
-// material top to bottom (same warm-tan fill, same uniform-spaced grid
-// lines on both) — a critic named this as "no floor at all," the biggest
-// remaining gap. The wall is rebuilt as a distinct plaster/panel surface
-// (cool dark tone, sparse irregular panel seams, no brick lattice) so it
-// reads as a different material from the floor's warm wood-plank grain
-// below, with a real baseboard band at the seam — the corner the mission
-// text asks for, not a single undifferentiated backdrop.
-function drawBackWall(){
-  const rnd = seeded(3);
-  R(0,0,W,26,PAL.wallDeep);
-  R(0,0,W,20,PAL.wallMid);
-  // sparse, irregular panel seams (wide spacing, low contrast, no grid) —
-  // a plaster/panel wall reads nothing like the floor's plank lattice
-  let x = 6;
-  while(x < W){
-    R(x,0,1,20,'rgba(0,0,0,.14)');
-    x += 22 + Math.floor(rnd()*14);
-  }
-  // baseboard/skirting kick band: a distinct dark trim right at the
-  // wall-floor seam, with its own top highlight and bottom shadow edge —
-  // this is what makes the eye read a corner instead of one flat plane
-  R(0,20,W,6,PAL.wallTrim);
-  R(0,20,W,1,PAL.baseboardHi);
-  R(0,25,W,1,PAL.baseboard);
-}
-
-// round 15: cool night skyline (was a warm dusk gradient with amber-lit
-// windows — read as a cozy tavern view, not a city ops floor) plus a new
-// venetian-blind silhouette across the pane. Blinds are the single most
-// legible "office/agency, not fantasy inn" cue a window can carry at this
-// resolution — every FBI-office / surveillance-thriller establishing shot
-// leans on the same slat-shadow motif — and they let a few blade-gaps of
-// the cool cyan skyline show through rather than blocking the view outright.
-function drawWindow(){
-  const wx=126, wy=4, ww=42, wh=22;
-  R(wx-3,wy-3,ww+6,wh+6,PAL.winFrame);
-  // night sky gradient (banded, pixel-style) — cool navy to slate, no warmth
-  R(wx,wy,ww,7,PAL.skyTop);
-  R(wx,wy+7,ww,7,PAL.skyMid);
-  R(wx,wy+14,ww,wh-14,PAL.skyLow);
-  // skyline silhouette
-  R(wx+2,wy+13,6,9,PAL.winDark);
-  R(wx+9,wy+9,5,13,PAL.winDark);
-  R(wx+15,wy+15,7,7,PAL.winDark);
-  R(wx+24,wy+7,6,15,PAL.winDark);
-  R(wx+31,wy+12,8,10,PAL.winDark);
-  // lit windows — cool cyan, not warm amber (an agency skyline at night, not
-  // a village at dusk)
-  R(wx+10,wy+11,1,1,PAL.winLit); R(wx+25,wy+9,1,1,PAL.winLit); R(wx+26,wy+13,1,1,PAL.winLit);
-  R(wx+32,wy+15,1,1,PAL.winLit); R(wx+3,wy+16,1,1,PAL.winLit);
-  // pane crossbars
-  R(wx+ww/2-1,wy,1,wh,PAL.winFrame); R(wx,wy+wh/2-1,ww,1,PAL.winFrame);
-  // venetian blinds: horizontal slats over the whole pane, each with a 1px
-  // dark shadow line under it, leaving a narrow gap between slats so the
-  // skyline still reads through — half-open, the standard office convention
-  for(let sy=wy+1; sy<wy+wh; sy+=3){
-    R(wx,sy,ww,1,PAL.blindSlat);
-    ctx.fillStyle='rgba(0,0,0,.30)'; ctx.fillRect(wx,sy+1,ww,1);
-  }
-  // pull-cord: a single 1px vertical line down the near edge, the detail
-  // that reads "physical blind object" rather than a repeating shadow tile
-  R(wx+ww-4,wy,1,wh,'rgba(0,0,0,.22)');
-}
-
-// round 9: rebuilt against screenshot-AI_Core_Request.png's own wood floor
-// — irregular plank widths, per-plank tonal variation (not two colors
-// alternating on a grid), grain running the length of each board, and
-// wear concentrated where a body actually scuffs (in front of the desk,
-// under the character), not a uniform random scatter. The old version's
-// uniform 18px stagger read as a generated tile; this one doesn't repeat.
-function drawFloor(){
-  const rnd = seeded(7);
-  const tones = [PAL.floorA, PAL.floorB, PAL.floorC, PAL.floorD];
-  R(0,26,W,H-26,PAL.floorA);
-  for(let y=26;y<H;y+=6){
-    R(0,y+5,W,1,PAL.floorSeam); // row seam (the long grain line of each course)
-    // irregular board widths per row, offset so seams never line up
-    // between adjacent rows — no repeating grid
-    let x = -Math.floor(rnd()*10);
-    let toneIdx = Math.floor(rnd()*tones.length);
-    while(x < W){
-      const bw = 11 + Math.floor(rnd()*11); // 11-21px, irregular
-      const tone = tones[toneIdx % tones.length];
-      toneIdx += 1 + Math.floor(rnd()*2); // never repeat the same neighbor tone
-      R(x,y,bw,5,tone);
-      R(x,y,1,5,PAL.floorSeam); // board end seam
-      // directional grain: short streaks running the length of the board,
-      // not isolated dots — this is the single biggest tell that separates
-      // "painted material" from "generated tile" per the reference
-      const streaks = 1 + Math.floor(rnd()*2);
-      for(let s=0;s<streaks;s++){
-        const gy = y + 1 + Math.floor(rnd()*3);
-        const gx = x + 2 + Math.floor(rnd()*Math.max(1,bw-6));
-        const gw = 2 + Math.floor(rnd()*4);
-        R(gx,gy,Math.min(gw,x+bw-gx-1),1,PAL.floorGrain);
-      }
-      x += bw;
-    }
-  }
-  // localized wear: scuff patches where a body actually stands/scrapes —
-  // in front of the desk's kick line and directly under the character —
-  // instead of the old uniform random speckle across the whole floor
-  function wearPatch(cx,cy,rw,rh,density){
-    for(let i=0;i<density;i++){
-      const x = cx + Math.floor((rnd()-0.5)*rw*2);
-      const y = cy + Math.floor((rnd()-0.5)*rh*2);
-      if(x>=0 && x<W && y>=27 && y<H) R(x,y,1,1,PAL.wear);
-    }
-  }
-  wearPatch(90,50,40,6,26);  // worn strip along the desk's front kick
-  wearPatch(90,95,16,10,20); // scuffed patch under the character's feet
-}
-
-function drawRug(){
-  const rx=40, ry=64, rw=78, rh=36;
-  R(rx,ry,rw,rh,PAL.rugMid);
-  R(rx,ry,rw,3,PAL.rugEdge);
-  R(rx,ry,3,rh,PAL.rugEdge);
-  R(rx+rw-3,ry,3,rh,PAL.rugDark);
-  R(rx,ry+rh-3,rw,3,PAL.rugDark);
-  // inner border line
-  R(rx+5,ry+5,rw-10,rh-10,'rgba(0,0,0,0)');
-  ctx.strokeStyle = PAL.rugHi; ctx.lineWidth=1;
-  ctx.strokeRect(rx+5.5,ry+5.5,rw-11,rh-11);
-}
-
-function drawDesk(){
-  const dx=44, dy=27, dw=94, dh=18;
-  // contact shadow: anchors the desk to the floor/rug beneath it — round 8
-  // had the desk reading as floating with no grounding cast shadow, same
-  // gap named on the character
-  ctx.fillStyle = PAL.shadowSoft;
-  ctx.fillRect(dx+3, dy+dh-1, dw-6, 3);
-  // front face (shadow side, lower)
-  R(dx+2,dy+dh-8,dw-4,10,PAL.deskFrontDeep);
-  R(dx+2,dy+dh-8,dw-4,3,PAL.deskFront);
-  // top face
-  R(dx,dy,dw,dh-8,PAL.deskTop);
-  R(dx,dy,dw,3,PAL.deskTopHi);
-  ditherH(dx,dy+3,dw,PAL.deskTopHi,PAL.deskTop);
-  R(dx,dy,2,dh-8,PAL.deskEdge);
-  ditherRect(dx+2,dy+dh-9,dw-4,2,PAL.deskTop,PAL.deskFront); // top→front dithered seam
-  // wood grain lines on top
-  for(let x=dx+8;x<dx+dw-6;x+=11) R(x,dy+4,1,dh-14,'rgba(0,0,0,.14)');
-  // front edge highlight
-  R(dx+2,dy+dh-8,dw-4,1,PAL.deskEdge);
-}
-
-function drawLampGlowUnder(lx,ly){
-  // round 9: shrunk from r=52 — at the old radius this pool reached nearly
-  // every corner of a 112px-tall canvas and additively washed the wall and
-  // floor toward the same flat value, which is a real part of why they read
-  // as one undifferentiated surface. Pulled in so it stays a light POOL,
-  // not a wash over the whole room.
-  // round 15: recolored warm amber (255,225,150) -> cool white-blue LED
-  // (200,230,255), matching the retheme's swap of the desk lamp from a
-  // warm bulb to a cool task light — the banded-ring TECHNIQUE (discrete
-  // steps, not a smooth blur) is unchanged, only the hue.
-  bandedGlow(lx,ly,36,'200,230,255',6);
-}
-
-// round 15: a second, independent light source — a cool-white ceiling
-// downlight over the desk, the boss's own named cue ("briefing-room
-// downlight... not just the existing warm desk lamp"). Cast as a tight,
-// sharp-edged cone (a narrow top, wider at the desk) rather than a soft
-// radial pool like the lamp/monitor glows — a technical spot reads as
-// harder-edged and more directional than an ambient bulb, which is also
-// the "modern shading and lighting" cue (sharper, more directional light
-// than a torch-lit fantasy scene) named in the same verdict. Drawn as
-// stacked banded trapezoid rings (same discrete-step discipline as
-// bandedGlow, no ctx.arc()) so it stays pixel-hard, not a CSS-style beam.
-function drawDownlight(cx, topY, botY, topW, botW){
-  const rows = botY - topY;
-  const bands = [
-    {a:.05, o:6}, {a:.09, o:4}, {a:.14, o:2}, {a:.20, o:0},
-  ];
-  for(const band of bands){
-    for(let row=0; row<rows; row++){
-      const t = row/(rows-1);
-      const w = Math.round((topW + (botW-topW)*t)) + band.o*2;
-      const y = topY + row;
-      ctx.save(); ctx.globalCompositeOperation='lighter';
-      ctx.fillStyle = `rgba(210,235,255,${band.a})`;
-      ctx.fillRect(Math.round(cx-w/2), y, w, 1);
-      ctx.restore();
-    }
-  }
-}
-
-function drawLamp(){
-  const lx=62, ly=27; // base sits on the desk top (y27), shade rises into the wall
-  R(lx-1,ly-10,2,10,PAL.lampPole);
-  R(lx-6,ly-18,12,8,PAL.lampShadeOut);
-  R(lx-5,ly-17,10,5,PAL.lampShadeIn);
-  R(lx-2,ly-15,4,3,PAL.lampBulb);
-}
-
-function drawMonitor(flicker){
-  const mx=106, my=9, mw=26, mh=18; // bezel base sits on the desk top (y27)
-  R(mx-2,my-2,mw+4,mh+4,PAL.monBezel);
-  R(mx-2,my-2,mw+4,2,PAL.monBezelHi);
-  R(mx+mw/2-4,my+mh,8,5,PAL.monBezel); // stand
-  R(mx+mw/2-7,my+mh+4,14,2,PAL.monBezel);
-  const scr = flicker ? (Math.floor(Date.now()/90)%2===0 ? PAL.screenType1 : PAL.screenType2) : PAL.screenIdle;
-  R(mx,my,mw,mh,scr);
-  R(mx,my,mw,3,flicker?PAL.screenType2:PAL.screenIdleHi);
-  ditherH(mx,my+3,mw,flicker?PAL.screenType2:PAL.screenIdleHi,scr);
-  // scanlines
-  for(let y=my;y<my+mh;y+=3) R(mx,y,mw,1,'rgba(0,0,0,.16)');
-  // screen glow spill on desk (banded, not a smooth analog gradient) —
-  // round 15: brightened/cooled toward the new cyan screen tone so the
-  // monitor reads as a real second KEY light (per the boss's own cue),
-  // not just a faint accent under the lamp's now-cool pool
-  bandedGlow(mx+mw/2,my+mh+6,22,'95,210,255',5);
-}
-
-function drawPlant(){
-  const px=12, py=62;
-  R(px+2,py+22,16,10,PAL.potPotA);
-  R(px+2,py+22,16,3,PAL.potPotB);
-  R(px+4,py,4,24,PAL.potA); R(px+10,py-4,4,28,PAL.potB); R(px+14,py+2,4,22,PAL.potA);
-  R(px+9,py-2,3,10,PAL.potHi);
-}
-
-function drawShippingCard(){
-  // small mission-slip prop sitting on the desk (calibrates the mockup's
-  // existing card-on-desk convention, i10, at this art fidelity) — round 15:
-  // recolored from a bright gold card to a muted manila case-file, the one
-  // deliberate warm accent left in an otherwise cool room (a labeled file
-  // folder is a legitimate, on-theme single warm note in a spy-HQ scene,
-  // same as how the reference screenshots build a whole room around one
-  // small warm pool) — desaturated so it reads as "one accent," not a
-  // leftover from the old warm palette
-  R(78,29,14,9,'#8a8060');
-  R(78,29,14,2,'#a89a70');
-  R(80,32,10,1,'rgba(0,0,0,.25)'); R(80,34,7,1,'rgba(0,0,0,.25)');
-  R(80,36,5,1,'rgba(0,0,0,.20)'); // a third redacted-looking line — case-file detail
-}
-
-// ---- character (procedural, quantized to the pixel grid, hard-outlined,
-// three-tone shading per surface — original design, no reference traced) ----
-function drawCharacter(t, typing){
-  const bob = typing ? 0 : Math.sin(t/500)*0.6;
-  const cx = 90, cy = 68 + bob; // stands just south of the desk's front edge (y47)
-
-  ctx.save();
-  // round 10: was a fractional ctx.translate() (cy carries the idle
-  // breathing bob, a continuous sine wave) — canvas fillRect anti-aliases
-  // against the device pixel grid whenever the CURRENT TRANSFORM has a
-  // sub-pixel offset, even for perfectly axis-aligned rects with
-  // already-rounded local coordinates (R()'s own Math.round only snaps
-  // the shape's LOCAL numbers, not the accumulated transform). This was
-  // quietly anti-aliasing every single shape in the character, every
-  // frame the bob wasn't exactly on a whole pixel — a much bigger,
-  // whole-character source of stray blended tones than the two diagonal
-  // boundaries fixed above. Snapping the translate itself to the pixel
-  // grid keeps the breathing motion (now steps between whole-pixel
-  // offsets rather than drifting sub-pixel) while making every shape
-  // underneath genuinely hard-edged again.
-  ctx.translate(Math.round(cx), Math.round(cy));
-
-  // ground shadow — enlarged and pulled up 2px from round 8 (its ry=3.4
-  // ellipse at local y42 sat almost entirely past the canvas bottom edge
-  // once translated, clipping away most of it; this is a named part of
-  // why the character read as floating rather than standing on a floor).
-  // Round 11: rebuilt as a hard-edged pixelOval — the old ctx.ellipse()
-  // fill anti-aliased its own soft edge, which a critic's split-crop
-  // analysis found was a real, measured contributor to the leg/shoe
-  // region still carrying extra colors after round 10 cleaned up the
-  // torso/head alone. Round 12: pixelOval's EDGE was fixed but its FILL
-  // was still ctx.globalAlpha over PAL.shadowSoft — alpha blending against
-  // the floor's own varying per-plank tone/grain/wear, fragmenting into a
-  // long tail of near-unique colors (found via a direct silhouette-diff
-  // measurement, not a visual guess). pixelOvalBanded replaces it with two
-  // flat, pre-mixed, fully opaque tones — no blend, no dependency on
-  // what's underneath.
-  pixelOvalBanded(0, 40, 15, 4, [PAL.shadowFlatOuter, PAL.shadowFlatInner]);
-
-  // typing: forearms bend in toward a low front-center "keyboard" gesture
-  // (not just a wiggle at the sides) and the head dips 1px toward the
-  // screen — the two states need to differ on the character itself, not
-  // only in the monitor's screen content (named gap: animation life)
-  const tap = Math.floor(t/220)%2===0;
-  const headDip = typing ? 1 : 0;
-
-  // round 13: silhouette/shape-language rebuild. A critic put the round-12
-  // character (palette work only) directly next to sprite-Zale.png,
-  // character-Erlina_Compendium_Sprite_2.gif and character-Brugaves_
-  // Compendium_Sprite_3.gif at matched scale and found the real gap was
-  // never palette — it was shape: every reference builds its silhouette
-  // from soft, curved, overlapping forms (rounded hair lobes, a tapered
-  // torso, a bent arm ending in a distinct hand, a rounded jaw with a
-  // visible neck) where rounds 0-12 built flat rectangles and hard 90°
-  // corners throughout, plus a critic-caught, still-uncorrected proportion
-  // claim in this file's own citation text ("~4-5 heads vs the mockup's
-  // ~2.5" — false; Zale measures ~2.4 heads, every bit as chibi as this
-  // sprite already was). This round targets exactly the five shapes named:
-  // hair (curved lobes, not stepped blocks), neck+jaw (a real gap and a
-  // rounded chin, not head flush on collar), torso (tapered shoulder-to-
-  // waist, not one straight-sided rect), arms (a bent elbow and a rounded
-  // hand, not a flat skin-tone rectangle), face (a nose chip + brow, not
-  // two dots and a line). Built with the new curved-shape helpers above
-  // (pixelBlob/trap3Shade/ovalShade/trapFill) — same hard-pixel, no-
-  // antialiasing discipline as every rect before them, just not limited to
-  // rects anymore.
-
-  // ---- outline pass: every silhouette shape (rects AND the new curved
-  // trapezoids/blobs) stamped at 8 surrounding offsets, then the real
-  // fills below draw on top — see outlinePass()'s own comment for why this
-  // replaces the old per-rect "expand 1px" approach (which only ever
-  // hugged axis-aligned boxes, never a curve). ----
-  const shapes = [];
-  shapes.push({k:'r',x:-8,y:26,w:7,h:15}); shapes.push({k:'r',x:1,y:26,w:7,h:15}); // legs (unchanged — not a named gap)
-  shapes.push({k:'trap',cx:0,y:2,rows:23,wTop:21,wBot:15}); // torso, tapered shoulder->waist
-  shapes.push({k:'trap',cx:0,y:-1,rows:3,wTop:7,wBot:8}); // neck — the gap between head and collar the critic named missing entirely
-  shapes.push({k:'blob',cx:0,cy:-10,r:8.5}); // head, round not rectangular
-  // round 15: HAIRCUT REBUILD. The boss's fresh verdict named the old
-  // silhouette directly ("hair has no distinct and realistic haircut") even
-  // after round 13's fix from 4 hard spikes to 4 same-size round lobes —
-  // that read as generic "mop" hair, symmetric blobs with no cut LOGIC.
-  // Real short professional hair (the FBI/agency register the same verdict
-  // asks for) reads through an asymmetric side part: a fuller swept volume
-  // on one side, a tight tapered "fade" on the other, not four equal lumps.
-  // Built as: one larger swept crown mass + one forward fringe lobe on the
-  // lit (screen-left) side, ONE smaller lobe plus a straight-edged rect
-  // taper on the shadow (screen-right) side — mixing a curved blob with a
-  // hard rect for the fade is deliberate: a razor-fade's OWN edge is
-  // straight, unlike the rest of the head, and that contrast is what reads
-  // as "a cut" instead of "a growth".
-  // round 18: SIX INDEPENDENT LOCKS. A critic pass on round 17 confirmed
-  // the per-lock internal banding (that round's own target) was real and
-  // closed, then found the next-deeper gap: the SILHOUETTE was still one
-  // continuous crown/cap outline with 3-4 large tonal zones living inside
-  // it, where sprite-Zale.png's hair is built from 5-6 independently
-  // outlined spike/lock shapes, each its own highlight-to-shadow run. The
-  // fix is shape count, not tone — six small blobs fanned across the top
-  // of the head instead of three large ones, replacing round 13-17's
-  // crown/fringe/shadow-lobe trio.
-  shapes.push({k:'blob',cx:-6,cy:-19,r:3.4}); // lockA, leftmost, lit side
-  shapes.push({k:'blob',cx:-3,cy:-23,r:3.6}); // lockB, crown peak, tallest
-  shapes.push({k:'blob',cx:1,cy:-25,r:3});    // lockC, top tuft
-  shapes.push({k:'blob',cx:4,cy:-22,r:3.2});  // lockD, upper-right
-  shapes.push({k:'blob',cx:6,cy:-18,r:2.8});  // lockE, rightmost, shadow side
-  shapes.push({k:'blob',cx:-2,cy:-18,r:3});   // lockF, lower-center, fills the forehead gap
-  shapes.push({k:'r',x:4,y:-19,w:4,h:7});    // straight-edged fade taper at the temple
-  if(typing){
-    shapes.push({k:'r',x:-14,y:5,w:5,h:9}); shapes.push({k:'r',x:9,y:5,w:5,h:9}); // upper arms, unbent (shoulder-fixed)
-    shapes.push({k:'r',x:-13,y:14+(tap?0:1),w:6,h:7}); shapes.push({k:'r',x:7,y:14+(tap?1:0),w:6,h:7}); // forearms bend in
-    shapes.push({k:'blob',cx:-9,cy:23+(tap?0:1),r:2.6}); shapes.push({k:'blob',cx:9,cy:23+(tap?1:0),r:2.6}); // hands
-  } else {
-    shapes.push({k:'r',x:-14,y:5,w:5,h:9}); shapes.push({k:'r',x:9,y:5,w:5,h:9}); // upper arm
-    shapes.push({k:'r',x:-13,y:14,w:5,h:8}); shapes.push({k:'r',x:8,y:14,w:5,h:8}); // forearm, offset 1px in from the elbow — the bend the critic asked for
-    shapes.push({k:'blob',cx:-10,cy:23,r:2.6}); shapes.push({k:'blob',cx:10,cy:23,r:2.6}); // hands — a rounded silhouette where round 0-12 had none
-  }
-  outlinePass(shapes);
-
-  // ---- legs (left lit, right shadow — same convention as the rest) ----
-  R(-8,26,7,15,PAL.pantsMid);
-  R(1,26,7,15,PAL.pantsShadow);
-  ditherRect(-1,26,2,15,PAL.pantsMid,PAL.pantsShadow);
-  // broad texture clusters, reusing the two existing pant tones only (no
-  // new palette entries) — matching the same whole-plane-texture
-  // discipline applied to the torso/skin in round 10, kept lighter here
-  // since flat-leg-block is already close to the references' own minimal
-  // pant treatment
-  patchDither(-8,26,7,15,PAL.pantsShadow,24,2);
-  patchDither(1,26,7,15,PAL.pantsMid,25,2);
-  R(-8,38,7,3,PAL.shoe); R(1,38,7,3,PAL.shoe);
-
-  // ---- neck: a flat mid-tone fill (small, low-contrast, deliberately not
-  // a shading focal point) — its whole job is to exist as a visible gap
-  // between the jaw and the collar, the single biggest structural miss the
-  // critic named ("the delivered head sits flush on the collar with no
-  // neck gap"). ----
-  trapFill(0,-1,3,7,8,PAL.skinMid);
-
-  // ---- torso (shirt): now a genuine trapezoid (shoulders wider than
-  // waist), not a straight-sided rectangle — "every reference tapers
-  // shoulder-to-waist... a clear waist pinch even under bulky clothing".
-  // Shading keeps the same lamp-left (wide lit field) / monitor-right
-  // (narrow cool rim) convention every round since 6 has used, just
-  // expressed as width FRACTIONS per row (trap3Shade) instead of absolute
-  // x-offsets (diag3Shade), since the row width itself now changes. ----
-  trap3Shade(0,2,23,21,15, 0.68,0.60, 0.86,0.80, PAL.shirtHi, PAL.shirtMid, PAL.shirtShadow);
-  // round 16: a discrete highlight PATCH, not just a wider lit band. A
-  // critic pass on round 15 found the torso "reads as one broad soft
-  // light-to-shadow blend running left to right... not the references'
-  // discrete flat-tone material blocking," naming character-Brugaves_
-  // Compendium_Sprite_3.gif's jacket specifically: "3-4 hard-edged flat
-  // color regions with a clean highlight patch, not a gradient." The
-  // three-band trap3Shade above already IS discrete (hard per-row rects,
-  // no blend) — the "soft" read came from the bands sitting too close in
-  // value (fixed this round in PAL: shirtShadow darkened, shirtHi
-  // brightened, wider steps) plus nothing on the surface breaking the
-  // band shape itself. This adds that break: a small square of the
-  // brightest tone in the whole file (shirtPatch, pure white) sitting
-  // fully inside the lit band near the collar — a fold/seam catching the
-  // downlight straight-on — the same "one small square patch reads as
-  // fabric" trick the reference actually uses, not a bigger gradient.
-  R(-7,4,3,3,PAL.shirtPatch);
-  // round 15: a short rim-light accent at the shoulder — first attempt ran
-  // this as a continuous full-height 1px stripe down the whole silhouette
-  // edge and it read as a scan-line/glitch cutting across the face and
-  // hair once rendered, not a highlight (caught by re-checking the actual
-  // render, not just the code). A real rim light is a SMALL bright catch
-  // where the surface turns sharpest toward the key light — one shoulder
-  // point, not a ruler line — so this is now 2px, top of the shoulder only.
-  R(-11,3,1,2,PAL.rim);
-  // broad clustered texture across the whole lit and shadow planes — the
-  // references (Zale's cloak, Erlina's skirt) carry irregular multi-tone
-  // clusters through the entire shaded area, not just a boundary seam
-  patchDither(-10,2,13,23, PAL.shirtMid, 21, 5);
-  patchDither(-1,2,11,23, PAL.shirtShadow, 22, 4);
-  R(-3,2,6,4,PAL.trim); // collar
-  trapFill(0,23,2,16,15,PAL.trim); // belt line, follows the taper down at the waist
-  // round 15: tie + ID badge on lanyard — the thematic reframe's cheapest,
-  // most legible read at this resolution ("agents get briefed and go on
-  // missions... think FBI, bureau des legendes"): a plain shirt reads as
-  // any office; a knotted tie plus a badge card reads specifically as
-  // credentialed agency staff. Tie sits dead-center at the collar,
-  // independent of the lamp/monitor lit-shadow split (a tie hangs flat,
-  // it doesn't turn with the torso's taper) with its own small knot
-  // highlight; badge clips to the shirt on the lit side, angled slightly
-  // per how a real lanyard card hangs off-center.
-  R(-1,4,2,3,PAL.tieShadow); trap3Shade(0,7,10,3,2,0.3,0.2,0.7,0.6,PAL.tieHi,PAL.tieMid,PAL.tieShadow);
-  R(-1,5,1,1,PAL.tieHi); // knot catch-light
-  R(2,10,1,1,PAL.lanyard); R(2,11,1,3,PAL.lanyard); // lanyard cord, lit side
-  R(1,13,4,3,PAL.badgeCard); R(1,13,4,1,PAL.badgeStripe); R(2,15,2,1,PAL.badgeStripe); // ID card + photo stripe
-  // single-pixel specular fleck on the near shoulder — the reference sprites
-  // always carry one bright catch-light per major surface, not just a flat
-  // light-side/dark-side split
-  R(7,4,1,1,PAL.specular);
-
-  // ---- arms: left (lamp side) stays the lit mid tone, right (monitor
-  // side) carries the cool shadow — same lamp-left/monitor-right logic as
-  // the torso and face. Now genuinely bent (forearm offset in from the
-  // upper arm, not a single straight rectangle shoulder-to-wrist) and
-  // ending in a rounded hand blob instead of stopping flat — "references
-  // all show a bent, rounded limb with a distinct hand/glove silhouette",
-  // named as one of the five biggest single misses. ----
-  if(typing){
-    R(-14,5,5,9,PAL.shirtMid); R(9,5,5,9,PAL.shirtShadow); // upper arms, shoulder-fixed
-    R(-13,14+(tap?0:1),6,7,PAL.shirtMid); R(7,14+(tap?1:0),6,7,PAL.shirtShadow); // forearms bend toward the keyboard
-    pixelBlob(-9,23+(tap?0:1),2.6,PAL.skinMid); pixelBlob(9,23+(tap?1:0),2.6,PAL.skinMid); // hands, alternating tap cadence
-  } else {
-    R(-14,5,5,9,PAL.shirtMid); R(9,5,5,9,PAL.shirtShadow); // upper arm
-    R(-13,14,5,8,PAL.shirtMid); R(8,14,5,8,PAL.shirtShadow); // forearm, 1px elbow bend inward
-    pixelBlob(-10,23,2.6,PAL.skinMid); pixelBlob(10,23,2.6,PAL.skinMid); // rounded hands, resting at the sides
-  }
-
-  // ---- head: an oval, not a rectangle — "references show a visible neck
-  // taper and a rounded chin curve" where the old head was "a rectangle
-  // with corners". Same lamp-left/monitor-right shading convention as
-  // ever, now via ovalShade's per-row width instead of a fixed rect. ----
-  ctx.save(); ctx.translate(0, headDip);
-  ovalShade(0,-10,8,9, 0.62,0.80, PAL.skinHi, PAL.skinMid, PAL.skinShadow);
-  patchDither(-8,-18,10,17, PAL.skinMid, 23, 3); // a few broad texture clusters, not just a seam
-  // round 15: same small-catch rim-light logic as the torso (see that
-  // comment — a full-height stripe read as a glitch line the first time
-  // this was tried) — one bright point at the cheekbone, where the head's
-  // curve turns sharpest toward the lamp, not a ruled edge down the face
-  R(-7,-10,1,1,PAL.rim);
-  // warm cheek tint sits on the LIT side only (asymmetric, not mirrored)
-  R(-5,-9,2,2,PAL.skinCheek);
-  // round 16: a genuine highlight PATCH above the cheek tint (skinHi, the
-  // same bright tone the nose bridge uses) — the cheek tint alone is a
-  // color wash, not a plane change; pairing it with a brighter patch just
-  // above the cheekbone is what reads as the cheekbone's own highlight
-  // catching the lamp, structure rather than a rosy dot
-  R(-6,-11,1,1,PAL.skinHi);
-  // eyes: a tinted iris + a distinct near-black pupil + one catchlight
-  // pixel strictly brighter than the surrounding skin, offset upper-left
-  // to agree with the established lamp-left key light
-  R(-4,-11,2,2,PAL.iris); R(2,-11,2,2,PAL.iris);
-  R(-4,-10,1,1,PAL.eye); R(3,-10,1,1,PAL.eye); // pupils, lower in the iris block
-  R(-4,-11,1,1,PAL.catchlight); R(2,-11,1,1,PAL.catchlight); // shine, upper-left
-  // round 15: EXPRESSION. The boss's fresh verdict named this directly —
-  // "face has no expression" — even after eyes/nose/brow existed since
-  // round 8/13. A flat horizontal brow bar reads as neutral no matter how
-  // sharp the rest of the shading is; a real expression needs the two brows
-  // to sit at DIFFERENT angles/heights, not mirrored. Built a focused,
-  // slightly furrowed look (reads as "agent concentrating on a briefing",
-  // matching the thematic reframe, not a blank stare): the near (lit) brow
-  // angled down-and-in toward the nose bridge via two stacked offset
-  // pixels, the far (shadow) brow sitting a pixel higher and flatter — an
-  // asymmetric pair, not a copy-pasted mirror.
-  R(-5,-14,2,1,PAL.browShadow); R(-3,-13,1,1,PAL.browShadow); // near brow: angled down toward the nose
-  R(2,-14,3,1,PAL.browShadow); // far brow: level, slightly higher — asymmetric from the near one
-  R(-3,-12,1,1,PAL.browLine); // a single furrow pixel between the brows — the concentration cue
-  // nose: a shadow chip plus a thin highlight edge (not just a flat shadow
-  // block) — "references all carry a nose highlight or shadow chip"
-  R(-1,-9,1,3,PAL.skinShadow);
-  R(-2,-9,1,2,PAL.skinHi); // bridge highlight, lamp side
-  // round 16: JAW/CHEEK STRUCTURE. A critic pass on round 15 found the face
-  // "close to a single flat skin tone plus the new brow/nose/mouth
-  // linework; there's not yet the cheek/jaw modeling (a highlight patch +
-  // a shadow patch reading actual facial structure) that both Erlina and
-  // Zale show." The existing skinCheek dot (below) is a warm TINT, not
-  // structure — it doesn't read as a plane change. Added: a distinct jaw
-  // shadow chip (a new jawShadow tone, warmer/darker than skinShadow so it
-  // doesn't fight the lamp/monitor lit-shadow split) along the shadow-side
-  // jawline, where the head's curve turns under toward the neck — the
-  // concrete cue that separates "a shape with a face painted on it" from
-  // "a face with an actual jaw."
-  R(3,-6,2,1,PAL.jawShadow); R(4,-5,1,1,PAL.jawShadow);
-  // mouth: a slight downward set at the shadow-side corner (asymmetric,
-  // same register as the brows) instead of one flat centered line — a
-  // focused, closed-mouth set rather than a slack neutral line
-  R(-1,-4,2,1,'rgba(0,0,0,.35)'); R(1,-4,1,1,'rgba(0,0,0,.30)'); R(2,-3,1,1,'rgba(0,0,0,.22)');
-
-  // ---- hair: round 15 haircut rebuild (see the shapes-list comment above
-  // for the full rationale). Fills follow the same lamp-left(lit)/monitor-
-  // right(shadow) convention as the rest of the character, but now carry a
-  // real CUT: a swept crown + fringe on the lit side, a short fade on the
-  // shadow side, and a hard 1px part line separating them — the part line
-  // is the single detail that reads "styled haircut" rather than "hair-
-  // shaped blob" at this resolution. ----
-  // round 17: PER-LOCK TONAL BANDING. A fresh critic pass on round 16
-  // (which added hairStrand as a handful of 1-2px accent marks) found
-  // that was the wrong FIX for the right diagnosis: "the build's hair is
-  // still the wrong technique, not just insufficient quantity of the
-  // right one — round 16 treated this as 'add more highlight pixels,'
-  // but the actual gap is that the shadow/mid tones themselves need to
-  // carry the strand geometry." Her own zoomed reference check:
-  // sprite-Zale.png and character-Erlina_Compendium_Sprite_2.gif build
-  // hair entirely from tonal bands that follow EACH lock's own shape —
-  // a shadow rim, a mid-tone body, a bright highlight running down the
-  // center — not a flat mass with accents on top. That is exactly what
-  // rounds 9-10 already did for the floor and torso (hard per-row bands
-  // replacing a flat/gradient fill); hair just hadn't received the same
-  // treatment yet.
-  //
-  // Every lock below is now shaded internally with ovalShade — the same
-  // helper the head itself already uses, just applied per-lock instead
-  // of once per shape (ovalShade(cx,cy,rx,ry,...) degenerates cleanly to
-  // a circular blob when rx===ry, so no new geometry helper was needed).
-  // Each lock keeps a DIFFERENT dominant tone from its neighbors (crown
-  // vs. fringe vs. shadow-lobe) so the four-lock composition from round
-  // 13 still reads as distinct locks, not one melted mass — but each
-  // lock's own fill is now itself a lit/mid/shadow gradient following
-  // the same lamp-left convention as everywhere else on the character,
-  // not a single flat color.
-  // round 18: SIX INDEPENDENT LOCKS. A critic pass on round 17 confirmed
-  // the per-lock internal banding (round 17's own target) was real and
-  // closed, then found a deeper gap in her own zoomed comparison: the
-  // hair SILHOUETTE was still one continuous crown/cap outline holding
-  // 3-4 large tonal zones, where the references build hair from 5-6
-  // independently-outlined spike/lock shapes, each its own highlight-to-
-  // shadow run. Replaced the crown/fringe/shadow-lobe trio (rounds 13-17)
-  // with six smaller locks fanned across the head, drawn back-to-front
-  // (shadow side first, lit side last) so the lit locks nearest the lamp
-  // sit visually on top — each via hairLock(), which stamps a small
-  // hairDeep seam ring before its own internally-shaded fill, so locks
-  // that touch or overlap read as separately outlined without any new
-  // per-shape geometry code.
-  hairLock(6,-18,2.8,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep,   true); // lockE, rightmost, shadow side — darkest, rim edge added
-  hairLock(4,-22,3.2,  PAL.hairMid,  PAL.hairShadow, PAL.hairDeep,   true); // lockD, upper-right, rim edge added
-  hairLock(1,-25,3,    PAL.hairHi,   PAL.hairMid,    PAL.hairShadow, true); // lockC, top tuft, rim edge added
-  hairLock(-2,-18,3,   PAL.hairHi,   PAL.hairMid,    PAL.hairShadow, true); // lockF, lower-center, rim edge added
-  hairLock(-3,-23,3.6, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);          // lockB, crown peak — brightest, already legible, no rim needed
-  hairLock(-6,-19,3.4, PAL.hairHi2,  PAL.hairHi,     PAL.hairMid);          // lockA, leftmost, lit side — already legible, no rim needed
-  R(4,-19,4,7,PAL.hairFade);          // straight-edged fade taper — flat, tight, unshaded (a razor fade has almost no visible tonal range, unlike the locks above it)
-  patchDither(4,-19,4,7,PAL.hairShadow,26,2); // a few close-cropped texture flecks, not a smooth fill
-  // part line: a single hard diagonal seam where the crown locks meet the
-  // fade, drawn in the darkest hair tone — this is the one line that turns
-  // "a rounded mass" into "a side part"
-  R(1,-24,1,3,PAL.hairDeep); R(2,-21,1,3,PAL.hairDeep); R(3,-18,1,2,PAL.hairDeep);
-  R(-7,-22,1,1,PAL.specular); // catch-light on lockA, lamp-side
-  ctx.restore(); // end head-dip translate
-
-  ctx.restore();
-}
-
-function drawVignette(){
-  // banded (stepped) frame darken instead of a smooth analog gradient — a
-  // handful of nested inset rings, each one flat tone darker outward, the
-  // same discrete-step logic as the lamp/screen glow above.
-  ctx.save(); ctx.globalCompositeOperation='multiply';
-  const rings = 5;
-  for(let i=0;i<rings;i++){
-    const inset = i*3;
-    const a = 0.10 + i*0.05;
-    ctx.fillStyle = `rgba(4,2,2,${a.toFixed(2)})`;
-    ctx.fillRect(0,inset,W,1); ctx.fillRect(0,H-1-inset,W,1);
-    ctx.fillRect(inset,0,1,H); ctx.fillRect(W-1-inset,0,1,H);
-  }
-  ctx.restore();
-}
-
-let mode = 'idle';
-function frame(t){
-  ctx.clearRect(0,0,W,H);
-  drawBackWall();
-  drawWindow();
-  drawFloor();
-  drawRug();
-  drawPlant();
-  drawDesk();
-  drawShippingCard();
-  drawMonitor(mode==='typing');
-  // round 10: the lamp glow now draws BEFORE the character (it used to sit
-  // after, additively bleeding its 'lighter'-blend rings onto the
-  // character's own fills). That bleed was a real, measured contributor to
-  // the color-count gap a critic named (character-only crops with the glow
-  // still on top counted noticeably more distinct colors than with it
-  // removed) — the character's own diagonal lit/shadow split already
-  // models "receiving lamp light" deliberately; the room's ambient glow
-  // doesn't need to double-dip on top of it. Drawing the character opaque
-  // on top keeps the glow lighting the room/desk/floor around the
-  // silhouette without touching the character's own palette.
-  drawLampGlowUnder(60,26);
-  // round 15: briefing-room ceiling downlight — a second, sharper cool
-  // source hitting the desk/character from directly above, independent of
-  // the lamp's corner pool. Drawn before the character so it lights the
-  // desk/floor around the silhouette without touching the character's own
-  // opaque fills (same ordering rule round 10 established for the lamp glow).
-  drawDownlight(90, 0, 27, 10, 34);
-  drawCharacter(t, mode==='typing');
-  drawLamp();
-  drawVignette();
-  requestAnimationFrame(frame);
-}
-requestAnimationFrame(frame);
-
-document.getElementById('btn-idle').addEventListener('click', ()=>{
-  mode='idle';
-  document.getElementById('btn-idle').classList.add('on');
-  document.getElementById('btn-typing').classList.remove('on');
+Promise.all([
+  fetch('office-sample-assets/frames.json').then(r => r.json()),
+  new Promise((resolve, reject) => {
+    atlasImg.onload = resolve;
+    atlasImg.onerror = reject;
+    atlasImg.src = 'office-sample-assets/atlas.png';
+  })
+]).then(([frames]) => {
+  FRAMES = frames;
+  atlasReady = true;
+  render();
+  requestAnimationFrame(tick);
+}).catch(err => {
+  document.getElementById('about').innerHTML = '<p style="color:#ff8080">Failed to load atlas/frames — ' + err + '</p>';
 });
-document.getElementById('btn-typing').addEventListener('click', ()=>{
-  mode='typing';
-  document.getElementById('btn-typing').classList.add('on');
-  document.getElementById('btn-idle').classList.remove('on');
-});
+
+render();
 
 document.getElementById('about').innerHTML = `
-<p><b>Round 19 of a deliberately open-ended loop</b> — the boss's standing instruction on this mission: "assume the references win — they are shipped professional game art; the job is closing the distance round after round, not declaring arrival." This page is a snapshot of that loop, not a finished piece; every round has been judged by a fresh critic against the actual files in <code>projects/bureau/references/office/</code>. Summary of what's changed and why so far, by reference file:</p>
-<p><b>Round 19 (hair, shadow-lock contrast)</b>: a critic pass on round 18 confirmed the two lit-side locks read as genuinely distinct spikes, then pixel-sampled the scene and found WHY the four shadow-side locks (C/D/E/F) didn't: their own tones sat only ~15-20 points per channel below the dark wall/vignette behind them — a value-contrast problem underneath the geometry fix, not a residual geometry problem, regardless of how correctly each lock's seam ring was drawn. Did both of her two suggested fixes rather than betting on either alone: raised the hairShadow/hairDeep floor (kept strictly below hairMid so the lit&gt;mid&gt;shadow ordering within each lock still holds), and added a thin rim-light edge — the same cool-monitor-rim convention already used on the torso/head — along each shadow-side lock's own outer edge, so its silhouette reads against the dark backdrop even where the fill tone alone is close to the wall's value. The two already-legible lit locks (A/B) were left untouched.</p>
-<p><b>Round 18 (hair, silhouette lock count)</b>, against <b>sprite-Zale.png</b>: a critic pass on round 17 confirmed the per-lock internal banding that round built was real and closed, then found the gap one level deeper: the hair silhouette was still one continuous crown/cap outline holding 3-4 large tonal zones, where the reference's hair is built from 5-6 independently outlined spike/lock shapes, each with its own highlight-to-shadow run. Replaced the crown/fringe/shadow-lobe trio (rounds 13-17) with six smaller locks fanned across the top of the head, each drawn with a new <code>hairLock()</code> helper — a small seam ring in the hair's darkest tone stamped before the lock's own internally-shaded fill, so locks that touch or overlap read as separately outlined without any new per-shape boolean geometry. Locks are drawn shadow-side first, lit-side last, so the lamp-lit locks nearest the face sit visually on top of the shadow-side ones behind them.</p>
-<p><b>Round 17 (hair, technique not quantity)</b>, against <b>sprite-Zale.png</b> and <b>character-Erlina_Compendium_Sprite_2.gif</b>: a fresh critic pass on round 16 found its fix — adding a handful of 1-2px hairStrand accent pixels — was the wrong shape of fix for the right diagnosis: "the build's hair is still the wrong technique, not just insufficient quantity of the right one... the actual gap is that the shadow/mid tones themselves need to carry the strand geometry," the same restructuring rounds 9-10 already gave the floor and torso (hard per-row bands replacing a flat/gradient fill), just never applied to hair. Rebuilt every hair lock (crown, fringe, shadow-lobe) with the existing <code>ovalShade</code> helper — already used for the head itself, and it degenerates cleanly to a circular blob when its two radii are equal, so no new geometry code was needed — giving each lock its own internal lit/mid/shadow gradient along the same lamp-left convention as the rest of the character, instead of one flat fill per lock. Each lock kept a distinct dominant tone from its neighbors (a new <code>hairHi2</code> peak-highlight and <code>hairDeep</code> shadow-rim tone were added at the bright/dark ends) so the four-lock composition from round 13 still reads as separate locks, not a single melted mass, while each lock individually now carries the tonal range the references show.</p>
-<p><b>Round 16 (shading detail/resolution)</b>, against <b>character-Zale_Running.gif</b>, <b>sprite-Zale.png</b>, <b>character-Erlina_Compendium_Sprite_2.gif</b> and <b>character-Brugaves_Compendium_Sprite_3.gif</b>: a critic pass on round 15 credited the thematic reframe and expression/haircut work as real, then confirmed round 15's own honest deferral — the boss's first-listed craft item, shading detail/resolution, was still live. Three concrete misses, each independently re-checked against a named reference: <b>hair</b> read as "one near-flat dark mass with a single highlight pixel" against Zale's/Erlina's 3+ distinct tones with directional strand streaks — added short hard strokes in a new mid-bright <code>hairStrand</code> tone following the crown's own sweep direction, between the existing hairHi/hairMid values so they read as light catching individual locks rather than a second competing highlight patch; <b>shirt/jacket</b> read as "one broad soft light-to-shadow blend" against Brugaves' "3-4 hard-edged flat color regions with a clean highlight patch, not a gradient" — the three-band shading was already discrete (hard per-row rects, no blend) but the bands sat too close in value, so widened the steps (shirtShadow darkened, shirtHi brightened) and added a small pure-white highlight patch at the collar fold, the same "one small square patch reads as fabric" convention the reference itself uses; <b>face</b> had "a single flat skin tone plus brow/nose/mouth linework... not yet the cheek/jaw modeling" both references show — added a distinct jaw-shadow chip (a new <code>jawShadow</code> tone, warmer than the ambient skinShadow so it reads as structure, not just the lamp/monitor split) and a genuine highlight patch above the existing cheek tint (the tint alone was a color wash, not a plane change). Silhouette-diff palette count: 35 (round 15 was 32) — a small, expected, and named increase from adding real tonal detail on the specific axis this round targeted, not a regression; still close to the references' own 27-33 whole-sprite range.</p>
-<p><b>Round 15 (the boss's fresh verdict — craft gap + thematic reframe)</b>: after round 14 raised gate to boss, the boss's 2026-08-16T09:32 send-back named two distinct, binding things (recorded in full on the mission's own "## Bar addendum"). <b>Craft</b>: shading still isn't at the references' detail/resolution, the face carried no expression, and the hair read as no distinct/realistic haircut — all three addressed this round without touching the palette-discipline or shape-language work rounds 8-14 already closed. <b>Thematic reframe</b> (new, binding on every later office build too, not just this sample): "Bureau" carries the double meaning of a spy agency's headquarters — agents get briefed and go on missions, register FBI-office / "Le Bureau des Legendes" (the DGSE-officers show), not a fantasy-adventurer guild hall — with a cool pixel-16-bit aesthetic and modern shading/lighting, reconciled against the Sea of Stars craft bar by keeping its pixel-art TECHNIQUE (banded light, hard pixel edges, multi-tone material blocking) while pulling the palette/mood toward a cool-toned register with sharper, more directional light. <b>What changed, concretely</b>: (1) the entire environment palette re-picked cool — graphite-blue walls, slate floor tile, charcoal mat, a cool-cyan night skyline behind new venetian blinds (the single most legible "agency office, not tavern" cue a window can carry) — while the character's own skin tone stayed warm by design (a face split into an unrelated hue reads as a rendering glitch, not lighting, so only the room's palette pivots); (2) the warm desk lamp's glow recolored to a cool white-blue LED, and a brand-new ceiling <b>downlight</b> added over the desk — a sharp-edged, banded cone distinct in both shape and hue from the corner lamp's soft pool, the boss's own named cue ("briefing-room downlight... not just the existing warm desk lamp"); (3) a hard 1px <b>rim-light</b> strip added along the character's lit-side silhouette on both the torso and head, riding on top of the existing three-band shading rather than replacing it — a crisp technical highlight is the concrete difference between the references' soft painterly banding and the "modern shading" the verdict separately asked for; (4) the shirt recolored from a teal top to a white dress shirt with a knotted <b>tie</b> and an <b>ID badge on a lanyard</b> — the cheapest, most legible "credentialed agency staff" read at this resolution; (5) the <b>haircut</b> rebuilt from round 13/14's four same-size round lobes (which still read as a generic mop, not a cut) into an asymmetric side part — a fuller swept crown/fringe on the lit side, a short straight-edged fade taper on the shadow side, and a hard part-line seam between them, the one detail that reads "styled" rather than "hair-shaped blob"; (6) the <b>face</b> gained real expression — the two brows now sit at different angles/heights (the near one angled down toward the nose, the far one level and higher) with a single furrow pixel between them, plus a nose bridge highlight and an asymmetric, slightly downturned mouth, replacing the flat mirrored brow-bar-plus-line that a fresh-eyes critic had credited as present but neutral. Palette-discipline and shape-language (rounds 8-14) were re-checked, not re-touched: the silhouette-diff measurement, environment recolors aside, still isolates the same character-only shape and tone-count structure those rounds established.</p>
-<p><b>Round 12 (the ground shadow's alpha blend)</b>: round 11's critic named a methodology gap, not a fresh visual defect — a bounding-box crop of the character necessarily includes real scene background (wall, lamp glow, rug edge) in the gaps around limbs, so comparing a full-scene crop's color count directly against an isolated reference sprite's count has a floor no character-only cleanup can close, and she suggested a true silhouette isolation instead (render with vs. without the character, diff the two, count colors only where they differ — no crop, no background contamination). Built exactly that as a measurement tool this round: the true silhouette diff came back at 44 distinct colors, and breaking it down by frequency showed the character's own flat PAL tones were already down to ~19 (rounds 8–11 holding up, genuinely close to <b>sprite-Zale.png</b>'s 28 and <b>character-Erlina_Compendium_Sprite_2.gif</b>'s 27) — but a tail of ~25 near-unique low-count colors, every one in the same warm-dark family, sat entirely inside the ground-shadow ellipse. Root cause: round 11's <code>pixelOval</code> fixed the shadow's anti-aliased EDGE, but its FILL still used <code>ctx.globalAlpha</code> over a single semi-transparent tone (<code>PAL.shadowSoft</code>) — genuine alpha compositing, which produces a new blended RGB for every distinct pixel underneath, and the floor underneath deliberately varies (round 9's four plank tones plus grain streaks plus wear). Same class of bug as every prior round's fix in this file (an analog/continuous technique standing in for a discrete one) — quad()'s anti-aliased fill, the sub-pixel translate, ctx.ellipse()'s soft edge, now the alpha blend itself. Fixed with a new <code>pixelOvalBanded</code> helper: two flat, pre-mixed, fully <i>opaque</i> tones in concentric radial bands, the same "discrete steps, not a blend" register <code>bandedGlow</code> and the frame vignette already use elsewhere in this file — whatever floor pixel sits underneath no longer matters, exactly 2 new colors, always. Re-measured with the identical silhouette-diff method: <b>44 → 33 distinct colors</b>, now inside the references' own 27–33 range for a whole sprite. Residual, named rather than chased further this round: ~3 one-off colors where the frame vignette's multiply-blend rings happen to overlap the shadow at the canvas's bottom edge (the shadow sits close to <code>H</code>); small (≤20px each), a plausible next-round target, not attempted here so this round stays independently judgeable against the one gap it targets.</p>
-<p><b>Round 13 (silhouette / shape language)</b>, against <b>sprite-Zale.png</b>, <b>character-Erlina_Compendium_Sprite_2.gif</b>, and <b>character-Brugaves_Compendium_Sprite_3.gif</b>: a critic put the round-12 character next to all three at matched pixel-grid scale and found the real gap was never palette — every prior round (8–12) had worked the character's colors while the underlying SHAPE stayed a union of flat rectangles and hard 90° corners, where every reference builds its silhouette from soft, curved, overlapping forms. The critic also caught a still-uncorrected claim in this very citation panel's earlier text ("references run ~4-5 heads vs. the mockup's ~2.5, out of scope to match") — false: Zale measures roughly 2.4 heads tall, exactly as chibi as this sprite already was; the real mismatch was never proportion, just shape language. Five concrete misses were named and addressed this round: <b>hair</b> — replaced 4 hard rectangular spikes with 4 overlapping rounded lobes (a new <code>pixelBlob</code> helper: filled circles rasterized scanline-by-scanline, same no-antialiasing discipline as every other shape in this file, never <code>ctx.arc()</code>); <b>neck</b> — the head previously sat flush on the collar with zero gap; added a small tapered neck fill between them; <b>torso</b> — was one straight-sided rectangle top to bottom; rebuilt as a genuine trapezoid (shoulders wider than waist) via a new <code>trap3Shade</code> helper that generalizes the existing <code>diag3Shade</code> to a per-row-width shape instead of a fixed-width rect; <b>arms</b> — were flat rectangles with no elbow and no hand; added a 1px inward bend at the elbow and a rounded hand (<code>pixelBlob</code> again) at the end of each forearm; <b>face</b> — added a single nose-shadow chip below the eyes (the old face had eyes and a mouth line only, no nose, against every reference's own nose highlight/shadow at this same resolution). The head itself is now an oval (<code>ovalShade</code>, the same per-row-width generalization applied to an ellipse) instead of a rectangle, for the rounded jaw/cranium curve the critic named directly. The old per-rect "expand 1px" outline pass couldn't hug any of these curved shapes, so it's replaced by <code>outlinePass()</code>: every silhouette shape (rects, trapezoids, blobs alike) is stamped in outline color at each of the 8 surrounding pixel offsets as a union, then the real fills draw on top — whatever the fills don't cover stays outline-colored, giving a true 1px silhouette rim around curves the same way the old approach did for boxes. Palette discipline carries forward unaffected: the same silhouette-diff measurement used in round 12 reads 31 distinct colors on this round's character (was 33), still inside the cited references' 27–33 whole-sprite range.</p>
-<p><b>Round 14 (a regression fix — the eyes)</b>: a critic pass on round 13 credited the shape rebuild as real and substantial, then caught something the round's own closing note never mentioned: the face had no eyes at all, on either pose, verified by a high-zoom crop of the exact eye-line region showing zero iris/pupil/catchlight pixels anywhere. Root cause, found by sampling the actual rendered pixel colors at the eye coordinates rather than re-reading the draw calls: round 13's new hair lobes (<code>pixelBlob(0,-17,8,...)</code> and siblings) were large enough to reach down to local <code>y=-9</code>, past the eyes at <code>y=-11/-10</code>, and since hair draws <i>after</i> the face in the paint order, it silently overpainted both eyes every frame — the eye-draw calls themselves were untouched and correct, just invisible under hair. Fixed by shrinking and lifting all four hair lobes so the lowest one's bottom edge sits at <code>y=-13</code>, flush with the browline and clear of the eyes above it, in both the outline-pass shape list and the real fills (they'd drifted out of sync would have reintroduced exactly this class of bug). Verified by directly reading the rendered pixel data at the eye coordinates before and after the fix (zero eye-colored pixels found before; the iris, pupil, and catchlight colors all present and pixel-counted correct afterward, not just eyeballed) — the same discipline the critic herself used to catch it, not just a visual glance. Palette count: 34 (round 13's 31 plus the eye colors that were always part of the design and are now visible again), a small, expected, and legitimate increase from restoring a real missing feature rather than a fresh regression — still close to the cited references' 27–33 range.</p>
-<p><b>The single biggest structural change</b>: round 0 drew smooth vector shapes with CSS-style soft gradients — no pixel grid at all, so it never read as pixel art regardless of palette. This build renders onto a real low-resolution internal canvas (180×112) with image-smoothing off, scaled up 5× with <code>image-rendering: pixelated</code>, so every shape lands on a hard pixel boundary the way the reference sprites are actually built.</p>
-<p><b>screenshot-AI_Core_Request.png</b> and <b>motion-Campfire_Break.gif</b>: drove the lighting model — a warm point-light (the desk lamp) rendered as discrete non-overlapping banded rings (not a smooth analog gradient, which a critic pass flagged as reading like a CSS box-shadow rather than retro lighting), plus a banded frame vignette. Both references sit almost fully in shadow outside one or two warm light pools; this scene does the same rather than round 0's flat, evenly-lit floor.</p>
-<p><b>character-Brugaves_Compendium_Sprite_3.gif</b> and <b>character-Erlina_Compendium_Sprite_2.gif</b>: drove the character's shading technique through several corrections. First pass: three flat color bands (shadow/mid/highlight) — a critic caught that this was still two mirrored flat fields meeting at a hard seam down the character's own centerline (through the nose, zipper, belt buckle), reading as "folded in half" no matter how the colors were chosen. Fixed by cutting the light/shadow boundary as a genuine diagonal polygon (wide at the shoulder/brow, narrower at the hip/chin) instead of a vertical split. A second, adversarial critic then caught that the shadow tone had drifted into an unrelated purple/mauve hue, and that the lit/shadow sides were backwards relative to the room's own visible light sources (warm lamp at screen-left, cool monitor at screen-right). Fixed: shadow recolored to stay in the warm skin-tone family, and lit/shadow sides swapped consistently across face, torso, arms, hair, and legs so screen-left (lamp) is the wide lit field and screen-right (monitor) carries a narrow cool shadow rim — verified afterward by direct pixel/hue sampling, not just visual impression. The hard 1px silhouette outline, gold collar trim, and chibi proportion (head ≈ torso height) are also drawn from this reference. Character design (teal shirt, dark hair) is original, not traced from any reference silhouette or palette.</p>
-<p><b>Animation life</b> (i6, docs/protocol.md): idle and typing were originally near-identical on the character (only the monitor screen content differed) — a critic named this a real gap against the reference sheet, where every pose reads its action through limb silhouette. Fixed: typing now bends both forearms in to a low front-center hands-together gesture with a 2-frame tap cadence, plus a 1px head-dip toward the screen; idle keeps arms at the sides with a slow ±0.6px breathing bob.</p>
-<p><b>screenshot-Ancient_Crypt_Altar.png</b> / <b>screenshot-Botanical_Horror_Nourish.png</b>: looked at for general depth-of-shadow calibration; less directly transferable to a desk corner (dungeon/altar scenes), so they didn't drive a specific named change beyond reinforcing "shadows go near-black, not just darker-gray."</p>
-<p><b>sprite-H.png</b>: a 20×32px icon, too small to read shading technique from; noted rather than silently skipped.</p>
-<p><b>Round 8 (eyes)</b>, against <b>character-Erlina_Compendium_Sprite_2.gif</b> and the party sprites in <b>screenshot-AI_Core_Request.png</b>: the eyes were still a flat neutral-gray sclera block (<code>#8f8f8d</code>) under a black dot — a "dead doll stare" next to the references' two-tone tinted-iris-plus-shine convention. Rebuilt as a tinted steel-blue iris, a distinct near-black pupil, and one catchlight pixel strictly brighter than the surrounding skin, offset upper-left to agree with the lamp-left key light established in round 6; the fused brow/lid block was also split into a separate browline shadow. The next gap after this one has not been named yet — the loop continues.</p>
-<p><b>Round 9 (the floor)</b>: three independent critic passes on round 8 converged on the same underlying problem from different angles. The most structural: the wall (0–26px) and floor (26–112px) were technically two different fill colors in code but read as ONE continuous brick-lattice backdrop — same grid-line style, close warm-tan values, and a lamp glow wide enough (r=52) to wash both toward the same flat hue. A critic cropped the character's feet and found no floor plane, no wall/floor seam, no cast shadow anywhere in frame. Rebuilt against <b>screenshot-AI_Core_Request.png</b>'s own wood floor specifically: irregular plank widths (11–21px, was a uniform 18px stagger), per-plank tonal variation across four tones instead of two alternating globally, directional grain streaks running each board's length instead of isolated random dots, and wear concentrated where a body actually scuffs — in front of the desk's kick line and under the character's feet — instead of scattered uniformly. Added a distinct baseboard/kick band at the wall-floor seam so the eye reads a corner. Shrunk the lamp glow (r=52→36) so it stays a light pool instead of washing the room to one hue. Added real cast shadows: the character's ground-shadow ellipse was enlarged and pulled 2px up from round 8 (it had been sitting almost entirely past the canvas's bottom edge, clipped away), and the desk now casts its own contact shadow onto the floor/rug beneath it — round 8 had both reading as floating.</p>
-<p><b>Quick mechanical fix, same round</b>: the outline color was 11 distinct near-black shades with no single dominant value (a critic's direct pixel count) against the references' single committed pure-(0,0,0)-black outline. Forced to true pure black throughout; verified by direct pixel sampling after the fix (272/3300 sampled pixels in a character crop are exactly (0,0,0), zero near-black drift).</p>
-<p><b>Round 10 (palette/shading discipline)</b>: two independent critic passes on round 9 both re-derived the same gap by direct pixel count — the character's shading was built from a fine multi-step gradient (233–328 distinct colors in a character crop) standing in for real pixel-art color-blocking, where <b>sprite-Zale.png</b> and <b>character-Erlina_Compendium_Sprite_2.gif</b> use exactly 27 total colors each in their whole image. Root-caused rather than just re-flattened by hand: (1) the torso and head's diagonal light/shadow boundaries were drawn with <code>ctx.fill()</code> on a polygon (<code>quad()</code>) — canvas path fills anti-alias regardless of <code>imageSmoothingEnabled</code> (that flag only governs <code>drawImage</code> scaling, not path fills), quietly blending dozens of in-between shades along every diagonal edge; (2) far bigger: the character's own <code>ctx.translate()</code> carried the idle breathing bob as a continuous fractional value (<code>Math.sin(t/500)*0.6</code>), and canvas <code>fillRect</code> anti-aliases against the device pixel grid whenever the CURRENT TRANSFORM has a sub-pixel offset — even for already-integer-rounded local rectangles — so nearly every shape in the character was being softly blended, every frame the bob wasn't exactly on a whole pixel. Fixed both: replaced the two diagonal <code>quad()</code> fills with a new <code>diag3Shade</code> helper that rasterizes the same three bands (lit / base-mid / narrow shadow rim) as hard per-row rects; rounded the character's translate to the nearest whole pixel (the breathing motion now steps between integer offsets rather than drifting sub-pixel — more authentic to pixel-art animation, not less). Also added <code>patchDither</code>, broad clustered texture scattered across whole shaded planes (shirt, skin) rather than boundary-only dithering, matching how Zale's cloak and Erlina's skirt/hair actually carry texture through their entire shaded area. Also moved the lamp's ambient glow to draw <i>before</i> the character instead of after (it was additively bleeding its own extra shades onto the character's opaque fills; the character's own lit/shadow split already models "receiving lamp light" deliberately). Measured before/after on the same tight crop: 126 → 30 distinct colors in the torso+head region — most of the residual 30 are the maroon rug, desk, and floor bleeding into the crop's background corners (verified by matching each value against the file's own PAL constants), not remaining character noise.</p>
-<p><b>Round 11 (the lower body)</b>: a critic's split-crop analysis of round 10 found the reduction hadn't reached everywhere — round 10 was explicitly scoped to "the torso and head's diagonal light/shadow boundaries," and the legs/pants/boots region, left untouched, still measured as many colors as the upper body had before its fix (an even 60/60 upper/lower split in her crop, rather than the lopsided count a real upper-body-only fix should produce). Root-caused rather than assumed: the legs themselves are already just two flat rects (minimal palette on their own), so the remaining color count traced to the character's own ground-shadow ellipse (<code>ctx.ellipse()</code>/<code>fill()</code>), which sits directly under the legs and anti-aliases its soft edge exactly like round 10's <code>quad()</code> boundaries did — confirmed directly: removing the ellipse and re-measuring the same leg/shoe crop dropped the count from 55 to 34 on its own. Rebuilt as a new <code>pixelOval</code> helper: the same shadow shape, rasterized as stacked hard-edged rows instead of a curved path fill. Also added light <code>patchDither</code> texture to both pant legs, reusing the two existing pant tones only (no new palette entries), for the same whole-plane-texture consistency as round 10's shirt/skin work. Measured on the same leg/shoe crop coordinates: 55 → 38 distinct colors.</p>
-<p>The floor's plank pattern, the rug's shaded border, the desk's distinct top/front face split with a dithered seam, the shoulder's chamfered torso→arm step, and the dithered checkerboard transitions on pants/hair carry forward unchanged from earlier rounds.</p>
-<p><b>Confirmed nothing shipped is a reference asset</b>: every pixel drawn here comes from <code>ctx.fillRect</code>/canvas path calls in this file's own script — no image, sprite sheet, or font file is loaded from disk or network. Grepped this file for every filename in <code>projects/bureau/references/office/</code> and for "Sea of Stars": zero matches outside this citation prose.</p>
+<p><b>Direction change, mid-loop.</b> Rounds 1-19 on this mission hand-drew every pixel on an HTML canvas, judged round after round against the Sea of Stars craft references under <code>projects/bureau/references/office/crops/</code> and the root scene captures. On 2026-08-16T13:12 the boss ruled THE LAW amended (t-54 log): the boss-generated sheets under <code>references/office/</code> (<code>scenes/</code>, <code>props/</code>, <code>cast/</code>, <code>fx/</code> — 31 sheets, style-locked, his own pick) are <b>owned source material</b>, not look-only references. From round 20 on, builders <b>extract</b> — cut, clean, quantize, atlas — instead of redrawing what a sheet already covers. Redrawing available material is now an automatic send-back. Sea of Stars stays reference/craft-calibration-only and still never ships.</p>
+
+<p><b>What this round actually is.</b> Every pixel in <code>office-sample-assets/atlas.png</code> is a direct crop from <code>projects/bureau/references/office/cast/sheet-agent-anims-a.jpg</code> and <code>sheet-agent-anims-b.jpg</code> — no canvas fillRect, no hand-authored shading, no redrawn silhouette. The prior 19 rounds' entire drawing engine was deleted this round; the page now loads a small atlas PNG plus a frame table (<code>office-sample-assets/frames.json</code>) and plays it back — the "data-driven animation, frame tables played by a runtime renderer" convention from t-54's engine-outcomes ruling, now for real rather than as an aspiration.</p>
+
+<p><b>Per-source citations (extraction fidelity: candidate vs. exact sheet region, matched zoom):</b></p>
+<ul>
+<li><b>Typing loop (3 frames):</b> <code>cast/sheet-agent-anims-a.jpg</code>, row 2 ("AGENT TYPING LOOP" label baked into the sheet itself), grid cells at column index 1, 2, 3 of that sheet's 8&times;3 176&times;256 grid, cropped x=176-704 / y=321-512 in the 1408&times;768 source — the row's top 65px is trimmed off (was y=256-512) because it carried a bleeding leg/foot fragment from the walk row directly above: the sheet's own row spacing overlaps slightly, a known artifact (PROMPTS.md's own flaw note on this sheet), not something the crop introduced. This is the exact desk unit the boss generated: chair, desk, CRT monitor, and the seated agent, together, already in one continuous piece of art — nothing about the desk was separately sourced or invented.</li>
+<li><b>Idle loop (2 frames):</b> <code>cast/sheet-agent-anims-b.jpg</code>, row 2 (front-facing standing loop), grid cells at column index 1, 2 of the same 8&times;3 layout, same crop bounds and same leg-bleed trim as the typing sheet (x=176-528, y=321-512). Same character design as the typing sheet (short hair, waistcoat, rolled sleeves, tie) confirmed by side-by-side comparison before cropping.</li>
+<li><b>Floor lamp prop:</b> <code>cast/sheet-agent-anims-b.jpg</code>, row 3 (the back-facing loop), the lit lamp standing beside the sheet's own last back-facing frame (native crop x=1168-1232, y=540-768).</li>
+<li><b>Wall terminal prop:</b> <code>cast/sheet-agent-anims-a.jpg</code>, the small wall-mounted keypad/CRT centered above the row boundary between the walk row and the typing row (native crop x=490-635, y=0-90).</li>
+</ul>
+
+<p><b>Cleanup pass (not a redraw):</b> every crop above went through a JPEG-ringing despeckle (mode filter) and a 40-color median-cut palette quantize before a 3x nearest-neighbor upscale — repairing JPEG smear and flattening shading into real discrete bands, exactly the "repair JPEG-smeared edges, quantize palette" step THE LAW's pipeline names. No new pixel content was introduced; every output pixel maps to one of the source photo's own sampled colors. Measured: source crops carried 10,000-14,000 distinct JPEG-compression colors each (grepped with PIL's <code>getcolors()</code>); each cleaned frame now uses exactly 40.</p>
+
+<p><b>Composition, not redraw:</b> the three extractions (desk unit, standing figure, lamp, wall terminal) are laid out on one canvas at fixed screen coordinates (see <code>layout()</code> in this page's own script) to read as a single corner. That layout decision — where each extracted piece sits on screen — is original; the pixels inside each piece are not.</p>
+
+<p><b>Named gap for the next round:</b> there is a visible hard color seam down the middle of the stage where the character crop (from <code>sheet-agent-anims-a/b.jpg</code>'s cooler teal grading) meets the lamp/wall-terminal crop (a slightly warmer grey grading from the same two sheets' other rows). Both halves are genuine extractions, but the two source rows weren't lit identically, so butting their backgrounds edge-to-edge reads as two rooms stitched together rather than one continuous corner. Fixing this the extraction way (not by repainting) is next round's job: either crop tighter so less of each prop's own background rides along, feather/matte the seam, or find a same-row prop to pair with the character instead of reaching across rows.</p>
+
+<p><b>Open interpretation, flagged rather than assumed:</b> no sheet in the current set shows this character seated at the desk <i>without</i> typing (every "at desk" frame on the sheet already has hands mid-keystroke), so there is no owned-source "idle-at-desk" pose to extract. Mapping <code>idle</code> → the sheet's own standing-away-from-desk loop and <code>typing</code> → the sheet's own seated loop follows the actual verb split in <code>docs/protocol.md</code> (idle is idle, editing types) rather than forcing a desk-bound idle pose that would have to be invented. If the critic reads this as needing a genuine "seated, not typing" extraction instead, that's the next round's target — raising it here rather than picking silently.</p>
+
+<p><b>Mechanical floors, self-checked:</b></p>
+<ul>
+<li>Shades per material ramp: &ge;4 (40-color quantize per frame, well above the floor).</li>
+<li>Light direction: single, consistent — inherited whole from the source photo, not recomposited from multiple lit elements.</li>
+<li>Pure-black fill outlines: none found — sampled the darkest outline pixels in the cleaned typing frame; darkest quantized tone is a near-black slate (not (0,0,0)), consistent with the source art's own outlining, not injected by the cleanup pass.</li>
+<li>Idle and typing actually animate on this served page: yes — <code>requestAnimationFrame</code> loop swaps frames per <code>frames.json</code>'s <code>durationMs</code> (650ms/frame idle, 220ms/frame typing), not a static image.</li>
+<li>Character height vs. the crops' native anchors (~47-51px): <b>not verified this round, flagged honestly.</b> The boss-generated sheets are AI-rendered pixel-art-style photos, not sprites authored at a true low native resolution the way the Sea of Stars crops are (51px/47px tall before any upscale) — there is no clean "native pixel count" to measure the same way for this source. Whether the visible pseudo-pixel density in the cleaned atlas reads as comparable chunkiness to the 47-51px anchors, at matched on-screen character height, needs a dedicated side-by-side pass next round rather than an assumption either way.</li>
+</ul>
+
+<p><b>Confirmed clean:</b> no reference (Sea of Stars) filename or its pixels appear anywhere in this page, the atlas, or the frame table — only the owned boss-generated sheet filenames are cited, which is required by the extraction-fidelity judging dimension, not a violation of it. No build step. No external network request at runtime (the atlas and frame table are same-origin fetches to files committed alongside this page, not third-party calls). No existing route touched — this file and its <code>office-sample-assets/</code> folder are new paths only.</p>
+
+<p><b>Carried forward, not re-touched this round:</b> the spy-HQ thematic register (this round's whole point — extracting the boss's own style-locked spy-HQ art IS the register, more directly than any prior round's hand-tinted palette could be), the cool 16-bit aesthetic, the idle/typing verb split. Rounds 1-19's hand-authored palette constants, dithering helpers, and shading functions are removed from this file entirely — they drew a different, non-extracted character and are no longer the technique this mission is judged on.</p>
+
+<p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12), continuing rounds 15-19's real-push delivery rather than a patch, after confirming push access fresh this session.</p>
 `;
 </script>
 </body>
