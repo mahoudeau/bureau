@@ -1,0 +1,421 @@
+/*
+ * Dashboard v2 — design tokens (t-63 schema, t-75 round 2 values)
+ *
+ * VALUES REPAINTED FROM THE APPROVED SAMPLE (t-58, "Pure Linear rebuild",
+ * boss-approved 2026-08-16 — projects/bureau/deliverables/t-58-v2-sample.html.txt,
+ * its own :root block at that file's lines 44-76). Per t-53's bar text
+ * ("the sample... becomes binding"), every value below traces to a specific
+ * selector/line in that file, cited inline, NOT to STUDY-lead.md prose or
+ * guesswork — the sample wins where the two differ (see the two additions
+ * below, both cases where the sample's own CSS does something STUDY's text
+ * says not to). t-63's own schema NAMES and STRUCTURE are unchanged except
+ * where noted with a documented reason (this file's own acceptance
+ * explicitly allows addition, never silent renaming/removal).
+ *
+ * Cites: projects/bureau/references/ux-v2/STUDY-lead.md (background/intent
+ * only, superseded by the sample wherever the two disagree — see below) and
+ * projects/bureau/deliverables/t-58-v2-sample.html.txt (the binding source
+ * for every value in this file).
+ *
+ * SWITCHER MECHANISM (CSS half; the toggle button and its localStorage
+ * persistence are wired by a sibling module, not this file):
+ *   - Default is system-following: bare :root carries the light palette,
+ *     and a `prefers-color-scheme: dark` media query repaints it dark
+ *     UNLESS an explicit override is present.
+ *   - Explicit override: whatever sets `document.documentElement.dataset
+ *     .theme = "light" | "dark"` (read from localStorage on load, written
+ *     on toggle) wins in both directions — [data-theme="dark"] always
+ *     applies dark even in a light system, [data-theme="light"] always
+ *     applies light even in a dark system (by not matching the
+ *     `:not([data-theme="light"])` guard the media query requires).
+ *   - Every token has its light definition in bare :root — never only
+ *     inside a media/attribute block — so nothing is undefined before JS
+ *     runs or if a module reads a token with no theme set yet.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- color: canvas + surface --------------------------------------
+     Sample line 48: --bg:#fbfbfc (canvas, body/#main) vs --surface:#ffffff
+     (raised chrome: header/#rail) — surface is WHITER than bg, the
+     opposite direction from this schema's original placeholder comment
+     ("surface... one step off bg"). Kept the NAME's intent (surface =
+     the raised-chrome tone) but the sample's actual direction: chrome
+     panels sit at pure white, the canvas behind them is a hair off-white.
+     Confirmed by usage, not just the :root values: sample's `header {
+     background: var(--surface) }` / `#rail { background: var(--surface) }`
+     vs `body { background: var(--bg) }` / `#main { background: var(--bg) }`. */
+  --v2-color-bg: #fbfbfc;
+  --v2-color-surface: #ffffff;
+  /* surface-raised: sample's --surface2 (#f4f4f6, line 48) — hover states,
+     tag/badge fills, .inline-edit's own background. */
+  --v2-color-surface-raised: #f4f4f6;
+  /* Not sample-traceable: the sample never renders a scrim (no modal in
+     this system — peek panel is a slide-in, cmd-K palette has no backdrop
+     per its own "non-modal" design). Kept unchanged pending a sample that
+     actually shows one. */
+  --v2-color-overlay-scrim: rgb(20 20 22 / 32%);
+
+  /* ---- color: text ----------------------------------------------------
+     Sample line 50: --text/--text2/--text3. */
+  --v2-color-text-primary: #1a1a1f;
+  --v2-color-text-secondary: #62636c;
+  --v2-color-text-muted: #93949c;
+  --v2-color-text-on-accent: #ffffff;
+
+  /* ---- color: border (hairline, low alpha per STUDY) -------------------
+     Sample line 49: --border: rgba(15,15,20,.08), --border-strong:
+     rgba(15,15,20,.14). */
+  --v2-color-border: rgb(15 15 20 / 8%);
+  --v2-color-border-strong: rgb(15 15 20 / 14%);
+
+  /* ---- color: one signature accent --------------------------------------
+     Sample line 51: --accent:#5e6ad2, --accent-fg:#ffffff, --accent-wash:
+     rgba(94,106,210,.10) — the wash's exact alpha (10%) is used directly
+     below, not the placeholder's invented 12%. */
+  --v2-color-accent: #5e6ad2;
+  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, black);
+  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, black);
+  --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 10%, transparent);
+  /* Not directly sample-traceable as a distinct tone: the sample's own
+     focus treatment (.inline-edit input:focus / .quickadd input:focus,
+     lines ~155/185) is `box-shadow: 0 0 0 3px var(--accent-wash)` — it
+     REUSES the wash token for focus rather than defining a separate,
+     stronger ring color. Recalibrated to match that reuse (was a bespoke
+     45%-mix guess) rather than inventing a value the sample never shows. */
+  --v2-color-focus-ring: var(--v2-color-accent-soft);
+
+  /* Selected/active row state: the sample never renders an explicit
+     selected-row example to trace this to — kept the existing formula
+     (accent-soft fill + accent border) unchanged, flagged for whoever
+     builds the first selectable list to confirm against a real screenshot
+     rather than this schema's own guess. */
+  --v2-color-row-selected-bg: var(--v2-color-accent-soft);
+  --v2-color-row-selected-border: var(--v2-color-accent);
+
+  /* ---- color: semantic status hues (status only, never decorative) ----
+     The sample's own status set (line 52-53: --st-queued/-working/-blocked/
+     -review/-done/-goal, six mission-lifecycle hues) doesn't share names
+     with this schema's five GOAL-HEALTH hues (bug/at-risk/on-track/
+     in-progress/done, consumed by components.js's STATUS_HUES for goal
+     progress, not by board.js's own mission-status colors, which read the
+     sample's set directly once board.js is itself restyled). Mapped by
+     closest semantic register, not a literal name match — flagged plainly
+     rather than silently invented:
+       - bug        <- sample --st-blocked/--st-goal, both #eb5757 (the
+                        sample's one red; blocked and goal share it)
+       - at-risk     <- sample --st-working #f2a30f (amber = needs
+                         attention, the sample's own "in-progress-under-
+                         watch" register)
+       - on-track    <- sample --st-done #29a36a (the sample's one green)
+       - in-progress <- sample --st-review #8b5cf6 (the sample's one
+                         purple; repurposed since the sample has no
+                         separate "actively working, not at risk" hue)
+       - done        <- sample --st-done #29a36a, same green as on-track
+                         (the sample only defines one green; this schema
+                         wants two adjacent-but-distinct greens with no
+                         second green in the sample to draw from — kept
+                         literally identical rather than inventing a
+                         second shade, flagged for whoever ships the first
+                         goal-progress widget to confirm this is the right
+                         call once there's a real screenshot to check it
+                         against). */
+  --v2-color-status-bug: #eb5757;
+  --v2-color-status-bug-soft: color-mix(in srgb, var(--v2-color-status-bug) 14%, transparent);
+  --v2-color-status-at-risk: #f2a30f;
+  --v2-color-status-at-risk-soft: color-mix(in srgb, var(--v2-color-status-at-risk) 16%, transparent);
+  --v2-color-status-on-track: #29a36a;
+  --v2-color-status-on-track-soft: color-mix(in srgb, var(--v2-color-status-on-track) 14%, transparent);
+  --v2-color-status-in-progress: #8b5cf6;
+  --v2-color-status-in-progress-soft: color-mix(in srgb, var(--v2-color-status-in-progress) 14%, transparent);
+  --v2-color-status-done: #29a36a;
+  --v2-color-status-done-soft: color-mix(in srgb, var(--v2-color-status-done) 14%, transparent);
+
+  /* ---- spacing scale (8 steps) ----------------------------------------
+     Unchanged: every one of these 8 round numbers (2/4/6/8/12/16/24/32)
+     already appears directly as a real gap/padding value somewhere in the
+     sample's own CSS (e.g. gap:6px .btn/.card .top; padding:8px
+     .inline-edit/.col; gap:8px header/.quickadd; padding:12px
+     #peek .phead) — no correction needed, the placeholder's round-number
+     guesses happened to land on the sample's own real numbers. */
+  --v2-space-1: 2px;
+  --v2-space-2: 4px;
+  --v2-space-3: 6px;
+  --v2-space-4: 8px;
+  --v2-space-5: 12px;
+  --v2-space-6: 16px;
+  --v2-space-7: 24px;
+  --v2-space-8: 32px;
+  /* Not one exact sample hit (the sample never generically labels one
+     element "a row") — synthesized from its closest analogs: .navitem
+     (padding 6px 8px + ~13px text ~ 30px total), .proj-row .head (padding
+     5px 8px + ~12.5px text ~ 28px), .attrs .row (padding 6px 2px + 12.5px
+     text ~ 30px). Moved from the placeholder's 36px down into this
+     26-30px measured cluster; picked 30px as the cluster's center rather
+     than any single exact figure. Flagged as an estimate, not a citation,
+     unlike every color/font value above. */
+  --v2-row-height: 30px;
+
+  /* ---- radius --------------------------------------------------------
+     The placeholder's 2-step xs/sm scale (3px/5px) undershoots what the
+     sample actually uses everywhere. Sample's SMALL-CONTROL radius
+     (buttons/nav items/icon buttons/search — by far the most repeated
+     value: .btn, .iconbtn, .searchbtn, .navitem, .proj-row, .proj-row
+     .head, #palette .res, all exactly 6px) and its smallest corner
+     (.proj-row .edit, .searchbtn kbd, both 4px) fill xs/sm. That still
+     leaves the sample's own NAMED, reused container radius unmapped:
+     var(--radius)=8px (.card, .inline-edit, .review-note, .item-row,
+     .medianote, #batchbar) and var(--radius-lg)=12px (#peek, #palette —
+     the two floating/overlay shells). Two clearly distinct, structurally
+     different steps the 2-slot placeholder had no room for — added md/lg
+     rather than overloading xs/sm with two unrelated magnitudes, per this
+     mission's own "no variable added without a documented reason" clause. */
+  --v2-radius-xs: 4px;
+  --v2-radius-sm: 6px;
+  --v2-radius-md: 8px;
+  --v2-radius-lg: 12px;
+  --v2-radius-full: 999px;
+
+  /* ---- elevation shadow (ADDED — see note) ------------------------------
+     STUDY-lead.md's text says "no drop shadows/elevation," and that's why
+     t-63 shipped with zero shadow tokens. The approved SAMPLE contradicts
+     that text directly and repeatedly: its own --shadow custom property
+     (line 54: `0 8px 28px rgba(15,15,20,.14), 0 1px 2px rgba(15,15,20,.08)`)
+     is applied to #peek (the slide-in panel, line ~220), a tooltip-style
+     popup (line ~265), and #palette (the cmd-K shell, line ~284) — every
+     floating/overlay surface in the sample carries real elevation. Per
+     this mission's own rule ("does the reference [sample] still win?"),
+     the sample wins over the STUDY prose it was itself built from. Added
+     as a genuinely new token (not overloading an unrelated existing one)
+     since t-64/t-65's already-shipped .v2-panel and .v2-palette currently
+     carry NO shadow at all — this is a real, citable gap for whoever next
+     touches components.css to pick up. */
+  --v2-shadow-overlay: 0 8px 28px rgb(15 15 20 / 14%), 0 1px 2px rgb(15 15 20 / 8%);
+
+  /* Status/action glyph sizing. Sample defines FOUR icon sizes, not this
+     schema's three: `svg.icon{width:15px}` (default/body-row icons),
+     `svg.icon.sm{13px}`, `svg.icon.lg{18px}`, plus `.sec svg{11px}`
+     (section-header icons, smaller still). Mapped the three most-repeated
+     into this schema's three existing slots (xs<-11, sm<-13, md<-15);
+     the sample's own .icon.lg (18px) has no slot in a 3-step scale and is
+     NOT mapped — flagged rather than silently folded into -md, since 15
+     and 18 are both real, distinct, repeated sample values. */
+  --v2-icon-size-xs: 11px;
+  --v2-icon-size-sm: 13px;
+  --v2-icon-size-md: 15px;
+  /* Sample's .avatar is a single size, 18px (line ~67) — no second size
+     rendered anywhere to calibrate -md against. -sm moved to the sample's
+     exact figure; -md is UNCONFIRMED (kept at the placeholder's 20px, one
+     step up, pending a sample that actually shows two avatar sizes). */
+  --v2-avatar-size-sm: 18px;
+  --v2-avatar-size-md: 20px;
+
+  /* Stacking order: unchanged — purely structural, no color/size to trace
+     to a sample pixel, and the sample's own z-index usage (21 for #peek,
+     unscoped ad hoc numbers typical of a throwaway static sample) doesn't
+     define a reusable named scale worth adopting over this one. */
+  --v2-z-panel: 50;
+  --v2-z-scrim: 55;
+  --v2-z-popover: 60;
+  --v2-z-toast: 70;
+
+  /* ---- type scale ------------------------------------------------------
+     Sample's own explicit base declaration (line 82: `body { font:
+     13.5px/1.5 'InterVar', ... }`) is the single most authoritative
+     citation in this whole file — the sample's author set this directly,
+     not as one of many scattered values to infer a pattern from. base
+     moved 13px -> 13.5px, line-height-base 1.4 -> 1.5 to match exactly.
+     xs (11px) kept as-is: a near-even split in the sample between exactly
+     11 (header .brand .mark, .sec, .card .id, .mchip, .sec2, .medianote,
+     #batchbar .titles — 7 hits) and 11.5 (.commit-row, .empty, .logrow,
+     .item-row .ibody, .artlist li — 5 hits); 11 is both the placeholder's
+     existing value and the (narrow) majority, so left unchanged rather
+     than moved on a 7-vs-5 split. sm kept at 12px, matching the sample's
+     own control-text cluster exactly (.searchbtn, .inline-edit input,
+     .btn, .quickadd select, all literally 12px) — a cleaner, more
+     one-directional match than xs's split.
+     lg/2xl round 2 (critic-directed): round 1's own method (t-58's
+     sample CSS only) doesn't cover this — the sample is a board+peek-
+     panel view and never renders a stat tile — but the mission's own
+     acceptance requires the raw ux-v2/ files too, and a critic pass
+     found projects/bureau/references/ux-v2/SCR-20260816-cvac.png (an
+     "Insights"-style panel) does: a "Completed this week" stat tile with
+     a large "129" hero number. Measured directly, own pixel crop, own
+     coordinates: hero "129" digit height 35px; two card/stat-tile
+     TITLES ("Completed this week", "Request volume") both measure 21px;
+     the data table's own header/row text ("SLA status", "Achieved")
+     both measure 16px. Screenshot DPR is unknown (flagged explicitly by
+     the critic), so absolute px counts aren't directly usable — anchored
+     instead to this schema's OWN already-confirmed -sm (12px, cited
+     independently to t-58's sample), treating the table's dense body
+     text as -sm's "secondary row text, chip text" register (16px in the
+     screenshot / 12px token = a 1.333 image-to-token factor for this one
+     screenshot). Applying that factor: card/stat titles (21px) ->
+     15.75px, landing cleanly on -lg's existing 16px — CONFIRMING -lg
+     with real reference evidence for the first time, not changing it;
+     hero "129" (35px) -> 26.25px, moving -2xl from the placeholder's
+     invented 28px down to 26px, now a real citation.
+     3xl: no second, bigger hero number exists anywhere in either
+     reference set to calibrate against directly — per the critic's own
+     stated fallback ("at minimum narrow 3xl down... with the measured
+     ratio as the citation"), narrowed from 40px to 32px, a modest step
+     above the now-confirmed -2xl rather than the placeholder's much
+     larger, uncited gap. Flagged plainly: this is an extrapolation from
+     the -2xl measurement, not a direct citation like everything else in
+     this block — nothing bigger than the one stat tile is evidenced.
+     xl (20px) is still not directly evidenced either, but now sits
+     between two REAL, measured anchors (-lg 16, confirmed; -2xl 26,
+     measured) rather than two unconfirmed guesses — left unchanged,
+     honestly still flagged as unconfirmed rather than claimed as a
+     citation it doesn't have.
+     xs/sm/base/md unchanged from round 1 (see that round's citations,
+     still accurate — a fresh critic pass independently re-verified all
+     of them this round and found no error). */
+  --v2-font-size-2xs: 10px;
+  --v2-font-size-xs: 11px;
+  --v2-font-size-sm: 12px;
+  --v2-font-size-base: 13.5px;
+  --v2-font-size-md: 14px;
+  --v2-font-size-lg: 16px;
+  --v2-font-size-xl: 20px;
+  --v2-font-size-2xl: 26px;
+  --v2-font-size-3xl: 32px;
+  --v2-line-height-tight: 1.3;
+  --v2-line-height-base: 1.5;
+  --v2-weight-regular: 400;
+  --v2-weight-medium: 500;
+  --v2-weight-semibold: 600;
+  --v2-tabular-nums: tabular-nums;
+
+  /* ---- typeface (ADDED --v2-font-serif / --v2-font-mono — see note) -----
+     A genuine schema gap, not a value tweak: this token set had exactly
+     ONE font-family token (-sans) before this round. The sample's own
+     CSS carries a comment recording an explicit boss ruling embedded
+     right in the file (line ~85): "Boss's typography verdict (2026-08-16):
+     one face throughout read as no hierarchy at all. Three complementary
+     faces now, each doing a distinct job... Fraunces... carries every
+     title; Inter stays the body/UI workhorse; JBMono carries every
+     number/id/timestamp AND every tag." That is a structural, binding
+     decision this schema had no tokens to represent at all — not a value
+     this mission could fix by editing -sans alone. Added two new tokens,
+     per this mission's own "no variable added without a documented
+     reason" allowance, values taken from the sample's own declared
+     fallback stacks (`'Fraunces', Georgia, serif` / `'JBMono',
+     ui-monospace, 'SF Mono', monospace`, lines ~26/33/40 and every
+     font-family declaration using them).
+     IMPORTANT, flagged plainly: only the FALLBACK stacks are usable today.
+     The sample embeds its own Fraunces/JBMono as base64 data: URIs inline
+     in a throwaway HTML file — t-66 has already vendored a real Inter
+     Variable binary (hub/public/v2/fonts/), but nobody has yet extracted
+     Fraunces or JetBrains Mono into the repo as reusable, licensed font
+     assets. Until that happens (same shape of work t-66 already did for
+     Inter — a follow-up mission, not this one, since this mission owns
+     only tokens.css, not font files or components.css's @font-face
+     block), -font-serif/-font-mono resolve to Georgia/ui-monospace system
+     fallbacks, not the sample's actual look. -font-sans's own family name
+     ("Inter Variable") already matches t-66's vendored file, so body text
+     alone gets the real face today; titles and numbers/tags do not yet. */
+  --v2-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --v2-font-serif: "Fraunces", Georgia, serif;
+  --v2-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+
+  /* ---- motion (bar: "soft, timely, sub-150ms, water-like and rare") ---
+     Not sample-traceable: a static HTML sample has no transitions to
+     measure durations from. Left unchanged, matching STUDY's prose
+     directly since the sample doesn't contradict it here (no evidence
+     either way, unlike shadow/radius above where the sample actively
+     does something different). */
+  --v2-motion-fast: 100ms;
+  --v2-motion-base: 150ms;
+  --v2-motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- dark mode: system-following default ------------------------------
+   Values from the sample's own :root[data-theme="dark"] block (line 57). */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --v2-color-bg: #0a0a0c;
+    --v2-color-surface: #111114;
+    --v2-color-surface-raised: #17171b;
+    --v2-color-overlay-scrim: rgb(0 0 0 / 48%);
+
+    --v2-color-text-primary: #edeef0;
+    --v2-color-text-secondary: #9a9ba3;
+    --v2-color-text-muted: #6c6d76;
+    --v2-color-text-on-accent: #ffffff;
+
+    --v2-color-border: rgb(255 255 255 / 8%);
+    --v2-color-border-strong: rgb(255 255 255 / 16%);
+
+    --v2-color-accent: #6e79e8;
+    --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, white);
+    --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, white);
+    /* dark's own wash alpha is 16%, not light's 10% (sample line 62:
+       rgba(110,121,232,.16)) — a real, deliberate difference, not copied
+       from light. */
+    --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 16%, transparent);
+    --v2-color-focus-ring: var(--v2-color-accent-soft);
+
+    --v2-color-status-bug: #f16565;
+    --v2-color-status-at-risk: #f2b40e;
+    --v2-color-status-on-track: #3ec080;
+    --v2-color-status-in-progress: #a48bf5;
+    --v2-color-status-done: #3ec080;
+
+    /* Dark shadow needs to be much darker/heavier to read against a
+       near-black surface than light's needs against near-white — sample's
+       own dark --shadow (line 65): `0 10px 32px rgba(0,0,0,.5), 0 1px 2px
+       rgba(0,0,0,.4)`, a deliberately different value from light's, not a
+       lazy reuse. */
+    --v2-shadow-overlay: 0 10px 32px rgb(0 0 0 / 50%), 0 1px 2px rgb(0 0 0 / 40%);
+  }
+}
+
+/* ---- explicit override: [data-theme="dark"] always wins -------------- */
+:root[data-theme="dark"] {
+  --v2-color-bg: #0a0a0c;
+  --v2-color-surface: #111114;
+  --v2-color-surface-raised: #17171b;
+  --v2-color-overlay-scrim: rgb(0 0 0 / 48%);
+
+  --v2-color-text-primary: #edeef0;
+  --v2-color-text-secondary: #9a9ba3;
+  --v2-color-text-muted: #6c6d76;
+  --v2-color-text-on-accent: #ffffff;
+
+  --v2-color-border: rgb(255 255 255 / 8%);
+  --v2-color-border-strong: rgb(255 255 255 / 16%);
+
+  --v2-color-accent: #6e79e8;
+  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, white);
+  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, white);
+  --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 16%, transparent);
+  --v2-color-focus-ring: var(--v2-color-accent-soft);
+
+  --v2-color-status-bug: #f16565;
+  --v2-color-status-at-risk: #f2b40e;
+  --v2-color-status-on-track: #3ec080;
+  --v2-color-status-in-progress: #a48bf5;
+  --v2-color-status-done: #3ec080;
+
+  --v2-shadow-overlay: 0 10px 32px rgb(0 0 0 / 50%), 0 1px 2px rgb(0 0 0 / 40%);
+}
+
+/* [data-theme="light"] needs no block: bare :root already holds the light
+   values, and not matching :not([data-theme="light"]) is what keeps the
+   dark media query from repainting it — see the switcher note above. */
+
+/* ---- base + tabular numerals (mechanical floor #6) -------------------- */
+html {
+  background: var(--v2-color-bg);
+  color: var(--v2-color-text-primary);
+  font-family: var(--v2-font-sans);
+  font-size: var(--v2-font-size-base);
+  line-height: var(--v2-line-height-base);
+  font-variant-numeric: var(--v2-tabular-nums);
+}
+
+.v2-tabular-nums {
+  font-variant-numeric: var(--v2-tabular-nums);
+}
