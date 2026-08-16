@@ -1,11 +1,13 @@
 {
-  "_comment": "Frame table for the t-59 office sample, round 20 (extraction era). Every region below is a direct pixel crop from a boss-generated owned-source sheet under projects/bureau/references/office/ (THE LAW, t-54, 2026-08-16 amendment) — cleaned (JPEG-ringing despeckle + 40-color median-cut quantize, no redraw) and scaled 3x nearest-neighbor. No pixel in atlas.png was hand-drawn.",
+  "_comment": "Frame table for the t-59 office sample, round 21 (light-direction fix + palette stability). Every region below is a direct pixel crop from cast/sheet-agent-anims-a.jpg (THE LAW, t-54, 2026-08-16 amendment) -- cleaned (JPEG-ringing despeckle + a SHARED 40-color median-cut palette across all 5 character frames, no per-frame drift) and scaled 3x nearest-neighbor. No pixel in atlas.png was hand-drawn.",
   "atlas": "atlas.png",
   "sourceSheets": {
-    "typing": "cast/sheet-agent-anims-a.jpg, row 2 (\"AGENT TYPING LOOP\"), native grid cells at column index 1,2,3 (0-based) of an 8x3 176x256 grid, y-trimmed to 321-512 (was 256-512: the first 65px dropped a bleeding leg/foot fragment from the walk row above, an artifact of the sheet's own imperfect row spacing, not introduced by the crop)",
-    "idle": "cast/sheet-agent-anims-b.jpg, row 2 (front-facing standing loop), same column index 1,2 and same y-trim (321-512) as the typing sheet",
-    "lamp": "cast/sheet-agent-anims-b.jpg, row 3 (back-facing loop), the lit floor lamp prop beside the last cell (native crop x1168-1232,y540-768 of the 1408x768 sheet)",
-    "wallmon": "cast/sheet-agent-anims-a.jpg, the wall-mounted terminal prop centered above the row boundary (native crop x490-635,y0-90)"
+    "typing": "cast/sheet-agent-anims-a.jpg, row 2 (\"AGENT TYPING LOOP\"), native grid cells at column index 1,2,3 (0-based) of an 8x3 176x256 grid, y-trimmed to 321-512 (drops a bleeding leg/foot fragment from the walk row above -- the sheet's own row-spacing artifact, not introduced by the crop)",
+    "idle": "cast/sheet-agent-anims-a.jpg, THE SAME ROW as typing (row 2, same 8x3 grid, same y-trim 321-512) -- column index 0 (the character standing before it sits down) and column index 7 (standing again after, with the desk's edge visible at frame-left). Round 21 change: round 20 sourced idle from a DIFFERENT sheet (sheet-agent-anims-b.jpg) with a different light register, which is what produced round 20's flagged light-direction seam. Pulling idle from the SAME row as typing instead means idle and typing now share one continuous light source by construction, not by after-the-fact color-matching.",
+    "wallmon": "cast/sheet-agent-anims-a.jpg, the wall-mounted terminal prop centered above the row boundary (native crop x490-635,y0-90) -- same sheet as the character, so same light register"
+  },
+  "droppedThisRound": {
+    "lamp": "round 20 composited a floor lamp cropped from sheet-agent-anims-b.jpg row 3 (a back-facing loop with its own near-black-to-warm-amber lighting) next to the character crop's cooler cyan register. The critic's round-20 pass named this the mechanical-floor violation (t-54: 'one consistent light direction per scene', an automatic send-back regardless of craft quality) -- the lamp was the actual cross-sheet mismatch, not the wallmon. Dropped entirely rather than re-matched, since no lamp prop sharing the character's own row/light source was found in the current sheet set."
   },
   "states": {
     "idle": { "frames": ["idle-0", "idle-1"], "durationMs": 650 },
@@ -17,7 +19,6 @@
     "typing-2": { "x": 1068, "y": 4, "w": 528, "h": 573 },
     "idle-0": { "x": 1600, "y": 4, "w": 528, "h": 573 },
     "idle-1": { "x": 2132, "y": 4, "w": 528, "h": 573 },
-    "lamp": { "x": 2664, "y": 4, "w": 192, "h": 684 },
-    "wallmon": { "x": 2860, "y": 4, "w": 435, "h": 270 }
+    "wallmon": { "x": 2664, "y": 4, "w": 435, "h": 270 }
   }
 }
