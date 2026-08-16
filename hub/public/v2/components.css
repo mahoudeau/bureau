@@ -77,7 +77,17 @@
 .v2-status-glyph--xs .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
 .v2-status-glyph--md .v2-icon { width: var(--v2-icon-size-md); height: var(--v2-icon-size-md); }
 
-/* ---- chip: generic label pill (non-status use only, see below) -------- */
+/* ---- chip: generic label pill (non-status use only, see below) --------
+   t-76 round 1: matched to the approved sample's own .tag exactly
+   (t-58-v2-sample.html.txt, the .tag rule) — font-size 10px (this
+   schema's -2xs, not the placeholder-era -xs/11px this file shipped
+   with), font-weight 600 (was 500), uppercase + 0.04em tracking (the
+   sample's own values, not present here at all before), and JBMono
+   (this schema's --v2-font-mono, added in t-75 round 1 specifically for
+   this "every tag" role — its first real consumer). Size/weight/case
+   were the visible gap; padding/radius/color were already correct
+   (radius-full + surface-raised + border, unchanged from t-66, already
+   matched the sample's own 999px/surface2/border chip chrome). */
 .v2-chip {
   display: inline-flex;
   align-items: center;
@@ -85,8 +95,11 @@
   height: calc(var(--v2-row-height) * 0.6);
   padding: 0 var(--v2-space-5);
   border-radius: var(--v2-radius-full);
-  font-size: var(--v2-font-size-xs);
-  font-weight: var(--v2-weight-medium);
+  font-size: var(--v2-font-size-2xs);
+  font-weight: var(--v2-weight-semibold);
+  font-family: var(--v2-font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   line-height: 1;
   color: var(--v2-color-text-secondary);
   background: var(--v2-color-surface-raised);
@@ -112,12 +125,31 @@
   font-size: inherit;
   font-weight: inherit;
   color: var(--v2-chip-fg, var(--v2-color-text-secondary));
+  /* t-76: the base .v2-chip above now carries the sample's own .tag
+     treatment (uppercase, tracked, mono) for plain label chips — but the
+     Linear reference frames this status treatment was itself ruled
+     against a pill on (SCR-20260816-cuol.png/-cums.png/-cuxb.png) show
+     status labels as ordinary sentence-case sans text ("Bug", "Design",
+     "AI"), never uppercase/tracked/mono. Reset explicitly so status
+     chips don't silently inherit the tag treatment through the cascade
+     (text-transform/letter-spacing/font-family are inherited properties;
+     without this reset they'd carry over from .v2-chip's own rule even
+     though font-size/weight above already correctly reset via `inherit`). */
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: inherit;
 }
 .v2-chip__label { font-variant-numeric: var(--v2-tabular-nums); }
 
-/* ---- id badge: tabular-nums mission id ("t-79") ----------------------- */
+/* ---- id badge: tabular-nums mission id ("t-79") -----------------------
+   t-76: sample's own id treatment (.card .id and #peek .phead .id, both
+   ~11-11.5px muted text at font-weight:500) already matched this file's
+   size/color; only font-weight was missing (this file had no explicit
+   weight, inheriting whatever ambient regular/400 weight surrounded it —
+   the sample's id text reads slightly heavier than that, medium/500). */
 .v2-id-badge {
   font-size: var(--v2-font-size-xs);
+  font-weight: var(--v2-weight-medium);
   color: var(--v2-color-text-muted);
   font-variant-numeric: var(--v2-tabular-nums);
 }
@@ -187,7 +219,12 @@
 .v2-btn--secondary:active { background: var(--v2-color-row-selected-bg); }
 
 .v2-btn--primary { background: var(--v2-color-accent); color: var(--v2-color-text-on-accent); }
-.v2-btn--primary:hover { background: var(--v2-color-accent-hover); }
+/* t-76: the sample's own primary-button hover is `filter: brightness(1.06)`
+   (its .btn.primary:hover rule), not a swap to a separately mixed color —
+   matched exactly rather than kept on this file's own pre-existing
+   color-mix technique, which was a reasonable placeholder guess but a
+   different technique from what the reference actually does. */
+.v2-btn--primary:hover { filter: brightness(1.06); }
 .v2-btn--primary:active { background: var(--v2-color-accent-active); }
 
 .v2-btn--ghost { color: var(--v2-color-text-secondary); }
