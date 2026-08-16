@@ -20,6 +20,28 @@
 // multi-character query, not by a synthetic single .value assignment).
 // The <input> node is now created once per open and never replaced while
 // the palette stays open.
+//
+// Round 4 (this mission's own reference-must-win loop): three literal
+// Unicode symbols were standing in for icons here — '⌨' (U+2328 KEYBOARD)
+// on the hint trigger, '✕' (U+2715) on the active-project pill's remove
+// button, and '↑'/'↓' (U+2191/2193) inside the hint's own <kbd> pair. The
+// boss caught the first of these directly on this mission's screenshots
+// ("I see emojis in available screenshots while we agreed on an icon
+// library"); the sibling t-89 sweep mission explicitly carves this whole
+// file out of its own scope with "t-65 is handling its own fix as part of
+// its own loop" — this is that fix, applied to all three, not just the
+// one the boss happened to name, since the same floor ("a real icon set,
+// no emoji") governs all of them identically. Swapped for t-66's vendored
+// Lucide set: `icon('command')` for the hint trigger (no dedicated
+// "keyboard" shape exists in the 30-icon vendored set; `command` is the
+// established glyph this codebase already uses for keyboard-triggered
+// affordances), `icon('x')` for the pill remove button (an exact semantic
+// match — the vendored set's own 'x' icon), `icon('chevron-up')` /
+// `icon('chevron-down')` for the up/down key hints (no dedicated arrow-key
+// shape exists either; chevrons are the standard substitute for this exact
+// purpose in the cited Linear-register reference material).
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -132,8 +154,8 @@
       palette.innerHTML =
         '<div class="v2-palette__head">' +
         '<input class="v2-palette__input" id="v2-palette-input" placeholder="Jump to a mission, or type to create one…" autocomplete="off">' +
-        '<button type="button" class="v2-palette__hint" aria-label="Palette keyboard shortcuts">⌨<span class="v2-palette__hint-tip">' +
-        '<kbd>↑</kbd><kbd>↓</kbd> navigate · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</span></button>' +
+        '<button type="button" class="v2-palette__hint" aria-label="Palette keyboard shortcuts">' + icon('command') + '<span class="v2-palette__hint-tip">' +
+        '<kbd>' + icon('chevron-up') + '</kbd><kbd>' + icon('chevron-down') + '</kbd> navigate · <kbd>Enter</kbd> open · <kbd>Esc</kbd> close</span></button>' +
         '</div>' +
         '<div class="v2-palette__pills" id="v2-palette-pills"></div>' +
         '<div class="v2-palette__results" id="v2-palette-results"></div>';
@@ -165,7 +187,7 @@
       var projectPills = (state.projects || []).map(function (pj) {
         var id = typeof pj === 'string' ? pj : pj.id;
         return '<button type="button" class="v2-palette__pill' + (activeProject === id ? ' v2-palette__pill--active' : '') + '" data-project="' + esc(id) + '">' +
-          esc(projLabel(state, id)) + (activeProject === id ? ' <span class="v2-palette__pill-x">✕</span>' : '') + '</button>';
+          esc(projLabel(state, id)) + (activeProject === id ? ' <span class="v2-palette__pill-x">' + icon('x') + '</span>' : '') + '</button>';
       }).join('');
       pillsEl.innerHTML = projectPills;
 
@@ -207,10 +229,21 @@
     style.textContent = [
       '.v2-palette__head { display: flex; align-items: center; gap: var(--v2-space-4, 8px); position: relative; }',
       '.v2-palette__input { flex: 1; font: inherit; font-size: var(--v2-font-size-base, 13px); padding: var(--v2-space-4, 8px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-bg, var(--v2-bg, transparent)); color: var(--v2-color-text-primary, var(--v2-ink, inherit)); }',
-      '.v2-palette__hint { width: 22px; height: 22px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); background: transparent; color: var(--v2-color-text-muted, var(--v2-muted, #999)); font-size: 11px; cursor: default; position: relative; flex: 0 0 auto; }',
+      '.v2-palette__hint { width: 22px; height: 22px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); background: transparent; color: var(--v2-color-text-muted, var(--v2-muted, #999)); font-size: 11px; cursor: default; position: relative; flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; }',
       '.v2-palette__hint-tip { display: none; position: absolute; top: 26px; right: 0; white-space: nowrap; background: var(--v2-color-text-primary, #17181a); color: var(--v2-color-text-on-accent, var(--v2-on-accent, #fff)); font-size: 11px; padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
       '.v2-palette__hint:hover .v2-palette__hint-tip, .v2-palette__hint:focus .v2-palette__hint-tip { display: block; }',
-      '.v2-palette__hint-tip kbd { display: inline-block; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; padding: 0 4px; font: inherit; }',
+      '.v2-palette__hint-tip kbd { display: inline-flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.35); border-radius: 3px; padding: 0 4px; font: inherit; }',
+      // round 4: components.css (t-66) is the source of record for .v2-icon
+      // sizing, but v2.html never links it (verified: grepped v2.html for
+      // "components.css" — zero matches) — the icon() helper's returned
+      // <svg class="v2-icon"> was rendering unsized everywhere in the whole
+      // v2 tranche, not just here. Same fix as keyboard.js's injectStyle:
+      // a local fallback rule in this file's own injected sheet, matching
+      // components.css's own values exactly, plus sizing for the pill's
+      // remove-icon (.v2-palette__pill-x had no rule at all previously —
+      // the raw '✕' character it replaced needed none to be legible).
+      '.v2-icon { display: inline-block; width: var(--v2-icon-size-sm, 14px); height: var(--v2-icon-size-sm, 14px); vertical-align: -0.15em; color: currentColor; flex: none; }',
+      '.v2-palette__pill-x { display: inline-flex; align-items: center; justify-content: center; margin-left: 2px; }',
       '.v2-palette__pills { display: flex; flex-wrap: wrap; gap: var(--v2-space-3, 6px); margin-top: var(--v2-space-4, 8px); }',
       /* radius-sm (tight, Pure-Linear register), NOT radius-full: a full
          999px pill read as the retired soft-admin-template register a
