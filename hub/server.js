@@ -112,18 +112,29 @@ const server = http.createServer(async (req, res) => {
     // Dashboard v2 (in-progress rebuild, t-53): its own shell + static assets,
     // fully separate from / and index.html above until the boss flips the
     // switch. hub/public/v2.html is the shell; hub/public/v2/*.css|*.js are
-    // the sibling modules built by the rest of this tranche. The asset regex
-    // matches a single path segment only (no '/', no '..'), so there is no
-    // traversal surface to guard against.
+    // the sibling modules built by the rest of this tranche.
     if (req.method === 'GET' && p === '/v2') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2.html')));
     }
-    const mV2Asset = p.match(/^\/v2\/([\w-]+\.(?:css|js))$/);
+    // t-92: components.css's vendored @font-face (fonts/Inter-Variable.woff2)
+    // 404'd here even once the CSS layer itself was wired in — this route
+    // only ever matched a single flat segment directly under v2/, so any
+    // asset one directory deeper (fonts/, icons/) was unreachable regardless
+    // of what any stylesheet or script asked for. Widened to an OPTIONAL one
+    // level subdirectory plus a woff2 extension, keeping the original no-'..'
+    // guarantee: both the subdir and filename segments are restricted to
+    // [\w-] (no '.', no '/'), so a real extension dot can only ever appear
+    // once, at the position this regex itself puts it — no traversal surface
+    // gained by the wider match.
+    const mV2Asset = p.match(/^\/v2\/(?:([\w-]+)\/)?([\w-]+\.(?:css|js|woff2))$/);
     if (req.method === 'GET' && mV2Asset) {
-      const file = path.join(__dirname, 'public', 'v2', mV2Asset[1]);
+      const [, subdir, filename] = mV2Asset;
+      const file = path.join(__dirname, 'public', 'v2', subdir || '', filename);
       if (!fs.existsSync(file)) return send(res, 404, { error: 'not found' }); // sibling module not built yet: harmless
-      const type = mV2Asset[1].endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8';
+      const type = filename.endsWith('.css') ? 'text/css; charset=utf-8'
+        : filename.endsWith('.woff2') ? 'font/woff2'
+        : 'text/javascript; charset=utf-8';
       res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(file));
     }
