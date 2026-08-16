@@ -15,7 +15,7 @@
  "anchor_logical_height": 48,
  "palette_size": 32,
  "accent_saturation_min": 0.15,
- "accent_max_area_frac": 0.05,
+ "accent_max_area_frac": 0,
  "regions": [
   {
    "name": "floor-wood",
