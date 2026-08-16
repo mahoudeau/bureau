@@ -72,12 +72,15 @@
                                                inside it (jump-to-mission,
                                                filter-by-project, full-text
                                                search across missions+brain)
-  #v2-quick-add           overlay, anchored    i11 baseline (title+project+
-  (popover, not modal)                         priority quick-add, + 🎯
-                                               goal form w/ reference
-                                               uploads) · i6 templates
-                                               (canned starting shapes,
-                                               picked before typing)
+  #v2-quickadd-form       inline, in board.js's i11 baseline (title+project+
+  #v2-qa-trigger          "+ Quick add" button  priority quick-add, t-64) ·
+                                               i6 templates (body textarea +
+                                               canned starting shapes,
+                                               decorated on in place by
+                                               quick-add.js/templates.js,
+                                               t-72 — not a separate overlay;
+                                               board.js builds the form once
+                                               and never re-renders it)
   #v2-goal-progress       overlay, right       i4 goal/cycle progress view
   (slide-in, not modal)                        (full child list + tranche
                                                trail, opened from a goal
@@ -474,7 +477,6 @@
        progress-panel too — both still carry the same latent bug, flagged
        here rather than silently worked around only for peek-panel). */
     #v2-peek-panel { top: 0; height: 100dvh; width: 100%; border-radius: 0; }
-    .v2-quick-add { left: var(--v2-space-2); right: var(--v2-space-2); bottom: var(--v2-space-2); width: auto; }
     /* t-93: the ⌘K hint means nothing without a keyboard, and the
        mode-switch's three buttons are the least essential topbar element
        at this width — drop both so the brand + search label + live dot
@@ -504,13 +506,6 @@
     box-shadow: 0 12px 40px rgba(0,0,0,.22); z-index: 50; padding: var(--v2-space-2);
   }
   @media (max-width: 720px) { .v2-palette { top: 0; left: 0; transform: none; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }
-
-  /* ---- quick-add: small anchored popover, not a form page ---- */
-  .v2-quick-add {
-    position: fixed; right: var(--v2-space-4); bottom: var(--v2-space-4); width: 340px;
-    background: var(--v2-surface); border: 1px solid var(--v2-border); border-radius: var(--v2-radius);
-    box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 45; padding: var(--v2-space-3);
-  }
 
   /* ---- batch verdicts bar ---- */
   .v2-batch-bar {
@@ -631,7 +626,6 @@
 <aside class="v2-brain-panel" id="v2-brain-panel" hidden aria-label="Brain browser"></aside>
 <aside class="v2-goal-progress-panel" id="v2-goal-progress" hidden aria-label="Goal progress"></aside>
 <div class="v2-palette" id="v2-palette" hidden role="dialog" aria-modal="false" aria-label="Command palette"></div>
-<div class="v2-quick-add" id="v2-quick-add" hidden aria-label="Quick add"></div>
 <div class="v2-batch-bar" id="v2-batch-bar" hidden aria-label="Batch verdicts"></div>
 <div class="v2-toasts" id="v2-toasts" aria-live="polite"></div>
 
@@ -742,7 +736,6 @@
     brainPanel: document.getElementById('v2-brain-panel'),
     goalProgress: document.getElementById('v2-goal-progress'),
     palette: document.getElementById('v2-palette'),
-    quickAdd: document.getElementById('v2-quick-add'),
     batchBar: document.getElementById('v2-batch-bar'),
     toasts: document.getElementById('v2-toasts')
   };
