@@ -1,0 +1,246 @@
+/*
+ * Dashboard v2 — design tokens (t-63, goal: t-53)
+ *
+ * SCHEMA MISSION, NOT SKIN. Every value below is a PLACEHOLDER — a coherent
+ * neutral set, not the sampled Linear register. What matters here is the
+ * variable NAMES and STRUCTURE: every other Wave-1 module (and, later, the
+ * Wave-2 restyle passes t-75/t-76/t-77/t-78) reads color/spacing/type ONLY
+ * through these custom properties, per t-62's v2- class-hook contract.
+ * Wave-2 edits THIS file's values once the applied style sample (t-58) is
+ * boss-approved; the surface (names, grouping, count of steps) must not
+ * need to change under that edit. Don't invent new tokens ad hoc in other
+ * v2/*.css files — extend this schema instead so there is one source of
+ * truth for the register.
+ *
+ * Cites: projects/bureau/references/ux-v2/STUDY-lead.md
+ *   - "The register, named" — near-neutral canvas + hairline structure
+ *     (no mid-gray card fills, no drop shadows/elevation — hence no
+ *     elevation/shadow tokens are defined below, on purpose), type does
+ *     the work (small quiet body, tabular numerals on every count), one
+ *     accent + small semantic status hues used strictly for status,
+ *     motion soft/timely/sub-150ms.
+ *   - "Mechanical floors" #5 (both modes, switchable, one token set) and
+ *     #6 (tabular numerals wherever a count renders) are this file's
+ *     direct responsibility; #1-#4 (font file, icon set, cmd-K, peek
+ *     panel) are structure/behavior owned by sibling missions and just
+ *     consume the type/spacing/color tokens defined here.
+ *
+ * SWITCHER MECHANISM (CSS half; the toggle button and its localStorage
+ * persistence are wired by a sibling module, not this file):
+ *   - Default is system-following: bare :root carries the light palette,
+ *     and a `prefers-color-scheme: dark` media query repaints it dark
+ *     UNLESS an explicit override is present.
+ *   - Explicit override: whatever sets `document.documentElement.dataset
+ *     .theme = "light" | "dark"` (read from localStorage on load, written
+ *     on toggle) wins in both directions — [data-theme="dark"] always
+ *     applies dark even in a light system, [data-theme="light"] always
+ *     applies light even in a dark system (by not matching the
+ *     `:not([data-theme="light"])` guard the media query requires).
+ *   - Every token has its light definition in bare :root — never only
+ *     inside a media/attribute block — so nothing is undefined before JS
+ *     runs or if a module reads a token with no theme set yet.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---- color: canvas + surface -------------------------------------- */
+  /* STUDY: "near-black or near-white, never mid-gray card fills" —
+     --v2-color-surface exists for the handful of things that must sit
+     visibly above the canvas (peek panel, cmd-K palette, popovers), and
+     stays a near-neutral one step off --v2-color-bg, not a distinct
+     "card" tone. Structure elsewhere comes from --v2-color-border, not
+     from surface fills. */
+  --v2-color-bg: #ffffff;
+  --v2-color-surface: #fbfbfb;
+  /* surface-raised: a nested elevation ONE STEP further from bg than
+     --v2-color-surface itself — a hovered row inside a panel, a
+     popover-within-popover. Still near-neutral; never a distinct "card"
+     tone. Base surfaces (panel/cmd-K/popover shell) use -surface;
+     reach for -surface-raised only for a nested layer atop one of those. */
+  --v2-color-surface-raised: #f5f5f6;
+  --v2-color-overlay-scrim: rgb(20 20 22 / 32%);
+
+  /* ---- color: text ---------------------------------------------------- */
+  --v2-color-text-primary: #17181a;
+  --v2-color-text-secondary: #55585e;
+  --v2-color-text-muted: #8a8d94;
+  --v2-color-text-on-accent: #ffffff;
+
+  /* ---- color: border (hairline, low alpha per STUDY) ------------------ */
+  --v2-color-border: rgb(23 24 26 / 9%);
+  --v2-color-border-strong: rgb(23 24 26 / 16%);
+
+  /* ---- color: one signature accent ------------------------------------ */
+  --v2-color-accent: #4b6bfb;
+  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, black);
+  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, black);
+  --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 12%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, var(--v2-color-accent) 45%, transparent);
+
+  /* Selected/active row state (keyboard.js arrow-nav, board.js click-select,
+     batch-verdicts.js multi-select): converge on ONE pattern — soft accent
+     fill + accent-colored left border/outline — instead of each module
+     inventing its own tint. Do not reuse -surface-raised for this; that
+     token is reserved for panel/popover nesting, not row selection. */
+  --v2-color-row-selected-bg: var(--v2-color-accent-soft);
+  --v2-color-row-selected-border: var(--v2-color-accent);
+
+  /* ---- color: semantic status hues (status only, never decorative) ---- */
+  /* Each hue ships with a low-alpha "soft" derivative for chip/pill fills
+     and status backgrounds — derived via color-mix so no second literal
+     color is authored per hue, per "zero magic numbers duplicated". */
+  --v2-color-status-bug: #e5484d;
+  --v2-color-status-bug-soft: color-mix(in srgb, var(--v2-color-status-bug) 14%, transparent);
+  --v2-color-status-at-risk: #f5a623;
+  --v2-color-status-at-risk-soft: color-mix(in srgb, var(--v2-color-status-at-risk) 16%, transparent);
+  --v2-color-status-on-track: #2fa968;
+  --v2-color-status-on-track-soft: color-mix(in srgb, var(--v2-color-status-on-track) 14%, transparent);
+  --v2-color-status-in-progress: #6b5bd6;
+  --v2-color-status-in-progress-soft: color-mix(in srgb, var(--v2-color-status-in-progress) 14%, transparent);
+  --v2-color-status-done: #3d8f5c;
+  --v2-color-status-done-soft: color-mix(in srgb, var(--v2-color-status-done) 14%, transparent);
+
+  /* ---- spacing scale (8 steps; tight rows per STUDY, ~36px per bar) --- */
+  --v2-space-1: 2px;
+  --v2-space-2: 4px;
+  --v2-space-3: 6px;
+  --v2-space-4: 8px;
+  --v2-space-5: 12px;
+  --v2-space-6: 16px;
+  --v2-space-7: 24px;
+  --v2-space-8: 32px;
+  --v2-row-height: 36px;
+
+  /* ---- radius (small elements only — no card-elevation radii) -------- */
+  --v2-radius-xs: 3px;
+  --v2-radius-sm: 5px;
+  --v2-radius-full: 999px;
+
+  /* Status/action glyph sizing (STUDY: "status is glyph + color, never
+     color alone" — every status/label/suggestion pairs a small geometric
+     icon with its color). Sized to sit inside --v2-row-height next to
+     -font-size-xs/-sm text. Avatars are a separate scale per the bar's
+     explicit "16-20px avatars". */
+  --v2-icon-size-xs: 12px;
+  --v2-icon-size-sm: 14px;
+  --v2-icon-size-md: 16px;
+  --v2-avatar-size-sm: 16px;
+  --v2-avatar-size-md: 20px;
+
+  /* Stacking order: panels slide in over a still-visible list (never a
+     full-screen takeover), cmd-K/popovers float above panels, a scrim
+     dims whatever sits below cmd-K, toasts sit above everything. Named
+     so peek-panel.js/palette.js/components.js agree on one order instead
+     of each picking its own z-index. */
+  --v2-z-panel: 50;
+  --v2-z-scrim: 55;
+  --v2-z-popover: 60;
+  --v2-z-toast: 70;
+
+  /* ---- type scale (base 13px per bar; 9 steps) -------------------------
+     2xs/xs: quiet chrome (meta, timestamps, shortcut hints). sm: small
+     labels one notch under body (secondary row text, chip text). base:
+     the canonical body size — reach for this by default. md: slightly
+     emphasized body (row titles). lg/xl: page/issue titles. 2xl/3xl: hero
+     numbers only (stat tiles, "129") per STUDY — nothing else gets big. */
+  --v2-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --v2-font-size-2xs: 10px;
+  --v2-font-size-xs: 11px;
+  --v2-font-size-sm: 12px;
+  --v2-font-size-base: 13px;
+  --v2-font-size-md: 14px;
+  --v2-font-size-lg: 16px;
+  --v2-font-size-xl: 20px;
+  --v2-font-size-2xl: 28px;
+  --v2-font-size-3xl: 40px;
+  --v2-line-height-tight: 1.2;
+  --v2-line-height-base: 1.4;
+  --v2-weight-regular: 400;
+  --v2-weight-medium: 500;
+  --v2-weight-semibold: 600;
+  /* STUDY mechanical floor #6: "numbers are always tabular ... so counts
+     don't jiggle" — applied globally below via font-variant-numeric, not
+     opt-in per element; --v2-tabular-nums stays available for any nested
+     context (e.g. inside a foreign-styled embed) that needs it explicit. */
+  --v2-tabular-nums: tabular-nums;
+
+  /* ---- motion (bar: "soft, timely, sub-150ms, water-like and rare") --- */
+  --v2-motion-fast: 100ms;
+  --v2-motion-base: 150ms;
+  --v2-motion-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ---- dark mode: system-following default ------------------------------ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --v2-color-bg: #0c0d0f;
+    --v2-color-surface: #131417;
+    --v2-color-surface-raised: #1a1c20;
+    --v2-color-overlay-scrim: rgb(0 0 0 / 48%);
+
+    --v2-color-text-primary: #f2f3f5;
+    --v2-color-text-secondary: #b4b7bf;
+    --v2-color-text-muted: #797d87;
+    --v2-color-text-on-accent: #ffffff;
+
+    --v2-color-border: rgb(255 255 255 / 8%);
+    --v2-color-border-strong: rgb(255 255 255 / 15%);
+
+    --v2-color-accent: #7c8fff;
+    --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, white);
+    --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, white);
+    --v2-color-focus-ring: color-mix(in srgb, var(--v2-color-accent) 55%, transparent);
+
+    --v2-color-status-bug: #f2555a;
+    --v2-color-status-at-risk: #ffb547;
+    --v2-color-status-on-track: #3ecf83;
+    --v2-color-status-in-progress: #8f81e8;
+    --v2-color-status-done: #4fb578;
+  }
+}
+
+/* ---- explicit override: [data-theme="dark"] always wins -------------- */
+:root[data-theme="dark"] {
+  --v2-color-bg: #0c0d0f;
+  --v2-color-surface: #131417;
+  --v2-color-surface-raised: #1a1c20;
+  --v2-color-overlay-scrim: rgb(0 0 0 / 48%);
+
+  --v2-color-text-primary: #f2f3f5;
+  --v2-color-text-secondary: #b4b7bf;
+  --v2-color-text-muted: #797d87;
+  --v2-color-text-on-accent: #ffffff;
+
+  --v2-color-border: rgb(255 255 255 / 8%);
+  --v2-color-border-strong: rgb(255 255 255 / 15%);
+
+  --v2-color-accent: #7c8fff;
+  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 88%, white);
+  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, white);
+  --v2-color-focus-ring: color-mix(in srgb, var(--v2-color-accent) 55%, transparent);
+
+  --v2-color-status-bug: #f2555a;
+  --v2-color-status-at-risk: #ffb547;
+  --v2-color-status-on-track: #3ecf83;
+  --v2-color-status-in-progress: #8f81e8;
+  --v2-color-status-done: #4fb578;
+}
+
+/* [data-theme="light"] needs no block: bare :root already holds the light
+   values, and not matching :not([data-theme="light"]) is what keeps the
+   dark media query from repainting it — see the switcher note above. */
+
+/* ---- base + tabular numerals (mechanical floor #6) -------------------- */
+html {
+  background: var(--v2-color-bg);
+  color: var(--v2-color-text-primary);
+  font-family: var(--v2-font-sans);
+  font-size: var(--v2-font-size-base);
+  line-height: var(--v2-line-height-base);
+  font-variant-numeric: var(--v2-tabular-nums);
+}
+
+.v2-tabular-nums {
+  font-variant-numeric: var(--v2-tabular-nums);
+}
