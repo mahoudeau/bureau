@@ -20,6 +20,15 @@
 // emits 'v2:goal-progress:open' { id } — new event, documented here since
 // t-70 doesn't exist yet; this panel keeps opening normally for goal
 // missions too so nothing regresses in the meantime.
+//
+// t-93 round 2: meta-row icons + LOG/ITEMIZED-REVIEW callout boxes,
+// converging on the approved t-58 sample's peek-panel anatomy (a critic
+// pass on round 1 grepped this file directly and found zero icon() calls
+// anywhere in the meta-row path, unlike needs-me-now.js which already
+// imports icon() the same way media.js does for its own MEDIA section —
+// this file just hadn't been touched since t-64 first built it).
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -146,18 +155,24 @@
       panel.innerHTML =
         '<button type="button" class="v2-panel__close" id="v2-pp-close" aria-label="Close">✕</button>' +
         '<h3 class="v2-panel__title">' + (isGoal ? '🎯 ' : '') + esc(t.title) + '</h3>' +
-        '<div class="v2-panel__meta">' + esc(t.id) + ' · ' + esc(t.status) + ' · P' + t.priority +
-        (t.assignee ? ' · ' + esc(t.assignee) : '') +
-        (t.project ? ' · ' + esc(projLabel(state, t.project)) : '') +
-        (t.gate === 'critic' ? ' · 🧪 critic gate' : '') +
-        (t.lease_until ? ' · lease until ' + esc(t.lease_until.slice(11, 16)) : '') +
+        '<div class="v2-panel__meta">' + esc(t.id) + ' · ' + esc(t.status) + ' · ' +
+        icon('flag', 'v2-icon--xs') + ' P' + t.priority +
+        (t.assignee ? ' · ' + icon('user', 'v2-icon--xs') + ' ' + esc(t.assignee) : '') +
+        (t.project ? ' · ' + icon('folder', 'v2-icon--xs') + ' ' + esc(projLabel(state, t.project)) : '') +
+        (t.gate === 'critic' ? ' · ' + icon('circle-check', 'v2-icon--xs') + ' critic gate' : '') +
+        (t.lease_until ? ' · ' + icon('clock', 'v2-icon--xs') + ' lease until ' + esc(t.lease_until.slice(11, 16)) : '') +
         '</div>' +
         (goalKids ? '<div class="v2-panel__meta">' + goalKids.done + '/' + goalKids.total + ' child missions done ' +
           '<button type="button" class="v2-panel__link-btn" id="v2-pp-goal-progress">Open goal/cycle progress →</button></div>' : '') +
         (t.body ? '<div class="v2-panel__body">' + esc(t.body) + '</div>' : '') +
-        items +
+        // t-93 round 2: itemized-review and log both get the sample's
+        // callout-box treatment (a distinct background + iconed uppercase
+        // header) instead of items sitting bare and the log getting no
+        // header at all — matching MEDIA (media.js already does this;
+        // this file just hadn't caught up).
+        (items ? '<div class="v2-panel__callout"><div class="v2-panel__callout-head">' + icon('circle-check', 'v2-icon--xs') + ' Itemized review</div>' + items + '</div>' : '') +
         renderArtifacts(t) +
-        '<div class="v2-panel__log">' + renderLog(t) + '</div>' +
+        '<div class="v2-panel__callout"><div class="v2-panel__callout-head">' + icon('clock', 'v2-icon--xs') + ' Log</div><div class="v2-panel__log">' + renderLog(t) + '</div></div>' +
         reviewActions + blockedActions + failedActions;
 
       var closeBtn = document.getElementById('v2-pp-close');
@@ -224,7 +239,15 @@
       '.v2-panel__artifact figcaption { color: var(--v2-muted, #999); font-size: 12px; }',
       '.v2-panel__logrow { padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 12.5px; }',
       '.v2-panel__ts { color: var(--v2-muted, #999); font-size: 11px; margin-right: var(--v2-space-1, 4px); font-variant-numeric: tabular-nums; }',
-      '.v2-panel__log { margin-top: var(--v2-space-2, 8px); }',
+      '.v2-panel__log { margin-top: 0; }',
+      // t-93 round 2: callout-box treatment — a distinct light-tinted
+      // background block with an iconed uppercase header, converging on
+      // the approved t-58 sample's "MEDIA — EVIDENCE PARITY" / "ITEMIZED
+      // REVIEW — PATTERN REFERENCE" section anatomy (media.js's own
+      // .v2-media already reads close to this register; this is the same
+      // treatment generalized for peek-panel.js's own sections).
+      '.v2-panel__callout { background: var(--v2-surface-2, var(--v2-bg, rgba(128,128,128,.06))); border: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-3, 12px); margin: var(--v2-space-3, 12px) 0; }',
+      '.v2-panel__callout-head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--v2-muted, #999); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-panel__actions { display: flex; gap: var(--v2-space-2, 8px); margin-top: var(--v2-space-3, 12px); }',
       '.v2-panel__note { flex: 1; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
       '.v2-panel__btn { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius, 6px); background: var(--v2-accent, #3f6fe0); color: var(--v2-on-accent, #fff); cursor: pointer; }',
