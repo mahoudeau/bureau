@@ -25,6 +25,15 @@
 // not compete with palette.js's quick mission-jump (Cmd/Ctrl+K) — that
 // stays the fast id/title jump; this is the deeper title+body+brain search
 // the mission itself asks for, reachable by its own affordance.
+//
+// t-89: the 🔎 trigger-button emoji prefix (below) is swapped for t-66's
+// vendored 'search' icon — an exact name/shape match, unlike this file's
+// own ✕ close-button glyph, left as-is: rendered (checked live, not just
+// by codepoint), ✕ (U+2715) is a plain monochrome glyph, not a colorful
+// emoji, same register as a plain arrow character — not what this
+// mission's emoji-as-icon sweep targets.
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -78,7 +87,7 @@
       trigger.type = 'button';
       trigger.className = 'v2-search-trigger';
       trigger.setAttribute('aria-label', 'Search missions and brain');
-      trigger.innerHTML = '🔎 <span class="v2-search-trigger__label">Search everything</span>';
+      trigger.innerHTML = icon('search') + ' <span class="v2-search-trigger__label">Search everything</span>';
       trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });
       document.body.appendChild(trigger);
     }
