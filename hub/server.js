@@ -532,9 +532,12 @@ async function mcpHandle(msg) {
 }
 
 // Periodic lease sweep so expired work re-queues even with no traffic.
+// Also the standing-work bell: pokes ring for work that is already waiting
+// (see lib/poke.js standing()), not only for fresh transitions.
 setInterval(() => {
   for (const t of store.expireLeases()) broadcast('task.requeued', t);
-}, 60_000);
+  try { poke.standing(store.load()); } catch (e) { console.error('[poke] standing sweep failed:', e.message); }
+}, +process.env.BUREAU_SWEEP_MS || 60_000);
 
 // Periodic intake sweep: files the boss dropped over SFTP or edited by hand
 // become commits (author human) without anyone asking.
