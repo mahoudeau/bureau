@@ -35,6 +35,15 @@
 // shows its images twice: once flat in the existing artifact list, once
 // curated here. Flagging plainly rather than quietly living with a
 // visual duplication a reader might mistake for a bug in this file.
+//
+// t-89: the 📷 emoji section-header prefix (below) is swapped for t-66's
+// vendored icon set — no "camera"/"image" shape exists in that set
+// (components.js is out of this mission's scope to extend), so this
+// picks the closest available semantic match, "paperclip" (attachment/
+// evidence register), the same kind of best-available-match call t-65
+// made swapping its own placeholder glyphs for icon('command') etc.
+import { icon } from './components.js';
+
 (function () {
   'use strict';
 
@@ -164,12 +173,12 @@
       section.className = 'v2-media';
 
       if (!groups) {
-        section.innerHTML = '<div class="v2-media__head">📷 Media</div><div class="v2-empty">No visual evidence attached yet.</div>';
+        section.innerHTML = '<div class="v2-media__head">' + icon('paperclip') + ' Media</div><div class="v2-empty">No visual evidence attached yet.</div>';
         panel.appendChild(section);
         return;
       }
 
-      var html = '<div class="v2-media__head">📷 Media <span class="v2-media__count">' + groups.current.length + '</span></div>';
+      var html = '<div class="v2-media__head">' + icon('paperclip') + ' Media <span class="v2-media__count">' + groups.current.length + '</span></div>';
       html += groups.current.length
         ? '<div class="v2-media__grid">' + groups.current.map(thumb).join('') + '</div>'
         : '<div class="v2-empty">No current-round evidence — only older history below.</div>';
