@@ -323,7 +323,21 @@ import { icon } from './components.js';
       '.v2-panel__id { font-size: 11.5px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; flex: 1; }',
       '.v2-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); display: flex; cursor: pointer; padding: 2px; flex: none; }',
       '.v2-panel__close:hover { color: var(--v2-color-text-primary, inherit); }',
-      '.v2-panel__title { margin: 0 0 var(--v2-space-4, 14px); font-size: 17px; font-weight: 600; line-height: 1.3; }',
+      // t-93 round 5: components.css:352 (`.v2-panel__title { flex: 1 1
+      // auto; ... }`, t-66) was written for a shared header-row context
+      // where .v2-panel__title sits beside .v2-panel__controls in one
+      // flex row. This file's own round-4 refactor moved .v2-panel__title
+      // out of any such row — it's a direct child of #v2-peek-panel,
+      // itself flex-column (components.css) — so the inherited flex-grow
+      // now expands the title to fill the column's available vertical
+      // space instead of shrinking horizontally, a real regression a
+      // round-4 critic pass measured directly (263px tall for one line of
+      // text). This file's own rule below already overrode margin/font-
+      // size/font-weight/line-height but never `flex`, so the stale value
+      // won. Explicit `flex: none` here, scoped to this file's own
+      // injected style rather than editing components.css (t-66's file,
+      // out of scope) — the narrower of the critic's two suggested fixes.
+      '.v2-panel__title { flex: none; margin: 0 0 var(--v2-space-4, 14px); font-size: 17px; font-weight: 600; line-height: 1.3; }',
       // Stacked attribute rows (sample: .attrs .row) replacing the old
       // single ' · '-joined meta line.
       '.v2-panel__attrs { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--v2-space-5, 16px); }',
