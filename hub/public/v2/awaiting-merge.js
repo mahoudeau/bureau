@@ -187,7 +187,19 @@
         '</div>';
     }
 
+    // t-128 fix: the trigger count must be the real, network-verified open-
+    // PR count from page load onward, and must keep tracking live updates
+    // while the panel stays closed — not a "candidate" guess that only gets
+    // corrected once the panel is opened (the bug: a stale/wrong count sat
+    // there until the first click, because the old code only recomputed
+    // countEl inside the fetch that used to run exclusively from an open
+    // panel's own render). render() now always resolves the real count on
+    // every call; the panel BODY markup is the only part gated on
+    // visibility, since rebuilding hidden DOM would be wasted work — the
+    // count itself is cheap even while closed (fetchPrState's own cache
+    // absorbs the repeat network cost across calls).
     function render() {
+      var showBody = !panel.hidden;
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
@@ -197,12 +209,12 @@
 
       if (!candidates.length) {
         countEl.textContent = '0';
-        bodyEl.innerHTML = '<div class="v2-empty">Nothing awaiting merge.</div>';
+        if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Nothing awaiting merge.</div>';
         return;
       }
 
-      bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
-      Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
+      if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
+      return Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
         // merged/closed PRs are filtered OUT — that mission isn't
         // "awaiting" anything anymore, even if bureau-side status hasn't
         // caught up. 'unconfirmed' (the GitHub call itself failed) stays
@@ -211,25 +223,27 @@
         var open = candidates.map(function (c, i) { return { task: c.task, pr: c.pr, state: states[i] }; })
           .filter(function (o) { return o.state === 'open' || o.state === 'unconfirmed'; });
         countEl.textContent = String(open.filter(function (o) { return o.state === 'open'; }).length || open.length);
-        bodyEl.innerHTML = open.length
-          ? open.map(function (o) { return row(o.task, o.pr, o.state); }).join('')
-          : '<div class="v2-empty">Nothing awaiting merge.</div>';
+        // Re-check panel.hidden at resolve time, not just at call time — a
+        // render() kicked off while the panel was open (or closed) can
+        // resolve after the user toggled it; writing hidden-panel markup is
+        // harmless, but skip it once the panel has since closed so a slow
+        // fetch can't repaint stale rows into a hidden node it's already
+        // about to be replaced in on the next open().
+        if (!panel.hidden) {
+          bodyEl.innerHTML = open.length
+            ? open.map(function (o) { return row(o.task, o.pr, o.state); }).join('')
+            : '<div class="v2-empty">Nothing awaiting merge.</div>';
+        }
       });
     }
 
-    // Re-render on live updates so a merge (or a new PR artifact landing)
-    // is reflected without needing to close/reopen the panel — same
-    // event set media.js already subscribes to for the identical reason.
-    V2.on('v2:state', function () { if (!panel.hidden) render(); });
-    // Initial count on load (panel stays closed/lazy for its full render,
-    // but the trigger's own count should reflect reality before the boss
-    // ever opens it) — a light candidate-count pass without the network
-    // round-trip, refined to the real open-PR count once actually opened.
-    (function initialCount() {
-      var tasks = (V2.state && V2.state.tasks) || [];
-      var n = tasks.filter(function (t) { return !!prLinkFor(t); }).length;
-      if (n) countEl.textContent = String(n);
-    })();
+    // Every state refresh — the initial load included, and every SSE tick
+    // or 60s poll after it — drives the trigger's real count, whether or
+    // not the panel is open. This is the actual fix for t-128: the count
+    // must be right before the boss ever clicks, and must keep tracking
+    // PR-bearing missions changing state while the panel stays closed.
+    V2.on('v2:state', function () { render(); });
+    render(); // cold-load count, before the panel has ever been opened
   }
 
   function injectStyle() {
