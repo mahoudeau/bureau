@@ -222,7 +222,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && p === '/api/agents/heartbeat') {
       const b = await readBody(req);
-      const a = store.heartbeat(b.name, b.note, b.activity);
+      const a = store.heartbeat(b.name, b.note, b.activity, b.sub_agents);
       if (!a) return send(res, 404, { error: 'unknown agent; register first' });
       if (a.error) return send(res, 400, a);
       broadcast('agent.heartbeat', { ...a, activity: a.activity });
