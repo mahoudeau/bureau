@@ -77,6 +77,21 @@ check "claiming under that same string only works via the normal claim path" "$(
 check "it is now an independent roster agent, unrelated to menace's fleet" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^1$'
 api PATCH "/api/tasks/$GHOSTID" '{"agent":"phantom-crew-1","status":"done","note":"closed - was only a claim-path identity-blur proof"}' > /dev/null
 
+echo "3c. roster curation: DELETE /api/agents/:name removes, never a ban"
+check "register a throwaway probe" "$(api POST /api/agents/register '{"name":"probe-1","kind":"dummy"}')" '"name": "probe-1"'
+PROBE_TASK=$(api POST /api/tasks '{"title":"Probe leaves a mark","priority":5}')
+PROBE_TID=$(echo "$PROBE_TASK" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"probe-1\",\"id\":\"$PROBE_TID\"}" > /dev/null
+check "removal refused while a live lease is held" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/agents/probe-1" -H "$AUTH")" '409'
+check "refusal names the mission and says to release it" "$(api DELETE /api/agents/probe-1)" "$PROBE_TID"
+api PATCH "/api/tasks/$PROBE_TID" '{"agent":"probe-1","status":"done","note":"probe finished, releasing the lease"}' > /dev/null
+check "removal succeeds once the lease is released" "$(api DELETE /api/agents/probe-1)" '"removed": true'
+check "removed name is gone from the roster" "$(agents_section | grep -c '"name": "probe-1"')" '^0$'
+check "its old mission log survives untouched" "$(api GET "/api/tasks/$PROBE_TID")" 'probe finished, releasing the lease'
+check "removing an unknown name is 404" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/agents/probe-1" -H "$AUTH")" '404'
+check "removal is curation, not a ban: the name re-registers clean" "$(api POST /api/agents/register '{"name":"probe-1","kind":"dummy"}')" '"name": "probe-1"'
+check "re-registered entry is back on the roster" "$(agents_section | grep -c '"name": "probe-1"')" '^1$'
+
 echo "4. blocked pauses the lease; the boss answers via capability link; work resumes"
 check "blocked" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"blocked","note":"waiting on: bean delivery"}')" '"blocked"'
 check "blocked clears lease" "$(api GET "/api/tasks/$TID")" '"lease_until": null'
