@@ -55,6 +55,21 @@
 
     function closePanel() { panel.hidden = true; currentId = null; }
 
+    // t-110 (goal: t-53): a discarded mission's closing note sometimes names
+    // the replacement it was re-scoped into (protocol.md's terminal-status
+    // doctrine: "duplicates, and missions re-scoped into a better-cut
+    // replacement (the closing note names the replacement)"). Scan the log
+    // newest-first so the most recent naming wins if more than one exists.
+    function findReplacement(t) {
+      var re = /(?:replaced by|re-cut as)[^.\n]{0,40}?(t-\d+)/i;
+      var log = t.log || [];
+      for (var i = log.length - 1; i >= 0; i--) {
+        var m = re.exec(log[i].note || '');
+        if (m) return m[1];
+      }
+      return null;
+    }
+
     function projLabel(state, id) {
       var p = (state.projects || []).find(function (pj) { return (typeof pj === 'string' ? pj : pj.id) === id; });
       if (!p) return id;
@@ -123,6 +138,7 @@
         });
       }
       var items = (t.items || []).map(function (it, i) { return itemRow(it, i, t.status === 'review'); }).join('');
+      var replacementId = t.status === 'discarded' ? findReplacement(t) : null;
 
       var reviewActions = t.status === 'review' ? (
         '<div class="v2-panel__actions">' +
@@ -154,6 +170,8 @@
         '</div>' +
         (goalKids ? '<div class="v2-panel__meta">' + goalKids.done + '/' + goalKids.total + ' child missions done ' +
           '<button type="button" class="v2-panel__link-btn" id="v2-pp-goal-progress">Open goal/cycle progress →</button></div>' : '') +
+        (replacementId ? '<div class="v2-panel__meta">🗄 discarded · ' +
+          '<button type="button" class="v2-panel__link-btn" id="v2-pp-replacement">Replaced by ' + esc(replacementId) + ' →</button></div>' : '') +
         (t.body ? '<div class="v2-panel__body">' + esc(t.body) + '</div>' : '') +
         items +
         renderArtifacts(t) +
@@ -165,6 +183,9 @@
 
       var goalBtn = document.getElementById('v2-pp-goal-progress');
       if (goalBtn) goalBtn.addEventListener('click', function () { V2.emit('v2:goal-progress:open', { id: t.id }); });
+
+      var replacementBtn = document.getElementById('v2-pp-replacement');
+      if (replacementBtn) replacementBtn.addEventListener('click', function () { V2.emit('v2:mission:open', { id: replacementId }); });
 
       function collectVerdicts() {
         var verdicts = [];
