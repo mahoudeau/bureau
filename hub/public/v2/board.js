@@ -411,6 +411,21 @@ import { icon } from './components.js';
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
       '.v2-project-row__entity { color: var(--v2-muted, #999); font-size: 11px; }',
       '.v2-project-row__counts { color: var(--v2-ink-2, #888); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }',
+      // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
+      // violation) — .v2-project-row is `display:flex` with no wrap, so
+      // entering inline edit (project-edit.js swapping __name for a wider
+      // .v2-pedit widget) shoves the other fields off the right edge of a
+      // 390px viewport, forcing real page-level horizontal scroll. project-
+      // edit.js already carries a matching phone-width wrap rule for its
+      // OWN inner .v2-pedit widget; this is the missing outer half. Same
+      // --v2-bp-phone breakpoint (720px) project-edit.js's own rule uses.
+      // Folds in finding #3 (LOW/polish) as a side effect: today, without
+      // row-level wrapping, each field individually shrinks and wraps its
+      // OWN text mid-word inside a squeezed box (the ragged multi-line
+      // look t-111 screenshotted) — letting the ROW wrap instead lets each
+      // field claim its natural width on its own line, a cleaner result
+      // from the same one-rule fix, not a second layout mechanism.
+      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { overflow-wrap: anywhere; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
       '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2, #888); display: flex; align-items: center; gap: 4px; }',
