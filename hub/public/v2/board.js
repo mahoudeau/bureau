@@ -40,7 +40,7 @@
 // (tokens.css/t-63; project-dot colors are the one deliberate exception,
 // same as the sample's own PCOLORS — a categorical per-project palette
 // isn't a semantic token, see projColor() below).
-import { icon } from './components.js';
+import { icon, avatar, chip } from './components.js';
 
 (function () {
   'use strict';
@@ -157,31 +157,166 @@ import { icon } from './components.js';
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
     };
     function initials(name) { return (name || '?').slice(0, 2).toUpperCase(); }
+    // Fleet sub-agent labels are short phrases ("inner critic round 4",
+    // "variant B of t-131"), not single names — first-letter-of-first-two-
+    // WORDS reads as a sane monogram ("IC", "VB"); initials()'s own
+    // first-two-CHARACTERS rule would give "IN"/"VA" instead, which reads
+    // as noise on a label that's already a phrase.
+    function fleetInitials(label) {
+      var words = (label || '?').trim().split(/\s+/);
+      return (words[0][0] + (words[1] ? words[1][0] : '')).toUpperCase();
+    }
+
+    // ---- roster: team vs visitors, quiet role, liveness glyph, nested
+    // fleet (t-131, goal: t-53 — "the agent rail becomes a team roster",
+    // boss order 2026-08-17) --------------------------------------------
+    //
+    // Liveness is its own small hue+glyph pairing, not STATUS_HUES
+    // (components.js) — that map is mission-status semantics (bug/at-risk/
+    // done); an agent's aliveness is a different axis, so it borrows the
+    // on-track green for "alive right now" and the two neutral text tones
+    // for the quieter tiers, rather than overloading a mission-shaped hue.
+    // Round 3 (inner critic): idle and offline both drew the same hollow
+    // "circle" glyph, differing only by color/dimming — for a 3-tier
+    // liveness axis where 2 of 3 tiers are visually identical shapes, the
+    // glyph does no work over half the time. offline gets its own shape
+    // (clock — already-vendored ICON, reads as "time has passed" for
+    // free) so all three tiers are shape-distinct, not just color-tinted.
+    var LIVENESS = {
+      active: { colorVar: '--v2-color-status-on-track', glyph: 'circle-dot', label: 'Active' },
+      idle: { colorVar: '--v2-color-text-secondary', glyph: 'circle', label: 'Idle' },
+      offline: { colorVar: '--v2-color-text-muted', glyph: 'clock', label: 'Offline' }
+    };
+
+    // Role is a UI-only presentation label (mission body: "kind stays a
+    // free string in the protocol"). protocol.md's own kind values are
+    // runtime shapes (cowork/claude-code/demo/dummy/other/human), not
+    // roles — the only place a role signal actually lives in the live hub
+    // today is capabilities[] (m-121's gate mechanism reads "critic"/
+    // "lead" literally there; sol's librarian work carries ['curation',
+    // 'librarian']; consul's outward-liaison/counsel work carries
+    // ['counsel', ...]). Reads capabilities first; "Builder" is the
+    // default for every other real team member.
+    function roleLabel(a) {
+      var caps = a.capabilities || [];
+      if (caps.indexOf('lead') !== -1) return 'Lead';
+      if (caps.indexOf('critic') !== -1 || (caps.indexOf('review') !== -1 && caps.indexOf('verification') !== -1)) return 'Critic';
+      if (caps.indexOf('librarian') !== -1 || caps.indexOf('curation') !== -1) return 'Librarian';
+      if (caps.indexOf('counsel') !== -1) return 'Envoy';
+      return 'Builder';
+    }
+
+    // Visitors: fixture/probe/demo registrations that are not "who works
+    // here" — kept out of the main roster per the mission's own permitted
+    // heuristic ("whatever heuristic the builder justifies from the
+    // data"). Justified from a live roster dump (2026-08-16): kind dummy/
+    // demo/other are the hub's own non-team runtime kinds; on top of that,
+    // every probe/fixture seen in that dump (moneta-fleet-check, bettik-
+    // fleet-probe-t117, ...) registers with EITHER zero capabilities or a
+    // capabilities[] drawn entirely from a small known fixture-signal set
+    // (curl — the dummy-agent.sh conformance script's literal capability;
+    // test; throwaway-verification) — a real team member always carries at
+    // least one substantive capability (code/ops/research/planning/...).
+    var FIXTURE_CAPS = { curl: 1, test: 1, 'throwaway-verification': 1 };
+    function isVisitor(a) {
+      if (a.kind === 'dummy' || a.kind === 'demo' || a.kind === 'other') return true;
+      var caps = a.capabilities || [];
+      if (!caps.length) return true;
+      return caps.every(function (c) { return FIXTURE_CAPS[c]; });
+    }
+
+    function rosterAvatar(a, size) {
+      // Round 3 (inner critic, fresh-eyes): isAgent:true renders the SAME
+      // generic monitor-icon "Agent" pill for every row regardless of
+      // `content` — components.js's avatar() ignores its own content arg
+      // on that branch by design (STUDY's "agents get a tag, not a
+      // different UI" rule, aimed at a DIFFERENT surface: a one-off
+      // assignee indicator elsewhere, where the name is already written
+      // right next to it). On a roster, the avatar IS the per-row
+      // identity anchor the mission body itself asks for ("initials
+      // avatar... name, a quiet role") — every row rendering an identical
+      // pill defeats "reads as a team, not a registration dump" before
+      // you even get to the name. Plain initials avatar for every roster
+      // row; "agent-ness" is already conveyed by the row's own role chip.
+      return avatar(initials(a.name), { size: size || 'sm' }).outerHTML;
+    }
+
+    function rosterRow(a, opts) {
+      opts = opts || {};
+      var st = agentStatus(a);
+      var live = LIVENESS[st];
+      var activityText = esc(a.activity || (st === 'offline' ? 'offline' : 'idle'));
+      var title = esc(a.kind + (a.note ? ' · ' + a.note : '') + ' · seen ' + ago(a.last_seen) + ' ago');
+      // Two lines per row (name+role on top, activity below) — not one
+      // packed line: round 1 tried avatar+name+role+activity on a single
+      // line and the rail's real width (~230px) crushed the name down to
+      // 1-2 characters, which fails the whole point of a roster ("who
+      // works here" is unreadable if the name is the field that gives).
+      // Name gets the top line to itself (minus the quiet role chip,
+      // which is short and pinned right); activity gets its own line so
+      // neither ever fights the name for space.
+      // No tabindex: the row carries no click/keyboard action (parity with
+      // the old .v2-agent-card, which was display-only too) — a focusable
+      // stop with nothing bound to it is worse a11y than no stop at all.
+      // The hover highlight stays purely as a scannability/craft cue
+      // (crop-ux-sidebar-item.png's own rounded row treatment), not a
+      // promise of interactivity.
+      return '<div class="v2-roster-row' + (st === 'offline' ? ' v2-roster-row--muted' : '') + '" data-agent="' + esc(a.name) + '" title="' + title + '">' +
+        rosterAvatar(a) +
+        '<div class="v2-roster-row__main">' +
+        '<div class="v2-roster-row__top">' +
+        '<span class="v2-roster-row__name">' + esc(a.name) + '</span>' +
+        (opts.showRole !== false ? chip(roleLabel(a)).outerHTML : '') +
+        '</div>' +
+        '<div class="v2-roster-row__activity">' +
+        '<span class="v2-status-glyph v2-status-glyph--xs" style="color:var(' + live.colorVar + ')" title="' + live.label + '">' + icon(live.glyph) + '</span>' +
+        activityText + '</div>' +
+        '</div>' +
+        '</div>';
+    }
+
+    function fleetRows(a) {
+      // Live only (t-109's own rule, unchanged): a stale fleet reads as a
+      // lie, so it's gated on the SAME `active` heartbeat tier the roster
+      // row's own liveness glyph uses, and disappears the moment the
+      // parent goes idle/offline — no separate liveness check to drift.
+      var st = agentStatus(a);
+      var fleet = st === 'active' && Array.isArray(a.sub_agents) ? a.sub_agents : [];
+      if (!fleet.length) return '';
+      return '<div class="v2-roster-fleet">' +
+        fleet.map(function (s) {
+          return '<div class="v2-roster-fleet__row">' +
+            '<span class="v2-avatar v2-avatar--xs">' + esc(fleetInitials(s.label)) + '</span>' +
+            '<span class="v2-roster-fleet__label">' + esc(s.label) + '</span>' +
+            (s.activity ? '<span class="v2-roster-fleet__activity">' + esc(s.activity) + '</span>' : '') +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
 
     function renderAgents(state) {
       var agents = state.agents || [];
-      mounts.agentsRail.querySelector('.v2-region-title') && null; // title stays static markup in v2.html
-      var body = agents.length ? agents.map(function (a) {
-        var st = agentStatus(a);
-        // Sub-agent fleet (t-109, goal: t-60; ports t-80's already-verified
-        // index.html pattern onto this rail). Live only, per the same rule
-        // t-80 shipped — a stale fleet reads as a lie, so it's gated on the
-        // SAME `active` status (heartbeat <5min) the roster badge already
-        // uses, and disappears entirely the moment the parent goes
-        // idle/offline, same v2:state re-render, no separate liveness check.
-        var fleet = st === 'active' && Array.isArray(a.sub_agents) ? a.sub_agents : [];
-        var fleetBadge = fleet.length ? ' <span class="v2-badge v2-badge--fleet">🧵 ' + fleet.length + '</span>' : '';
-        var fleetFoldout = fleet.length
-          ? '<details class="v2-fleet"><summary>' + fleet.length + ' sub-agent' + (fleet.length === 1 ? '' : 's') + '</summary>' +
-            fleet.map(function (s) { return '<div class="v2-fleet__subagent">' + esc(s.label) + (s.activity ? ' · ' + esc(s.activity) : '') + '</div>'; }).join('') +
-            '</details>'
-          : '';
-        return '<div class="v2-agent-card">' +
-          '<div class="v2-agent-card__name">' + esc(a.name) + '<span class="v2-badge v2-badge--' + st + '"><span class="v2-badge__dot"></span>' + st + '</span>' + fleetBadge + '</div>' +
-          '<div class="v2-agent-card__meta">' + esc(a.kind) + (a.activity ? ' · ' + esc(a.activity) : '') + ' · seen ' + ago(a.last_seen) + ' ago' + (a.note ? ' · ' + esc(a.note) : '') + '</div>' +
-          fleetFoldout +
-          '</div>';
-      }).join('') : '<div class="v2-empty">No agents yet.</div>';
+      var team = agents.filter(function (a) { return !isVisitor(a); });
+      var visitors = agents.filter(isVisitor);
+
+      // Active first, then idle, then offline — each tier by recency
+      // descending, tiers never interleaved (boss order: "idle for days
+      // sit muted at the bottom, never interleaved with the live team").
+      var TIER = { active: 0, idle: 1, offline: 2 };
+      team.sort(function (x, y) {
+        var rx = TIER[agentStatus(x)], ry = TIER[agentStatus(y)];
+        if (rx !== ry) return rx - ry;
+        return new Date(y.last_seen) - new Date(x.last_seen);
+      });
+
+      var teamHtml = team.map(function (a) { return rosterRow(a) + fleetRows(a); }).join('');
+      var visitorsHtml = visitors.length
+        ? '<details class="v2-roster-visitors"><summary>Visitors <span class="v2-tabular-nums">(' + visitors.length + ')</span></summary>' +
+          visitors.map(function (a) { return rosterRow(a, { showRole: false }); }).join('') +
+          '</details>'
+        : '';
+
+      var body = (team.length ? teamHtml : '<div class="v2-empty">No agents yet.</div>') + visitorsHtml;
       setRegionBody(mounts.agentsRail, body);
     }
 
@@ -450,31 +585,10 @@ import { icon } from './components.js';
     style.id = 'v2-board-style';
     style.textContent = [
       '.v2-region-body { display: contents; }',
-      '.v2-agent-card { padding: var(--v2-space-2, 8px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
-      '.v2-agent-card:last-child { border-bottom: none; }',
-      '.v2-agent-card__name { font-weight: 600; display: flex; align-items: center; gap: var(--v2-space-2, 8px); }',
-      '.v2-agent-card__meta { color: var(--v2-ink-2, #888); font-size: 12px; margin-top: 2px; }',
-      '.v2-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px; border: 1px solid var(--v2-border, rgba(128,128,128,.3)); border-radius: 999px; color: var(--v2-ink-2, #888); }',
-      '.v2-badge__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--v2-muted, #999); display: inline-block; }',
-      '.v2-badge--active .v2-badge__dot { background: var(--v2-good, #17845a); }',
-      '.v2-badge--idle .v2-badge__dot { background: var(--v2-warning, #b5790a); }',
-      '.v2-badge--offline .v2-badge__dot { background: var(--v2-muted, #999); }',
-      // Sub-agent fleets (t-109, goal: t-60). The count badge reuses the
-      // existing .v2-badge shell (same precedent t-80 set on index.html)
-      // but carries no dot of its own — a fleet is not a roster agent with
-      // a heartbeat history. The fold-out rows below go further: plain
-      // text at the .v2-task-card__meta scale, muted only, no accent, no
-      // badge-pill shape — that visual language specifically means "this
-      // has its own heartbeat history," which is exactly untrue of a
-      // sub-agent, so it is withheld by construction, not by convention.
-      '.v2-badge--fleet { color: var(--v2-ink-2, #888); }',
-      '.v2-fleet { margin-top: 4px; }',
-      '.v2-fleet summary { cursor: pointer; font-size: 11px; color: var(--v2-muted, #999); list-style: none; }',
-      '.v2-fleet summary::-webkit-details-marker { display: none; }',
-      '.v2-fleet summary::before { content: "▸ "; }',
-      '.v2-fleet[open] summary::before { content: "▾ "; }',
-      '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted, #999); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
-      '.v2-fleet__subagent:last-child { border-bottom: none; }',
+      // Agent roster row/fleet/visitors styling now lives in components.css
+      // (t-131, goal: t-53) — the atom-owning file, not this inline block;
+      // superseded the old flat .v2-agent-card/.v2-badge/.v2-fleet rules
+      // that read as a raw registration dump.
       '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       '.v2-project-row__name { font-weight: 600; }',

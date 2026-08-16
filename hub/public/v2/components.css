@@ -170,6 +170,7 @@
   font-size: var(--v2-font-size-2xs);
   font-weight: var(--v2-weight-semibold);
 }
+.v2-avatar--xs { width: var(--v2-avatar-size-xs); height: var(--v2-avatar-size-xs); font-size: 8px; }
 .v2-avatar--sm { width: var(--v2-avatar-size-sm); height: var(--v2-avatar-size-sm); }
 .v2-avatar--md { width: var(--v2-avatar-size-md); height: var(--v2-avatar-size-md); }
 
@@ -185,9 +186,133 @@
   font-size: var(--v2-font-size-2xs);
   font-weight: var(--v2-weight-medium);
 }
+.v2-agent-tag--xs { height: var(--v2-avatar-size-xs); padding: 0 var(--v2-space-2); font-size: 9px; }
 .v2-agent-tag--sm { height: var(--v2-avatar-size-sm); }
 .v2-agent-tag--md { height: var(--v2-avatar-size-md); }
 .v2-agent-tag__icon .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
+.v2-agent-tag--xs .v2-agent-tag__icon .v2-icon { width: 9px; height: 9px; }
+
+/* ---- agent roster (t-131, goal: t-53) ----------------------------------
+   The left rail's #v2-agents-rail body: "who works here", not a raw
+   registration dump (boss order 2026-08-17). Row grammar follows
+   crop-ux-agent-tag-row.png (avatar/tag + name, quiet role trailing) and
+   crop-ux-sidebar-item.png (row height/rhythm, rounded hover/selected
+   background instead of a hairline divider between rows). Nested fleet
+   sub-entries use an elbow connector — crop-ux-status-glyphs.png's own
+   nested "Linear" row under "jori", and crop-ux-list-row-density.png's
+   parent/child tree — a vertical rail off the parent's own avatar center
+   with a horizontal stub into each child row, so subordinate rows read as
+   branches, not a second flat list glued underneath. */
+.v2-roster-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--v2-space-4);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  cursor: default;
+}
+/* Hover only, no :focus-visible rule — the row carries no tabindex/click
+   action (board.js's own comment on the row markup explains why), so
+   there is nothing for a focus ring to ever attach to; a hover-only cue
+   is the honest state to design for a display-only row. */
+.v2-roster-row:hover {
+  background: var(--v2-color-surface-raised);
+}
+/* Two lines, not one: round 1 packed avatar+name+role+activity onto a
+   single line and the rail's real width (~230px) crushed the name down
+   to 1-2 characters (a roster whose own name field is unreadable fails
+   its one job). __main stacks name+role above activity so the name
+   always gets a full line to itself before anything competes with it. */
+.v2-roster-row__main { flex: 1; min-width: 0; padding-top: 1px; }
+.v2-roster-row__top { display: flex; align-items: center; gap: var(--v2-space-3); }
+/* Round 3 (inner critic): name previously carried flex:1, stretching to
+   fill the row and shoving the role chip out to the row's far edge with
+   a large gap — the crop's own role/tag sits quiet and snug immediately
+   after the name, not detached across a wide gap. Name now takes only
+   its own content width (shrinking, not growing, under real pressure);
+   the chip sits right beside it. */
+.v2-roster-row__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: var(--v2-weight-semibold);
+  font-size: var(--v2-font-size-sm);
+  color: var(--v2-color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-roster-row__activity {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  margin-top: var(--v2-space-1);
+  color: var(--v2-color-text-secondary);
+  font-size: var(--v2-font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Idle-for-days tier: still in the live team, never dropped into Visitors
+   (that group is for non-team registrations, a different axis), but
+   visually deemphasized and always sorted last within the team so it
+   never interleaves with who is actually active right now. */
+.v2-roster-row--muted { opacity: 0.55; }
+.v2-roster-row--muted:hover, .v2-roster-row--muted:focus-visible { opacity: 0.85; }
+
+.v2-roster-fleet {
+  position: relative;
+  margin: 0 0 var(--v2-space-2) calc(var(--v2-space-3) + var(--v2-avatar-size-sm) / 2);
+  padding-left: var(--v2-space-6);
+}
+.v2-roster-fleet::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(-1 * var(--v2-space-2));
+  bottom: calc(var(--v2-row-height) * 0.45);
+  width: 1px;
+  background: var(--v2-color-border-strong);
+}
+.v2-roster-fleet__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  min-height: calc(var(--v2-row-height) * 0.9);
+  color: var(--v2-color-text-secondary);
+  font-size: var(--v2-font-size-xs);
+}
+.v2-roster-fleet__row::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--v2-space-6));
+  top: 50%;
+  width: var(--v2-space-6);
+  height: 1px;
+  background: var(--v2-color-border-strong);
+}
+.v2-roster-fleet__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-roster-fleet__activity { margin-left: auto; color: var(--v2-color-text-muted); white-space: nowrap; }
+
+/* Visitors: fixture/probe/demo registrations, collapsed by default (native
+   <details>, zero JS) so they never compete with the working team for
+   attention, per the mission's own "collapsed under a single muted group,
+   hidden by default" order. */
+.v2-roster-visitors { margin-top: var(--v2-space-3); }
+.v2-roster-visitors summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: var(--v2-font-size-2xs);
+  font-weight: var(--v2-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--v2-color-text-muted);
+  padding: var(--v2-space-3);
+}
+.v2-roster-visitors summary::-webkit-details-marker { display: none; }
+.v2-roster-visitors summary::before { content: "▸ "; }
+.v2-roster-visitors[open] summary::before { content: "▾ "; }
+.v2-roster-visitors .v2-roster-row { opacity: 0.7; }
 
 /* ---- button ------------------------------------------------------------
    variants: primary (accent fill), secondary (hairline outline, default),
