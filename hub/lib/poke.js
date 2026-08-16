@@ -10,6 +10,9 @@
 // events: hub event types to match (empty/absent = all).
 // filter: every key must strictly equal the same key in the payload
 //         (top level first, then inside .task).
+// wrap: "text" posts {"text":"<one human-readable line>"} instead of the raw
+//       payload, for endpoints that append the body as a message to a session
+//       (the woken agent reads why it was summoned). Absent = raw payload.
 'use strict';
 
 let SUBS = [];
@@ -55,6 +58,19 @@ function matches(sub, p) {
   return true;
 }
 
+function asLine(p) {
+  const t = p.task || {};
+  const bits = [
+    `poke: ${p.event}`,
+    t.id ? `${t.id} "${t.title || ''}"` : '',
+    t.status ? `status=${t.status}` : '', t.gate ? `gate=${t.gate}` : '',
+    t.reserved_for ? `reserved_for=${t.reserved_for}` : '',
+    p.by ? `by=${p.by}` : '', p.prev_status ? `prev=${p.prev_status}` : '',
+    p.note ? `note: ${p.note}` : '',
+  ].filter(Boolean);
+  return bits.join(' · ');
+}
+
 async function send(type, data, extra) {
   if (!SUBS.length) return;
   const p = payloadFor(type, data, extra);
@@ -64,7 +80,7 @@ async function send(type, data, extra) {
       await fetch(sub.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(sub.headers || {}) },
-        body: JSON.stringify(p),
+        body: JSON.stringify(sub.wrap === 'text' ? { text: asLine(p) } : p),
       });
     } catch (e) {
       console.error('[poke] send failed:', String(sub.url).split('?')[0], e.message);
