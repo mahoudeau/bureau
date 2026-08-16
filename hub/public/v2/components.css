@@ -435,3 +435,34 @@
    Applies the same dimmed/inert treatment to any atom via a utility class,
    for states a component doesn't have a dedicated modifier for. */
 .v2-is-disabled { opacity: 0.5; pointer-events: none; cursor: not-allowed; }
+
+/* ---- touch hit-slop, shared utility (t-115, goal: t-53) ----------------
+   Closes t-111's finding #2 (HIGH, systemic): every hand-tappable control
+   in the review/verdict flow — itemized-verdict radios (13x13), the batch-
+   select checkboxes on review cards and inside the itemized list (13x13/
+   18x18), the shared panel close button (30x30), and the Approve/Send-back
+   actions (30px tall) — measured well under both mobile touch-target
+   guidelines (iOS HIG >=44x44pt, Material >=48x48dp) on the single
+   surface the Bar names as the fastest path on mobile.
+   One shared class, applied at every call site, rather than five one-off
+   paddings: an absolutely-positioned, invisible ::before sized to at
+   least 44x44 (or the element's own box, whichever is larger, via
+   `max()`), centered over the element. The VISIBLE control — the glyph,
+   checkbox square, or button's own padding/fill — is completely
+   untouched; only the invisible tappable region around it grows. Requires
+   `position: relative` on the host (set here) so the pseudo-element's
+   percentage sizing resolves against the host's own box, not some
+   ancestor. Works identically on native form controls (checkbox/radio)
+   and on <button>: a pseudo-element's hit box is dispatched to its host
+   element, confirmed empirically via Playwright click tests at the edge
+   of the expanded zone, not just measured. */
+.v2-hit44 { position: relative; }
+.v2-hit44::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: max(44px, 100%);
+  height: max(44px, 100%);
+}
