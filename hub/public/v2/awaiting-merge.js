@@ -47,6 +47,18 @@
 // which is the fail-safe direction: a boss who can't fully trust one
 // row's live state is far better served than one who never sees a
 // tranche because a network call quietly ate it.
+//
+// t-129 (goal: t-53) split: the boss's own complaint — a flat list mixed
+// t-59-style round-N branch PRs (mission still looping, not his to
+// merge) in with PRs whose missions are genuinely done. This surface
+// answers one question, "what's waiting on ME", so it now buckets every
+// PR-carrying mission into READY (mission done, or in review at
+// gate:boss — his own click is the only thing left) or IN-LOOP (mission
+// queued/claimed/in_progress, or in review at gate:critic — still
+// mid-loop, not his turn yet). READY renders first and undimmed; IN-LOOP
+// renders muted below it. The trigger's count — both the light on-load
+// pass and the network-confirmed pass — counts READY rows only, since
+// that's the number that answers "how many need me right now".
 (function () {
   'use strict';
 
@@ -128,6 +140,26 @@
       return null;
     }
 
+    // READY = the boss's own click is the only thing left standing
+    // between this PR and merged: the mission itself is done, or it's
+    // sitting in review at gate:boss (already survived the critic loop,
+    // promoted to him by the critic/lead, per t-119's own gate rule —
+    // never self-promoted by a builder). Everything else with an open PR
+    // (queued, claimed, in_progress, blocked, or review at gate:critic —
+    // still mid critic-loop per t-53's own judging protocol) is still
+    // in the loop: a real open PR, but not his turn yet.
+    function isReady(task) {
+      return task.status === 'done' || (task.status === 'review' && task.gate === 'boss');
+    }
+
+    // Short human label for why a row sits where it sits — shown on
+    // IN-LOOP rows so the muted section reads as "still cooking, here's
+    // the stage" rather than an unexplained dimming.
+    function statusLabel(task) {
+      if (task.status === 'review') return 'review · gate ' + (task.gate || '?');
+      return String(task.status || 'unknown').replace(/_/g, ' ');
+    }
+
     function artImg(a) {
       var m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
       if (m && !/^https?:/i.test(m[1])) return m[1];
@@ -175,16 +207,52 @@
         });
     }
 
-    function row(task, pr, state) {
+    function row(task, pr, state, ready) {
       var badge = state === 'open' ? '' : state === 'unconfirmed' ? '<span class="v2-awaitmerge-row__unconfirmed">PR state unconfirmed</span>' : '';
-      return '<div class="v2-awaitmerge-row">' +
+      return '<div class="v2-awaitmerge-row' + (ready ? '' : ' v2-awaitmerge-row--inloop') + '">' +
         '<div class="v2-awaitmerge-row__head">' +
         '<span class="v2-awaitmerge-row__title">' + esc(task.id) + ' · ' + esc(task.title) + '</span>' +
         '<a class="v2-awaitmerge-row__pr" href="' + esc(pr.url) + '" target="_blank" rel="noopener">PR #' + esc(pr.number) + ' →</a>' +
         '</div>' +
-        (badge ? '<div class="v2-awaitmerge-row__meta">' + badge + '</div>' : '') +
+        '<div class="v2-awaitmerge-row__meta">' +
+        (ready ? '' : '<span class="v2-awaitmerge-row__status">' + esc(statusLabel(task)) + '</span>') +
+        badge +
+        '</div>' +
         thumbsFor(task) +
         '</div>';
+    }
+
+    // A section is only worth its own header once it has rows; an empty
+    // READY (or empty IN-LOOP) section renders nothing rather than an
+    // empty header, so "one done PR + one looping PR" reads as exactly
+    // two labeled blocks, not two-plus-a-hollow-third.
+    function section(key, label, rows, ready) {
+      if (!rows.length) return '';
+      return '<div class="v2-awaitmerge-section v2-awaitmerge-section--' + key + '">' +
+        '<div class="v2-awaitmerge-section__head">' + esc(label) +
+        ' <span class="v2-awaitmerge-section__count">' + rows.length + '</span></div>' +
+        rows.map(function (o) { return row(o.task, o.pr, o.state, ready); }).join('') +
+        '</div>';
+    }
+
+    // Splits the states-resolved candidate list into READY (rendered
+    // first, undimmed) and IN-LOOP (rendered below, muted) — the only
+    // classification this file needs, driven off task.status/task.gate,
+    // never off PR state (PR state only ever decides in/out of the list
+    // at all, per the merged/closed filter above it).
+    function bucket(resolved) {
+      var readyRows = [], inLoopRows = [];
+      resolved.forEach(function (o) { (isReady(o.task) ? readyRows : inLoopRows).push(o); });
+      return { ready: readyRows, inLoop: inLoopRows };
+    }
+
+    // Trigger count = READY only (t-129's own instruction: the number on
+    // the trigger answers "how many need me right now", not "how many
+    // PRs exist"). Same open-count-with-unconfirmed-fallback shape the
+    // pre-split count used, just scoped to the ready bucket.
+    function readyCount(readyRows) {
+      var confirmed = readyRows.filter(function (o) { return o.state === 'open'; }).length;
+      return confirmed || readyRows.length;
     }
 
     function render() {
@@ -201,7 +269,7 @@
         return;
       }
 
-      bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
+      if (!panel.hidden) bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
       Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
         // merged/closed PRs are filtered OUT — that mission isn't
         // "awaiting" anything anymore, even if bureau-side status hasn't
@@ -210,24 +278,33 @@
         // tranche because a network call quietly ate it.
         var open = candidates.map(function (c, i) { return { task: c.task, pr: c.pr, state: states[i] }; })
           .filter(function (o) { return o.state === 'open' || o.state === 'unconfirmed'; });
-        countEl.textContent = String(open.filter(function (o) { return o.state === 'open'; }).length || open.length);
+        var b = bucket(open);
+        countEl.textContent = String(readyCount(b.ready));
+        if (panel.hidden) return; // trigger count stays live even closed; DOM body work waits for open
         bodyEl.innerHTML = open.length
-          ? open.map(function (o) { return row(o.task, o.pr, o.state); }).join('')
+          ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
           : '<div class="v2-empty">Nothing awaiting merge.</div>';
       });
     }
 
-    // Re-render on live updates so a merge (or a new PR artifact landing)
-    // is reflected without needing to close/reopen the panel — same
-    // event set media.js already subscribes to for the identical reason.
-    V2.on('v2:state', function () { if (!panel.hidden) render(); });
+    // Re-render on live updates so a merge, a new PR artifact landing, or
+    // a mission's status/gate change (moving its row between READY and
+    // IN-LOOP) is reflected without needing to close/reopen the panel —
+    // same event set media.js already subscribes to for the identical
+    // reason. Runs whether the panel is open or closed: the trigger's
+    // own READY count has to stay live either way, and render() itself
+    // skips the DOM body work while closed.
+    V2.on('v2:state', function () { render(); });
     // Initial count on load (panel stays closed/lazy for its full render,
     // but the trigger's own count should reflect reality before the boss
     // ever opens it) — a light candidate-count pass without the network
     // round-trip, refined to the real open-PR count once actually opened.
+    // Scoped to READY candidates only, same as the network-confirmed
+    // count, so the light pass and the real pass never disagree in kind
+    // — only in confidence.
     (function initialCount() {
       var tasks = (V2.state && V2.state.tasks) || [];
-      var n = tasks.filter(function (t) { return !!prLinkFor(t); }).length;
+      var n = tasks.filter(function (t) { return !!prLinkFor(t) && isReady(t); }).length;
       if (n) countEl.textContent = String(n);
     })();
   }
@@ -243,13 +320,32 @@
       '@media (max-width: 720px) { .v2-awaitmerge-panel { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }',
       '.v2-awaitmerge-panel__head { display: flex; align-items: center; justify-content: space-between; padding: var(--v2-space-4, 12px); border-bottom: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.2))); font-size: var(--v2-font-size-md, 14px); }',
       '.v2-awaitmerge-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); cursor: pointer; font-size: 14px; }',
-      '.v2-awaitmerge-panel__body { overflow-y: auto; padding: var(--v2-space-3, 12px); display: flex; flex-direction: column; gap: var(--v2-space-4, 12px); }',
+      '.v2-awaitmerge-panel__body { overflow-y: auto; padding: var(--v2-space-3, 12px); display: flex; flex-direction: column; gap: var(--v2-space-5, 16px); }',
+      // Section header: small caps-weight label + a tabular-numeral count
+      // pill. READY gets the done/green accent (it's a positive, "this is
+      // for you" signal); IN-LOOP gets the neutral muted text — visually
+      // distinct without needing a second color vocabulary.
+      '.v2-awaitmerge-section { display: flex; flex-direction: column; gap: var(--v2-space-3, 10px); }',
+      '.v2-awaitmerge-section__head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }',
+      '.v2-awaitmerge-section--ready .v2-awaitmerge-section__head { color: var(--v2-color-status-done, #29a36a); }',
+      '.v2-awaitmerge-section--inloop .v2-awaitmerge-section__head { color: var(--v2-color-text-muted, #93949c); }',
+      '.v2-awaitmerge-section__count { font-variant-numeric: tabular-nums; font-weight: 600; }',
       '.v2-awaitmerge-row { border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.2))); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-3, 10px); }',
+      // READY rows: a full-strength left accent so the section reads as
+      // "yours to act on" even scanned quickly. IN-LOOP rows: dimmed as a
+      // whole (border, text, thumbnails) so the muted section reads as
+      // background context, not a second to-do list competing for
+      // attention — per t-129's own "visually distinct" instruction.
+      '.v2-awaitmerge-section--ready .v2-awaitmerge-row { border-left: 3px solid var(--v2-color-status-done, #29a36a); }',
+      '.v2-awaitmerge-row--inloop { opacity: .6; }',
+      '.v2-awaitmerge-row--inloop:hover, .v2-awaitmerge-row--inloop:focus-within { opacity: .85; }',
       '.v2-awaitmerge-row__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 6px); }',
       '.v2-awaitmerge-row__title { font-weight: 600; font-size: 13px; overflow-wrap: break-word; }',
       '.v2-awaitmerge-row__pr { flex: none; font-size: 12px; color: var(--v2-color-accent, #3f6fe0); text-decoration: none; white-space: nowrap; }',
       '.v2-awaitmerge-row__pr:hover { text-decoration: underline; }',
-      '.v2-awaitmerge-row__meta { margin-bottom: var(--v2-space-2, 6px); }',
+      '.v2-awaitmerge-row__meta { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 6px); }',
+      '.v2-awaitmerge-row__meta:empty { display: none; margin: 0; }',
+      '.v2-awaitmerge-row__status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--v2-color-text-muted, #93949c); }',
       '.v2-awaitmerge-row__unconfirmed { font-size: 11px; color: var(--v2-color-status-at-risk, #f2a30f); }'
     ].join('\n');
     document.head.appendChild(style);
