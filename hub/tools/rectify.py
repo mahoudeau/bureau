@@ -62,6 +62,7 @@
 #   "background_key": [255, 0, 255],       // magenta, the sheets' own key
 #   "key_tolerance": 60,                    // OUTER band edge: channel-distance beyond which a cell is fully opaque
 #   "key_inner_tolerance": 21,               // INNER band edge (default: 0.35 * key_tolerance): fully background within this distance. Between the two, alpha ramps and color is decontaminated — this is what kills fringe halos that a single hard threshold can't.
+#   "edge_hue_tolerance": 40,                // (round 27) an edge cell's DECONTAMINATED color is still checked for the key's own hue signature (min(R,B)-G, see magenta_hue_score) — decontamination is a linear approximation and can leave a residual tint on isolated cells; one that scores above this is dropped to fully transparent rather than shipped tinted. Default 40 is calibrated against this atlas's committed sprites (real content <=28, prior defects 62-92); tune per-sheet only with evidence, same as the other tolerances.
 #   "anchor_region": [x, y, w, h],          // rough box containing the sheet's
 #                                            // own 48px-tall anchor figure —
 #                                            // padding is fine, tight-cropped
@@ -143,7 +144,31 @@ def mode_color(pixels):
     return tuple(int(round(c)) for c in avg)
 
 
-def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol):
+def magenta_hue_score(rgb, bg_color):
+    # How strongly a color still carries the KEY's own hue (not just its
+    # brightness/distance) — the key is near-pure magenta (R and B both far
+    # above G), so this is min(R,B) - G. Distance-to-background (color_dist)
+    # and hue score measure different things: a dark, near-black pixel can
+    # sit far from the key in Euclidean distance (safe by that test) while a
+    # bright, desaturated one can be hue-clean but numerically close. Round
+    # 26's critic pass found isolated edge-band pixels that clear outer_tol
+    # (so cell_vote_grid's linear decontamination fires and ships them) but
+    # still read as visibly magenta-tinted after decontamination — the
+    # per-cell alpha_frac (itself only an approximation of true alpha, since
+    # it comes from a single scalar distance) understates the real blend
+    # fraction, so solving for fg leaves a residual tint. This score is a
+    # bg-agnostic gate for that residue, independent of build_shared_palette's
+    # existing Euclidean-distance safety net (which catches a different
+    # failure mode: opaque interior votes that drifted back toward the key
+    # through bucket-averaging, see its own comment).
+    r, g, b = rgb
+    bg_r, bg_g, bg_b = bg_color
+    if min(bg_r, bg_b) - bg_g <= 0:
+        return 0  # background isn't magenta-hued (custom key); this net doesn't apply
+    return min(r, b) - g
+
+
+def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, edge_hue_tol=40):
     # Soft chroma-key with decontamination, not a hard threshold. A cell
     # voted color's distance to the background color puts it in one of
     # three bands:
@@ -158,6 +183,21 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol):
     #     observed = alpha_frac*fg + (1-alpha_frac)*bg for fg, so the
     #     magenta tint mixed into the edge blend is removed rather than
     #     shipped as part of the sprite's own color.
+    #     Hue safety net (round 27): even after decontamination, a handful of
+    #     isolated edge cells can still carry the key's own magenta hue
+    #     signature (see magenta_hue_score) — the round-26 critic pass found
+    #     4 such pixels atlas-wide (all in the edge band, all isolated single
+    #     cells at a hard alpha-0/alpha-255 boundary), none caught by the
+    #     existing Euclidean-distance checks. A cell whose decontaminated
+    #     color still scores above edge_hue_tol is dropped to fully
+    #     transparent instead: the linear unmix has already shown itself
+    #     unreliable for this cell (that's exactly what the residual hue
+    #     means), and the sprite's real edge is carried by the next cell in,
+    #     which is untouched — so there is nothing to reconstruct, only a
+    #     wrong-colored pixel to not ship. 40 is calibrated against this
+    #     atlas's own committed sprites: every legitimate opaque or edge
+    #     pixel scores <=28 (measured atlas-wide, see t-59 round-27 log),
+    #     the 4 defects score 62-92 — a wide, clean margin either side.
     x, y, w, h = region
     n_cols = int((w - dx) // pitch)
     n_rows = int((h - dy) // pitch)
@@ -185,10 +225,15 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol):
                 colors[r][c] = col
             else:
                 frac = (d - inner_tol) / (outer_tol - inner_tol)
-                alphas[r][c] = int(round(255 * frac))
                 fg = (np.array(col, dtype=np.float64) - (1 - frac) * bg_arr) / max(frac, 1e-6)
                 fg = np.clip(fg, 0, 255)
-                colors[r][c] = tuple(int(round(v)) for v in fg)
+                fg_tuple = tuple(int(round(v)) for v in fg)
+                if magenta_hue_score(fg_tuple, bg_color) > edge_hue_tol:
+                    alphas[r][c] = 0
+                    colors[r][c] = col
+                else:
+                    alphas[r][c] = int(round(255 * frac))
+                    colors[r][c] = fg_tuple
             # agreement score for phase search: fraction of the cell matching
             # the coarse bucket that won the vote (crisp cells -> high score)
             q = (cell // 16) * 16
@@ -307,6 +352,7 @@ def main():
     # not a hard cutoff, is what actually kills fringe halos.
     outer_tol = m.get('key_tolerance', 60)
     inner_tol = m.get('key_inner_tolerance', outer_tol * 0.35)
+    edge_hue_tol = m.get('edge_hue_tolerance', 40)
     if 'anchor_source_px_height' in m:
         # Manual override (spec's "or manual parameter" alternative to
         # auto grid-fit) — for sheets where connected-component detection
@@ -338,7 +384,7 @@ def main():
         for r in regions:
             box = (r['x'], r['y'], r['w'], r['h'])
             dx, dy = best_phase(img, box, pitch, bg, inner_tol, outer_tol)
-            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol)
+            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol, edge_hue_tol)
             region_grids[r['name']] = {
                 'colors': colors, 'alphas': alphas, 'n_cols': n_cols, 'n_rows': n_rows,
                 'dx': dx, 'dy': dy, 'score': score, 'box': box,
