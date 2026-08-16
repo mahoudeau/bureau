@@ -25,7 +25,7 @@ function load() {
   // Self-heal: any project with OPEN missions is registered (pre-registry data included).
   // Closed missions do not resurrect deliberately deleted projects.
   for (const t of state.tasks)
-    if (t.project && t.status !== 'done' && t.status !== 'failed' && !state.projects.some(pj => pj.id === t.project))
+    if (t.project && t.status !== 'done' && t.status !== 'failed' && t.status !== 'discarded' && !state.projects.some(pj => pj.id === t.project))
       state.projects.push({ id: t.project, label: t.project });
   state.projects.sort((a, b) => a.id.localeCompare(b.id));
   return state;
@@ -161,7 +161,7 @@ function heartbeat(name, note, activity, subAgents) {
 }
 
 // ---- Tasks ----
-const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed'];
+const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed', 'discarded'];
 
 // Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
 const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_input', 'waiting_permission', 'blocked', 'idle'];
@@ -197,7 +197,7 @@ function createProject(label, id, entity, repo) {
 function deleteProject(id) {
   const s = load();
   if (!s.projects.some(p => p.id === id)) return { error: 'not_found' };
-  const open = s.tasks.filter(t => t.project === id && t.status !== 'done' && t.status !== 'failed').length;
+  const open = s.tasks.filter(t => t.project === id && t.status !== 'done' && t.status !== 'failed' && t.status !== 'discarded').length;
   if (open) return { error: `project has ${open} open mission(s); finish or move them first` };
   s.projects = s.projects.filter(p => p.id !== id);
   save();
@@ -382,7 +382,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
     if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;
     // blocked keeps its assignee but pauses the lease, so it never auto-requeues
-    if (status === 'done' || status === 'failed' || status === 'review' || status === 'blocked') t.lease_until = null;
+    if (status === 'done' || status === 'failed' || status === 'discarded' || status === 'review' || status === 'blocked') t.lease_until = null;
     if (status === 'queued') { t.assignee = null; t.lease_until = null; }
     // Capability links exist exactly while the task sits in review; any transition out consumes them.
     if (status === 'review') t.review_links = makeReviewLinks();
