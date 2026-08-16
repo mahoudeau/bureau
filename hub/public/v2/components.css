@@ -1,0 +1,385 @@
+/*
+ * Dashboard v2 — component atoms + states (t-66, goal: t-53)
+ *
+ * Wave 1: shared visual-atom layer (buttons, chips, status glyphs, rows,
+ * cards, panel chrome) every other Wave-1 module composes with, per t-62's
+ * v2- class-hook contract — every class here is v2- prefixed, every color/
+ * spacing/type value is read from t-63's tokens.css custom properties
+ * (var(--v2-...)), zero magic numbers, zero hardcoded hex outside this
+ * file's own @font-face block (which vendors the font itself, not a color).
+ * PLACEHOLDER-safe: because everything reads tokens.css variables, this
+ * file needs no edits when Wave-2 (t-76) repaints those variables with the
+ * approved sample's real values — same discipline as t-62/t-63/t-64.
+ *
+ * Also vendors the two hardest mechanical floors (STUDY-lead.md,
+ * "mechanical floors" #1 and #2):
+ *   - fonts/Inter-Variable.woff2 (real Inter, OFL-1.1, license in fonts/) —
+ *     the SAME binary already used and approved in t-58's applied style
+ *     sample; extracted from that sample's own embedded font rather than
+ *     re-sourced, so the vendored asset is identical, already-vetted, and
+ *     not a second independent font choice drifting from what the boss saw.
+ *   - icons/lucide-icons.json (ISC, license in icons/) — the same 24 Lucide
+ *     glyphs used in t-58, plus 5 more this mission needed (peek-panel
+ *     minimize/maximize, a loading spinner, an error glyph, chevron-up).
+ *     components.js embeds these inline (see that file's header comment for
+ *     why: zero-async-race icon availability) — this JSON is the source of
+ *     record and license anchor, not a runtime fetch target.
+ *
+ * Cites: projects/bureau/references/ux-v2/STUDY-lead.md, "the register,
+ * named" (type does the work; near-neutral canvas, hairline structure, no
+ * drop shadows/card fills on rows-tiles-lists; status is glyph + color,
+ * never color alone; one accent, small semantic hues; density with air;
+ * panels over modals; shortcuts taught not chrome) and "mechanical floors".
+ * The critic judges this file against the raw ux-v2/ references directly,
+ * per t-53's reference-wins rule — no arbitrary final round; send back
+ * naming the single biggest remaining gap while the reference still wins.
+ */
+
+/* ---- vendored font ----------------------------------------------------
+   Family name matches tokens.css's --v2-font-sans first choice exactly, so
+   that token's font stack resolves to this real file instead of falling
+   through to system-ui/ui-sans-serif. */
+@font-face {
+  font-family: "Inter Variable";
+  src: url("fonts/Inter-Variable.woff2") format("woff2-variations"), url("fonts/Inter-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---- icon sizing (glyphs are colored via currentColor, sized here) ---- */
+.v2-icon {
+  width: var(--v2-icon-size-sm);
+  height: var(--v2-icon-size-sm);
+  flex: none;
+  display: inline-block;
+  vertical-align: -0.15em;
+  color: currentColor;
+}
+.v2-icon svg { display: block; width: 100%; height: 100%; }
+.v2-icon--xs { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
+.v2-icon--md { width: var(--v2-icon-size-md); height: var(--v2-icon-size-md); }
+@keyframes v2-spin { to { transform: rotate(360deg); } }
+.v2-icon--spin { animation: v2-spin 0.8s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .v2-icon--spin { animation-duration: 2.4s; }
+}
+
+/* ---- status glyph: the tiny colored icon STUDY requires next to every
+   status/label surface (never color alone) ----------------------------- */
+.v2-status-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.v2-status-glyph .v2-icon { width: var(--v2-icon-size-sm); height: var(--v2-icon-size-sm); }
+.v2-status-glyph--xs .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
+.v2-status-glyph--md .v2-icon { width: var(--v2-icon-size-md); height: var(--v2-icon-size-md); }
+
+/* ---- chip: status/label pill, glyph + soft-tinted bg + text ---------- */
+.v2-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  height: calc(var(--v2-row-height) * 0.6);
+  padding: 0 var(--v2-space-5);
+  border-radius: var(--v2-radius-full);
+  font-size: var(--v2-font-size-xs);
+  font-weight: var(--v2-weight-medium);
+  line-height: 1;
+  color: var(--v2-color-text-secondary);
+  background: var(--v2-color-surface-raised);
+  border: 1px solid var(--v2-color-border);
+  white-space: nowrap;
+}
+.v2-chip--bug, .v2-chip--at-risk, .v2-chip--on-track, .v2-chip--in-progress, .v2-chip--done {
+  color: var(--v2-chip-fg, var(--v2-color-text-secondary));
+  background: var(--v2-chip-bg, var(--v2-color-surface-raised));
+  border-color: transparent;
+}
+.v2-chip__label { font-variant-numeric: var(--v2-tabular-nums); }
+
+/* ---- id badge: tabular-nums mission id ("t-79") ----------------------- */
+.v2-id-badge {
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-muted);
+  font-variant-numeric: var(--v2-tabular-nums);
+}
+
+/* ---- avatar / agent tag ------------------------------------------------
+   16-20px circular avatars for humans; agents get a square tag chip at the
+   SAME row height/position (STUDY: "agents get a tag, not a different UI"),
+   never a distinct card or row shape. */
+.v2-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: var(--v2-radius-full);
+  background: var(--v2-color-surface-raised);
+  border: 1px solid var(--v2-color-border);
+  color: var(--v2-color-text-secondary);
+  font-size: var(--v2-font-size-2xs);
+  font-weight: var(--v2-weight-semibold);
+}
+.v2-avatar--sm { width: var(--v2-avatar-size-sm); height: var(--v2-avatar-size-sm); }
+.v2-avatar--md { width: var(--v2-avatar-size-md); height: var(--v2-avatar-size-md); }
+
+.v2-agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  padding: 0 var(--v2-space-3);
+  border-radius: var(--v2-radius-xs);
+  background: var(--v2-color-surface-raised);
+  border: 1px solid var(--v2-color-border);
+  color: var(--v2-color-text-muted);
+  font-size: var(--v2-font-size-2xs);
+  font-weight: var(--v2-weight-medium);
+}
+.v2-agent-tag--sm { height: var(--v2-avatar-size-sm); }
+.v2-agent-tag--md { height: var(--v2-avatar-size-md); }
+.v2-agent-tag__icon .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
+
+/* ---- button ------------------------------------------------------------
+   variants: primary (accent fill), secondary (hairline outline, default),
+   ghost (no border until hover). States below cover hover/focus/active/
+   disabled/loading for every variant. */
+.v2-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  height: calc(var(--v2-row-height) * 0.78);
+  padding: 0 var(--v2-space-6);
+  border-radius: var(--v2-radius-sm);
+  font-size: var(--v2-font-size-sm);
+  font-weight: var(--v2-weight-medium);
+  font-family: inherit;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--v2-color-text-primary);
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease),
+              border-color var(--v2-motion-fast) var(--v2-motion-ease),
+              color var(--v2-motion-fast) var(--v2-motion-ease),
+              box-shadow var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-btn .v2-icon { width: var(--v2-icon-size-sm); height: var(--v2-icon-size-sm); }
+
+.v2-btn--secondary { border-color: var(--v2-color-border); background: var(--v2-color-surface); }
+.v2-btn--secondary:hover { border-color: var(--v2-color-border-strong); background: var(--v2-color-surface-raised); }
+.v2-btn--secondary:active { background: var(--v2-color-row-selected-bg); }
+
+.v2-btn--primary { background: var(--v2-color-accent); color: var(--v2-color-text-on-accent); }
+.v2-btn--primary:hover { background: var(--v2-color-accent-hover); }
+.v2-btn--primary:active { background: var(--v2-color-accent-active); }
+
+.v2-btn--ghost { color: var(--v2-color-text-secondary); }
+.v2-btn--ghost:hover { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
+.v2-btn--ghost:active { background: var(--v2-color-row-selected-bg); }
+
+.v2-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--v2-color-bg), 0 0 0 4px var(--v2-color-focus-ring);
+}
+.v2-btn:disabled, .v2-btn--disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  pointer-events: none;
+}
+.v2-btn--loading { cursor: progress; opacity: 0.85; }
+.v2-btn--error { border-color: var(--v2-color-status-bug); color: var(--v2-color-status-bug); }
+
+/* ---- row: dense list row, ~36px, hairline divider only ---------------- */
+.v2-row {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-5);
+  height: var(--v2-row-height);
+  padding: 0 var(--v2-space-6);
+  border-bottom: 1px solid var(--v2-color-border);
+  color: var(--v2-color-text-primary);
+  cursor: pointer;
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease),
+              border-left-color var(--v2-motion-fast) var(--v2-motion-ease);
+  border-left: 2px solid transparent;
+}
+.v2-row:hover { background: var(--v2-color-surface-raised); }
+.v2-row:active { background: var(--v2-color-row-selected-bg); }
+.v2-row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--v2-color-focus-ring);
+}
+.v2-row.v2-is-selected {
+  background: var(--v2-color-row-selected-bg);
+  border-left-color: var(--v2-color-row-selected-border);
+}
+.v2-row.v2-is-loading { opacity: 0.6; cursor: progress; }
+.v2-row.v2-is-error { background: var(--v2-color-status-bug-soft); }
+.v2-row__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--v2-font-size-md);
+}
+.v2-row__meta {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-4);
+  color: var(--v2-color-text-muted);
+  font-size: var(--v2-font-size-xs);
+}
+
+/* ---- card / tile: flat hairline box, no shadow, no fill --------------- */
+.v2-card {
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-color-bg);
+  padding: var(--v2-space-6);
+}
+.v2-card:hover { border-color: var(--v2-color-border-strong); }
+.v2-card.v2-is-selected { border-color: var(--v2-color-row-selected-border); background: var(--v2-color-row-selected-bg); }
+.v2-card.v2-is-error { border-color: var(--v2-color-status-bug); }
+.v2-card__value {
+  font-size: var(--v2-font-size-2xl);
+  font-weight: var(--v2-weight-semibold);
+  font-variant-numeric: var(--v2-tabular-nums);
+  line-height: var(--v2-line-height-tight);
+}
+.v2-card__label {
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-muted);
+  margin-bottom: var(--v2-space-3);
+}
+/* Stat tile: the reference (SCR-20260816-cvac.png) gives its hero number
+   real air above and below — label near the top, generous gap, then the
+   number floats with room on every side, not a dense box. Reserve this for
+   actual stat/KPI tiles; the plain .v2-card stays compact for list-style
+   uses (e.g. a card wrapping a single row) that want no such height. */
+.v2-card--stat {
+  padding: var(--v2-space-7) var(--v2-space-6);
+  min-height: calc(var(--v2-row-height) * 4.5);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.v2-card--stat .v2-card__label { margin-bottom: 0; }
+
+/* ---- peek panel chrome: slides in over the list, never a modal -------
+   Per SCR-20260816-cums.png: compact header (avatar/name/model tag,
+   minimize/expand/close glyphs), scrollable body, one input pinned at the
+   bottom. z-index/scrim from tokens.css's named stacking scale. */
+.v2-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100vw);
+  background: var(--v2-color-surface);
+  border-left: 1px solid var(--v2-color-border);
+  display: flex;
+  flex-direction: column;
+  z-index: var(--v2-z-panel);
+  transform: translateX(100%);
+  transition: transform var(--v2-motion-base) var(--v2-motion-ease);
+}
+.v2-panel.v2-is-open { transform: translateX(0); }
+.v2-panel__header {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-4);
+  height: var(--v2-row-height);
+  padding: 0 var(--v2-space-6);
+  border-bottom: 1px solid var(--v2-color-border);
+}
+.v2-panel__title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--v2-weight-medium); }
+.v2-panel__controls { flex: none; display: flex; align-items: center; gap: var(--v2-space-2); }
+.v2-panel__body { flex: 1 1 auto; overflow-y: auto; padding: var(--v2-space-6); }
+.v2-panel__footer {
+  flex: none;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-5) var(--v2-space-6);
+  border-top: 1px solid var(--v2-color-border);
+}
+.v2-panel__footer .v2-input { flex: 1 1 auto; min-width: 0; }
+.v2-panel__footer .v2-icon-btn { flex: none; }
+
+/* ---- input: the text-entry atom (peek-panel reply box, quick-add, ------
+   inline filter dropdowns) - hairline border, no shadow, focus ring from
+   the shared accent token, placeholder in muted text. */
+.v2-input {
+  display: block;
+  width: 100%;
+  height: calc(var(--v2-row-height) * 0.78);
+  padding: 0 var(--v2-space-5);
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-sm);
+  background: var(--v2-color-bg);
+  color: var(--v2-color-text-primary);
+  font: inherit;
+  font-size: var(--v2-font-size-sm);
+  transition: border-color var(--v2-motion-fast) var(--v2-motion-ease), box-shadow var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-input::placeholder { color: var(--v2-color-text-muted); }
+.v2-input:hover { border-color: var(--v2-color-border-strong); }
+.v2-input:focus-visible, .v2-input:focus {
+  outline: none;
+  border-color: var(--v2-color-accent);
+  box-shadow: 0 0 0 3px var(--v2-color-focus-ring);
+}
+.v2-input:disabled { opacity: 0.5; cursor: not-allowed; }
+.v2-input.v2-is-error { border-color: var(--v2-color-status-bug); }
+/* Multi-line variant (peek-panel reply box) grows to a fixed small height
+   instead of the single-line input's row height. */
+.v2-input--area { height: auto; min-height: calc(var(--v2-row-height) * 1.6); padding: var(--v2-space-4) var(--v2-space-5); resize: none; }
+.v2-panel__scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--v2-color-overlay-scrim);
+  z-index: var(--v2-z-scrim);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--v2-motion-base) var(--v2-motion-ease);
+}
+.v2-panel__scrim.v2-is-open { opacity: 1; pointer-events: auto; }
+
+/* ---- icon-only control button (panel header minimize/expand/close) ---- */
+.v2-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: calc(var(--v2-row-height) * 0.72);
+  height: calc(var(--v2-row-height) * 0.72);
+  border: none;
+  border-radius: var(--v2-radius-xs);
+  background: none;
+  color: var(--v2-color-text-muted);
+  cursor: pointer;
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease), color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-icon-btn:hover { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
+.v2-icon-btn:active { background: var(--v2-color-row-selected-bg); }
+.v2-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring); }
+.v2-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
+/* The conventional trailing "submit" icon button (panel footer send) reads
+   as the primary action - filled accent circle, matching .v2-btn--primary's
+   treatment - rather than a peer of the muted attach/etc. icons beside it. */
+.v2-icon-btn--primary {
+  background: var(--v2-color-accent);
+  color: var(--v2-color-text-on-accent);
+  border-radius: var(--v2-radius-full);
+}
+.v2-icon-btn--primary:hover { background: var(--v2-color-accent-hover); }
+.v2-icon-btn--primary:active { background: var(--v2-color-accent-active); }
+
+/* ---- disabled state, shared shorthand ---------------------------------
+   Applies the same dimmed/inert treatment to any atom via a utility class,
+   for states a component doesn't have a dedicated modifier for. */
+.v2-is-disabled { opacity: 0.5; pointer-events: none; cursor: not-allowed; }
