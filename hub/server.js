@@ -108,6 +108,26 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
     }
+
+    // Dashboard v2 (in-progress rebuild, t-53): its own shell + static assets,
+    // fully separate from / and index.html above until the boss flips the
+    // switch. hub/public/v2.html is the shell; hub/public/v2/*.css|*.js are
+    // the sibling modules built by the rest of this tranche. The asset regex
+    // matches a single path segment only (no '/', no '..'), so there is no
+    // traversal surface to guard against.
+    if (req.method === 'GET' && p === '/v2') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2.html')));
+    }
+    const mV2Asset = p.match(/^\/v2\/([\w-]+\.(?:css|js))$/);
+    if (req.method === 'GET' && mV2Asset) {
+      const file = path.join(__dirname, 'public', 'v2', mV2Asset[1]);
+      if (!fs.existsSync(file)) return send(res, 404, { error: 'not found' }); // sibling module not built yet: harmless
+      const type = mV2Asset[1].endsWith('.css') ? 'text/css; charset=utf-8' : 'text/javascript; charset=utf-8';
+      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(file));
+    }
+
     if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
 
     // Capability-scoped image serving: a valid review link may render the brain
