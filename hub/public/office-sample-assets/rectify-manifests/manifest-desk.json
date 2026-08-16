@@ -1,0 +1,30 @@
+{
+ "sheet": "props/sheet-desks-workstations-v2.jpg",
+ "background_key": [
+  255,
+  0,
+  255
+ ],
+ "key_tolerance": 170,
+ "anchor_region": [
+  45,
+  10,
+  175,
+  455
+ ],
+ "anchor_logical_height": 48,
+ "palette_size": 24,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0.01,
+ "regions": [
+  {
+   "name": "desk-tidy",
+   "x": 1035,
+   "y": 254,
+   "w": 350,
+   "h": 201,
+   "group": "desk"
+  }
+ ],
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) \u2014 download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in rectify-report.json against this atlas's own sprite hashes."
+}

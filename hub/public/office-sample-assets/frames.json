@@ -1,24 +1,33 @@
 {
-  "_comment": "Frame table for the t-59 office sample, round 21 (light-direction fix + palette stability). Every region below is a direct pixel crop from cast/sheet-agent-anims-a.jpg (THE LAW, t-54, 2026-08-16 amendment) -- cleaned (JPEG-ringing despeckle + a SHARED 40-color median-cut palette across all 5 character frames, no per-frame drift) and scaled 3x nearest-neighbor. No pixel in atlas.png was hand-drawn.",
+  "_comment": "Frame table for the t-59 office sample, round 23 — rebuilt on the boss's re-scope (2026-08-16T19:10): every sprite below is produced by hub/tools/rectify.py (the mandatory rectifier, t-54 engine outcome), never hand-despeckled/quantized. Re-run any manifest in rectify-manifests/ against the cited region and diff the output PNG's sha256 against the matching rectify-manifests/report-*.json (recorded when this atlas was built) to verify determinism.",
+  "innerCriticFix": "An inner-critic sub-agent pass (before this round parked) caught a real chroma-key bug: near-magenta gradient pixels at the edge of the typing sprite's lamp-glow area (and one stray pixel each on the idle character and the window) were surviving as opaque near-magenta blotches instead of keying to alpha, because their distance to pure magenta fell just outside the original key_tolerance=100. Root cause confirmed by direct pixel sampling of the raw source: those pixels are genuinely near-background magenta (distance ~10-35), not a distinct warm-glow color, contrary to this round's earlier assumption that the visible pink triangle in the source was intentional lamp-glow content. Fixed by raising key_tolerance to 170 (checked safe against the character's own darkest colors, which sit at distance >250 from pure magenta) and re-running every manifest; re-verified determinism (byte-identical on a repeat run) and re-screenshotted the composed scene. The wall-cracked tile's crack detail loss (also flagged by the critic) is a spatial-resolution limit of that region's pitch, not a bug — left as a known rough edge for a future round, not blocking.",
   "atlas": "atlas.png",
+  "rectifyManifests": "rectify-manifests/ (one JSON per sheet; pitch is derived per-sheet from that sheet's own 48px anchor figure, never guessed or shared across sheets)",
   "sourceSheets": {
-    "typing": "cast/sheet-agent-anims-a.jpg, row 2 (\"AGENT TYPING LOOP\"), native grid cells at column index 1,2,3 (0-based) of an 8x3 176x256 grid, y-trimmed to 321-512 (drops a bleeding leg/foot fragment from the walk row above -- the sheet's own row-spacing artifact, not introduced by the crop)",
-    "idle": "cast/sheet-agent-anims-a.jpg, THE SAME ROW as typing (row 2, same 8x3 grid, same y-trim 321-512) -- column index 0 (the character standing before it sits down) and column index 7 (standing again after, with the desk's edge visible at frame-left). Round 21 change: round 20 sourced idle from a DIFFERENT sheet (sheet-agent-anims-b.jpg) with a different light register, which is what produced round 20's flagged light-direction seam. Pulling idle from the SAME row as typing instead means idle and typing now share one continuous light source by construction, not by after-the-fact color-matching.",
-    "wallmon": "cast/sheet-agent-anims-a.jpg, the wall-mounted terminal prop centered above the row boundary (native crop x490-635,y0-90) -- same sheet as the character, so same light register"
+    "idle-0": "cast/sheet-agent-undercut-typing.jpg, column 0 (the anchor figure) of the 5x2 grid, row 1. HONEST FLAG (per the boss's own re-scope text): this is the standing-away-from-desk pose reused as 'idle', not a true seated-idle pose — no sheet in the current set shows the character idle AT the desk without typing (kit prompt 28, 'seated idle', is still open per PROMPTS.md's NEXT WINDOW list). Carried forward from round 21's same open-interpretation note, not re-litigated.",
+    "typing-0..3": "cast/sheet-agent-undercut-typing.jpg, row 1, columns 1-4 of the same 5x2 grid — the character's own integrated desk/monitor/lamp, one continuous piece of source art, same light register as idle-0 by construction (same sheet, same row).",
+    "floor-wood": "props/sheet-tiles-surfaces-v2.jpg, row 1 column 1 (first wood-plank tile, left of the two wood options).",
+    "wall-cracked": "props/sheet-tiles-surfaces-v2.jpg, row 1 column 4 (cracked plaster wall texture) — picked over the warmer wood-tone wall option for the cool spy-HQ register the boss's addendum asked for.",
+    "desk-tidy": "props/sheet-desks-workstations-v2.jpg, row 2 column 3 (the plain desk already dressed with one folder + keyboard) — a SEPARATE desk from the character's own seat, not a merge onto it (see layout note below for why).",
+    "window-blue-night": "scenes/scene-window-states.jpg, row 2 column 1, labeled BLUE NIGHT — window + floor light-pool pair, picked to read as the same cool night register as the character's own monitor-lit side."
   },
+  "layoutNote": "The mission's re-scope names sheet-desks-workstations-v2 as the desk source, but the typing sheet's character is already drawn integrated with its own desk/monitor/lamp (one inseparable piece of source art). Rather than attempt a pixel-level merge of two different sheets' desks under one seated figure — which is exactly the 'two light sources in one scene' mechanical-floor violation that sent round 20 back — this round sources BOTH: the character keeps its own integrated desk (typing-0..3), and a second, separately-extracted desk from sheet-desks-workstations-v2 (desk-tidy, already dressed with a folder) sits elsewhere in the corner as additional furniture. Flagged as an open interpretation call, not assumed silently.",
   "droppedThisRound": {
-    "lamp": "round 20 composited a floor lamp cropped from sheet-agent-anims-b.jpg row 3 (a back-facing loop with its own near-black-to-warm-amber lighting) next to the character crop's cooler cyan register. The critic's round-20 pass named this the mechanical-floor violation (t-54: 'one consistent light direction per scene', an automatic send-back regardless of craft quality) -- the lamp was the actual cross-sheet mismatch, not the wallmon. Dropped entirely rather than re-matched, since no lamp prop sharing the character's own row/light source was found in the current sheet set."
+    "standalone-folder-crop": "Attempted a second, standalone folder crop from props/sheet-desk-supplies-v2.jpg (row 0 column 0) to dress a desk separately from desk-tidy's own built-in folder. The rectified output came back as a near-solid tan block with no legible silhouette — a bad region fit, not a rectifier bug (the other four crops from four different sheets came out clean). Dropped rather than shipped broken; desk-tidy's own built-in folder (already part of that crop) covers the 'dressed desk' requirement on its own. A future round can retry the standalone crop with a tighter region."
   },
   "states": {
-    "idle": { "frames": ["idle-0", "idle-1"], "durationMs": 650 },
-    "typing": { "frames": ["typing-0", "typing-1", "typing-2"], "durationMs": 220 }
+    "idle": { "frames": ["idle-0"], "durationMs": 650 },
+    "typing": { "frames": ["typing-0", "typing-1", "typing-2", "typing-3"], "durationMs": 220 }
   },
   "sprites": {
-    "typing-0": { "x": 4, "y": 4, "w": 528, "h": 573 },
-    "typing-1": { "x": 536, "y": 4, "w": 528, "h": 573 },
-    "typing-2": { "x": 1068, "y": 4, "w": 528, "h": 573 },
-    "idle-0": { "x": 1600, "y": 4, "w": 528, "h": 573 },
-    "idle-1": { "x": 2132, "y": 4, "w": 528, "h": 573 },
-    "wallmon": { "x": 2664, "y": 4, "w": 435, "h": 270 }
+    "idle-0": { "x": 2, "y": 2, "w": 20, "h": 48 },
+    "typing-0": { "x": 24, "y": 2, "w": 38, "h": 48 },
+    "typing-1": { "x": 64, "y": 2, "w": 39, "h": 48 },
+    "typing-2": { "x": 105, "y": 2, "w": 37, "h": 48 },
+    "typing-3": { "x": 144, "y": 2, "w": 38, "h": 48 },
+    "floor-wood": { "x": 184, "y": 2, "w": 55, "h": 45 },
+    "wall-cracked": { "x": 241, "y": 2, "w": 52, "h": 45 },
+    "desk-tidy": { "x": 295, "y": 2, "w": 37, "h": 20 },
+    "window-blue-night": { "x": 334, "y": 2, "w": 38, "h": 37 }
   }
 }

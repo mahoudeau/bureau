@@ -32,17 +32,17 @@
 </head>
 <body>
 <header>
-  <b>BUREAU</b><span class="sep">·</span>office · sample scene (t-59)<span class="r">one desk · one extracted agent sprite · one corner · static, no live events</span>
+  <b>BUREAU</b><span class="sep">·</span>office · sample scene (t-59)<span class="r">rectifier round · corner rebuilt entirely from v2 reference sheets · static, no live events</span>
 </header>
 <main>
-  <div id="stage-wrap"><canvas id="stage" width="983" height="573" style="width:700px;height:408px"></canvas></div>
+  <div id="stage-wrap"><canvas id="stage" width="240" height="160" style="width:960px;height:640px"></canvas></div>
   <div class="controls">
     <button id="btn-idle" class="on">Idle</button>
     <button id="btn-typing">Typing</button>
     <span class="hint">idle = the "idle" heartbeat verb · typing = the "editing" verb (docs/protocol.md)</span>
   </div>
   <details open>
-    <summary>About this sample — round 22: answering the boss's compression-artifact question</summary>
+    <summary>About this sample — round 23: rebuilt through the rectifier (the beads-system foundation)</summary>
     <div class="body" id="about"></div>
   </details>
 </main>
@@ -60,40 +60,55 @@ let state = 'idle';
 let frameIdx = 0;
 let lastSwap = 0;
 
+// One-desk corner: wall band top, floor band bottom, window + the
+// character's own integrated desk against the wall, a second dressed
+// desk (sourced separately per the mission's re-scope) off to the side.
+// This function is the only place SCREEN POSITIONS are decided — no
+// pixel inside any sprite was redrawn or invented; every sprite here
+// came out of hub/tools/rectify.py against a cited region of an owned
+// reference sheet (see frames.json's sourceSheets for exact citations).
+const FLOOR_Y = 70;
+
 function layout() {
-  // Composed room corner: the extracted desk/character cell on the left,
-  // the extracted wall terminal above/right of it. Round 21 drops the
-  // round-20 floor lamp (sourced from a different sheet/row with a
-  // mismatched light register — the critic's named mechanical-floor
-  // violation) rather than re-matching it; both remaining pieces now come
-  // from the SAME row of the SAME sheet as the character, so there is one
-  // light source by construction, not by after-the-fact color correction.
-  // This function is the only place their SCREEN POSITIONS are decided —
-  // no pixel inside either of them was redrawn or invented.
-  const stageH = 573;
   return {
-    char: { x: 0, y: 0 },
-    wallmon: { x: 548, y: 20, scale: 1 }
+    wallTileSize: { w: 52, h: 45 },
+    floorTileSize: { w: 55, h: 45 },
+    window: { x: 18, y: 20 },
+    deskTidy: { x: 186, y: FLOOR_Y + 30 },
+    character: { x: 84, y: FLOOR_Y - 45 },
   };
 }
 
-function drawSprite(name, dx, dy, scale) {
+function drawSprite(name, dx, dy) {
   const s = FRAMES.sprites[name];
-  const dw = scale ? s.w * scale : s.w;
-  const dh = scale ? s.h * scale : s.h;
-  ctx.drawImage(atlasImg, s.x, s.y, s.w, s.h, dx, dy, dw, dh);
+  ctx.drawImage(atlasImg, s.x, s.y, s.w, s.h, dx, dy, s.w, s.h);
+}
+
+function tileRow(name, y, totalW) {
+  const s = FRAMES.sprites[name];
+  for (let x = 0; x < totalW; x += s.w) drawSprite(name, x, y);
 }
 
 function render() {
   ctx.clearRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = '#0c1116';
-  ctx.fillRect(0, 0, cv.width, cv.height);
   if (!atlasReady) return;
   const L = layout();
+
+  // Wall band (tiled to cover the back wall above the floor line).
+  for (let y = 0; y < FLOOR_Y; y += L.wallTileSize.h) tileRow('wall-cracked', y, cv.width);
+  // Floor band (tiled below the floor line).
+  for (let y = FLOOR_Y; y < cv.height; y += L.floorTileSize.h) tileRow('floor-wood', y, cv.width);
+
+  // Window, set into the wall.
+  drawSprite('window-blue-night', L.window.x, L.window.y);
+
+  // Second dressed desk (sheet-desks-workstations-v2, folder built in).
+  drawSprite('desk-tidy', L.deskTidy.x, L.deskTidy.y);
+
+  // The character, at its own integrated desk (typing) or standing (idle).
   const st = FRAMES.states[state];
   const name = st.frames[frameIdx % st.frames.length];
-  drawSprite(name, L.char.x, L.char.y);
-  drawSprite('wallmon', L.wallmon.x, L.wallmon.y, L.wallmon.scale);
+  drawSprite(name, L.character.x, L.character.y);
 }
 
 function tick(ts) {
@@ -139,48 +154,41 @@ Promise.all([
 render();
 
 document.getElementById('about').innerHTML = `
-<p><b>Direction change, mid-loop (round 20).</b> Rounds 1-19 on this mission hand-drew every pixel on an HTML canvas, judged round after round against the Sea of Stars craft references under <code>projects/bureau/references/office/crops/</code> and the root scene captures. On 2026-08-16T13:12 the boss ruled THE LAW amended (t-54 log): the boss-generated sheets under <code>references/office/</code> (<code>scenes/</code>, <code>props/</code>, <code>cast/</code>, <code>fx/</code> — 31 sheets, style-locked, his own pick) are <b>owned source material</b>, not look-only references. From round 20 on, builders <b>extract</b> — cut, clean, quantize, atlas — instead of redrawing what a sheet already covers. Redrawing available material is now an automatic send-back. Sea of Stars stays reference/craft-calibration-only and still never ships.</p>
+<p><b>Round 23 — the boss's re-scope (2026-08-16T19:10), landed after round 22 was rejected.</b> Direct ruling: before any sample can be the art bar, this mission owns building and implementing the <b>rectifier</b> (the "beads system") as a shared repo tool — <code>hub/tools/rectify.py</code> — then rebuilding this one-desk corner entirely through it from the v2 reference sheets, never by ad-hoc despeckle/quantize again. "If a sprite didn't come out of the rectifier, it doesn't ship."</p>
 
-<p><b>Round 22: answering the boss's own question (2026-08-16T14:16, on this mission's log).</b> After round 21 cleared both critic gaps and moneta raised the gate to boss, his verdict was: "I believe we're getting closer, sprite and scene is on par with example and direction. My only grief is that I see image compression artefacts. Is it because it's a zoomed screenshot? Is quality crisp enough for Retina display?" Direct answer: <b>not the screenshot format, and not Retina scaling</b> — genuinely investigated both before concluding this, not assumed. The uploaded evidence screenshots are lossless PNG (Playwright's <code>page.screenshot()</code> default, no JPEG re-compression in that step), and this page's own <code>&lt;canvas&gt;</code> already carries <code>image-rendering: pixelated</code> plus a 1:1 backing-store/native-asset match with no extra browser-side scaling in the render path. The <b>real</b> cause, found by zooming into the atlas itself at 2x (not the served screenshot): the round-20/21 despeckle pass (a 3&times;3 mode filter) was too weak to fully remove the source JPEG's own compression ringing — a faint speckled noise pattern, most visible in shadow regions like the jaw/ear, survived the despeckle step and got preserved (not invented) by the palette quantize, since quantize maps existing pixels to a smaller palette rather than smoothing spatial noise. Under 3x nearest-neighbor upscale with zero smoothing (deliberate, to stay crisp), that residual noise reads exactly like "compression artifacts" — because it genuinely is compression artifact, just from the source photo, carried through the pipeline further than intended, not introduced by this page's own display path.</p>
+<p><b>The rectifier, in one line:</b> the generated sheets are a photo OF pixel art; the tool re-derives the true pixels on our own grid — grid-fit (a per-sheet pitch derived from that sheet's own 48px anchor figure, plus a deterministic phase search so cell boundaries land on real edges), per-cell dominant-color vote, a palette shared across every frame of one subject (never per-frame), magenta keyed to alpha, and the grid pitch itself as the only scaling knob (never a post-resize). Full spec: <code>projects/bureau/references/office/PROMPTS.md</code>, "Rectification" section. Full tool source, header-commented: <code>hub/tools/rectify.py</code>.</p>
 
-<p><b>Fixed:</b> A/B tested four despeckle strengths (mode filter at 3/5/7px, median filter at 3/5px) by eye against the same face-crop region before picking one. Mode filter at larger kernel sizes made the noise WORSE (it amplifies pattern noise rather than removing it). Median filter at size 3 removed the speckling cleanly while keeping edges and shading bands crisp; size 5 was cleaner still but started visibly softening real detail (hair texture going mushy) — 3 is the chosen balance. Switched the despeckle step from <code>ImageFilter.ModeFilter(3)</code> to <code>ImageFilter.MedianFilter(3)</code> for every crop (character frames and the wall terminal alike), then re-ran the exact same shared-palette quantize and accent-color-preservation steps from round 21 unchanged. Compare this round's face crop against round 21's in the mission log's own screenshot history — the shadow-side noise is visibly gone.</p>
+<p><b>Determinism, checked, not assumed:</b> every manifest under <code>office-sample-assets/rectify-manifests/</code> was run twice against its cited sheet region before shipping; output PNGs were byte-identical both times (sha256 match). The critic can reproduce this: download the cited sheet from the brain, run the matching manifest, diff the sha256 against <code>rectify-report.json</code>'s recorded hash for that region.</p>
 
-<p><b>Round 21: fixing what the round-20 critic pass found.</b> Round 20's fresh-eyes critic pass confirmed the extraction technique itself was genuine (near-pixel-match to source, no redrawing) but sent it back on two counts: (1) a <b>mechanical-floor automatic send-back</b> — the composed room corner mixed two different light sources (the character+desk from <code>sheet-agent-anims-a.jpg</code>'s cool cyan register, a floor lamp from <code>sheet-agent-anims-b.jpg</code>'s near-black-to-warm-amber register), violating t-54's own "one consistent light direction per scene" floor; (2) extraction-fidelity color drift — the idle frames' skin tone visibly shifted between idle-0 and idle-1 (a quantize-pipeline instability, not a deliberate choice), and the wall terminal's red/green status-light pixels were erased entirely by the palette quantize. All three fixed this round, detailed below.</p>
-
-<p><b>Every pixel in <code>office-sample-assets/atlas.png</code> is still a direct crop</b> — no canvas fillRect, no hand-authored shading, no redrawn silhouette. Round 21 goes further than round 20 on sourcing discipline: everything now comes from ONE sheet (<code>cast/sheet-agent-anims-a.jpg</code>), not two.</p>
-
-<p><b>Per-source citations (extraction fidelity: candidate vs. exact sheet region, matched zoom):</b></p>
+<p><b>Per-sprite citations (source sheet, exact region, what changed from round 22):</b></p>
 <ul>
-<li><b>Typing loop (3 frames):</b> <code>cast/sheet-agent-anims-a.jpg</code>, row 2 ("AGENT TYPING LOOP" label baked into the sheet itself), grid cells at column index 1, 2, 3 of that sheet's 8&times;3 176&times;256 grid, cropped x=176-704 / y=321-512 in the 1408&times;768 source — the row's top 65px is trimmed off (was y=256-512) because it carried a bleeding leg/foot fragment from the walk row directly above: the sheet's own row spacing overlaps slightly, a known artifact (PROMPTS.md's own flaw note on this sheet), not something the crop introduced. This is the exact desk unit the boss generated: chair, desk, CRT monitor, and the seated agent, together, already in one continuous piece of art — nothing about the desk was separately sourced or invented.</li>
-<li><b>Idle loop (2 frames) — RESOURCED this round:</b> <code>cast/sheet-agent-anims-a.jpg</code>, the SAME row 2 as typing, same y-trim (321-512), column index 0 (standing, before sitting) and column index 7 (standing again, after — the desk's own edge is visible at frame-left, a nice room-corner continuity cue). Round 20 had sourced idle from <code>sheet-agent-anims-b.jpg</code> instead — a different sheet with a different light register, which is what produced round 20's flagged seam. Pulling idle from the same row as typing means idle and typing now share one light source by construction, not by after-the-fact color-matching.</li>
-<li><b>Wall terminal prop:</b> <code>cast/sheet-agent-anims-a.jpg</code>, the small wall-mounted keypad/CRT centered above the row boundary between the walk row and the typing row (native crop x=490-635, y=0-90). Same sheet as the character — always was, this wasn't the round-20 mismatch.</li>
-<li><b>Dropped this round: the floor lamp.</b> Round 20's lamp came from <code>sheet-agent-anims-b.jpg</code> row 3, a back-facing loop with its own unrelated lighting — the actual source of the critic's named seam. No lamp prop sharing the character's own row/light source exists in the current sheet set, so it's dropped rather than re-matched. A future round can reintroduce room-corner lighting props once a same-row (or otherwise light-matched) source exists — noted here rather than silently dropped.</li>
+<li><b>Character (idle + typing, 5 frames):</b> <code>cast/sheet-agent-undercut-typing.jpg</code> — a NEW sheet this round (round 22 used <code>sheet-agent-anims-a.jpg</code>; the v2 batch's dedicated typing-loop sheet is cleaner and on-model). Row 1 of its 5x2 grid: column 0 is the anchor figure (reused as idle — HONEST FLAG, unchanged from round 21/22: no sheet yet shows a true seated-idle pose, kit prompt 28 is still open), columns 1-4 are the seated typing frames with their own integrated desk/monitor/lamp, one continuous piece of source art.</li>
+<li><b>Floor:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 1 (wood plank tile), tiled across the floor band.</li>
+<li><b>Wall:</b> <code>props/sheet-tiles-surfaces-v2.jpg</code>, row 1 column 4 (cracked plaster), tiled across the wall band — picked over the sheet's warmer wood-tone wall option for the cool 16-bit register the boss's addendum asked for.</li>
+<li><b>Window:</b> <code>scenes/scene-window-states.jpg</code>, row 2 column 1, labeled BLUE NIGHT (window + floor light-pool pair) — cool register, consistent with the character's own monitor-lit side.</li>
+<li><b>Second desk:</b> <code>props/sheet-desks-workstations-v2.jpg</code>, row 2 column 3 — a plain desk, already dressed with a folder + keyboard in the source art itself.</li>
 </ul>
 
-<p><b>Cleanup pass (not a redraw), round 21 change — a SHARED palette:</b> round 20 quantized each character frame independently (40-color median-cut per frame), which let the same true skin tone snap to slightly different output values frame-to-frame — a visible color flicker the critic caught by direct pixel sampling. Round 21 fixes the root cause: all 5 character frames (3 typing + 2 idle) are concatenated into one combined image, a single 40-color palette is derived from THAT combined image, and every individual frame is quantized against that one shared palette — so the same source color always maps to the same output color, in every frame. Verified visually (idle-0/idle-1 face crops now read as the same warm tan, not a gray-vs-warm mismatch).</p>
+<p><b>Open interpretation, flagged not assumed:</b> the mission text names <code>sheet-desks-workstations-v2</code> as the desk source, but the typing sheet's character is inseparably drawn WITH its own desk/monitor/lamp. Rather than attempt a pixel-level merge of two different sheets' desks under one seated figure (exactly the two-light-sources violation that sent round 20 back), this round sources both: the character keeps its own integrated desk, and a second, separately-extracted desk sits elsewhere in the corner as additional dressed furniture. A future round can revisit this if the boss reads the mission text more literally.</p>
 
-<p><b>Wall terminal — accent-color preservation, round 21:</b> the two status-light pixel clusters (a green ready-light, a red alert-light — both real, present in the source photo, located by direct pixel scan for saturated red/green) were being erased by the palette quantize regardless of color budget (tested 40/64/96 colors — all three merged both clusters into the surrounding panel gray, since each cluster is under 0.4% of the crop's pixels and median-cut splits by population, not by visual importance). Fixed by exempting those two small, precisely-located regions from the quantize step and pasting back their true despeckled source colors directly — not inventing a color, just not lossily discarding the two accent pixels that were always there. Verified: both status lights are visibly colored in the shipped atlas.</p>
+<p><b>Dropped this round:</b> a standalone folder crop from <code>props/sheet-desk-supplies-v2.jpg</code> came back as a near-solid tan block — a bad region fit on my part, not a rectifier bug (the other four crops from four other sheets came out clean). Dropped rather than shipped broken; the second desk's own built-in folder covers the "dressed desk" ask on its own. Flagged for a future round rather than silently reattempted under time pressure.</p>
 
-<p><b>Composition, not redraw:</b> the two remaining extractions (desk unit, wall terminal) are laid out on one canvas at fixed screen coordinates (see <code>layout()</code> in this page's own script) to read as a single corner. That layout decision — where each extracted piece sits on screen — is original; the pixels inside each piece are not.</p>
+<p><b>Composition, not redraw:</b> wall and floor bands are tiled repeats of one rectified swatch each (a real render-time tiling loop, see <code>tileRow()</code> in this page's own script — not a wider crop). Window, second desk, and character sit at fixed screen coordinates decided in <code>layout()</code>. No pixel inside any sprite was invented; only where each sprite sits on screen is original composition.</p>
 
-<p><b>Open, not blocking, per the round-20 critic's own read:</b> character-height-vs-Sea-of-Stars-native-anchor proportions (the <code>crop-proportions-zale-51px</code> / <code>-docarri-47px</code> mechanical floor) remains unverified. The critic's own round-20 note flagged that in the extraction era, the boss's owned cast sheets are arguably the live proportion source now rather than the Sea of Stars anchors — carrying that open question forward rather than re-litigating it here.</p>
-
-<p><b>Open interpretation, unchanged from round 20, still flagged rather than assumed:</b> no sheet in the current set shows this character seated at the desk <i>without</i> typing (every "at desk" frame on the sheet already has hands mid-keystroke), so there is no owned-source "idle-at-desk" pose to extract. Mapping <code>idle</code> → the sheet's own standing-away-from-desk loop and <code>typing</code> → the sheet's own seated loop follows the actual verb split in <code>docs/protocol.md</code> (idle is idle, editing types) rather than forcing a desk-bound idle pose that would have to be invented.</p>
+<p><b>Light register, self-assessed:</b> character keeps its established warm-lamp/cool-monitor register (same sheet, same row as idle — no seam by construction). Window is cool BLUE NIGHT. Wall is cool cracked plaster. Floor is warm wood (the one deliberately warm element, grounding the room the way a lamp-lit floor reads in the actual reference mood boards). Second desk carries no strong baked-in light source of its own, so it composites into either register without a visible clash. Read as one coherent cool-night-with-warm-accent scene at native resolution and at the page's display scale; not fresh-eyes critic-verified yet — that verification is the next step, not self-declared here.</p>
 
 <p><b>Mechanical floors, self-checked:</b></p>
 <ul>
-<li>Shades per material ramp: &ge;4 (40-color shared quantize, well above the floor).</li>
-<li>Light direction: single, consistent — every sprite in this round's atlas now traces to the SAME row of the SAME sheet, so there is no seam to color-match after the fact.</li>
-<li>Pure-black fill outlines: none found — sampled the darkest outline pixels in the cleaned typing frame; darkest quantized tone is a near-black slate (not (0,0,0)), consistent with the source art's own outlining, not injected by the cleanup pass.</li>
-<li>Idle and typing actually animate on this served page: yes — <code>requestAnimationFrame</code> loop swaps frames per <code>frames.json</code>'s <code>durationMs</code> (650ms/frame idle, 220ms/frame typing), not a static image.</li>
-<li>Character height vs. the crops' native anchors (~47-51px): <b>not verified this round, flagged honestly.</b> The boss-generated sheets are AI-rendered pixel-art-style photos, not sprites authored at a true low native resolution the way the Sea of Stars crops are (51px/47px tall before any upscale) — there is no clean "native pixel count" to measure the same way for this source. Whether the visible pseudo-pixel density in the cleaned atlas reads as comparable chunkiness to the 47-51px anchors, at matched on-screen character height, needs a dedicated side-by-side pass next round rather than an assumption either way.</li>
+<li>Every shipped sprite came out of <code>hub/tools/rectify.py</code>, none hand-despeckled/quantized: confirmed by construction (no other image-editing step touches <code>atlas.png</code> after the tool writes each region's PNG and this round's packer concatenates them).</li>
+<li>Determinism: same manifest run twice, byte-identical output (sha256-checked, see above) — the critic re-running a cited manifest and confirming a byte-identical sprite is a mechanical pass, not a matter of taste.</li>
+<li>No live route touched: this file and <code>office-sample-assets/</code> remain a standalone path only.</li>
+<li>No reference (Sea of Stars) filename or pixel appears anywhere in this page or its assets — only owned boss-generated sheet filenames are cited.</li>
+<li>No build step, no external request at runtime: atlas and frame table are same-origin fetches to files committed alongside this page.</li>
 </ul>
 
-<p><b>Confirmed clean:</b> no reference (Sea of Stars) filename or its pixels appear anywhere in this page, the atlas, or the frame table — only the owned boss-generated sheet filenames are cited, which is required by the extraction-fidelity judging dimension, not a violation of it. No build step. No external network request at runtime (the atlas and frame table are same-origin fetches to files committed alongside this page, not third-party calls). No existing route touched — this file and its <code>office-sample-assets/</code> folder are new paths only.</p>
+<p><b>Open, not blocking, carried forward for the critic/boss to weigh:</b> the room is a single corner (wall + floor bands, one window, two desks), not the full "engine room" scale of the approved t-56 floor plan — this mission's own scope is a sample, not the full build. Character-height-vs-native-anchor proportion question from round 20/21 remains unresolved in the same way (the sheets are AI-rendered photos of pixel art, not natively low-res the way Sea of Stars crops are) — carried forward, not re-litigated.</p>
 
-<p><b>Carried forward, not re-touched this round:</b> the spy-HQ thematic register (this round's whole point — extracting the boss's own style-locked spy-HQ art IS the register, more directly than any prior round's hand-tinted palette could be), the cool 16-bit aesthetic, the idle/typing verb split. Rounds 1-19's hand-authored palette constants, dithering helpers, and shading functions are removed from this file entirely — they drew a different, non-extracted character and are no longer the technique this mission is judged on.</p>
-
-<p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12), continuing the branch's real-push delivery.</p>
+<p><b>Delivery:</b> pushed as a new commit on the existing branch <code>t-59-office-sample-scene</code> (PR #12), rebased onto current main first (the branch predated t-92/t-93's v2 chrome convergence work; rebase picked that up cleanly, no manual conflict resolution needed) so this round's diff stays scoped to the office-sample files only.</p>
 `;
 </script>
 </body>
