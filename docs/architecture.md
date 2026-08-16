@@ -90,7 +90,7 @@ A goal marked `## Mode: perpetual` never finishes on its own: it advances in **t
 
 ### 3.7 Adapters
 
-Every hub event flows through one internal `events` bus. Adapters subscribe to it. The scaffold ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. Later candidates: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
+Every hub event flows through one internal `events` bus. Adapters subscribe to it. The scaffold ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. It also ships **outbound pokes** (`lib/poke.js`, a no-op unless `BUREAU_POKES` is set): config-driven webhooks that fire on matching transitions so agent runtimes can be summoned the moment work changes hands instead of polling on a schedule (see the pokes paragraph in `protocol.md`). Later candidates: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
 
 ## 4. How agents connect
 
@@ -109,7 +109,7 @@ Single shared secret (`BUREAU_TOKEN`) as a Bearer token on every API call; the d
 
 ## 6. Deployment
 
-The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
+The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
 
 JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable. If the queue ever gets big, swapping `lib/store.js` for SQLite is a contained change.
 
@@ -121,6 +121,7 @@ hub/
   lib/store.js         # JSON state with atomic writes (tasks, agents, messages, log)
   lib/knowledge.js     # brain/ writes + git commits
   lib/discord.js       # outbound webhook mirror (no-op if not configured)
+  lib/poke.js          # outbound wake-up pokes, the summoner (no-op if not configured)
   public/index.html    # live dashboard (SSE)
   .env.example
 mockups/office.html    # pixel office mockup (scripted choreography)
