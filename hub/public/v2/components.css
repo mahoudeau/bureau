@@ -77,7 +77,7 @@
 .v2-status-glyph--xs .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
 .v2-status-glyph--md .v2-icon { width: var(--v2-icon-size-md); height: var(--v2-icon-size-md); }
 
-/* ---- chip: status/label pill, glyph + soft-tinted bg + text ---------- */
+/* ---- chip: generic label pill (non-status use only, see below) -------- */
 .v2-chip {
   display: inline-flex;
   align-items: center;
@@ -93,10 +93,25 @@
   border: 1px solid var(--v2-color-border);
   white-space: nowrap;
 }
+/* Status labels are icon + colored text directly on the canvas, never a
+   filled/bordered pill (boss ruling on t-66 round 1's evidence: three
+   independent Linear reference frames — SCR-20260816-cuol.png, -cums.png,
+   -cuxb.png — every status instance across the set is plain icon+text,
+   zero background/border/pill shape; the fully-rounded filled pill this
+   file shipped originally reads as a generic component-library chip, not
+   Linear's actual quieter status language). Overrides the base .v2-chip
+   pill box model down to nothing but color + inherited sizing; the pill
+   treatment above stays available for a genuinely non-status label use,
+   since only status specifically has that reference agreement. */
 .v2-chip--bug, .v2-chip--at-risk, .v2-chip--on-track, .v2-chip--in-progress, .v2-chip--done {
+  height: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  font-weight: inherit;
   color: var(--v2-chip-fg, var(--v2-color-text-secondary));
-  background: var(--v2-chip-bg, var(--v2-color-surface-raised));
-  border-color: transparent;
 }
 .v2-chip__label { font-variant-numeric: var(--v2-tabular-nums); }
 

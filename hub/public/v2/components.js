@@ -121,9 +121,12 @@ export function statusGlyph(status, size) {
 export function chip(text, status) {
   const c = el('span', { class: 'v2-chip' + (status ? ` v2-chip--${status}` : '') });
   if (status && STATUS_HUES[status]) {
+    // Status chips render as icon + colored text only (components.css's
+    // .v2-chip--<status> rules strip the pill/fill/border down to nothing
+    // but color) — only --v2-chip-fg is still read; no soft background
+    // variable to set since status labels no longer have one.
     const s = STATUS_HUES[status];
     c.style.setProperty('--v2-chip-fg', `var(${s.colorVar})`);
-    c.style.setProperty('--v2-chip-bg', `var(${s.softVar})`);
     c.appendChild(statusGlyph(status, 'xs'));
   }
   c.appendChild(el('span', { class: 'v2-chip__label v2-tabular-nums' }, text));
