@@ -13,7 +13,7 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 | Call | Purpose |
 |---|---|
 | `POST /api/agents/register` | join the roster: `{name, kind, capabilities[]}` |
-| `POST /api/agents/heartbeat` | I'm alive: `{name, note?, activity?}` |
+| `POST /api/agents/heartbeat` | I'm alive: `{name, note?, activity?, sub_agents?}` |
 | `POST /api/tasks/claim` | claim by id, or highest-priority queued from a project with free capacity; returns lease |
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
@@ -41,6 +41,24 @@ Goals are a convention, not an API object: a mission titled `goal: ...` filed by
 
 Session guidance for connectors: a session is a shift, not the queue. Make every task self-contained (claim, work, write knowledge, update status, claim next) and keep state in the hub, never in session context. Leases turn dead sessions into requeued work; fresh sessions resume from the hub, not from memory.
 
+**Sub-agent fleets.** A parent agent's sub-agent fleet (variant builders, inner critics, sub-critic panels) rides its own `POST /api/agents/heartbeat` as an optional `sub_agents` array, full-snapshot semantics (each heartbeat replaces the parent's last-reported fleet, the same replace-not-diff style the field already uses for `note`/`activity`):
+
+```
+POST /api/agents/heartbeat
+{"name":"bettik","activity":"editing","sub_agents":[
+  {"label":"variant A of t-58","activity":"editing"},
+  {"label":"variant B of t-58","activity":"thinking"},
+  {"label":"inner critic round 4","activity":"reading"}
+]}
+```
+
+- `sub_agents` is optional; omit it, or send `[]`, and the hub clears the parent's fleet (session ended, or dropped back to solo work) - there is no partial-update form, every heartbeat that reports a fleet reports all of it.
+- Each entry's `label` is required free text, hub-truncated to ~80 characters, never rejected - same forgiving posture as `note`.
+- Each entry's `activity`, when present, is validated against the SAME generic activity vocabulary as the parent's own heartbeat `activity` (below) - one vocabulary, not two. An entry with no `activity` (or an unrecognized one) renders label-only.
+- The array is capped at 24 entries server-side (truncate, don't reject) - bounds state size against a runaway fleet without breaking an over-sized heartbeat.
+- The fleet is stored ONLY on the parent's own roster record (`agent.sub_agents`), never inserted into the top-level `agents[]` roster array: a sub-agent gets no `name`, no `kind`, no registration, no token of its own. `POST /api/tasks/claim` and `POST /api/agents/heartbeat` both key strictly off registered roster `name`s, and no code path reads INTO `sub_agents` to authenticate anything - a fleet label can never claim a mission or heartbeat as itself. This identity-blur guarantee holds by construction, not by convention.
+- **History.** When a heartbeat's fleet composition changes from the agent's previous heartbeat (a label added or removed, or an `activity` change on an existing label - reordering the same labels is not a change), the hub appends one log line to every mission currently assigned to that agent with status `claimed`/`in_progress`: `"fleet: 3 running - variant A of t-58 (editing), variant B of t-58 (thinking), inner critic round 4 (reading)"`. Throttled on CHANGE only: repeated heartbeats with the identical composition write nothing. A fleet dropping to zero writes one closing line, `"fleet: 0 - cleared"`, so the mission record shows exactly when the fleet stood down and survives after the session ends - no new storage, this reuses the mission's existing `log[]`. An agent heartbeating a fleet change while it holds no active mission updates the roster record (for live display) but writes no log line: there is nothing to attach it to.
+
 `kind` is a free string (`cowork`, `claude-code`, `sdk`, `n8n`, `human`, ...) used for display/grouping, with one deliberate exception: `cowork` marks an agent as an interchangeable pool worker, and only the reservation rules read it (a non-`cowork` agent's missions come back reserved after an answer or a lease expiry, because that agent likely holds local context a pool worker cannot see). Everything else attaches no behavior to `kind`.
 
 ## Generic activity vocabulary
@@ -59,6 +77,8 @@ The stickiness trap isn't the API, it's the UI animating vendor event names. The
 | `idle` | alive, no work | coffee machine / wander |
 
 (Example mapping, claude-code connector: `PostToolUse(Edit|Write)` → `editing`, `PostToolUse(Read|Grep|Glob)` → `reading`, `PostToolUse(Bash)` → `executing`, `Notification/permission` → `waiting_permission`, `Stop` → `idle`.)
+
+The same eight verbs are reused, unchanged, for each entry in a heartbeat's `sub_agents` array (above) - one vocabulary for main agents and their fleets, not two.
 
 ## Connectors
 

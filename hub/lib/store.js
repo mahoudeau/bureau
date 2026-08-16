@@ -101,7 +101,47 @@ function upsertAgent({ name, kind, capabilities }) {
   return a;
 }
 
-function heartbeat(name, note, activity) {
+// Sub-agent fleets (t-60/t-61 i1+i2): a parent agent's sub-agent fleet rides
+// its own heartbeat as a full-snapshot array, stored ONLY on the parent's own
+// roster record (agent.sub_agents) - never inserted into s.agents itself, so
+// a sub-agent has no name/kind/registration/token of its own and structurally
+// cannot claim a mission or heartbeat as itself (claim and heartbeat both key
+// strictly off registered roster `name`s; nothing reads INTO sub_agents to
+// authenticate anything). Omitting the field, or sending [], means "nothing
+// to report this beat" and clears whatever fleet was last seen - this is a
+// full-snapshot report, not a diff, so a parent that stops including the
+// field is read as having stood its fleet down.
+const SUBAGENT_CAP = 24;
+function normalizeFleet(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, SUBAGENT_CAP).map(e => {
+    const label = String((e && e.label) ?? '').slice(0, 80); // free text; truncate, never reject
+    const activity = e && e.activity != null && ACTIVITIES.includes(e.activity) ? e.activity : undefined;
+    return activity ? { label, activity } : { label };
+  });
+}
+// Order-insensitive composition key: reordering the same labels/activities is
+// not itself a "change" per i2 (label added/removed, or an activity change on
+// an existing label are the three named triggers).
+function fleetKey(list) { return JSON.stringify(list.map(e => [e.label, e.activity || '']).sort()); }
+function fleetLogLine(list) {
+  if (!list.length) return 'fleet: 0 - cleared';
+  const parts = list.map(e => (e.activity ? `${e.label} (${e.activity})` : e.label));
+  return `fleet: ${list.length} running - ${parts.join(', ')}`;
+}
+// Throttled on CHANGE only: appends one log line to every mission currently
+// assigned (claimed/in_progress) to this agent. No active mission -> the
+// fleet still lands on the roster record for live display, but there is
+// nothing to attach a log line to, so none is written (per i2).
+function logFleetChange(s, agentName, fleet) {
+  const active = s.tasks.filter(t => t.assignee === agentName && (t.status === 'claimed' || t.status === 'in_progress'));
+  if (!active.length) return;
+  const note = fleetLogLine(fleet);
+  for (const t of active) t.log.push({ ts: nowISO(), by: agentName, note });
+  save();
+}
+
+function heartbeat(name, note, activity, subAgents) {
   const s = load();
   const a = s.agents.find(x => x.name === name);
   if (!a) return null;
@@ -111,7 +151,12 @@ function heartbeat(name, note, activity) {
     if (activity !== null && !ACTIVITIES.includes(activity)) return { error: `unknown activity; use one of ${ACTIVITIES.join(', ')}` };
     a.activity = activity;
   }
+  const prevFleet = Array.isArray(a.sub_agents) ? a.sub_agents : [];
+  const nextFleet = normalizeFleet(subAgents);
+  const fleetChanged = fleetKey(prevFleet) !== fleetKey(nextFleet);
+  a.sub_agents = nextFleet;
   save();
+  if (fleetChanged) logFleetChange(s, a.name, nextFleet);
   return a;
 }
 
