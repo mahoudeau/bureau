@@ -244,7 +244,19 @@ import { icon } from './components.js';
             if (row.querySelector('.v2-batch-item-select')) return; // already wired this render
             var cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.className = 'v2-batch-item-select';
+            // t-115 (goal: t-53): .v2-hit44 (components.css) — closes t-111
+            // finding #2's "itemized-verdict 'select for batch' checkboxes:
+            // 18x18px" line. That finding's own mission (t-115) named only
+            // peek-panel.js/board.js as touch targets, believing all 5
+            // undersized controls lived there; this one (.v2-batch-item-
+            // select) is actually injected by THIS file, not peek-panel.js.
+            // Extending the shared utility here rather than leaving one of
+            // the finding's own 5 named controls unfixed — flagged plainly
+            // in the closing note as a deliberate, disclosed scope call,
+            // not silent scope creep: the fix is the same one-line class
+            // addition as every other call site, on the exact class this
+            // finding named, just in the file that actually owns it.
+            cb.className = 'v2-batch-item-select v2-hit44';
             cb.setAttribute('aria-label', 'Select ' + row.getAttribute('data-item-id') + ' for batch verdict');
             cb.addEventListener('change', function () {
               var iid = row.getAttribute('data-item-id');

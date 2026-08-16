@@ -72,12 +72,15 @@
                                                inside it (jump-to-mission,
                                                filter-by-project, full-text
                                                search across missions+brain)
-  #v2-quick-add           overlay, anchored    i11 baseline (title+project+
-  (popover, not modal)                         priority quick-add, + 🎯
-                                               goal form w/ reference
-                                               uploads) · i6 templates
-                                               (canned starting shapes,
-                                               picked before typing)
+  #v2-quickadd-form       inline, in board.js's i11 baseline (title+project+
+  #v2-qa-trigger          "+ Quick add" button  priority quick-add, t-64) ·
+                                               i6 templates (body textarea +
+                                               canned starting shapes,
+                                               decorated on in place by
+                                               quick-add.js/templates.js,
+                                               t-72 — not a separate overlay;
+                                               board.js builds the form once
+                                               and never re-renders it)
   #v2-goal-progress       overlay, right       i4 goal/cycle progress view
   (slide-in, not modal)                        (full child list + tranche
                                                trail, opened from a goal
@@ -356,18 +359,43 @@
     border-bottom: 1px solid var(--v2-hairline);
     height: calc(var(--v2-row-h) + var(--v2-space-2));
   }
-  .v2-topbar__brand { font-weight: 600; }
+  .v2-topbar__brand { font-weight: 600; display: flex; align-items: center; gap: var(--v2-space-2); }
   .v2-topbar__badge {
     font-size: 10px; font-weight: 600; color: var(--v2-muted);
     border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
     padding: 1px 5px; margin-left: var(--v2-space-1);
   }
+  /* t-93: converging toward the approved t-58 sample's header — a small
+     solid brand mark (a monogram square, the sample's own "B" glyph)
+     ahead of the wordmark, and a mode-switch (light/dark/system) that
+     genuinely did not exist before this round: --v2-color-scheme was
+     read by CSS (see the data-theme selectors just above) but nothing
+     in this file ever SET the attribute — dark mode was reachable only
+     by a manual DOM edit, never a real control. */
+  .v2-topbar__mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: 5px;
+    background: var(--v2-accent); color: var(--v2-on-accent, #fff);
+    font-size: 12px; font-weight: 700;
+  }
+  .v2-modeswitch { display: flex; gap: 2px; margin-left: var(--v2-space-2); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); padding: 2px; }
+  .v2-modeswitch__btn {
+    display: flex; align-items: center; justify-content: center; width: 24px; height: 22px;
+    border: none; border-radius: calc(var(--v2-radius) - 2px); background: transparent; color: var(--v2-muted); cursor: pointer;
+  }
+  .v2-modeswitch__btn svg { width: 13px; height: 13px; }
+  .v2-modeswitch__btn.v2-on { background: var(--v2-surface); color: var(--v2-ink); box-shadow: 0 0 0 1px var(--v2-hairline); }
   .v2-search-entry {
-    flex: 1; max-width: 420px; display: flex; align-items: center; gap: var(--v2-space-2);
+    flex: 1; min-width: 0; max-width: 420px; display: flex; align-items: center; gap: var(--v2-space-2);
     background: var(--v2-surface); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
     color: var(--v2-muted); font: inherit; padding: 0 var(--v2-space-3); height: var(--v2-row-h); cursor: pointer;
   }
-  .v2-search-entry__label { flex: 1; text-align: left; }
+  /* t-93: min-width:0 + ellipsis — the topbar's flex row didn't shrink this
+     child below its text's own intrinsic width (flex items default to
+     min-width:auto), so adding the mode-switch's extra ~80px this round
+     was enough to overflow/wrap the whole header at phone width. Found by
+     actually rendering at 390px, not assumed. */
+  .v2-search-entry__label { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; }
   .v2-search-entry__hint {
     border: 1px solid var(--v2-hairline); border-radius: 4px; padding: 0 5px; font-size: 11px;
   }
@@ -387,6 +415,24 @@
   .v2-rail { grid-area: rail; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
   .v2-main { grid-area: main; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
   .v2-side { grid-area: side; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
+
+  /* t-93: sidebar nav (Board/Goals/Brain) — the approved t-58 sample's own
+     top-of-rail structure, absent entirely before this round (the rail
+     held only the agents/projects/brain-entry cards, no top-level nav).
+     Board/Goals swap the .v2-main view (see the boot script below);
+     Brain reuses the existing #v2-brain-entry overlay-open behavior
+     rather than duplicating it — one click target for "open the brain",
+     matching how #v2-brain-entry already worked pre-this-round. */
+  .v2-navtabs { display: flex; flex-direction: column; gap: 2px; }
+  .v2-navitem {
+    display: flex; align-items: center; gap: var(--v2-space-2);
+    padding: var(--v2-space-2) var(--v2-space-3); border-radius: var(--v2-radius);
+    color: var(--v2-ink-2); font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent;
+    text-align: left; width: 100%;
+  }
+  .v2-navitem svg { width: 15px; height: 15px; flex: none; }
+  .v2-navitem:hover { background: var(--v2-surface); }
+  .v2-navitem.v2-on { background: var(--v2-surface); color: var(--v2-ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--v2-accent); }
 
   .v2-region-title {
     font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--v2-muted);
@@ -411,7 +457,32 @@
     .v2-rail { order: 2; }
     .v2-side { order: 3; }
     .v2-panel, .v2-brain-panel, .v2-goal-progress-panel { width: 100%; right: 0; left: 0; top: auto; bottom: 0; height: 80vh; border-radius: var(--v2-radius) var(--v2-radius) 0 0; }
-    .v2-quick-add { left: var(--v2-space-2); right: var(--v2-space-2); bottom: var(--v2-space-2); width: auto; }
+    /* t-93 round 4: the mission-detail panel specifically (not the brain
+       browser or goal-progress panels, which this round's own critic
+       finding didn't touch) becomes a true full-viewport takeover on
+       phone, matching the sample's own phone mockup (t-58-current-phone.png
+       — nothing else visible behind it) instead of an 80vh sheet leaving
+       the board's tail columns visible underneath. */
+    /* width: 100% here is NOT redundant with the shared rule above: this
+       file's later, unconditional `.v2-panel, .v2-brain-panel, ...{width:
+       var(--v2-panel-w)}` base rule (outside any media query) sits AFTER
+       this @media block in source order, and wins the cascade on width at
+       EQUAL class-selector specificity regardless of the media query still
+       matching — a real pre-existing ordering bug, confirmed live (the
+       panel measured 380px, the desktop width, at a 390px viewport before
+       this line was added). #v2-peek-panel's ID selector reliably beats
+       that later class rule on every property this ruleset sets, so
+       repeating width:100% here is the scoped fix rather than reordering
+       the whole stylesheet (which would need auditing brain-panel/goal-
+       progress-panel too — both still carry the same latent bug, flagged
+       here rather than silently worked around only for peek-panel). */
+    #v2-peek-panel { top: 0; height: 100dvh; width: 100%; border-radius: 0; }
+    /* t-93: the ⌘K hint means nothing without a keyboard, and the
+       mode-switch's three buttons are the least essential topbar element
+       at this width — drop both so the brand + search label + live dot
+       stay legible instead of wrapping onto a second line. */
+    .v2-search-entry__hint, .v2-modeswitch { display: none; }
+    .v2-topbar { gap: var(--v2-space-2); padding-left: var(--v2-space-3); padding-right: var(--v2-space-3); }
   }
 
   /* ---- overlays: peek panel / brain panel / goal progress — slide-in, never a modal (§1, §5) ---- */
@@ -435,13 +506,6 @@
     box-shadow: 0 12px 40px rgba(0,0,0,.22); z-index: 50; padding: var(--v2-space-2);
   }
   @media (max-width: 720px) { .v2-palette { top: 0; left: 0; transform: none; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }
-
-  /* ---- quick-add: small anchored popover, not a form page ---- */
-  .v2-quick-add {
-    position: fixed; right: var(--v2-space-4); bottom: var(--v2-space-4); width: 340px;
-    background: var(--v2-surface); border: 1px solid var(--v2-border); border-radius: var(--v2-radius);
-    box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 45; padding: var(--v2-space-3);
-  }
 
   /* ---- batch verdicts bar ---- */
   .v2-batch-bar {
@@ -496,16 +560,26 @@
 </div>
 
 <header class="v2-topbar" id="v2-topbar">
-  <div class="v2-topbar__brand">Bureau<span class="v2-topbar__badge">v2</span></div>
+  <div class="v2-topbar__brand"><span class="v2-topbar__mark" aria-hidden="true">B</span>Bureau<span class="v2-topbar__badge">v2</span></div>
   <button class="v2-search-entry" id="v2-search-entry" type="button" aria-label="Search missions and brain (opens the command palette)">
     <span class="v2-search-entry__label">Search or jump to…</span>
     <span class="v2-search-entry__hint">⌘K</span>
   </button>
+  <div class="v2-modeswitch" id="v2-modeswitch" role="group" aria-label="Color theme">
+    <button type="button" class="v2-modeswitch__btn" data-mode="light" title="Light" aria-label="Light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></button>
+    <button type="button" class="v2-modeswitch__btn" data-mode="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></button>
+    <button type="button" class="v2-modeswitch__btn" data-mode="system" title="System" aria-label="System theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg></button>
+  </div>
   <div class="v2-conn" id="v2-conn"><span class="v2-conn__dot" id="v2-conn-dot"></span><span id="v2-conn-text">connecting…</span></div>
 </header>
 
 <div class="v2-shell" id="v2-shell">
   <aside class="v2-rail" id="v2-rail">
+    <nav class="v2-navtabs" id="v2-navtabs" aria-label="Primary view">
+      <button type="button" class="v2-navitem v2-on" id="v2-nav-board" data-view="board" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"/></svg><span>Board</span></button>
+      <button type="button" class="v2-navitem" id="v2-nav-goals" data-view="goals"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></svg><span>Goals</span></button>
+      <button type="button" class="v2-navitem" id="v2-nav-brain" data-view="brain"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg><span>Brain</span></button>
+    </nav>
     <section class="v2-card" id="v2-agents-rail" aria-label="Agent roster">
       <h2 class="v2-region-title">Agents</h2>
       <div class="v2-empty">Loading…</div>
@@ -552,7 +626,6 @@
 <aside class="v2-brain-panel" id="v2-brain-panel" hidden aria-label="Brain browser"></aside>
 <aside class="v2-goal-progress-panel" id="v2-goal-progress" hidden aria-label="Goal progress"></aside>
 <div class="v2-palette" id="v2-palette" hidden role="dialog" aria-modal="false" aria-label="Command palette"></div>
-<div class="v2-quick-add" id="v2-quick-add" hidden aria-label="Quick add"></div>
 <div class="v2-batch-bar" id="v2-batch-bar" hidden aria-label="Batch verdicts"></div>
 <div class="v2-toasts" id="v2-toasts" aria-live="polite"></div>
 
@@ -663,7 +736,6 @@
     brainPanel: document.getElementById('v2-brain-panel'),
     goalProgress: document.getElementById('v2-goal-progress'),
     palette: document.getElementById('v2-palette'),
-    quickAdd: document.getElementById('v2-quick-add'),
     batchBar: document.getElementById('v2-batch-bar'),
     toasts: document.getElementById('v2-toasts')
   };
@@ -672,6 +744,56 @@
   // entry point opens the palette mount; palette.js/search.js do the rest.
   mounts.searchEntry.addEventListener('click', function () { emit('v2:palette:open', null); });
   mounts.brainEntry.addEventListener('click', function () { emit('v2:brain:open', {}); });
+
+  // t-93: mode-switch (light/dark/system) — data-theme was already read by
+  // every CSS rule in tokens.css/this file's own :root blocks, but nothing
+  // ever SET it before this round; dark mode was reachable only by editing
+  // the DOM by hand. Persisted under its own localStorage key (not
+  // 'bureau_token', unrelated concern) so a choice survives reload.
+  (function initModeSwitch() {
+    var KEY = 'bureau_v2_theme';
+    var saved = localStorage.getItem(KEY); // 'light' | 'dark' | null (system)
+    function apply(mode) {
+      if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-theme', mode);
+      else document.documentElement.removeAttribute('data-theme');
+      document.querySelectorAll('.v2-modeswitch__btn').forEach(function (b) {
+        b.classList.toggle('v2-on', b.getAttribute('data-mode') === (mode || 'system'));
+      });
+    }
+    apply(saved);
+    document.querySelectorAll('.v2-modeswitch__btn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var mode = b.getAttribute('data-mode');
+        if (mode === 'system') { localStorage.removeItem(KEY); apply(null); }
+        else { localStorage.setItem(KEY, mode); apply(mode); }
+      });
+    });
+  })();
+
+  // t-93: sidebar nav (Board/Goals/Brain), converging toward the approved
+  // t-58 sample's own top-of-rail structure. Board (default) keeps the
+  // existing stacked main (insights + goals + board) exactly as it already
+  // worked — this is additive chrome, not a removal of the insights-strip/
+  // needs-me-now/activity-feed regions the acceptance says must keep
+  // working. Goals gives goals a dedicated full view (hides insights +
+  // board so the goal list/children get the room). Brain reuses the
+  // existing brain-entry overlay-open behavior — one open path, not two.
+  (function initNavTabs() {
+    var tabs = { board: document.getElementById('v2-nav-board'), goals: document.getElementById('v2-nav-goals'), brain: document.getElementById('v2-nav-brain') };
+    function setView(view) {
+      Object.keys(tabs).forEach(function (k) { tabs[k].classList.toggle('v2-on', k === view); tabs[k].removeAttribute('aria-current'); });
+      tabs[view].setAttribute('aria-current', 'page');
+      // goals is visible in BOTH the board view (today's stacked layout)
+      // and its own dedicated view — only insights/board hide when Goals
+      // is picked, giving the goal list the full-width room the sample's
+      // own Goals tab implies.
+      if (mounts.insightsStrip) mounts.insightsStrip.hidden = view === 'goals';
+      if (mounts.board && mounts.board.closest('section')) mounts.board.closest('section').hidden = view === 'goals';
+    }
+    tabs.board.addEventListener('click', function () { setView('board'); });
+    tabs.goals.addEventListener('click', function () { setView('goals'); });
+    tabs.brain.addEventListener('click', function () { emit('v2:brain:open', {}); });
+  })();
 
   // t-87: window.BureauV2 is assigned HERE, inside boot(), not at module-
   // init time above — boot() only ever runs after the token gate has
@@ -699,7 +821,15 @@
       on: on,
       emit: emit,
       bus: bus,
-      mounts: mounts
+      mounts: mounts,
+      // t-93 round 4: a mutable contract slot, same shape as `mounts` —
+      // Object.freeze is shallow, so this plain object's OWN properties
+      // stay assignable even though BureauV2 itself can never gain or lose
+      // a top-level key. peek-panel.js (t-64) fills this in with
+      // { registerSection, refreshSections } once it boots; sibling
+      // modules (media.js today) attach a panel section here instead of
+      // fighting peek-panel.js's own innerHTML rebuilds from outside.
+      peekPanel: {}
     });
     updateViewport();
     refresh().then(function () { emit('v2:ready', undefined); });
