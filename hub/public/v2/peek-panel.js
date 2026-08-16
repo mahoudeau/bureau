@@ -168,9 +168,11 @@ import { icon } from './components.js';
         return head + '<span class="v2-panel__ts">' + esc(it.verdict) + (it.comment ? ': ' + esc(it.comment) : '') + '</span></div>';
       }
       return head +
-        '<label><input type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
-        '<label><input type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
-        '<label><input type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
+        // t-115: .v2-hit44 (components.css) on each radio — closes t-111
+        // finding #2's "itemized-verdict radio buttons (13x13px)" line.
+        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
+        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
+        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
         '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" value="' + esc(it.comment || '') + '">' +
         '</div>';
     }
@@ -199,23 +201,30 @@ import { icon } from './components.js';
       }
       var items = (t.items || []).map(function (it, i) { return itemRow(it, i, t.status === 'review'); }).join('');
 
+      // t-115: .v2-hit44 on every .v2-panel__btn — closes finding #2's
+      // "Primary actions Approve/Send back: only 30px tall" line (Approve/
+      // Send back are the two named in the finding; Answer & re-queue and
+      // Re-queue share the exact same .v2-panel__btn class and 30px height,
+      // so leaving them out would make three near-identical buttons behave
+      // inconsistently on the same panel — extended to all four for that
+      // reason, not scope creep, called out here plainly).
       var reviewActions = t.status === 'review' ? (
         '<div class="v2-panel__actions">' +
         '<input class="v2-panel__note" id="v2-pp-note" placeholder="Note for the agent (optional on approve, required to send back)">' +
         '</div>' +
         '<p class="v2-panel__err" id="v2-pp-err" hidden></p>' +
         '<div class="v2-panel__actions">' +
-        '<button type="button" class="v2-panel__btn" id="v2-pp-approve">✅ Approve</button>' +
-        '<button type="button" class="v2-panel__btn v2-panel__btn--ghost" id="v2-pp-sendback">↩️ Send back</button>' +
+        '<button type="button" class="v2-panel__btn v2-hit44" id="v2-pp-approve">✅ Approve</button>' +
+        '<button type="button" class="v2-panel__btn v2-panel__btn--ghost v2-hit44" id="v2-pp-sendback">↩️ Send back</button>' +
         '</div>'
       ) : '';
       var blockedActions = t.status === 'blocked' ? (
         '<div class="v2-panel__actions"><input class="v2-panel__note" id="v2-pp-note" placeholder="Your answer to the worker (required)"></div>' +
         '<p class="v2-panel__err" id="v2-pp-err" hidden></p>' +
-        '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn" id="v2-pp-answer">💬 Answer &amp; re-queue</button></div>'
+        '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-hit44" id="v2-pp-answer">💬 Answer &amp; re-queue</button></div>'
       ) : '';
       var failedActions = t.status === 'failed' ? (
-        '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-panel__btn--ghost" id="v2-pp-requeue">↩️ Re-queue</button></div>'
+        '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-panel__btn--ghost v2-hit44" id="v2-pp-requeue">↩️ Re-queue</button></div>'
       ) : '';
 
       // t-93 round 4: stacked attribute rows (sample: renderT58()'s six
@@ -245,7 +254,12 @@ import { icon } from './components.js';
         // critic reproduced a real overlap bug on long titles from the old
         // single-button-no-wrapper markup, at both desktop and phone width.
         '<div class="v2-panel__head"><span class="v2-panel__id v2-tabular-nums">' + esc(t.id) + '</span>' +
-        '<button type="button" class="v2-panel__close" id="v2-pp-close" aria-label="Close">' + icon('x') + '</button></div>' +
+        // t-115: .v2-hit44 — closes finding #2's "shared panel close
+        // button: 30x30px" line (this file's own instance of the pattern;
+        // brain-browser.js's and goal-progress.js's own close buttons use
+        // different classes, .v2-brain-close/.v2-gp__close, and are out of
+        // this mission's stated file scope — flagged in the closing note).
+        '<button type="button" class="v2-panel__close v2-hit44" id="v2-pp-close" aria-label="Close">' + icon('x') + '</button></div>' +
         '<h2 class="v2-panel__title">' + (isGoal ? '🎯 ' : '') + esc(t.title) + '</h2>' +
         '<div class="v2-panel__attrs">' + rows + '</div>' +
         (goalKids ? '<div class="v2-panel__meta">' + goalKids.done + '/' + goalKids.total + ' child missions done ' +

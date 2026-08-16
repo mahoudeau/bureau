@@ -272,8 +272,12 @@ import { icon } from './components.js';
         var cards = shown.map(function (t) {
           var isGoal = /^goal:/i.test(t.title);
           var kids = isGoal ? goalKids[t.id] : null;
+          // t-115 (goal: t-53): .v2-hit44 (components.css) — closes t-111
+          // finding #2's "batch-verdicts per-card selection checkbox
+          // (board.js): 13x13px" line, the highest-frequency tap in the
+          // review flow (one per card, every time the boss triages review).
           var checkbox = key === 'review'
-            ? '<input type="checkbox" class="v2-task-card__select" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
+            ? '<input type="checkbox" class="v2-task-card__select v2-hit44" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
             : '';
           // Chips: goal (flag) + project (colored dot) + priority, the
           // sample's own three (t-58-v2-sample.html.txt, .card .chips).
