@@ -1,5 +1,5 @@
 /*
- * Dashboard v2 — design tokens (t-63 schema, t-75 round 1 values)
+ * Dashboard v2 — design tokens (t-63 schema, t-75 round 2 values)
  *
  * VALUES REPAINTED FROM THE APPROVED SAMPLE (t-58, "Pure Linear rebuild",
  * boss-approved 2026-08-16 — projects/bureau/deliverables/t-58-v2-sample.html.txt,
@@ -235,13 +235,43 @@
      own control-text cluster exactly (.searchbtn, .inline-edit input,
      .btn, .quickadd select, all literally 12px) — a cleaner, more
      one-directional match than xs's split.
-     lg/xl/2xl/3xl (16/20/28/40) are NOT sample-traceable: this sample is
-     a board+peek-panel view, and its largest rendered text is #peek h2 at
-     17px (line ~128) — it never renders a stat tile or hero number at
-     all. Kept at the placeholder's original values, honestly flagged as
-     unconfirmed rather than silently re-guessed to a different unconfirmed
-     number; a future sample/reference with a stats view should calibrate
-     these for real. */
+     lg/2xl round 2 (critic-directed): round 1's own method (t-58's
+     sample CSS only) doesn't cover this — the sample is a board+peek-
+     panel view and never renders a stat tile — but the mission's own
+     acceptance requires the raw ux-v2/ files too, and a critic pass
+     found projects/bureau/references/ux-v2/SCR-20260816-cvac.png (an
+     "Insights"-style panel) does: a "Completed this week" stat tile with
+     a large "129" hero number. Measured directly, own pixel crop, own
+     coordinates: hero "129" digit height 35px; two card/stat-tile
+     TITLES ("Completed this week", "Request volume") both measure 21px;
+     the data table's own header/row text ("SLA status", "Achieved")
+     both measure 16px. Screenshot DPR is unknown (flagged explicitly by
+     the critic), so absolute px counts aren't directly usable — anchored
+     instead to this schema's OWN already-confirmed -sm (12px, cited
+     independently to t-58's sample), treating the table's dense body
+     text as -sm's "secondary row text, chip text" register (16px in the
+     screenshot / 12px token = a 1.333 image-to-token factor for this one
+     screenshot). Applying that factor: card/stat titles (21px) ->
+     15.75px, landing cleanly on -lg's existing 16px — CONFIRMING -lg
+     with real reference evidence for the first time, not changing it;
+     hero "129" (35px) -> 26.25px, moving -2xl from the placeholder's
+     invented 28px down to 26px, now a real citation.
+     3xl: no second, bigger hero number exists anywhere in either
+     reference set to calibrate against directly — per the critic's own
+     stated fallback ("at minimum narrow 3xl down... with the measured
+     ratio as the citation"), narrowed from 40px to 32px, a modest step
+     above the now-confirmed -2xl rather than the placeholder's much
+     larger, uncited gap. Flagged plainly: this is an extrapolation from
+     the -2xl measurement, not a direct citation like everything else in
+     this block — nothing bigger than the one stat tile is evidenced.
+     xl (20px) is still not directly evidenced either, but now sits
+     between two REAL, measured anchors (-lg 16, confirmed; -2xl 26,
+     measured) rather than two unconfirmed guesses — left unchanged,
+     honestly still flagged as unconfirmed rather than claimed as a
+     citation it doesn't have.
+     xs/sm/base/md unchanged from round 1 (see that round's citations,
+     still accurate — a fresh critic pass independently re-verified all
+     of them this round and found no error). */
   --v2-font-size-2xs: 10px;
   --v2-font-size-xs: 11px;
   --v2-font-size-sm: 12px;
@@ -249,8 +279,8 @@
   --v2-font-size-md: 14px;
   --v2-font-size-lg: 16px;
   --v2-font-size-xl: 20px;
-  --v2-font-size-2xl: 28px;
-  --v2-font-size-3xl: 40px;
+  --v2-font-size-2xl: 26px;
+  --v2-font-size-3xl: 32px;
   --v2-line-height-tight: 1.3;
   --v2-line-height-base: 1.5;
   --v2-weight-regular: 400;
