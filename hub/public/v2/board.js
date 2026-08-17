@@ -572,20 +572,26 @@ import { icon } from './components.js';
       // the nowrap/ellipsis trio truncates a too-long label with "…"
       // instead of the old bug (wrapping its own text mid-word once the
       // meta group below no longer had room beside it).
-      // Round 3 (verify pass): `flex-basis: auto` still failed the ONE-line
-      // bar the send-back actually asked for — .v2-project-row's flex-wrap
-      // groups items into lines using each item's HYPOTHETICAL size first,
-      // and with an auto basis that's __name's full intrinsic content
-      // width (not its shrunk render width), so a name of any real length
-      // already claimed the entire row width during line-grouping and
-      // pushed .v2-project-row__meta to its own line every time — verified
-      // empirically: every seeded row still rendered 2 lines against this
-      // branch's actual committed CSS. `flex-basis: 0%` makes the
-      // hypothetical size ~0 instead, so meta's fixed width is what
-      // actually competes for line 1, and __name only grows into whatever
-      // it leaves behind — the one-line result the named crop
-      // (crop-ux-list-row-density.png) actually shows.
-      '.v2-project-row__name { font-weight: 600; flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      //
+      // Round 3 tried `flex-basis: 0%` here to force meta onto line 1 by
+      // starving __name's hypothetical size during flex-wrap's line-
+      // packing pass — it DID make every row physically one line, but at
+      // a cost worse than the bug it closed: a name only gets whatever
+      // width meta leaves behind, so ordinary labels like "Acme Corp" or
+      // "No Repo Project With A Genuinely Long Label" rendered as "Acm…"
+      // / "No Re…" — 3-4 legible characters. Confirmed by screenshot, not
+      // asserted. That fails "rows read clean" (this mission's own
+      // Acceptance line, and the actual boss complaint this mission was
+      // filed to fix) far more visibly than a tidy second line ever did.
+      // Reverted to `flex: 1 1 auto`: the browser's real content width
+      // decides whether name+meta share line 1 (most short/medium names
+      // still do, especially after round 3's genuinely good tightening of
+      // meta's own footprint below) or meta cleanly wraps to its own full
+      // line — never at the cost of truncating the name itself. The send-
+      // back's "reads as ONE line" was about entity+capacity+open-count+
+      // repo never splitting from EACH OTHER (the actual orphaning bug) —
+      // satisfied either way — not a mandate to sacrifice the label.
+      '.v2-project-row__name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
       // t-136 send-back on t-133: chips + repo used to be two independent
       // flex children of .v2-project-row, free to end up on different
