@@ -266,7 +266,7 @@ import { icon, avatar, chip } from './components.js';
         '<div class="v2-roster-row__main">' +
         '<div class="v2-roster-row__top">' +
         '<span class="v2-roster-row__name">' + esc(a.name) + '</span>' +
-        (opts.showRole !== false ? chip(roleLabel(a)).outerHTML : '') +
+        (opts.showRole !== false ? chip(roleLabel(a), 'role').outerHTML : '') +
         '</div>' +
         '<div class="v2-roster-row__activity">' +
         '<span class="v2-status-glyph v2-status-glyph--xs" style="color:var(' + live.colorVar + ')" title="' + live.label + '">' + icon(live.glyph) + '</span>' +
