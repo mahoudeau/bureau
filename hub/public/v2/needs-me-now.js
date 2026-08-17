@@ -130,7 +130,13 @@ import { icon } from './components.js';
       mount.innerHTML =
         '<div class="v2-needs-me-now__toolbar">' +
         '<span class="v2-needs-me-now__total">' + total + ' waiting on you</span>' +
-        '<button type="button" class="v2-needs-me-now__sort-toggle" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
+        // t-150 (goal: t-53): v2-hit44 (components.css) — a pre-existing,
+        // purely functional class hook (zero visible style, an invisible
+        // centered 44px tap zone), not the "hand-rolled visual language"
+        // this file's own header comment rules out. Its only neighbor is
+        // the plain-text total span to its left, so the grown zone has
+        // nothing clickable to collide with.
+        '<button type="button" class="v2-needs-me-now__sort-toggle v2-hit44" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
         '</div>' +
         (total === 0
           ? '<div class="v2-empty">Nothing waiting on you.</div>'
