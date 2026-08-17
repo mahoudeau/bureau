@@ -197,9 +197,24 @@ import { icon, avatar, chip } from './components.js';
     // 'librarian']; consul's outward-liaison/counsel work carries
     // ['counsel', ...]). Reads capabilities first; "Builder" is the
     // default for every other real team member.
+    //
+    // t-131 round 3 (moneta, reopened twice, independently reconfirmed):
+    // the literal caps.indexOf('lead') check is unreachable for the REAL
+    // live lead — ummon's actual capabilities are ['planning',
+    // 'decomposition'], no 'lead' string anywhere (checked against
+    // /api/state, not a hand-picked fixture) — it fell through to
+    // "Builder" every time, contradicting the mission's own explicit ask
+    // for a reachable Lead label. Not fixed by hardcoding the agent name
+    // (that breaks the moment a different agent takes over planning/
+    // decomposition) — extended with the SAME compound-capability
+    // heuristic the Critic branch below already uses for moneta (who
+    // carries no literal 'critic' string either, just review+
+    // verification): planning+decomposition is what "the lead" actually
+    // does in this protocol, same relationship as review+verification to
+    // "the critic".
     function roleLabel(a) {
       var caps = a.capabilities || [];
-      if (caps.indexOf('lead') !== -1) return 'Lead';
+      if (caps.indexOf('lead') !== -1 || (caps.indexOf('planning') !== -1 && caps.indexOf('decomposition') !== -1)) return 'Lead';
       if (caps.indexOf('critic') !== -1 || (caps.indexOf('review') !== -1 && caps.indexOf('verification') !== -1)) return 'Critic';
       if (caps.indexOf('librarian') !== -1 || caps.indexOf('curation') !== -1) return 'Librarian';
       if (caps.indexOf('counsel') !== -1) return 'Envoy';
