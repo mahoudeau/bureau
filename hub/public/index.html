@@ -60,6 +60,13 @@
   .proj .pcounts { color: var(--ink2); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }
   .proj .pedit { text-decoration: none; opacity: .5; }
   .proj .pedit:hover { opacity: 1; }
+  /* t-152: v1 sibling of t-114's v2 fix. .proj is display:flex with no
+     wrap, so the .pedit icon cluster (5 icons, no hit-slop) plus .pcounts
+     push the row past a 390px viewport, forcing real page-level
+     horizontal scroll (confirmed: scrollWidth 550px vs clientWidth 390px).
+     Same fix shape as v2's .v2-project-row: let the row wrap instead of
+     overflowing, same 720px breakpoint v2 uses for this exact bug. */
+  @media (max-width: 720px) { .proj { flex-wrap: wrap; } }
   .badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px;
            border: 1px solid var(--border); border-radius: 999px; color: var(--ink2); }
   .badge .dot { width: 7px; height: 7px; }
@@ -101,6 +108,16 @@
   .evt b { font-weight: 600; }
   /* Forms */
   form.newtask { display: flex; gap: 8px; margin-bottom: 14px; }
+  /* t-152: same page, same 390px floor, a second real contributor found
+     while verifying the .proj fix actually clears horizontal scroll —
+     the mission toolbar (title input + 2 selects + Add + Goal) is also
+     display:flex with no wrap, and its own min-content (~578px measured)
+     exceeds a 390px column on its own, independent of the .proj bug.
+     Wrapping it (title takes its own full-width row; controls wrap below)
+     is required for the mission's stated floor ("no horizontal page
+     scroll at any width") to actually hold — the .proj fix alone left
+     this one standing. Same 720px breakpoint as the .proj fix above. */
+  @media (max-width: 720px) { form.newtask { flex-wrap: wrap; } #nt-title { flex: 1 1 100%; } }
   input, select, button, textarea { font: inherit; color: var(--ink); background: var(--surface);
     border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; }
   input { flex: 1; }
