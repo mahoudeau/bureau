@@ -115,29 +115,90 @@ import { icon } from './components.js';
         '</section>';
     }
 
+    // t-162: the total used to be reviewCritic + reviewBoss + blocked + toBoss
+    // — every review, every blocked mission, every message ever sent to
+    // boss, unconditionally. Boss's own report (screenshot: 1+0+4+15=20,
+    // "Boss technically has nothing to do now"): the badge was counting
+    // things that don't actually need HIM. Three separate over-counts,
+    // fixed independently below — none of them invents new backend state,
+    // each reads only what's already on the task/message.
+    //
+    // (1) Review · critic doesn't need the boss — per docs/protocol.md's
+    // own two-tier gate design, a critic-gate review is the CRITIC's job
+    // ("only the boss or the lead agent set critic" implies critic-gate
+    // exists precisely so routine work does NOT queue on the boss). Kept
+    // visible for context (the boss can still look), just not counted.
+    //
+    // (2) A `blocked` mission is not always blocked ON THE BOSS — this
+    // codebase's own convention (bureau-process.md / this shift's own
+    // t-143/t-158) is "set status blocked with a note starting 'waiting
+    // on:'" for BOTH "waiting on a human answer" and "waiting on a
+    // sibling mission to finish," with no structured field distinguishing
+    // the two. blockedOnMission() below reads the mission's own most
+    // recent log note (the one written in the same PATCH that set
+    // status=blocked, per that convention) for a `waiting on: t-N`
+    // reference, and treats it as NOT the boss's problem only when that
+    // referenced task still exists and is still open — the moment the
+    // dependency closes, the same mission (unchanged) starts counting
+    // again on its own next render, no re-classification needed. A block
+    // with no such reference (a genuine human question, external-access
+    // wall, etc.) still counts, unchanged from before.
+    //
+    // (3) Messages to boss have no read/unread state anywhere in this
+    // hub's data model (checked: the store has no such field, and adding
+    // one is a real backend change out of this display-only mission's
+    // scope) — but a message already rang the boss's Discord in real time
+    // per protocol.md ("it rings his Discord"); re-presenting the SAME
+    // notification forever in a persistent "still waiting" badge conflates
+    // "was notified once" with "still needs an action," which is exactly
+    // the miscount this mission reports. Uncounted, kept visible as a
+    // reference list (so nothing about total message volume is hidden),
+    // relabeled so its own header no longer implies it's part of the tally.
+    function blockedOnMission(t, tasksById) {
+      var log = t.log || [];
+      var last = log.length ? log[log.length - 1] : null;
+      var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
+      if (!m) return false; // no mission reference at all -> a real human-facing block
+      var ref = tasksById[m[1]];
+      // Unknown/deleted id: can't confirm the dependency is still open, so
+      // don't silently drop it from the boss's count — safer to over-count
+      // by one than to hide something that might genuinely need him.
+      if (!ref) return false;
+      return ref.status !== 'done' && ref.status !== 'failed' && ref.status !== 'discarded';
+    }
+
     function render() {
       var state = V2.state;
       if (!state) return;
       var tasks = state.tasks || [];
+      var tasksById = {};
+      tasks.forEach(function (t) { tasksById[t.id] = t; });
 
       var reviewCritic = sortByCreated(tasks.filter(function (t) { return t.status === 'review' && t.gate === 'critic'; }));
       var reviewBoss = sortByCreated(tasks.filter(function (t) { return t.status === 'review' && t.gate !== 'critic'; }));
-      var blocked = sortByCreated(tasks.filter(function (t) { return t.status === 'blocked'; }));
+      var blockedAll = sortByCreated(tasks.filter(function (t) { return t.status === 'blocked'; }));
+      var blockedOnBoss = blockedAll.filter(function (t) { return !blockedOnMission(t, tasksById); });
+      var blockedOnWork = blockedAll.filter(function (t) { return blockedOnMission(t, tasksById); });
       var toBoss = sortOldestFirst ? messages.slice() : messages.slice().reverse();
 
-      var total = reviewCritic.length + reviewBoss.length + blocked.length + toBoss.length;
+      // Only the two genuinely boss-actionable groups count toward the
+      // headline number now: a boss-gate review (needs his own click, per
+      // protocol.md's "moves out... only when agent is human") and a block
+      // that isn't waiting on another mission to close first.
+      var total = reviewBoss.length + blockedOnBoss.length;
 
       mount.innerHTML =
         '<div class="v2-needs-me-now__toolbar">' +
         '<span class="v2-needs-me-now__total">' + total + ' waiting on you</span>' +
         '<button type="button" class="v2-needs-me-now__sort-toggle" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
         '</div>' +
-        (total === 0
+        (total === 0 && !reviewCritic.length && !blockedOnWork.length && !toBoss.length
           ? '<div class="v2-empty">Nothing waiting on you.</div>'
-          : group('review-critic', icon('flag') + ' Review · critic', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
-          group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
-          group('blocked', '⏸ Blocked, awaiting an answer', blocked.map(function (t) { return missionRow(t, state); }).join(''), blocked.length) +
-          group('messages', icon('message-square') + ' Messages to boss', toBoss.map(messageRow).join(''), toBoss.length));
+          : group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
+          group('blocked', '⏸ Blocked, awaiting your answer', blockedOnBoss.map(function (t) { return missionRow(t, state); }).join(''), blockedOnBoss.length) +
+          group('review-critic', icon('flag') + ' Review · critic (not yours to act on)', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
+          group('blocked-other', '⏸ Blocked on other work (not yours to act on)', blockedOnWork.map(function (t) { return missionRow(t, state); }).join(''), blockedOnWork.length) +
+          group('messages', icon('message-square') + ' Recent messages to boss (already delivered)', toBoss.map(messageRow).join(''), toBoss.length));
 
       var sortBtn = document.getElementById('v2-nmn-sort');
       if (sortBtn) sortBtn.addEventListener('click', function () { sortOldestFirst = !sortOldestFirst; render(); });
