@@ -100,7 +100,7 @@
     function buildTrigger() {
       trigger = document.createElement('button');
       trigger.type = 'button';
-      trigger.className = 'v2-awaitmerge-trigger';
+      trigger.className = 'v2-awaitmerge-trigger v2-hit44';
       trigger.setAttribute('aria-label', 'Missions awaiting merge');
       trigger.innerHTML = '⎇ <span id="v2-awaitmerge-count">0</span> awaiting merge';
       trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });

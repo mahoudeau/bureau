@@ -85,7 +85,7 @@ import { icon } from './components.js';
     function buildTrigger() {
       trigger = document.createElement('button');
       trigger.type = 'button';
-      trigger.className = 'v2-search-trigger';
+      trigger.className = 'v2-search-trigger v2-hit44';
       trigger.setAttribute('aria-label', 'Search missions and brain');
       trigger.innerHTML = icon('search') + ' <span class="v2-search-trigger__label">Search everything</span>';
       trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });
