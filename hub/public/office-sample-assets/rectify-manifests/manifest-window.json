@@ -1,0 +1,32 @@
+{
+ "sheet": "scenes/scene-window-states.jpg",
+ "background_key": [
+  255,
+  0,
+  255
+ ],
+ "key_tolerance": 170,
+ "anchor_region": [
+  0,
+  345,
+  210,
+  423
+ ],
+ "anchor_logical_height": 48,
+ "palette_size": 24,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {
+   "name": "window-blue-night",
+   "x": 207,
+   "y": 420,
+   "w": 257,
+   "h": 219,
+   "group": "window",
+   "_round26": "Re-cropped to the BLUE NIGHT cell's full tight connected-component bbox (was x215 y435 w273 h172, which clipped both the top and bottom frame rails). See frames.json's round26Fixes.window for why."
+  }
+ ],
+ "anchor_source_px_height": 335,
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) \u2014 download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in the matching report-*.json against this atlas's own sprite hashes."
+}

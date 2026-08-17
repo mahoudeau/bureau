@@ -1,0 +1,38 @@
+{
+ "sheet": "props/sheet-tiles-surfaces-v2.jpg",
+ "background_key": [
+  255,
+  0,
+  255
+ ],
+ "key_tolerance": 170,
+ "anchor_region": [
+  50,
+  10,
+  165,
+  240
+ ],
+ "anchor_logical_height": 48,
+ "palette_size": 32,
+ "accent_saturation_min": 0.15,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {
+   "name": "floor-wood",
+   "x": 270,
+   "y": 20,
+   "w": 265,
+   "h": 220,
+   "group": "floor"
+  },
+  {
+   "name": "wall-cracked",
+   "x": 1130,
+   "y": 20,
+   "w": 255,
+   "h": 220,
+   "group": "wall"
+  }
+ ],
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) \u2014 download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in the matching report-*.json against this atlas's own sprite hashes."
+}

@@ -5,3 +5,4 @@ brain/
 .DS_Store
 *.log
 bureau-internal/
+__pycache__/
