@@ -550,7 +550,7 @@ import { icon } from './components.js';
       '.v2-task-card--done { border-left-color: var(--v2-color-status-done, #29a36a); }',
       '.v2-task-card--failed { border-left-color: var(--v2-color-status-bug, #eb5757); }',
       '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
-      '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; font-variant-numeric: tabular-nums; }',
+      '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #71727c); font-weight: 500; font-variant-numeric: tabular-nums; }',
       '.v2-task-card__sp { flex: 1; }',
       '.v2-avatar { width: 18px; height: 18px; border-radius: 50%; background: var(--v2-color-surface-raised, #f4f4f6); border: 1px solid var(--v2-color-border, rgba(128,128,128,.2)); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--v2-color-text-secondary, #62636c); flex: none; }',
       '.v2-task-card__title { font-weight: 450; font-size: 12.5px; line-height: 1.4; color: var(--v2-color-text-primary, inherit); overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: var(--v2-space-3, 6px); }',
@@ -562,7 +562,7 @@ import { icon } from './components.js';
          sample, fed from the real state.knowledge.recent (git log over the
          brain repo), not a placeholder link. */
       '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
-      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
+      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #71727c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
       '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       // Discarded cards (t-110): dashed border + reduced opacity, distinguishable

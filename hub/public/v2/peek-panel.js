@@ -355,7 +355,7 @@ import { icon } from './components.js';
       // width. The id sits where the sample's own .phead .id sits; the
       // close button no longer needs to reserve title margin to dodge it.
       '.v2-panel__head { display: flex; align-items: center; gap: var(--v2-space-3, 8px); margin-bottom: var(--v2-space-3, 10px); }',
-      '.v2-panel__id { font-size: 11.5px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; flex: 1; }',
+      '.v2-panel__id { font-size: 11.5px; color: var(--v2-color-text-muted, #71727c); font-weight: 500; flex: 1; }',
       '.v2-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); display: flex; cursor: pointer; padding: 2px; flex: none; }',
       '.v2-panel__close:hover { color: var(--v2-color-text-primary, inherit); }',
       // t-93 round 5: components.css:352 (`.v2-panel__title { flex: 1 1

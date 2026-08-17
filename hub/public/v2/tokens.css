@@ -58,10 +58,27 @@
   --v2-color-overlay-scrim: rgb(20 20 22 / 32%);
 
   /* ---- color: text ----------------------------------------------------
-     Sample line 50: --text/--text2/--text3. */
+     Sample line 50: --text/--text2/--text3.
+     --v2-color-text-muted (t-151): the sample's literal #93949c/#6c6d76
+     (light/dark) failed WCAG AA at the sizes this token is actually used
+     at (mission meta lines, ~11.5px, well under the large-text exemption)
+     — 2.92-3.85:1 measured against this file's own bg/surface pairs,
+     against a 4.5:1 floor. Darkened (light) / lightened (dark) in HSL,
+     hue and saturation held exactly, only lightness moved, to the least
+     change that clears 4.5:1 against BOTH bg and surface with a small
+     safety margin for hex rounding (light: L .594->.469, dark: L
+     .443->.502) — still visibly less contrasty than -secondary in both
+     modes (light 4.6-4.8:1 vs secondary's 5.8-6.0:1; dark 4.6-4.8:1 vs
+     secondary's 6.8-7.2:1), so the muted-vs-secondary hierarchy the
+     sample intended is preserved, just no longer below the mechanical
+     floor. Sample wins in general per t-53's rule, but a sample value
+     that fails the mission's own named mechanical floor cannot be the
+     binding source for that one value — same logic as this file's
+     existing shadow/radius sample-overrides, applied to accessibility
+     instead of layout. */
   --v2-color-text-primary: #1a1a1f;
   --v2-color-text-secondary: #62636c;
-  --v2-color-text-muted: #93949c;
+  --v2-color-text-muted: #71727c;
   --v2-color-text-on-accent: #ffffff;
 
   /* ---- color: border (hairline, low alpha per STUDY) -------------------
@@ -335,7 +352,9 @@
 
     --v2-color-text-primary: #edeef0;
     --v2-color-text-secondary: #9a9ba3;
-    --v2-color-text-muted: #6c6d76;
+    /* -muted lightened for AA contrast, see the light block's t-151 note
+       above (same fix, dark direction: L .443->.502, hue/sat unchanged). */
+    --v2-color-text-muted: #7b7d87;
     --v2-color-text-on-accent: #ffffff;
 
     --v2-color-border: rgb(255 255 255 / 8%);
@@ -374,7 +393,7 @@
 
   --v2-color-text-primary: #edeef0;
   --v2-color-text-secondary: #9a9ba3;
-  --v2-color-text-muted: #6c6d76;
+  --v2-color-text-muted: #7b7d87;
   --v2-color-text-on-accent: #ffffff;
 
   --v2-color-border: rgb(255 255 255 / 8%);
