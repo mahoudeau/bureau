@@ -212,7 +212,10 @@
       return '<div class="v2-awaitmerge-row' + (ready ? '' : ' v2-awaitmerge-row--inloop') + '">' +
         '<div class="v2-awaitmerge-row__head">' +
         '<span class="v2-awaitmerge-row__title">' + esc(task.id) + ' · ' + esc(task.title) + '</span>' +
-        '<a class="v2-awaitmerge-row__pr" href="' + esc(pr.url) + '" target="_blank" rel="noopener">PR #' + esc(pr.number) + ' →</a>' +
+        // t-145 (goal: t-53): .v2-hit44 (components.css) — invisible 44px
+        // hit zone around the small "PR #N →" link, same pattern as t-115
+        // (closes t-111). Keeps the compact visual, grows only the tap area.
+        '<a class="v2-awaitmerge-row__pr v2-hit44" href="' + esc(pr.url) + '" target="_blank" rel="noopener">PR #' + esc(pr.number) + ' →</a>' +
         '</div>' +
         '<div class="v2-awaitmerge-row__meta">' +
         (ready ? '' : '<span class="v2-awaitmerge-row__status">' + esc(statusLabel(task)) + '</span>') +
@@ -320,7 +323,12 @@
     var style = document.createElement('style');
     style.id = 'v2-awaitmerge-style';
     style.textContent = [
-      '.v2-awaitmerge-trigger { position: fixed; right: var(--v2-space-3, 12px); bottom: var(--v2-space-3, 12px); z-index: 44; display: flex; align-items: center; gap: var(--v2-space-2, 6px); font: inherit; font-size: var(--v2-font-size-xs, 12px); font-variant-numeric: tabular-nums; padding: var(--v2-space-2, 6px) var(--v2-space-4, 10px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-surface, var(--v2-surface, #fff)); color: var(--v2-color-text-secondary, var(--v2-ink-2, inherit)); cursor: pointer; }',
+      // t-145 (goal: t-53): min-height 44px — the trigger sits alone in the
+      // bottom-right thumb zone (no neighboring controls to keep visually
+      // compact against), so growing its own box is simpler than the
+      // hit44 pseudo-element trick and there's no `position: relative`
+      // clash with the `position: fixed` this element needs to stay pinned.
+      '.v2-awaitmerge-trigger { position: fixed; right: var(--v2-space-3, 12px); bottom: var(--v2-space-3, 12px); z-index: 44; display: flex; align-items: center; gap: var(--v2-space-2, 6px); font: inherit; font-size: var(--v2-font-size-xs, 12px); font-variant-numeric: tabular-nums; padding: var(--v2-space-2, 6px) var(--v2-space-4, 10px); min-height: 44px; border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-surface, var(--v2-surface, #fff)); color: var(--v2-color-text-secondary, var(--v2-ink-2, inherit)); cursor: pointer; }',
       '.v2-awaitmerge-trigger:hover { border-color: var(--v2-color-border-strong, var(--v2-hairline, rgba(128,128,128,.5))); }',
       '.v2-awaitmerge-panel { position: fixed; right: var(--v2-space-3, 12px); bottom: calc(var(--v2-space-3, 12px) + 40px); width: min(420px, 92vw); max-height: 70vh; display: flex; flex-direction: column; background: var(--v2-color-surface, var(--v2-surface, #fff)); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 8px); box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 50; overflow: hidden; }',
       '@media (max-width: 720px) { .v2-awaitmerge-panel { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }',
@@ -334,7 +342,7 @@
       '.v2-awaitmerge-section { display: flex; flex-direction: column; gap: var(--v2-space-3, 10px); }',
       '.v2-awaitmerge-section__head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }',
       '.v2-awaitmerge-section--ready .v2-awaitmerge-section__head { color: var(--v2-color-status-done, #29a36a); }',
-      '.v2-awaitmerge-section--inloop .v2-awaitmerge-section__head { color: var(--v2-color-text-muted, #93949c); }',
+      '.v2-awaitmerge-section--inloop .v2-awaitmerge-section__head { color: var(--v2-color-text-muted, #71727c); }',
       '.v2-awaitmerge-section__count { font-variant-numeric: tabular-nums; font-weight: 600; }',
       '.v2-awaitmerge-row { border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.2))); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-3, 10px); }',
       // READY rows: a full-strength left accent so the section reads as
@@ -351,7 +359,7 @@
       '.v2-awaitmerge-row__pr:hover { text-decoration: underline; }',
       '.v2-awaitmerge-row__meta { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 6px); }',
       '.v2-awaitmerge-row__meta:empty { display: none; margin: 0; }',
-      '.v2-awaitmerge-row__status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--v2-color-text-muted, #93949c); }',
+      '.v2-awaitmerge-row__status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--v2-color-text-muted, #71727c); }',
       '.v2-awaitmerge-row__unconfirmed { font-size: 11px; color: var(--v2-color-status-at-risk, #f2a30f); }'
     ].join('\n');
     document.head.appendChild(style);
