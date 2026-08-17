@@ -565,7 +565,22 @@ import { icon } from './components.js';
       ':root { --v2-row-active-tint: 2%; }',
       '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --v2-row-active-tint: 6%; } }',
       ':root[data-theme="dark"] { --v2-row-active-tint: 6%; }',
-      '.v2-project-row--active { background: color-mix(in srgb, var(--v2-color-accent, #5e6ad2) var(--v2-row-active-tint, 2%), transparent); }',
+      // Verified-live bug (reproduced, not read off the diff): `.v2-project-
+      // row--active` is one class selector (specificity 0,1,0,0); the
+      // `:hover` rule two lines up is one class + one pseudo-class (0,2,0,0)
+      // — HIGHER, so it silently wins whenever the active row is also
+      // hovered, regardless of source order. That is the ordinary case, not
+      // an edge one: a user's mouse is still resting on the row right after
+      // the click that made it active. Reproduced with a live click (mouse
+      // left in place, not moved away): background fell back to the plain
+      // surface-raised gray while the text stayed accent-colored, measuring
+      // 4.28:1 — under the 4.5:1 floor this exact round's own commit
+      // message claims to hold (its 4.59:1 number was measured with the
+      // mouse moved away first, the one path that doesn't hit this).
+      // `.v2-project-row.v2-project-row--active` (two classes) matches
+      // :hover's specificity and sits later in source, so it wins ties —
+      // re-verified: active+hovered now measures the same as active-alone.
+      '.v2-project-row.v2-project-row--active { background: color-mix(in srgb, var(--v2-color-accent, #5e6ad2) var(--v2-row-active-tint, 2%), transparent); }',
       // t-136 send-back on t-133: the name is a real flex item now, not
       // implicitly full-width — min-width:0 lets it actually shrink inside
       // the row instead of forcing the row wider than its 240px rail, and
