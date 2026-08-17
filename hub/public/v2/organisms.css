@@ -256,3 +256,36 @@
 .v2-desk__event-line b { font-weight: 600; color: var(--v2-color-text-primary); }
 .v2-desk__event-target { color: var(--v2-color-accent); }
 .v2-desk__event-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* t-240 round 3 (boss: "those parts look out of place"): the rail chrome
+   hooks (__toolbar/__total/__group-title) had NO rules anywhere — they
+   rendered as native h3/button defaults. They now speak the same register
+   as the board's swimlane heads, and the toggles became .v2-btn--ghost
+   atoms in the markup. */
+.v2-needs-me-now__toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--v2-space-3); padding: var(--v2-space-2) var(--v2-space-3);
+  border-bottom: 1px solid var(--v2-color-border);
+}
+.v2-needs-me-now__total {
+  font-size: var(--v2-font-size-sm); font-weight: 600;
+  color: var(--v2-color-text-primary); font-variant-numeric: tabular-nums;
+}
+.v2-needs-me-now__group { margin: 0; }
+.v2-needs-me-now__group-title {
+  display: flex; align-items: center; gap: var(--v2-space-2);
+  margin: 0; padding: var(--v2-space-2) var(--v2-space-3);
+  font-size: var(--v2-font-size-sm); font-weight: 600;
+  color: var(--v2-color-text-primary);
+  background: var(--v2-color-surface-raised);
+  border-bottom: 1px solid var(--v2-color-border);
+  font-variant-numeric: tabular-nums;
+}
+.v2-needs-me-now__group-title .v2-icon { width: 15px; height: 15px; color: var(--v2-color-text-muted); }
+/* Rows align to the FIRST text line, so the unread dot and action chevron
+   sit beside the title instead of floating at the vertical middle of a
+   wrapped multi-line row. */
+.v2-needs-me-now__row { align-items: flex-start; }
+.v2-needs-me-now__unread-dot { margin-top: 7px; }
+.v2-needs-me-now__row-action { margin-top: 4px; }
+.v2-needs-me-now__row .v2-status-glyph { margin-top: 3px; }
