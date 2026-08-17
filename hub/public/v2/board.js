@@ -240,15 +240,61 @@ import { icon } from './components.js';
       // file renders no visible placeholder copy itself (out of scope —
       // board.js owns structure/hooks only, per this mission's own
       // instruction not to touch anything beyond the project-card path).
+      //
+      // t-133 (goal: t-53): three changes to this row, all judged against
+      // STUDY-lead.md's named crops.
+      //  - entity moves into .v2-chip (components.css's own bordered-pill
+      //    "tag" treatment, already the labels-chips grammar elsewhere in
+      //    this app — crop-ux-labels-chips.png) instead of bare text;
+      //    capacity moves into .v2-mchip, that same crop's OTHER register
+      //    (plain icon+text, no pill) — see the CSS block below for why
+      //    the two facts don't share one treatment. Capacity's glyph also
+      //    switches from the 🪑 emoji to icon('user') per STUDY-lead's
+      //    mechanical floor #2 (no emoji standing in for icons).
+      //  - the four-number "Nq · Nw · Nr · N✓" string (the actual "not
+      //    clean" complaint the boss filed) collapses to one quiet trailing
+      //    "N open" count (queued+active+review; closed/done excluded since
+      //    that work is no longer live) — a plain right-aligned tabular
+      //    number with no border, matching crop-ux-list-row-density.png's
+      //    own trailing-count style, not another chip.
+      //  - repo goes from a raw clone URL to a host icon: repoIconName() below
+      //    derives the glyph from the URL's own hostname generically (github
+      //    icon for github.com, git-branch otherwise — host-agnostic by
+      //    construction, no per-host special-casing beyond the one named
+      //    case) wrapped in a real <a target=_blank> so click-opens-new-tab
+      //    is native browser behavior, not hand-rolled. The full URL moves
+      //    into a hover/focus tooltip (.v2-project-row__repo-tip, styled
+      //    like keyboard.js's own .v2-kbd-hint__tip — same dark floating-
+      //    chip register, crop-ux-shortcut-tooltip.png) plus a long-press
+      //    touch equivalent wired below (parity law: hover has no touch
+      //    analog, so touch gets its own explicit path rather than silently
+      //    losing the disclosure). data-field="repo" stays on the OUTER
+      //    span exactly as t-86 left it, so the empty-repo "click to add"
+      //    edit path is completely unchanged; project-edit.js gets one
+      //    small guard (see that file) so a click that lands on the <a>
+      //    itself opens the repo instead of hijacking into edit mode — the
+      //    edit-an-existing-repo path is still reachable via the same
+      //    generous data-field hit padding project-edit.js already
+      //    documents, just outside the anchor's own small icon footprint.
       var body = ids.length ? ids.map(function (id) {
         var b = byProj[id];
         var pj = b.meta || {};
+        var openCount = b.queued + b.active + b.review;
+        var entityChip = pj.entity
+          ? '<span class="v2-chip v2-project-row__entity-chip">' + icon('folder', 'v2-icon--xs') + '<span class="v2-chip__label">@' + esc(pj.entity) + '</span></span>'
+          : '';
+        var repoInner = pj.repo
+          ? '<a class="v2-project-row__repo-link" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repo in a new tab: ' + esc(pj.repo) + '">' +
+              icon(repoIconName(pj.repo), 'v2-icon--xs') +
+              '<span class="v2-project-row__repo-tip" role="tooltip">' + esc(pj.repo) + '</span>' +
+            '</a>'
+          : '';
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
-          '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
-          '<span class="v2-project-row__entity" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)">' + (pj.entity ? '@' + esc(pj.entity) : '') + '</span>' +
-          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + ' title="repo (clone URL)">' + (pj.repo ? esc(pj.repo) : '') + '</span>' +
-          '<span class="v2-project-row__cap" data-field="capacity" title="capacity (parallel desks)">🪑<span class="v2-project-row__cap-n">' + (pj.capacity || 1) + '</span></span>' +
-          '<span class="v2-project-row__counts">' + b.queued + 'q · ' + b.active + 'w · ' + b.review + 'r · ' + b.closed + '✓</span>' +
+          '<span class="v2-project-row__name" data-field="label" title="' + esc(projLabel(state, id)) + '">' + esc(projLabel(state, id)) + '</span>' +
+          '<span class="v2-project-row__entity" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)">' + entityChip + '</span>' +
+          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + (pj.repo ? '' : ' title="repo (clone URL)"') + '>' + repoInner + '</span>' +
+          '<span class="v2-mchip v2-project-row__cap" data-field="capacity" title="capacity (parallel desks)">' + icon('user', 'v2-icon--xs') + '<span class="v2-tabular-nums v2-project-row__cap-n">' + (pj.capacity || 1) + '</span></span>' +
+          '<span class="v2-project-row__counts v2-tabular-nums">' + openCount + ' open</span>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
@@ -259,6 +305,59 @@ import { icon } from './components.js';
           render();
         });
       });
+      wireRepoLongPress(mounts.projectsRail);
+    }
+
+    // t-133: hostname -> icon name, the one place that decides it. Anything
+    // that isn't exactly github.com (subdomains, gitlab.com, a self-hosted
+    // gitea, an http fallback that fails URL parsing) falls through to the
+    // generic glyph — adding a second named host later is a one-line add
+    // here, never a rethink of the row markup above.
+    function repoIconName(url) {
+      try { return new URL(url).hostname.replace(/^www\./, '') === 'github.com' ? 'github' : 'git-branch'; }
+      catch (e) { return 'git-branch'; }
+    }
+
+    // t-133: touch has no :hover, so the CSS-only tooltip reveal
+    // (.v2-project-row__repo-link:hover/:focus .v2-project-row__repo-tip,
+    // in the stylesheet below) is invisible on a phone — the mission's own
+    // named parity requirement. A long-press (~500ms touchstart) reveals
+    // the tooltip via a class instead and swallows that gesture's own
+    // click so it previews rather than navigates; a normal short tap is
+    // untouched and opens the link exactly like a mouse click would.
+    // Delegated on the rail (survives every renderProjects() rebuild)
+    // rather than per-link, same pattern project-edit.js already uses for
+    // its own delegated field listener.
+    function wireRepoLongPress(rail) {
+      if (rail.__t133LongPress) return; // wire the rail once, not per render
+      rail.__t133LongPress = true;
+      var LONG_PRESS_MS = 500;
+      var timer = null;
+      var firedLink = null;
+      rail.addEventListener('touchstart', function (e) {
+        var link = e.target.closest('.v2-project-row__repo-link');
+        if (!link) return;
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+          firedLink = link;
+          link.classList.add('v2-project-row__repo-link--pressed');
+        }, LONG_PRESS_MS);
+      }, { passive: true });
+      function clear() { clearTimeout(timer); timer = null; }
+      rail.addEventListener('touchmove', clear, { passive: true });
+      rail.addEventListener('touchend', function (e) {
+        clear();
+        if (firedLink) {
+          // The long press already showed the tooltip; this touchend is
+          // the SAME gesture's release, not a fresh tap — suppress the
+          // synthetic click so it previews instead of also navigating.
+          e.preventDefault();
+          var link = firedLink;
+          firedLink = null;
+          setTimeout(function () { link.classList.remove('v2-project-row__repo-link--pressed'); }, 2500);
+        }
+      });
+      rail.addEventListener('touchcancel', clear, { passive: true });
     }
 
     var V2_COLS = [
@@ -477,10 +576,74 @@ import { icon } from './components.js';
       '.v2-fleet__subagent:last-child { border-bottom: none; }',
       '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
-      '.v2-project-row__name { font-weight: 600; }',
+      // t-133: the sidebar rail is a genuinely narrow column (~240px, see
+      // v2.html's own grid, not a viewport-width thing — the 720px phone
+      // media query below never fires here) and a label like "Job Hunt"
+      // was wrapping onto a second line, dragging every chip after it down
+      // with it — exactly the ragged multi-line look crop-ux-list-row-
+      // density.png argues against. flex:1/min-width:0/ellipsis on the
+      // name plus flex:none on every fixed-size sibling (chips, repo,
+      // counts) makes the LABEL the one flexible/truncating element and
+      // keeps every chip at its natural, un-squeezed width — one line per
+      // row regardless of label length. title carries the untruncated text.
+      '.v2-project-row__name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
-      '.v2-project-row__entity { color: var(--v2-muted, #999); font-size: 11px; }',
-      '.v2-project-row__counts { color: var(--v2-ink-2, #888); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }',
+      '.v2-project-row__entity { color: var(--v2-muted, #999); font-size: 11px; min-height: 20px; display: inline-flex; align-items: center; flex: none; }',
+      '.v2-project-row__entity-chip { color: var(--v2-color-text-secondary, var(--v2-muted, #999)); }',
+      // t-133: capacity keeps the same data-field tap target/hover box
+      // project-edit.js already styles generically ([data-field]{...}).
+      // Round 1 of this mission filled it with the bordered .v2-chip pill
+      // (entity's own treatment below) but capacity, unlike entity, has no
+      // empty state — it renders on EVERY row, every project defaults to
+      // 1 — and the pill's own padding+border ate ~28px per row that this
+      // rail (a fixed ~240px column, not viewport width) can't spare
+      // without truncating the label itself, the exact raggedness this
+      // mission exists to remove. Switched to .v2-mchip — the SAME plain
+      // icon+text register this file already uses for task-card meta
+      // (P1/goal/reserved-for chips above) — which is also the OTHER half
+      // of what crop-ux-labels-chips.png itself actually shows: that
+      // reference frame mixes a bordered pill ("Bug") with plain icon+text
+      // suggestions in the same row, not one style used everywhere. Entity
+      // stays the bordered .v2-chip since it's genuinely optional (hidden
+      // outright when unset, so most rows never pay its width) and reads
+      // as the more "labeled" of the two facts.
+      '.v2-project-row__cap { cursor: pointer; flex: none; }',
+      '.v2-project-row__counts { color: var(--v2-ink-2, #888); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; flex: none; white-space: nowrap; }',
+      // ---- t-133: repo host icon + hover/focus/long-press tooltip -------
+      // Same dark floating-chip register as keyboard.js's .v2-kbd-hint__tip
+      // (crop-ux-shortcut-tooltip.png) — deliberately not re-abstracted
+      // into a shared component this mission doesn't own, matched by eye
+      // against that file's own values instead.
+      '.v2-project-row__repo { display: inline-flex; align-items: center; min-height: 20px; flex: none; }',
+      '.v2-project-row__repo[data-empty="true"] { min-width: 20px; }',
+      '.v2-project-row__repo-link { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: var(--v2-radius-sm, 5px); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); }',
+      '.v2-project-row__repo-link:hover, .v2-project-row__repo-link:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
+      // AA-contrast note: this floating tooltip is meant to read as a
+      // small dark chip in BOTH modes (crop-ux-shortcut-tooltip.png's own
+      // reference is a dark tooltip sitting on a LIGHT host page — it does
+      // not invert with the app's theme). --v2-color-text-primary looked
+      // like the right token at a glance (keyboard.js's .v2-kbd-hint__tip
+      // and palette.js's .v2-palette__hint-tip both already lean on it the
+      // same way) but it's mode-flipped in tokens.css (near-black in
+      // light, near-white in dark) — using it here would render this
+      // tooltip white-on-near-white in dark mode, invisible, failing the
+      // mission's own AA-contrast floor. Hardcoded to a fixed near-black
+      // instead, deliberately NOT reading a token, since no "always-dark
+      // floating surface" token exists yet. Flagged in this mission's
+      // debrief: keyboard.js/palette.js likely carry the identical bug on
+      // their own tooltips (out of scope to fix here — sibling files this
+      // mission doesn't own).
+      '.v2-project-row__repo-tip { display: none; position: absolute; top: 24px; left: 50%; transform: translateX(-50%); white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: #17181a; color: #ffffff; font-size: 11px; font-weight: var(--v2-weight-regular, 400); font-family: var(--v2-font-sans, inherit); text-transform: none; letter-spacing: normal; padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
+      // Hover/focus (mouse + keyboard) and the long-press class (touch,
+      // set/cleared by wireRepoLongPress above) all reveal the same node —
+      // one tooltip, three ways in, per the mission's own parity law.
+      '.v2-project-row__repo-link:hover .v2-project-row__repo-tip, .v2-project-row__repo-link:focus .v2-project-row__repo-tip, .v2-project-row__repo-link:focus-visible .v2-project-row__repo-tip, .v2-project-row__repo-link--pressed .v2-project-row__repo-tip { display: block; }',
+      // Phone: 20px is a real hit target but under the ~44px guideline
+      // touch UIs generally want — grown here rather than at every width,
+      // since the desktop row is already tight on horizontal room (see the
+      // ellipsis-name comment above) and doesn't need the extra padding a
+      // mouse cursor has no trouble with.
+      '@media (max-width: 720px) { .v2-project-row__repo-tip { left: auto; right: 0; transform: none; max-width: 70vw; } .v2-project-row__repo-link { width: 32px; height: 32px; } }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
       // violation) — .v2-project-row is `display:flex` with no wrap, so
       // entering inline edit (project-edit.js swapping __name for a wider
@@ -495,7 +658,12 @@ import { icon } from './components.js';
       // look t-111 screenshotted) — letting the ROW wrap instead lets each
       // field claim its natural width on its own line, a cleaner result
       // from the same one-rule fix, not a second layout mechanism.
-      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { overflow-wrap: anywhere; } }',
+      // t-133: the row-wrap half still holds (editing label/entity as text
+      // can still go wide); the __repo overflow-wrap half is dropped here
+      // — repo's display state is a fixed 20px icon now, never long text,
+      // so a raw-URL word-break rule for it is dead weight after this
+      // mission's own change to what that span contains.
+      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
       // t-110: archive toggle — same tap-target treatment as the quick-add

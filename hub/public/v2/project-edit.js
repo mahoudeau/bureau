@@ -139,6 +139,22 @@
       // live browser and finding no PATCH request was ever sent, not by
       // reading the code.
       if (row.getAttribute('data-editing') === 'true') return;
+      // t-133: a SET repo field renders a real <a href target=_blank> (the
+      // host icon) instead of plain text — a click on that anchor means
+      // "open the repo", not "edit the URL" (the mission's own explicit
+      // click contract). Let the browser's native navigation run instead
+      // of hijacking it into the text-edit widget; still stopPropagation
+      // so board.js's row-level click-to-filter listener doesn't ALSO fire
+      // for the same tap (this capture-phase listener runs strictly before
+      // that bubble-phase one regardless, so this is the only place that
+      // can suppress it). Editing an already-set repo's URL stays reachable
+      // the same way every other field's generous data-field hit-padding
+      // already works (this file's own injected [data-field] rule below) —
+      // anywhere in the field's box that isn't the 20px anchor itself.
+      if (field.getAttribute('data-field') === 'repo' && e.target.closest('a')) {
+        e.stopPropagation();
+        return;
+      }
       // Not yet editing: this click means "start editing" — take it over
       // from board.js's own row-level click-to-filter listener (bubble
       // phase, closer to the target, would otherwise fire first and
