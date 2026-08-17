@@ -40,7 +40,7 @@
 // (tokens.css/t-63; project-dot colors are the one deliberate exception,
 // same as the sample's own PCOLORS — a categorical per-project palette
 // isn't a semantic token, see projColor() below).
-import { icon } from './components.js';
+import { icon, idBadge } from './components.js';
 
 (function () {
   'use strict';
@@ -289,7 +289,14 @@ import { icon } from './components.js';
         // would be invisible in the live app for EVERY status, not just this
         // one; a glyph+label survives that regardless of border cascade).
         '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
-        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + esc(t.id) + ' · P' + t.priority +
+        // t-123: the id itself renders through components.js's idBadge()
+        // (a real DOM node, serialized via outerHTML into this string
+        // template — the rest of this file builds markup as strings, and
+        // idBadge()'s own element already carries the exact classes/markup
+        // the CSS layer expects) instead of a plain esc()'d string, so the
+        // vendored JetBrains Mono token (t-112) actually reaches a live id
+        // once that mission's CSS lands.
+        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + idBadge(t.id).outerHTML + ' · P' + t.priority +
         (t.assignee ? ' · ' + esc(t.assignee) : '') +
         (t.project ? ' · ' + esc(t.project) : '') +
         (kids ? ' · ' + kids.done + '/' + kids.total + ' missions' : '') +
@@ -338,7 +345,14 @@ import { icon } from './components.js';
             checkbox +
             '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
             '<div class="v2-task-card__top">' +
-            '<span class="v2-task-card__id v2-tabular-nums">' + esc(t.id) + '</span><span class="v2-task-card__sp"></span>' +
+            // t-123: this is the PRIMARY board-card id (every live column
+            // renders through here, not through taskCard()/.v2-task-card__meta
+            // below, which only the archived-toggle strip uses) — wired to
+            // idBadge() same as that path, so both id call sites render
+            // through the one component. .v2-task-card__id carried no
+            // layout role, purely typographic (see the removed CSS rule
+            // this replaces), so no wrapper is needed.
+            idBadge(t.id).outerHTML + '<span class="v2-task-card__sp"></span>' +
             (t.assignee ? '<span class="v2-avatar" title="' + esc(t.assignee) + '">' + esc(initials(t.assignee)) + '</span>' : '') +
             '</div>' +
             '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
@@ -566,14 +580,15 @@ import { icon } from './components.js';
       '.v2-task-card:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); }',
       '.v2-task-card__body { cursor: pointer; flex: 1; min-width: 0; }',
       '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
-      // t-136: near-identical in role to components.css's own .v2-id-badge
-      // (font-size/weight/muted-color/tabular-nums all match; only
-      // --v2-font-mono is missing) — not renamed here. t-123 (unmerged,
-      // in review as of this mission) is independently wiring idBadge()
-      // into this exact call site for the font-family verdict; renaming
-      // the class here too would collide with that in-flight branch.
-      // Flagged as a named follow-up, not silently left unreconciled.
-      '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; font-variant-numeric: tabular-nums; }',
+      // t-136 flagged .v2-task-card__id as a near-match follow-up for
+      // components.css's .v2-id-badge, deferred because t-123 was still
+      // unmerged and independently wiring idBadge() into this exact call
+      // site. t-123 has since merged (main's markup above now renders
+      // through idBadge() directly, see the t-123 comment there) — the
+      // class this rule targeted no longer appears in this file's markup
+      // at all, so the rule itself is dead. Dropped on merge rather than
+      // carried forward as a second, now-pointless drift source; the
+      // follow-up t-136 named is closed by t-123, not by this file.
       '.v2-task-card__sp { flex: 1; }',
       // t-136: components.css already ships a real .v2-avatar atom (+
       // --sm/--md size modifiers) this file's markup never opts into (no
@@ -597,7 +612,7 @@ import { icon } from './components.js';
          sample, fed from the real state.knowledge.recent (git log over the
          brain repo), not a placeholder link. */
       '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
-      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
+      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #71727c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
       '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       // Discarded cards (t-110): dashed border + reduced opacity, distinguishable
