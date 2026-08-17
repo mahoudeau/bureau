@@ -429,6 +429,20 @@
     padding: var(--v2-space-2) var(--v2-space-3); border-radius: var(--v2-radius);
     color: var(--v2-ink-2); font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent;
     text-align: left; width: 100%;
+    /* t-150 round 2 (send-back): .v2-hit44's ::before centers a 44px-min
+       box on the ELEMENT's own box, growing symmetrically from its
+       center. That's harmless for an isolated control, but this list
+       packs three .v2-navitem rows (visible height 23px) 2px apart, so
+       each row's own halo (needing ~10.5px above/below to reach 44px)
+       overlapped its neighbor's by ~19px — moneta's round-1 send-back
+       measured a real elementFromPoint collision at the boundary, not a
+       theoretical one. Fixed at the source (real min-height, not a
+       bigger invisible halo): once each row's own box is already 44px
+       tall, .v2-hit44's max(44px,100%) resolves to the row's real
+       height with zero halo growth, so adjacent zones stop overlapping
+       — the other 4 controls this mission touches are isolated (no
+       hit44 neighbor within 44px) and don't need this. */
+    min-height: 44px;
   }
   .v2-navitem svg { width: 15px; height: 15px; flex: none; }
   .v2-navitem:hover { background: var(--v2-surface); }
