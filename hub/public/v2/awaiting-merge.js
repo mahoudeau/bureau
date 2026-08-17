@@ -112,11 +112,9 @@
       } catch (_) {}
     }
     // Rate-limit hygiene: one 403 pauses ALL fetching for a cooldown window
-    // (retrying into a spent budget only wastes the refill), and each render
-    // resolves at most FETCH_BUDGET unknown PRs — the rest stay at their
-    // last known state and resolve across subsequent renders.
+    // (retrying into a spent budget only wastes the refill). Fetching itself
+    // happens only on the metered ticker below, never on render.
     var rateLimitedUntil = 0;
-    var FETCH_BUDGET = 8;
 
     buildTrigger();
     buildPanel();
@@ -346,12 +344,11 @@
     // only the panel BODY markup is gated on visibility (rebuilding hidden
     // DOM is wasted work; fetchPrState's cache absorbs the repeat network
     // cost across calls).
-    // t-172: renders are sequenced (a stale async resolve may never paint
-    // over a newer one) and differential (the DOM is only touched when the
+    // t-172: renders are differential (the DOM is only touched when the
     // computed markup actually changed — no interstitial "Checking…" wipe,
-    // which was the visible flicker: every SSE tick blanked the open panel
-    // and repainted it, making rows "disappear" dozens of times an hour).
-    var renderSeq = 0;
+    // which was the visible flicker). Since the t-200 metered ticker they
+    // are also fully synchronous cache reads, so ordering races are gone
+    // by construction.
     var lastBodyHtml = null, lastCount = null;
 
     function paintCount(v) {
@@ -364,7 +361,6 @@
     }
 
     function render() {
-      var seq = ++renderSeq;
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
@@ -379,37 +375,54 @@
         return;
       }
 
-      // First-ever open with nothing painted yet: show the checking note
-      // ONCE. Any later render keeps the existing rows on screen while the
-      // refresh resolves behind them.
-      if (!panel.hidden && lastBodyHtml === null) {
-        bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
-      }
-
-      // Budget the unknowns: only the first FETCH_BUDGET candidates that
-      // genuinely need network get it this render; the rest answer from
-      // memory and resolve across subsequent renders.
-      var networkUsed = 0;
-      return Promise.all(candidates.map(function (c) {
+      // t-200 metered ticker (boss ruling): renders NEVER fetch. They read
+      // the cache synchronously and paint; the background ticker below is
+      // the only thing that ever talks to GitHub, at a fixed one request
+      // per minute, so blowing the 60/h anonymous quota is arithmetically
+      // impossible no matter how often the page renders.
+      var open = candidates.map(function (c) {
         var key = c.pr.owner + '/' + c.pr.repo + '#' + c.pr.number;
         var known = prState[key];
-        var fresh = known && (known.state === 'closed' || (known.state === 'open' && Date.now() - known.ts < OPEN_TTL));
-        var allow = fresh || inflight[key] ? true : (networkUsed++ < FETCH_BUDGET);
-        return fetchPrState(c.pr, allow);
-      })).then(function (states) {
-        if (seq !== renderSeq) return; // a newer render superseded this one: never paint stale
-        // Only a CONFIRMED closed/merged PR leaves the list (fetchPrState
-        // guarantees 'closed' can only come from a genuine 200); a failed
-        // check keeps the row with its last known state, per the boss law.
-        var open = candidates.map(function (c, i) { return { task: c.task, pr: c.pr, state: states[i] }; })
-          .filter(function (o) { return o.state !== 'closed'; });
-        var b = bucket(open);
-        paintCount(readyCount(b.ready));
-        paintBody(open.length
-          ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
-          : '<div class="v2-empty">Nothing awaiting merge.</div>');
-      });
+        return { task: c.task, pr: c.pr, state: (known && known.state) || 'unconfirmed' };
+      }).filter(function (o) { return o.state !== 'closed'; });
+      var b = bucket(open);
+      paintCount(readyCount(b.ready));
+      paintBody(open.length
+        ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
+        : '<div class="v2-empty">Nothing awaiting merge.</div>');
     }
+
+    // The metered ticker: once a minute, refresh exactly ONE PR's state —
+    // unknowns first (oldest mission first), then the stalest confirmed-open
+    // beyond its TTL. Steady state (a handful of open PRs, everything else
+    // in the permanent closed-cache) means each open PR refreshes every few
+    // minutes while total spend stays at most 60/h by construction.
+    function tickFetch() {
+      if (Date.now() < rateLimitedUntil) return;
+      var tasks = (V2.state && V2.state.tasks) || [];
+      var pick = null, pickTs = Infinity, pickUnknown = false;
+      tasks.forEach(function (t) {
+        if (isAbandoned(t)) return;
+        var pr = prLinkFor(t);
+        if (!pr) return;
+        var key = pr.owner + '/' + pr.repo + '#' + pr.number;
+        if (inflight[key]) return;
+        var known = prState[key];
+        if (known && known.state === 'closed') return;
+        var unknown = !known || known.state === 'unconfirmed';
+        var stale = known && known.state === 'open' && Date.now() - known.ts >= OPEN_TTL;
+        if (!unknown && !stale) return;
+        // unknowns beat stale-opens; within a class, oldest check first
+        var ts = known ? known.ts : 0;
+        if ((unknown && !pickUnknown) || ((unknown === pickUnknown) && ts < pickTs)) {
+          pick = pr; pickTs = ts; pickUnknown = unknown;
+        }
+      });
+      if (!pick) return;
+      fetchPrState(pick, true).then(function () { requestRender(); });
+    }
+    setInterval(tickFetch, 60000);
+    setTimeout(tickFetch, 1500); // first tick shortly after load
 
     // SSE ticks arrive far faster than PR reality changes (eight agents
     // heartbeating, every mission note). Coalesce them: leading render for
@@ -425,28 +438,7 @@
     }
 
     V2.on('v2:state', function () { requestRender(); });
-    // Instant light pass before the first network resolve: READY candidates
-    // only, same scope as the confirmed count, so the two passes never
-    // disagree in kind — only in confidence.
-    (function initialCount() {
-      var tasks = (V2.state && V2.state.tasks) || [];
-      // isAbandoned() not re-checked here: isReady() only ever returns true
-      // for 'done' or 'review'+gate:boss, which by construction (status is
-      // a single field) can never also be 'failed'/'discarded' - the two
-      // predicates are already mutually exclusive, so adding the check
-      // would be dead weight, not defense.
-      // Consult the persisted closed-cache so the light pass excludes PRs
-      // already known merged: on any load after the first warm-up this pass
-      // is near-exact instead of counting the whole done-mission history.
-      var n = tasks.filter(function (t) {
-        var pr = prLinkFor(t);
-        if (!pr || !isReady(t)) return false;
-        var known = prState[pr.owner + '/' + pr.repo + '#' + pr.number];
-        return !(known && known.state === 'closed');
-      }).length;
-      if (n) countEl.textContent = String(n);
-    })();
-    render(); // cold-load network-verified count, before the panel is ever opened
+    render(); // cold-load paint from the persisted cache; the ticker refines it
   }
 
   function injectStyle() {
