@@ -81,7 +81,7 @@
 // "Show all" control reveals the rest. Kept as a per-group control (not
 // wired into the existing sort-toggle) since the mission body scopes this
 // to messages only — review/blocked groups aren't sized to need it.
-import { icon } from './components.js';
+import { icon, idBadge, statusGlyph } from './components.js';
 
 (function () {
   'use strict';
@@ -183,10 +183,14 @@ import { icon } from './components.js';
     // than a separate mission, since the keyboard attributes already touch
     // this line.
     function missionRow(t, state) {
+      // t-240 refit: system atoms, not hand-rolled text — the status glyph
+      // (glyph + hue, never color alone) leads the row, the id renders as
+      // the shared .v2-id-badge (t-123's one source of truth for ids).
       return '<div class="v2-list__row v2-needs-me-now__row" data-open="' + esc(t.id) + '" role="button" tabindex="0">' +
+        statusGlyph(t.status, 'sm').outerHTML +
         '<span class="v2-list__row-body">' +
         '<span class="v2-list__row-title">' + esc(t.title) + '</span>' +
-        '<span class="v2-list__row-meta">' + esc(t.id) + ' · P' + t.priority +
+        '<span class="v2-list__row-meta">' + idBadge(t.id).outerHTML + ' · P' + t.priority +
         (t.project ? ' · ' + esc(projLabel(state, t.project)) : '') +
         (t.assignee ? ' · ' + esc(t.assignee) : '') +
         '</span></span></div>';
@@ -254,7 +258,7 @@ import { icon } from './components.js';
         '<span class="v2-list__row-body">' +
         '<span class="v2-list__row-meta v2-desk__event-line">' +
         (actor ? '<b>' + esc(actor) + '</b> ' : '') + esc(verb) +
-        (target ? ' <span class="v2-desk__event-target">' + esc(target) + '</span>' : '') +
+        (target ? ' ' + (/^t-\d+$/.test(target) ? idBadge(target).outerHTML : '<span class="v2-desk__event-target">' + esc(target) + '</span>') : '') +
         '</span>' +
         (label ? '<span class="v2-list__row-meta v2-desk__event-label">' + esc(truncate(label, 70)) + '</span>' : '') +
         '</span></div>';
@@ -265,14 +269,18 @@ import { icon } from './components.js';
     // the peek. Approve files done; Send back / Answer require a note and
     // re-queue (the same PATCH shape peek-panel.js submits).
     function decisionRow(t, state, kind) {
+      // t-240 refit: the tray is built from the system's own atoms —
+      // .v2-btn (t-173 base, --primary for the one affirmative action per
+      // crop-ux-button-row's register) and .v2-input — with v2-desk__* left
+      // as pure behavior hooks, zero visual styling of their own.
       var actions = kind === 'review'
-        ? '<button type="button" class="v2-desk__act v2-desk__act--approve" data-act="done" data-task="' + esc(t.id) + '">Approve</button>' +
-          '<button type="button" class="v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Send back</button>'
-        : '<button type="button" class="v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Answer</button>';
+        ? '<button type="button" class="v2-btn v2-btn--primary v2-desk__act" data-act="done" data-task="' + esc(t.id) + '">Approve</button>' +
+          '<button type="button" class="v2-btn v2-btn--secondary v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Send back</button>'
+        : '<button type="button" class="v2-btn v2-btn--secondary v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Answer</button>';
       return '<div class="v2-desk__decision" data-decision="' + esc(t.id) + '">' +
         missionRow(t, state) +
         '<div class="v2-desk__tray">' +
-        '<input type="text" class="v2-desk__note" data-note="' + esc(t.id) + '" placeholder="' + (kind === 'review' ? 'Note (required to send back)' : 'Your answer') + '">' +
+        '<input type="text" class="v2-input v2-desk__note" data-note="' + esc(t.id) + '" placeholder="' + (kind === 'review' ? 'Note (required to send back)' : 'Your answer') + '">' +
         actions +
         '</div>' +
         '<div class="v2-desk__err" data-err="' + esc(t.id) + '" hidden></div>' +

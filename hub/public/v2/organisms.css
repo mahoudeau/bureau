@@ -240,26 +240,15 @@
 .v2-desk__decision:last-child { border-bottom: none; }
 .v2-desk__decision .v2-list__row { border-bottom: none; }
 .v2-desk__tray { display: flex; gap: var(--v2-space-2); align-items: center; padding: 0 var(--v2-space-3) var(--v2-space-1); }
-.v2-desk__note {
-  flex: 1; min-width: 0; font: inherit; font-size: var(--v2-font-size-xs);
-  padding: var(--v2-space-1) var(--v2-space-2);
-  border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-sm);
-  background: var(--v2-color-bg); color: var(--v2-color-text-primary);
-}
-.v2-desk__note:focus-visible { outline: 2px solid var(--v2-color-focus-ring); outline-offset: -1px; }
-.v2-desk__act {
-  flex: none; font: inherit; font-size: var(--v2-font-size-xs); font-weight: 600;
-  padding: var(--v2-space-1) var(--v2-space-2); min-height: 28px;
-  border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-sm);
-  background: var(--v2-color-surface); color: var(--v2-color-text-secondary); cursor: pointer;
-}
-.v2-desk__act:hover { border-color: var(--v2-color-border-strong); color: var(--v2-color-text-primary); }
-.v2-desk__act:focus-visible { outline: 2px solid var(--v2-color-focus-ring); outline-offset: 1px; }
-.v2-desk__act--approve { background: var(--v2-color-status-done); border-color: var(--v2-color-status-done); color: #fff; }
-.v2-desk__act[disabled] { opacity: .5; cursor: default; }
+/* t-240 refit: the tray's controls ARE the system atoms (.v2-btn variants,
+   .v2-input from components.css) — v2-desk__act / __note are behavior hooks
+   only and carry zero visual rules here. This block owns layout alone:
+   sizing the atoms into the narrow rail, and the tap floor at phone width. */
+.v2-desk__tray .v2-input { flex: 1; min-width: 0; }
+.v2-desk__tray .v2-btn { flex: none; padding: 0 var(--v2-space-4); }
 .v2-desk__err { color: var(--v2-color-status-bug); font-size: var(--v2-font-size-xs); padding: 0 var(--v2-space-3) var(--v2-space-1); }
 /* Tap-target floor at phone width (t-53 mechanical floors). */
-@media (max-width: 720px) { .v2-desk__act { min-height: 44px; } .v2-desk__note { min-height: 44px; } }
+@media (max-width: 720px) { .v2-desk__tray .v2-btn, .v2-desk__tray .v2-input { min-height: 44px; } }
 
 /* Activity: the pulse. Compact two-line events, time gutter, clickable id. */
 .v2-desk__event { min-height: 34px; }
