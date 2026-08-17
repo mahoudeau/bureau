@@ -129,6 +129,33 @@
     .sg-nav { position: static; flex-direction: row; flex-wrap: wrap; }
     .sg-nav__item[aria-disabled="true"]::after { content: none; }
   }
+
+  /* ---- forced-state specimens (t-139 round 2, critic send-back): a real
+     :hover/:focus-visible only exists while a pointer or keyboard focus is
+     actually on the element, so the earlier "hover / Tab the first one"
+     approach left those two states invisible to a reader who never
+     touches the page. crop-ux-hover-selected-state.png's own pattern is a
+     STATIC specimen sitting next to its default sibling, always visible.
+     These rules key the exact same declarations components.css's real
+     :hover/:focus-visible selectors use (same var(--v2-...) tokens, same
+     values, checked against that file directly) to a page-local class
+     instead of a live pseudo-class, scoped entirely to this mission's own
+     shell file — components.css itself is reused, not edited. */
+  .sg-force-hover.v2-btn--secondary { border-color: var(--v2-color-border-strong); background: var(--v2-color-surface-raised); }
+  .sg-force-hover.v2-btn--primary { filter: brightness(1.06); }
+  .sg-force-hover.v2-btn--ghost { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
+  .sg-force-focus.v2-btn {
+    outline: none;
+    box-shadow: 0 0 0 2px var(--v2-color-bg), 0 0 0 4px var(--v2-color-focus-ring);
+  }
+  .sg-force-hover.v2-icon-btn { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
+  .sg-force-focus.v2-icon-btn { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring); }
+  .sg-force-hover.v2-input { border-color: var(--v2-color-border-strong); }
+  .sg-force-focus.v2-input {
+    outline: none;
+    border-color: var(--v2-color-accent);
+    box-shadow: 0 0 0 3px var(--v2-color-focus-ring);
+  }
 </style>
 </head>
 <body>
