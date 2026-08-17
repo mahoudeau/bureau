@@ -305,7 +305,10 @@
   position: absolute;
   left: 0;
   top: calc(-1 * var(--v2-space-2));
-  bottom: calc(var(--v2-row-height) * 0.45);
+  /* Stop one radius above the last child's centre: the last row's own
+     curved elbow (below) supplies that final segment, so trunk + curve
+     meet flush instead of the trunk overshooting into a hard right angle. */
+  bottom: calc(var(--v2-row-height) * 0.45 + var(--v2-radius-sm));
   width: 1px;
   background: var(--v2-color-border-strong);
 }
@@ -326,6 +329,21 @@
   width: var(--v2-space-6);
   height: 1px;
   background: var(--v2-color-border-strong);
+}
+/* Last child (and the single-child fleet, which is the reference crop's own
+   jori -> Linear case) turns the corner on a curve, not a hard 90 degrees —
+   crop-ux-status-glyphs.png's elbow is rounded. Replace the straight stub
+   with an L-shaped border whose bottom-left corner is radiused: the vertical
+   leg (radius tall) rises to meet the shortened trunk, the horizontal leg
+   runs into the row at the same centre line as the straight stubs above it. */
+.v2-roster-fleet__row:last-child::before {
+  top: auto;
+  bottom: 50%;
+  height: var(--v2-radius-sm);
+  background: none;
+  border-left: 1px solid var(--v2-color-border-strong);
+  border-bottom: 1px solid var(--v2-color-border-strong);
+  border-bottom-left-radius: var(--v2-radius-sm);
 }
 .v2-roster-fleet__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .v2-roster-fleet__activity { margin-left: auto; color: var(--v2-color-text-muted); white-space: nowrap; }

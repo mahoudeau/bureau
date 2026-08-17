@@ -232,20 +232,35 @@ import { icon, avatar, chip } from './components.js';
     // Visitors: fixture/probe/demo registrations that are not "who works
     // here" — kept out of the main roster per the mission's own permitted
     // heuristic ("whatever heuristic the builder justifies from the
-    // data"). Justified from a live roster dump (2026-08-16): kind dummy/
-    // demo/other are the hub's own non-team runtime kinds; on top of that,
-    // every probe/fixture seen in that dump (moneta-fleet-check, bettik-
-    // fleet-probe-t117, ...) registers with EITHER zero capabilities or a
-    // capabilities[] drawn entirely from a small known fixture-signal set
-    // (curl — the dummy-agent.sh conformance script's literal capability;
-    // test; throwaway-verification) — a real team member always carries at
-    // least one substantive capability (code/ops/research/planning/...).
+    // data"). Two signals, both keyed off what a NON-team registration
+    // looks like, never off the absence of a positive signal:
+    //   (1) kind dummy/demo/other — the hub's own non-team runtime kinds
+    //       (store.js:93 also defaults a kind-less registration to 'other',
+    //       so a bare probe with no kind at all is caught here too), vs a
+    //       real team member's cowork/claude-code/sdk/human kind.
+    //   (2) a capabilities[] drawn ENTIRELY from a small known fixture-
+    //       signal set (curl — dummy-agent.sh's literal capability; test;
+    //       throwaway-verification), i.e. a probe that declared only its
+    //       throwaway tags.
+    //
+    // t-131 (moneta, 00:54:56 send-back): the earlier `if (!caps.length)
+    // return true` rule was an acceptance-contradicting bug. A real team
+    // agent's normal state immediately after first registration is zero
+    // capabilities (store.js upsertAgent defaults capabilities:[]), and a
+    // team registration carries no capabilities at all unless it passes
+    // some — e.g. dummy-agent.sh's own `{"name":"shifty","kind":"cowork"}`,
+    // and every genuine newhire before it reports caps. Treating "no caps
+    // yet" as evidence of not-a-team-member swept those real cowork/human
+    // agents into the collapsed Visitors group — the exact opposite of the
+    // mission's "the main rail shows only the team." Absence of caps is
+    // absence of a role signal, never proof of visitor-hood; the junk case
+    // must be recognised by a positive non-team signal (kind, or an all-
+    // fixture capabilities set), so that rule is gone.
     var FIXTURE_CAPS = { curl: 1, test: 1, 'throwaway-verification': 1 };
     function isVisitor(a) {
       if (a.kind === 'dummy' || a.kind === 'demo' || a.kind === 'other') return true;
       var caps = a.capabilities || [];
-      if (!caps.length) return true;
-      return caps.every(function (c) { return FIXTURE_CAPS[c]; });
+      return caps.length > 0 && caps.every(function (c) { return FIXTURE_CAPS[c]; });
     }
 
     function rosterAvatar(a, size) {
