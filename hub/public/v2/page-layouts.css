@@ -1,0 +1,219 @@
+/*
+ * Dashboard v2 — page-level structural layouts (t-138, goal: t-134)
+ *
+ * Atomic design's fourth output: "wireframe page-level layouts placing
+ * organisms into a structural grid without real data." NEW, DISJOINT FILE —
+ * not linked from v2.html by this mission (that would touch the live app's
+ * structural rendering, out of scope here; t-138's own styleguide route
+ * links and demonstrates this file). Every rule below places an EXISTING
+ * organism/molecule/atom by its real class name (components.css t-66,
+ * molecules.css t-77, organisms.css t-78) into a grid shape — it does not
+ * restyle any of them, and it introduces no new atoms of its own.
+ *
+ * NAMING WARNING inherited from the mission body: hub/public/v2/templates.js
+ * already exists and means something unrelated (t-72's quick-add
+ * mission-template picker). This file is deliberately named
+ * page-layouts.css, not templates.css/templates.js, to avoid the collision.
+ *
+ * THE GAP THIS FILE CLOSES: v2.html's own inline <style> block (t-62's
+ * skeleton baseline) is the ONLY place the app's page-level shell
+ * (.v2-shell grid, the peek panel's viewport position, the cmd-K palette's
+ * centering) has ever been defined — none of it lives in tokens.css/
+ * components.css/molecules.css/organisms.css. That is itself the class of
+ * drift the goal (t-134) calls out ("a surface that styles itself outside
+ * the system is a defect"): the shell's shape was never a formal, citable
+ * layer. This file is that layer, extracted fresh from the intent of
+ * v2.html's inline rules and this mission's own cited references — NOT a
+ * verbatim copy (per the mission body's own instruction) — and deliberately
+ * namespaced under .v2-tmpl so linking it later cannot silently reflow the
+ * live app's existing .v2-shell/.v2-rail/.v2-main/.v2-side/.v2-palette
+ * classes (that migration is explicitly later tranche work per t-134's own
+ * order: "...templates -> styleguide route -> migrate surfaces").
+ *
+ * ZERO MAGIC NUMBERS: every width below is composed via calc() from
+ * tokens.css's own --v2-space-* step scale, the same idiom components.css
+ * already uses for its own derived sizes (e.g. --v2-row-height * 0.78).
+ * Bare "1px" border widths and viewport-relative units (vh/dvh/vw) are
+ * structural/positional, not design-scale sizes, and follow the same
+ * convention already established in components.css/tokens.css/v2.html.
+ *
+ * Cites: projects/bureau/references/ux-v2/STUDY-lead-t134.md and
+ * STUDY-lead.md ("density with air", hairline structure, panels over
+ * modals — never a centered <dialog> modal or prompt()); crop-ux-sidebar-
+ * item.png (rail: a muted section label over tight, rounded-highlight nav
+ * rows) and crop-ux-peek-header.png (peek panel: compact avatar + name +
+ * model-tag header row, icon-button cluster right-aligned, hairline
+ * divider, then body log rows) for the rail/panel proportions specifically.
+ */
+
+/* ============================================================
+   SHARED LAYOUT PRIMITIVES
+   Local custom properties, scoped to .v2-tmpl so they never leak into the
+   rest of the system — this file's own layer, not a global token addition.
+   Rail footprint continues v2.html's already-shipped --v2-rail-w (240px)
+   so a template rendered here reads at the same scale the live shell
+   already occupies (that figure is itself not sample-traced — v2.html's
+   own skeleton comment doesn't claim one either — this is continuity, not
+   a new citation), but composed from the real token scale instead of
+   repeating an untraced literal. No --side-w here: none of this mission's
+   three named templates (three-pane/two-pane/overlay) place a fourth
+   "side" region — v2.html's own #v2-side-rail (insights/needs-me-now) is
+   out of this mission's cited scope.
+   ============================================================ */
+.v2-tmpl {
+  --v2-tmpl-rail-w: calc(var(--v2-space-8) * 7.5);  /* 32px * 7.5 = 240px */
+  --v2-tmpl-overlay-w: calc(var(--v2-space-8) * 17.5); /* 32px * 17.5 = 560px, matches v2.html's shipped palette width */
+
+  box-sizing: border-box;
+  min-height: 100vh;
+  background: var(--v2-color-bg);
+  color: var(--v2-color-text-primary);
+}
+.v2-tmpl *, .v2-tmpl *::before, .v2-tmpl *::after { box-sizing: border-box; }
+
+/* A muted section label over a group of rail rows (crop-ux-sidebar-item.png:
+   "Favorites" sits above the nav list in small uppercase-ish muted text).
+   No new atom invented — reuses .v2-card__label's existing register
+   (components.css: small, muted, --v2-font-size-xs) rather than adding a
+   parallel style for what is visually the same small-label role. */
+.v2-tmpl__section-label {
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-muted);
+  padding: 0 var(--v2-space-6);
+  margin-bottom: var(--v2-space-2);
+}
+
+/* ============================================================
+   1. THREE-PANE — the live default layout
+   Places: rail organism (two .v2-card groups of .v2-row items — agent
+   roster + project rail, per v2.html's #v2-agents-rail/#v2-projects-rail)
+   + board organism (.v2-board__columns of .v2-task-card, organisms.css/
+   molecules.css) + peek-panel organism (.v2-panel, components.css's real
+   fixed-position atom — header/body/footer chrome already defined there).
+   Calibrated to crop-ux-sidebar-item.png (rail row density/label) and
+   crop-ux-peek-header.png (panel header proportions: avatar + title +
+   tag chip left, icon-button cluster right, hairline under it).
+   Grid, not the live app's fixed-overlay peek: the peek column's track is
+   `auto`, sized to .v2-panel's own intrinsic width (min(420px,100vw), set
+   in components.css) — so the panel's real width is never re-declared
+   here, only slotted into flow. Because a true `position: fixed` panel
+   can't be sized by a grid track, this template's own selector below
+   scopes the panel to `position: static` for ITS placement in the grid —
+   the panel's internal chrome (header/body/footer, colors, radius) is
+   untouched; only the containment mode changes, the way any page-level
+   template legitimately re-contains an atom for its own structural slot.
+   ============================================================ */
+.v2-tmpl--three-pane {
+  display: grid;
+  grid-template-columns: var(--v2-tmpl-rail-w) 1fr auto;
+  grid-template-areas: "rail main peek";
+  gap: var(--v2-space-4);
+  align-items: stretch;
+  padding: var(--v2-space-4);
+}
+.v2-tmpl--three-pane .v2-tmpl__rail { grid-area: rail; }
+.v2-tmpl--three-pane .v2-tmpl__main { grid-area: main; }
+.v2-tmpl--three-pane .v2-tmpl__peek { grid-area: peek; }
+.v2-tmpl--three-pane .v2-tmpl__peek .v2-panel {
+  position: static;
+  height: 100%;
+  transform: none;
+}
+
+/* ============================================================
+   2. TWO-PANE — rail + board only (peek closed)
+   Same rail + board organisms as three-pane, minus the peek column
+   entirely (not merely hidden — the grid has no third track), matching
+   how the live app reclaims that width when nothing is selected.
+   ============================================================ */
+.v2-tmpl--two-pane {
+  display: grid;
+  grid-template-columns: var(--v2-tmpl-rail-w) 1fr;
+  grid-template-areas: "rail main";
+  gap: var(--v2-space-4);
+  align-items: stretch;
+  padding: var(--v2-space-4);
+}
+.v2-tmpl--two-pane .v2-tmpl__rail { grid-area: rail; }
+.v2-tmpl--two-pane .v2-tmpl__main { grid-area: main; }
+
+/* ---- shared rail/main region bodies (both pane layouts) --------------- */
+.v2-tmpl__rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-4);
+  min-width: 0;
+}
+.v2-tmpl__main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-4);
+  min-width: 0;
+}
+
+/* ---- phone breakpoint (390px, per this mission's own acceptance) ------
+   Rail and peek stack below main rather than compressing to illegible
+   columns — same reflow INTENT as v2.html's own @media(max-width:720px)
+   block (main first, rail second, peek/side last), not a verbatim copy of
+   its selectors since this file owns its own .v2-tmpl namespace. The peek
+   panel takes a full-width block in flow here (a wireframe simplification
+   of the live app's true full-viewport takeover, which is Pages-layer
+   interactive behavior, not this static Templates-layer grid). */
+@media (max-width: 720px) {
+  .v2-tmpl--three-pane {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main" "rail" "peek";
+    padding: var(--v2-space-3);
+  }
+  .v2-tmpl--two-pane {
+    grid-template-columns: 1fr;
+    grid-template-areas: "main" "rail";
+    padding: var(--v2-space-3);
+  }
+  .v2-tmpl--three-pane .v2-tmpl__peek .v2-panel { width: 100%; min-height: 60vh; }
+}
+
+/* ============================================================
+   3. OVERLAY — palette/settings surface floating over whichever pane
+   layout is active
+   Places: the cmd-K palette molecule (.v2-palette, molecules.css — already
+   carries its own radius-lg + shadow-overlay chrome) plus the scrim atom
+   (.v2-panel__scrim, components.css, already built for exactly this
+   backdrop role) for a non-modal floating surface — per STUDY-lead.md's
+   "panels over modals" register, this is a floating anchored surface, not
+   a centered <dialog> with a click-trapping backdrop (the scrim dims but
+   the overlay wrapper itself does not intercept clicks outside the
+   surface — see pointer-events below).
+   The palette's own centered-floating POSITION (not its internal chrome)
+   has never lived in molecules.css — only inline in v2.html — so this is
+   this file's own real contribution, extracted from that inline rule's
+   intent (top offset, centered, capped width, full-bleed on phone) rather
+   than copied verbatim.
+   No crop citation: STUDY-lead.md's own filter/token-popover references
+   (Screenshot-2024-08-03-at-16.25.37/16.40.34.png) are already components.css/
+   molecules.css's citation, not this file's; this template only positions
+   the already-calibrated surface in the page.
+   ============================================================ */
+.v2-tmpl__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--v2-z-popover);
+  display: flex;
+  justify-content: center;
+  padding-top: 12vh;
+  pointer-events: none;
+}
+.v2-tmpl__overlay .v2-panel__scrim { pointer-events: auto; }
+.v2-tmpl__overlay-surface {
+  position: relative;
+  width: min(var(--v2-tmpl-overlay-w), 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  pointer-events: auto;
+}
+
+@media (max-width: 720px) {
+  .v2-tmpl__overlay { padding-top: 0; }
+  .v2-tmpl__overlay-surface { width: 100%; max-height: 100%; height: 100%; }
+  .v2-tmpl__overlay-surface .v2-palette.v2-palette { border-radius: 0; height: 100%; }
+}
