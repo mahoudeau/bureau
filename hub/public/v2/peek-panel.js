@@ -362,9 +362,20 @@ import { icon, idBadge } from './components.js';
       // width. The id sits where the sample's own .phead .id sits; the
       // close button no longer needs to reserve title margin to dodge it.
       '.v2-panel__head { display: flex; align-items: center; gap: var(--v2-space-3, 8px); margin-bottom: var(--v2-space-3, 10px); }',
-      '.v2-panel__id { flex: 1; }', // t-123: typography now lives on idBadge()'s own .v2-id-badge (components.css); this rule keeps only the layout role
-      '.v2-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); display: flex; cursor: pointer; padding: 2px; flex: none; }',
-      '.v2-panel__close:hover { color: var(--v2-color-text-primary, inherit); }',
+      '.v2-panel__id { flex: 1; }', // t-123 (merged since t-136's own round): typography now lives on idBadge()'s own .v2-id-badge (components.css); this rule keeps only the layout role — closes the exact near-match follow-up t-136 had flagged and deferred.
+      // t-136: `color`/`display` deleted from the base rule — organisms.css's
+      // doubled-class `.v2-panel__close.v2-panel__close` (t-78) already wins
+      // both at higher specificity (its own inline-flex + font-size +
+      // row-height box also apply, unaffected either way). `border`/
+      // `background`/`cursor`/`padding`/`flex` have no organisms.css analog
+      // and stay live exactly as before — confirmed via computed-style
+      // snapshot. The `:hover` color rule main separately carried is dead
+      // for the identical reason: organisms.css's own
+      // `.v2-panel__close.v2-panel__close:hover` already sets `color` at
+      // the same higher specificity, so this file's hover rule never won —
+      // dropped on merge rather than left as a second, newly-discovered
+      // instance of the same drift this mission exists to close.
+      '.v2-panel__close { border: none; background: transparent; cursor: pointer; padding: 2px; flex: none; }',
       // t-93 round 5: components.css:352 (`.v2-panel__title { flex: 1 1
       // auto; ... }`, t-66) was written for a shared header-row context
       // where .v2-panel__title sits beside .v2-panel__controls in one
@@ -374,12 +385,16 @@ import { icon, idBadge } from './components.js';
       // now expands the title to fill the column's available vertical
       // space instead of shrinking horizontally, a real regression a
       // round-4 critic pass measured directly (263px tall for one line of
-      // text). This file's own rule below already overrode margin/font-
-      // size/font-weight/line-height but never `flex`, so the stale value
-      // won. Explicit `flex: none` here, scoped to this file's own
+      // text). Explicit `flex: none` here, scoped to this file's own
       // injected style rather than editing components.css (t-66's file,
       // out of scope) — the narrower of the critic's two suggested fixes.
-      '.v2-panel__title { flex: none; margin: 0 0 var(--v2-space-4, 14px); font-size: 17px; font-weight: 600; line-height: 1.3; }',
+      // t-136: `font-size`/`font-weight` deleted from the rule below —
+      // organisms.css's doubled-class `.v2-panel__title.v2-panel__title`
+      // (t-78) already wins both (16px/serif/semibold/primary-color live
+      // today, not this file's stale 17px). `flex`/`margin`/`line-height`
+      // have no organisms.css analog (organisms sets font-family/weight/
+      // size/color only) and stay live exactly as before.
+      '.v2-panel__title { flex: none; margin: 0 0 var(--v2-space-4, 14px); line-height: 1.3; }',
       // Stacked attribute rows (sample: .attrs .row) replacing the old
       // single ' · '-joined meta line.
       '.v2-panel__attrs { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--v2-space-5, 16px); }',
@@ -388,18 +403,51 @@ import { icon, idBadge } from './components.js';
       '.v2-panel__row-v { font-weight: 500; display: flex; align-items: center; gap: 6px; }',
       '.v2-panel__stpill { font-weight: 600; text-transform: capitalize; }',
       '.v2-panel__sechead { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--v2-color-text-muted, #999); display: flex; align-items: center; gap: var(--v2-space-2, 6px); margin: var(--v2-space-4, 14px) 0 var(--v2-space-2, 8px); }',
-      '.v2-panel__meta { color: var(--v2-ink-2, #888); font-size: 12px; margin-bottom: var(--v2-space-2, 8px); font-variant-numeric: tabular-nums; }',
-      '.v2-panel__link-btn { border: none; background: transparent; color: var(--v2-accent, #3f6fe0); cursor: pointer; font: inherit; padding: 0; margin-left: var(--v2-space-2, 8px); }',
-      '.v2-panel__body { white-space: pre-wrap; font-size: 13px; margin-bottom: var(--v2-space-3, 12px); }',
-      '.v2-panel__item { border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-2, 8px); margin: var(--v2-space-2, 8px) 0; }',
-      '.v2-panel__item label { margin-right: var(--v2-space-2, 8px); font-size: 12.5px; }',
-      '.v2-panel__item-body { white-space: pre-wrap; background: var(--v2-bg, rgba(128,128,128,.08)); padding: var(--v2-space-2, 8px); border-radius: var(--v2-radius, 6px); font-size: 12px; overflow-x: auto; }',
-      '.v2-panel__item-comment { width: 100%; box-sizing: border-box; margin-top: var(--v2-space-1, 4px); font: inherit; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
+      '.v2-panel__meta { color: var(--v2-ink-2); font-size: 12px; margin-bottom: var(--v2-space-2, 8px); font-variant-numeric: tabular-nums; }',
+      '.v2-panel__link-btn { border: none; background: transparent; color: var(--v2-accent); cursor: pointer; font: inherit; padding: 0; margin-left: var(--v2-space-2, 8px); }',
+      // t-136: `font-size` deleted — organisms.css's doubled-class
+      // `.v2-panel__body.v2-panel__body` (t-78) already wins it (12px
+      // live today, not this file's stale 13px; organisms also sets
+      // line-height/color, neither of which this file ever set).
+      // `white-space`/`margin-bottom` have no organisms.css analog and
+      // stay live exactly as before.
+      '.v2-panel__body { white-space: pre-wrap; margin-bottom: var(--v2-space-3, 12px); }',
+      // t-136: .v2-panel__item and its `label` sub-rule deleted whole —
+      // molecules.css's doubled-class `.v2-panel__item.v2-panel__item`
+      // (t-77, built specifically to win this fight — see that file's own
+      // header comment) already wins every property both rules declared
+      // (border/border-radius/padding/margin for the base rule,
+      // margin-right/font-size for the label rule), each with its own
+      // different value; both were fully dead, confirmed via computed-
+      // style snapshot before removal.
+      '.v2-panel__item-body { white-space: pre-wrap; background: var(--v2-bg); padding: var(--v2-space-2, 8px); border-radius: var(--v2-radius); font-size: 12px; overflow-x: auto; }',
+      '.v2-panel__item-comment { width: 100%; box-sizing: border-box; margin-top: var(--v2-space-1, 4px); font: inherit; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
       '.v2-panel__artifact { margin: var(--v2-space-2, 8px) 0; }',
-      '.v2-panel__artifact img { max-width: 100%; border-radius: var(--v2-radius, 6px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); }',
-      '.v2-panel__artifact figcaption { color: var(--v2-muted, #999); font-size: 12px; }',
-      '.v2-panel__logrow { padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 12.5px; }',
-      '.v2-panel__ts { color: var(--v2-muted, #999); font-size: 11px; margin-right: var(--v2-space-1, 4px); font-variant-numeric: tabular-nums; }',
+      // t-136: `border-radius` deleted — organisms.css's doubled-class
+      // `.v2-panel__artifact.v2-panel__artifact img` (t-78) already wins it
+      // (both resolve to 6px today via different tokens, but organisms'
+      // rule is the one actually winning the cascade). Its own `border-
+      // color`-only declaration also outranks this rule's border-color,
+      // so the --v2-hairline fallback below never renders — stripped per
+      // the same drift-floor rule as every other old-namespace fallback in
+      // this file, not left as inert dead weight. `max-width` and the
+      // border's width/style have no organisms.css analog and stay live.
+      '.v2-panel__artifact img { max-width: 100%; border: 1px solid var(--v2-hairline); }',
+      // t-136: .v2-panel__artifact figcaption deleted whole — organisms.css's
+      // doubled-class `.v2-panel__artifact.v2-panel__artifact figcaption`
+      // (t-78) already wins both color and font-size at higher specificity,
+      // each with a different value (--v2-color-text-muted/11px live today,
+      // not this file's --v2-muted/12px) — fully dead, confirmed via
+      // computed-style snapshot before removal.
+      // t-136: `font-size` deleted — organisms.css's doubled-class
+      // `.v2-panel__logrow.v2-panel__logrow` (t-78) already wins it (11px
+      // live today, not this file's stale 12.5px; organisms also sets
+      // border-bottom-color and color, longhand-overriding this rule's
+      // shorthand border-bottom color component too — the --v2-hairline
+      // fallback below is stripped, not removed, since the border's
+      // width/style are still this file's own and stay live).
+      '.v2-panel__logrow { padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline); }',
+      '.v2-panel__ts { color: var(--v2-muted); font-size: 11px; margin-right: var(--v2-space-1, 4px); font-variant-numeric: tabular-nums; }',
       '.v2-panel__log { margin-top: 0; }',
       // t-93 round 2: callout-box treatment — a distinct light-tinted
       // background block with an iconed uppercase header, converging on
@@ -407,13 +455,29 @@ import { icon, idBadge } from './components.js';
       // REVIEW — PATTERN REFERENCE" section anatomy (media.js's own
       // .v2-media already reads close to this register; this is the same
       // treatment generalized for peek-panel.js's own sections).
-      '.v2-panel__callout { background: var(--v2-surface-2, var(--v2-bg, rgba(128,128,128,.06))); border: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-3, 12px); margin: var(--v2-space-3, 12px) 0; }',
-      '.v2-panel__callout-head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--v2-muted, #999); margin-bottom: var(--v2-space-2, 8px); }',
+      // t-136: was `var(--v2-surface-2, var(--v2-bg, rgba(128,128,128,.06)))`
+      // — --v2-surface-2 is not defined anywhere (not in tokens.css, not in
+      // v2.html's t-87 alias block), so that outer var() always fell
+      // through to its own fallback, --v2-bg, which IS unconditionally
+      // defined by boot time — collapsed to the one var() reference that
+      // ever actually resolves, same drift-floor reasoning as every other
+      // fallback stripped in this file.
+      '.v2-panel__callout { background: var(--v2-bg); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); padding: var(--v2-space-3, 12px); margin: var(--v2-space-3, 12px) 0; }',
+      '.v2-panel__callout-head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--v2-muted); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-panel__actions { display: flex; gap: var(--v2-space-2, 8px); margin-top: var(--v2-space-3, 12px); }',
-      '.v2-panel__note { flex: 1; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      '.v2-panel__btn { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius, 6px); background: var(--v2-accent, #3f6fe0); color: var(--v2-on-accent, #fff); cursor: pointer; }',
-      '.v2-panel__btn--ghost { background: transparent; color: var(--v2-ink, inherit); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); }',
-      '.v2-panel__err { color: var(--v2-critical, #c23434); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; }'
+      // t-136: near-identical in role to components.css's own .v2-input
+      // atom, but .v2-input's real box model (row-height-derived height,
+      // space-5 padding, --v2-radius-sm, --v2-font-size-sm) genuinely
+      // differs in px from what's shipped here today — adopting it would
+      // be a real layout change, not a mechanical no-op, so it's flagged
+      // as a follow-up (needs its own before/after check) rather than
+      // renamed under this mission's no-regression bar. Same reasoning
+      // applies to .v2-panel__btn/--ghost below vs components.css's own
+      // .v2-btn/--secondary/--ghost.
+      '.v2-panel__note { flex: 1; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
+      '.v2-panel__btn { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius); background: var(--v2-accent); color: var(--v2-on-accent); cursor: pointer; }',
+      '.v2-panel__btn--ghost { background: transparent; color: var(--v2-ink); border: 1px solid var(--v2-hairline); }',
+      '.v2-panel__err { color: var(--v2-critical); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; }'
     ].join('\n');
     document.head.appendChild(style);
   }
