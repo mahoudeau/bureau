@@ -1,25 +1,46 @@
 {
-  "_comment": "t-143 stage-2 composition: one-desk corner, data-driven. Consumes stage-1's frozen sprites (hub/public/office-sprites/sprites/) byte-identical, no pixel edits. seam_y is where the wall plane meets the floor plane. Every object's y is its TOP edge; 'anchor: bottom' objects are placed so their bottom edge sits exactly on seam_y (grounded, nothing floats). Stage 3 consumes this file as-is and only swaps 'desk-agent's sprite between the frame-table entries (idle-anchor.png / typing-0..3.png) to animate; composition (world size, tile layout, wall-monitor position, desk position) is frozen.",
-  "world": { "w": 160, "h": 135 },
+  "_comment": "t-143 stage-2 composition (round 3): one-desk corner, data-driven. Consumes stage-1's frozen sprites byte-identical, no pixel edits. Round-3 changes vs b46d686 are LAYOUT ONLY (world size + object x/y): (1) wall-monitor clustered directly above the desk workstation in the agent's forward sightline, not stranded over empty wall; (2) world tightened so the wall headroom and floor apron read as intentional negative space framing one composed corner, not a desk adrift in a void. Sprites untouched (byte-identical to stage 1). seam_y is where the wall plane meets the floor plane. Every object's y is its TOP edge; 'anchor: bottom' objects sit with their bottom edge on seam_y (grounded). Stage 3 consumes this file and only swaps desk-agent's sprite between idle-anchor.png / typing-0..3.png to animate; composition stays frozen.",
+  "world": {
+    "w": 74,
+    "h": 94
+  },
   "spriteBase": "/office-sprites/sprites/",
-  "wall": { "sprite": "wall-cracked.png", "w": 52, "h": 45, "y0": 0, "y1": 90 },
-  "floor": { "sprite": "floor-wood.png", "w": 55, "h": 45, "y0": 90, "y1": 135 },
-  "seam_y": 90,
+  "wall": {
+    "sprite": "wall-cracked.png",
+    "w": 52,
+    "h": 45,
+    "y0": 0,
+    "y1": 80
+  },
+  "floor": {
+    "sprite": "floor-wood.png",
+    "w": 55,
+    "h": 45,
+    "y0": 80,
+    "y1": 94
+  },
+  "seam_y": 80,
   "objects": [
     {
       "id": "wall-monitor",
       "sprite": "wall-monitor.png",
-      "x": 118, "y": 40, "w": 13, "h": 16,
+      "x": 35,
+      "y": 14,
+      "w": 13,
+      "h": 16,
       "plane": "wall",
-      "note": "mounted on the back wall at believable eye-plus height, clear of the desk unit's own screen so the two reads don't collide"
+      "note": "mounted on the back wall directly above/behind the desk workstation, in the seated agent's forward sightline, so wall element + desk read as ONE furniture cluster (matches the reference's corkboard-over-workstation grammar). Height leaves a believable gap above the agent's head."
     },
     {
       "id": "desk-agent",
       "sprite": "typing-0.png",
-      "x": 55, "y": 42, "w": 38, "h": 48,
+      "x": 18,
+      "y": 32,
+      "w": 38,
+      "h": 48,
       "plane": "floor",
       "anchor": "bottom",
-      "note": "self-contained agent+chair+desk+CRT unit per t-141's MANIFEST.md ('stage 2 should treat typing-* as a self-contained agent-at-a-workstation pose, not something to layer piecemeal onto desk-tidy/chair/crt-monitor'). Bottom edge (y+h=90) sits exactly on seam_y: grounded. Stage 3's frame table swaps this entry's sprite between idle-anchor.png (standing, off the desk footprint) and typing-0..3.png (seated, this footprint) to animate the editing/idle verbs; x/y/plane/anchor stay frozen."
+      "note": "self-contained agent+chair+desk+CRT unit per t-141's MANIFEST.md. Bottom edge (y+h=seam_y) grounded on the seam; a small floor apron reads in front. Stage 3's frame table swaps this sprite between idle-anchor.png and typing-0..3.png; x/y/plane/anchor stay frozen."
     }
   ]
 }
