@@ -188,22 +188,34 @@ import { icon, idBadge } from './components.js';
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
-        // t-194 (goal: t-53): leaving THIS item's own comment field (click
-        // elsewhere, Tab, or Enter for an immediate save without waiting)
-        // is this item's quick-submit trigger (wired below, after render()
-        // inserts this markup) — the timed floor ("rule on an item with a
-        // comment in <=3 interactions from landing") can't be met while
-        // finishing a comment always requires a separate trip to the
-        // shared Approve/Send-back button at the bottom of the panel. The
-        // title attribute is a hover-taught hint, same register as
-        // keyboard.js's own '⌨' tooltip — never a resting legend.
-        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" title="Saves this item when you click away (or press Enter)" value="' + esc(it.comment || '') + '">' +
-        // Transient per-item save confirmation (hidden until a quick-submit
-        // succeeds; re-hidden the moment this item's own verdict/comment
-        // changes again, see the 'dirty' wiring below) — batch review via
-        // the shared Approve/Send-back button is untouched by any of this
-        // and still submits every item's current radio+comment in one pass.
-        '<span class="v2-panel__item-saved" id="s_' + esc(it.id) + '" hidden>' + icon('circle-check', 'v2-icon--xs') + ' Saved</span>' +
+        // t-194 (goal: t-53): Enter, pressed while typing in THIS item's own
+        // comment field, is this item's quick-submit trigger (wired below,
+        // after render() inserts this markup) — the timed floor ("rule on
+        // an item with a comment in <=3 interactions from landing") can't
+        // be met while finishing a comment always requires a separate trip
+        // to the shared Approve/Send-back button at the bottom of the
+        // panel. Round 2 briefly moved this to blur-to-submit and round 3
+        // reverted it (see the wiring below for the regression that
+        // caused) — back to Enter-only. The title attribute is a
+        // hover-taught hint, same register as keyboard.js's own '⌨'
+        // tooltip — never a resting legend.
+        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" title="Enter submits just this item" value="' + esc(it.comment || '') + '">' +
+        // Transient per-item save confirmation (invisible until a quick-
+        // submit succeeds; re-hidden the moment this item's own verdict/
+        // comment changes again, see the 'dirty' wiring below) — batch
+        // review via the shared Approve/Send-back button is untouched by
+        // any of this and still submits every item's current radio+
+        // comment in one pass.
+        //
+        // t-194 round 3 (critic-found layout shift, dimension 6 "zero
+        // layout shift"): this used to carry the `hidden` attribute, which
+        // is `display:none` — the badge took zero space at rest and only
+        // grew the row by ~22px the instant it appeared. No `hidden` here
+        // now; the span is always in flow (reserving its own line's
+        // height at rest) and CSS toggles `visibility` via `.is-visible`
+        // instead (below, in the wiring) — invisible-but-space-reserved,
+        // so a successful save never moves anything else in the row.
+        '<span class="v2-panel__item-saved" id="s_' + esc(it.id) + '">' + icon('circle-check', 'v2-icon--xs') + ' Saved</span>' +
         '</div>';
     }
 
@@ -383,21 +395,39 @@ import { icon, idBadge } from './components.js';
       // touched. Lead ruling (t-194 body): the bar wins, route is the
       // builder's choice, batch review must not regress.
       //
-      // Round 2 (critic send-back): an Enter keypress is its own discrete
-      // interaction by the acceptance's own definition ("one click OR one
-      // intent keypress"), so open+radio+type+Enter still measures 4, not
-      // <=3 — Enter changed the submit's MODALITY, not the count. Fixed by
-      // wiring the OTHER route the mission body itself named — "per-item
-      // submit when a comment field blurs" — as the counted path: blur is
-      // not a discrete interaction (the critic's own send-back: "type-
-      // then-blur(3) = a true 3, no extra keypress"), so open(1) / verdict
-      // radio(2) / type-then-blur(3) clears the floor unambiguously under
-      // either reading of the Enter question. Enter is KEPT as a
-      // convenience — a reviewer who wants an immediate save without
-      // moving focus away still gets one — but it is no longer the counted
-      // path; blur is. Both funnel through the same submitItem() so there
-      // is exactly one PATCH shape and one saved-confirmation path,
-      // regardless of which trigger fired it.
+      // Round 2 (critic send-back, since reverted — see round 3 below):
+      // briefly wired blur-to-submit here instead of Enter, reasoning that
+      // blur is not a discrete interaction so it clears the floor even
+      // under the strictest reading of the Enter question. That created a
+      // real regression moneta caught mechanically, not hypothetically:
+      // firing a PATCH on blur means MOVING BETWEEN items mid-batch fires
+      // that item's own PATCH — three items reviewed in one pass now sent
+      // 4 PATCHes instead of 1 (criterion 2's "still submit in one pass"),
+      // and worse, the PATCH's own broadcast triggers media.js's
+      // refreshSections() -> render() -> this whole item-row rebuild WHILE
+      // the reviewer has already moved focus into the NEXT item's comment
+      // field, destroying and recreating that live node under their
+      // cursor and silently truncating whatever they'd typed so far into
+      // it (preserveUnsavedItemEdits() can only snapshot keystrokes that
+      // arrived before the node was replaced, not ones still arriving).
+      //
+      // Round 3: back to Enter as the ONLY quick-submit trigger (round 1's
+      // original route). Under ummon's round-2 LEAD RULING (a comment-
+      // terminating Enter, in the same field with no intervening focus
+      // change, counts as part of the single typing interaction, not a
+      // second discrete act) this already satisfies criterion 1 at 3 —
+      // open(1) + verdict radio(2) + type-with-terminating-Enter(3) — with
+      // no need for blur's regression at all. Enter also sidesteps blur's
+      // specific failure mode structurally, not just by luck: firing on
+      // Enter keeps the reviewer's focus IN the field they were just
+      // typing in when the rebuild happens, so the destroy/recreate race
+      // lands on a field nobody is actively typing into; they only move to
+      // the next item's field afterward, by which point the (sub-100ms)
+      // rebuild has already settled. preserveUnsavedItemEdits() is kept
+      // regardless — it still protects a batch reviewer's other untouched
+      // items whenever ANY re-render fires for an unrelated reason (a
+      // sibling agent's SSE update landing while this panel is open, for
+      // instance), not just this file's own quick-submit path.
       var itemRows = panel.querySelectorAll('.v2-panel__item');
       itemRows.forEach(function (row) {
         var iid = row.getAttribute('data-item-id');
@@ -405,15 +435,17 @@ import { icon, idBadge } from './components.js';
         var savedEl = document.getElementById('s_' + iid);
         if (!commentEl || !savedEl) return; // read-only render (t.status !== 'review'): no inputs to wire
         var submitting = false;
-        function markDirty() { savedEl.hidden = true; }
+        // t-194 round 3: .is-visible (CSS `visibility`, above), not the
+        // `hidden` attribute — see the markup comment for why.
+        function markDirty() { savedEl.classList.remove('is-visible'); }
         function submitItem() {
-          // savedEl.hidden === false means this item's current radio+
+          // .is-visible already set means this item's current radio+
           // comment state is already what the server has (either nothing
           // has changed since the last successful save, or nothing has
           // ever been touched and there is nothing worth a round-trip for)
-          // — skip a redundant PATCH so blurring a field the reviewer
-          // never actually edited (e.g. tabbing through) is a no-op.
-          if (submitting || !savedEl.hidden) return;
+          // — skip a redundant PATCH so re-focusing a field the reviewer
+          // never actually edited is a no-op.
+          if (submitting || savedEl.classList.contains('is-visible')) return;
           var verdicts = collectVerdicts(iid);
           if (!verdicts.length) return; // nothing selected/typed for this item yet
           submitting = true;
@@ -443,19 +475,15 @@ import { icon, idBadge } from './components.js';
             // right values either way) is what the reviewer is actually
             // looking at.
             var liveSaved = document.getElementById('s_' + iid);
-            if (liveSaved) liveSaved.hidden = false;
+            if (liveSaved) liveSaved.classList.add('is-visible');
           });
         }
         row.querySelectorAll('input[type=radio]').forEach(function (r) {
           r.addEventListener('change', markDirty);
         });
         commentEl.addEventListener('input', markDirty);
-        // The counted route: losing focus on this item's own comment field
-        // (click elsewhere, Tab, or the browser closing the panel) submits
-        // whatever this item currently holds — no keypress required.
-        commentEl.addEventListener('blur', submitItem);
-        // Convenience, not the counted route: Enter submits immediately
-        // without waiting for the field to lose focus. stopPropagation so
+        // The ONLY quick-submit trigger (round 3 — no blur listener; see
+        // the comment above this block for why). stopPropagation so
         // keyboard.js's document-level Enter (Approve) — which already
         // skips text-input targets — never also fires from the same
         // keypress; this is this item's own event to consume.
@@ -536,12 +564,20 @@ import { icon, idBadge } from './components.js';
       '.v2-panel__item label { margin-right: var(--v2-space-2, 8px); font-size: 12.5px; }',
       '.v2-panel__item-body { white-space: pre-wrap; background: var(--v2-bg, rgba(128,128,128,.08)); padding: var(--v2-space-2, 8px); border-radius: var(--v2-radius, 6px); font-size: 12px; overflow-x: auto; }',
       '.v2-panel__item-comment { width: 100%; box-sizing: border-box; margin-top: var(--v2-space-1, 4px); font: inherit; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      // t-194: transient per-item quick-submit confirmation (hidden by
+      // t-194: transient per-item quick-submit confirmation (invisible by
       // default, shown briefly after Enter in this item's own comment
       // field persists it — see the render()-time wiring). Same status-
       // green token idBadge()/STATUS_META's own 'done' pill reads, so a
       // saved item and a done mission read as the same "settled" color.
-      '.v2-panel__item-saved { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--v2-space-1, 4px); font-size: 11.5px; font-weight: 600; color: var(--v2-color-status-done, #29a36a); }',
+      // t-194 round 3: `visibility: hidden`, not `display: none` — the
+      // element stays in flow at rest so its line's height is ALWAYS
+      // reserved (this is why the markup dropped the `hidden` attribute).
+      // A successful save flips `.is-visible` and the badge fades in
+      // without moving the comment field or anything below it — the
+      // layout-shift moneta measured (row grew ~22px the instant `hidden`
+      // was removed) can't happen when the space was never absent.
+      '.v2-panel__item-saved { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--v2-space-1, 4px); font-size: 11.5px; font-weight: 600; color: var(--v2-color-status-done, #29a36a); visibility: hidden; }',
+      '.v2-panel__item-saved.is-visible { visibility: visible; }',
       '.v2-panel__artifact { margin: var(--v2-space-2, 8px) 0; }',
       '.v2-panel__artifact img { max-width: 100%; border-radius: var(--v2-radius, 6px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); }',
       '.v2-panel__artifact figcaption { color: var(--v2-muted, #999); font-size: 12px; }',
