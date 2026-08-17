@@ -257,7 +257,7 @@ import { icon } from './components.js';
       //    that work is no longer live) — a plain right-aligned tabular
       //    number with no border, matching crop-ux-list-row-density.png's
       //    own trailing-count style, not another chip.
-      //  - repo goes from a raw clone URL to a host icon: repoIconName() below
+      //  - repo goes from a raw clone URL to a host icon: repoWebInfo() below
       //    derives the glyph from the URL's own hostname generically (github
       //    icon for github.com, git-branch otherwise — host-agnostic by
       //    construction, no per-host special-casing beyond the one named
@@ -280,12 +280,21 @@ import { icon } from './components.js';
         var b = byProj[id];
         var pj = b.meta || {};
         var openCount = b.queued + b.active + b.review;
+        // Round 2 (post inner-critic): the folder icon on the entity chip
+        // and the spelled-out word "open" were the two cheapest things to
+        // cut without losing information — "@slug" already reads as a
+        // label without a leading glyph, and a small glyph replacing the
+        // word "open" (title carries the spelled-out count for anyone who
+        // needs it) claws back real width for the one thing a project row
+        // exists to show: its name. See the critic-round-1 comment on
+        // .v2-project-row__name below for the measured before/after.
         var entityChip = pj.entity
-          ? '<span class="v2-chip v2-project-row__entity-chip">' + icon('folder', 'v2-icon--xs') + '<span class="v2-chip__label">@' + esc(pj.entity) + '</span></span>'
+          ? '<span class="v2-chip v2-project-row__entity-chip"><span class="v2-chip__label">@' + esc(pj.entity) + '</span></span>'
           : '';
-        var repoInner = pj.repo
-          ? '<a class="v2-project-row__repo-link" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repo in a new tab: ' + esc(pj.repo) + '">' +
-              icon(repoIconName(pj.repo), 'v2-icon--xs') +
+        var repoInfo = pj.repo ? repoWebInfo(pj.repo) : null;
+        var repoInner = repoInfo
+          ? '<a class="v2-project-row__repo-link" href="' + esc(repoInfo.url) + '" target="_blank" rel="noopener noreferrer" aria-label="Open repo in a new tab: ' + esc(pj.repo) + '">' +
+              icon(repoInfo.icon, 'v2-icon--xs') +
               '<span class="v2-project-row__repo-tip" role="tooltip">' + esc(pj.repo) + '</span>' +
             '</a>'
           : '';
@@ -294,7 +303,7 @@ import { icon } from './components.js';
           '<span class="v2-project-row__entity" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)">' + entityChip + '</span>' +
           '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + (pj.repo ? '' : ' title="repo (clone URL)"') + '>' + repoInner + '</span>' +
           '<span class="v2-mchip v2-project-row__cap" data-field="capacity" title="capacity (parallel desks)">' + icon('user', 'v2-icon--xs') + '<span class="v2-tabular-nums v2-project-row__cap-n">' + (pj.capacity || 1) + '</span></span>' +
-          '<span class="v2-project-row__counts v2-tabular-nums">' + openCount + ' open</span>' +
+          '<span class="v2-project-row__counts v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
@@ -308,14 +317,37 @@ import { icon } from './components.js';
       wireRepoLongPress(mounts.projectsRail);
     }
 
-    // t-133: hostname -> icon name, the one place that decides it. Anything
-    // that isn't exactly github.com (subdomains, gitlab.com, a self-hosted
-    // gitea, an http fallback that fails URL parsing) falls through to the
-    // generic glyph — adding a second named host later is a one-line add
-    // here, never a rethink of the row markup above.
-    function repoIconName(url) {
-      try { return new URL(url).hostname.replace(/^www\./, '') === 'github.com' ? 'github' : 'git-branch'; }
-      catch (e) { return 'git-branch'; }
+    // t-133: hostname -> {icon, url}, the one place that decides both.
+    // Anything that isn't exactly github.com (subdomains, gitlab.com, a
+    // self-hosted gitea) falls through to the generic glyph — adding a
+    // second named host later is a one-line add here, never a rethink of
+    // the row markup above. Round 2 (post inner-critic): new URL() throws
+    // on the scp-like clone syntax GitHub itself still offers as an
+    // alternative to the https one this field's placeholder documents
+    // ("git@github.com:owner/repo.git") — round 1 caught that in the try/
+    // catch and degraded gracefully to the generic icon, but the anchor's
+    // href stayed the raw scp string, which isn't a URL a browser can
+    // navigate: the "click opens the repo in a new tab" contract silently
+    // failed for a real, if secondary, input shape. This regex converts it
+    // to the equivalent https URL for the LINK TARGET only — the tooltip
+    // still shows the value exactly as stored (esc(pj.repo) in the caller
+    // above), so nothing about what's actually saved is hidden or altered.
+    // Checked directly against the live hub: POST/PATCH /api/projects both
+    // already reject a non-https repo server-side ("repo must be an https
+    // clone URL"), so this branch can't actually be reached through the
+    // API today — kept anyway since it's a one-line-cheap, correct defense
+    // against a hand-edited state.json or a future looser server rule,
+    // not a fix for a currently-reachable bug.
+    var SCP_LIKE = /^[\w.-]+@([\w.-]+):(.+?)(?:\.git)?\/?$/;
+    function repoWebInfo(raw) {
+      var host = '', url = raw;
+      try {
+        host = new URL(raw).hostname.replace(/^www\./, '').toLowerCase();
+      } catch (e) {
+        var m = SCP_LIKE.exec(raw);
+        if (m) { host = m[1].toLowerCase(); url = 'https://' + host + '/' + m[2].replace(/\.git$/, ''); }
+      }
+      return { icon: host === 'github.com' ? 'github' : 'git-branch', url: url };
     }
 
     // t-133: touch has no :hover, so the CSS-only tooltip reveal
