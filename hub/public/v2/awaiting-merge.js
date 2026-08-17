@@ -94,6 +94,29 @@
     var prState = {};                 // "owner/repo#N" -> { state: 'open'|'closed'|'unconfirmed', ts }
     var OPEN_TTL = 120000;            // recheck open PRs at most every 2 min (unauthenticated API is 60 req/h)
     var inflight = {};                // key -> Promise, so bursts share one fetch instead of stacking
+    // t-200: a CLOSED verdict is a permanent fact — remember it across page
+    // loads so each merged PR ever costs exactly one successful API call.
+    // Without this, the whole merged history (dozens of missions) re-checks
+    // on every load, devours the 60/h anonymous budget, rate-limits, and
+    // floods the panel with unconfirmed ghost rows the boss must scroll past.
+    var LS_KEY = 'v2-awaitmerge-closed';
+    try {
+      (JSON.parse(localStorage.getItem(LS_KEY) || '[]')).forEach(function (k) {
+        prState[k] = { state: 'closed', ts: 0 };
+      });
+    } catch (_) {}
+    function rememberClosed(key) {
+      try {
+        var seen = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
+        if (seen.indexOf(key) === -1) { seen.push(key); localStorage.setItem(LS_KEY, JSON.stringify(seen)); }
+      } catch (_) {}
+    }
+    // Rate-limit hygiene: one 403 pauses ALL fetching for a cooldown window
+    // (retrying into a spent budget only wastes the refill), and each render
+    // resolves at most FETCH_BUDGET unknown PRs — the rest stay at their
+    // last known state and resolve across subsequent renders.
+    var rateLimitedUntil = 0;
+    var FETCH_BUDGET = 8;
 
     buildTrigger();
     buildPanel();
@@ -192,7 +215,7 @@
       }).join('') + '</div>';
     }
 
-    function fetchPrState(pr) {
+    function fetchPrState(pr, allowNetwork) {
       var key = pr.owner + '/' + pr.repo + '#' + pr.number;
       var known = prState[key];
       // Confirmed closed is forever; confirmed open is fresh enough within
@@ -200,7 +223,18 @@
       if (known && (known.state === 'closed' || (known.state === 'open' && Date.now() - known.ts < OPEN_TTL))) {
         return Promise.resolve(known.state);
       }
+      // Over this render's fetch budget: answer from memory now, resolve on
+      // a later render (t-200 — never spend the whole hourly API allowance
+      // in one pass over the mission history).
+      if (allowNetwork === false) {
+        return Promise.resolve((known && known.state) || 'unconfirmed');
+      }
       if (inflight[key]) return inflight[key]; // a burst of renders shares one request
+      // Inside a rate-limit cooldown: don't spend a request that will 403;
+      // answer with last known (or unconfirmed) and let a later render retry.
+      if (Date.now() < rateLimitedUntil) {
+        return Promise.resolve((prState[key] && prState[key].state) || 'unconfirmed');
+      }
       var url = 'https://api.github.com/repos/' + pr.owner + '/' + pr.repo + '/pulls/' + pr.number;
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timeout = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
@@ -212,11 +246,15 @@
       inflight[key] = fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal: controller ? controller.signal : undefined })
         .then(function (r) {
           if (timeout) clearTimeout(timeout);
-          if (!r.ok) return lastKnownOr('unconfirmed'); // 403 rate limit or any non-200: keep last known
+          if (!r.ok) {
+            if (r.status === 403 || r.status === 429) rateLimitedUntil = Date.now() + 600000; // 10 min global pause
+            return lastKnownOr('unconfirmed'); // rate limit or any non-200: keep last known
+          }
           return r.json().then(function (data) {
             var state = data && typeof data === 'object' && data.state ? data.state : null;
             if (state === 'open' || state === 'closed') {
               prState[key] = { state: state, ts: Date.now() }; // only genuine answers are ever recorded
+              if (state === 'closed') rememberClosed(key);     // permanent fact, survives reloads
               return state;
             }
             return lastKnownOr('unconfirmed');
@@ -327,7 +365,17 @@
         bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
       }
 
-      return Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
+      // Budget the unknowns: only the first FETCH_BUDGET candidates that
+      // genuinely need network get it this render; the rest answer from
+      // memory and resolve across subsequent renders.
+      var networkUsed = 0;
+      return Promise.all(candidates.map(function (c) {
+        var key = c.pr.owner + '/' + c.pr.repo + '#' + c.pr.number;
+        var known = prState[key];
+        var fresh = known && (known.state === 'closed' || (known.state === 'open' && Date.now() - known.ts < OPEN_TTL));
+        var allow = fresh || inflight[key] ? true : (networkUsed++ < FETCH_BUDGET);
+        return fetchPrState(c.pr, allow);
+      })).then(function (states) {
         if (seq !== renderSeq) return; // a newer render superseded this one: never paint stale
         // Only a CONFIRMED closed/merged PR leaves the list (fetchPrState
         // guarantees 'closed' can only come from a genuine 200); a failed
