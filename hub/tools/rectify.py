@@ -74,8 +74,11 @@
 #   "palette_size": 28,
 #   "accent_saturation_min": 0.5,
 #   "accent_max_area_frac": 0.01,
+#   "detail_dark_min_frac": null,            // (t-141) manifest/region-level, default off. When set, opaque cells preserve a salient dark minority (thin cracks/seams) instead of erasing it under the whole-cell mode — see cell_vote_grid. Off leaves every existing sprite byte-identical.
+#   "detail_dark_contrast": 18,              // (t-141) luminance a cell pixel must fall below the cell mode by to count as "dark" for detail preservation.
 #   "regions": [
 #     {"name": "typing-0", "x": .., "y": .., "w": .., "h": .., "group": "undercut-agent"},
+#     // optional per-region: "phase": [dx, dy] pins the grid phase (bypasses best_phase, for a region whose binding detail is sub-pitch — see main); "detail_dark_min_frac"/"detail_dark_contrast" override the manifest-level detail-preservation gate for this region only.
 #     ...
 #   ]
 # }
@@ -195,7 +198,8 @@ def magenta_complement_score(rgb, bg_color):
 
 
 def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, edge_hue_tol=40,
-                   edge_overshoot_tol=16, edge_complement_tol=12):
+                   edge_overshoot_tol=16, edge_complement_tol=12,
+                   detail_dark_min_frac=None, detail_dark_contrast=18):
     # Soft chroma-key with decontamination, not a hard threshold. A cell
     # voted color's distance to the background color puts it in one of
     # three bands:
@@ -249,6 +253,28 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, e
                 colors[r][c] = col
             elif d >= outer_tol:
                 alphas[r][c] = 255
+                # Detail preservation (t-141, manifest-gated per region): whole-
+                # cell mode voting erases a sub-cell feature that covers less than
+                # half the cell — correct for JPEG ringing, wrong for a thin, dark,
+                # HIGH-CONTRAST line (a plaster crack, a plank seam) that is real
+                # signal, not noise. When detail_dark_min_frac is set, a cell whose
+                # pixels darker than its own mode by >= detail_dark_contrast make up
+                # at least that fraction re-votes among ONLY those dark pixels, so a
+                # crack that crosses the cell claims it instead of being outvoted by
+                # the surrounding fill. Deterministic (mode of a fixed pixel subset),
+                # opaque-only (never touches the alpha/edge path), and off by default
+                # so every existing sprite is byte-identical — only the wall tile,
+                # whose defining feature IS its crack network, opts in. The two
+                # thresholds separate crack from noise: JPEG ringing is low-contrast
+                # (< detail_dark_contrast) and diffuse (< detail_dark_min_frac area);
+                # a crack is both darker and coherent. Calibrated on the cited wall
+                # region: 16 cells trace the primary cracks at frac 0.12 / contrast
+                # 18, none elsewhere on the flat field (see t-141 log / MANIFEST.md).
+                if detail_dark_min_frac is not None:
+                    lum = cell.mean(axis=1)
+                    dark = lum < (sum(col) / 3.0 - detail_dark_contrast)
+                    if cell.shape[0] and dark.mean() >= detail_dark_min_frac:
+                        col = mode_color(cell[dark])
                 colors[r][c] = col
             else:
                 frac = (d - inner_tol) / (outer_tol - inner_tol)
@@ -453,8 +479,28 @@ def main():
         vote_counts = {}
         for r in regions:
             box = (r['x'], r['y'], r['w'], r['h'])
-            dx, dy = best_phase(img, box, pitch, bg, inner_tol, outer_tol)
-            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol, edge_hue_tol, edge_overshoot_tol, edge_complement_tol)
+            if 'phase' in r:
+                # Manual phase override (spec's "or manual parameter" alternative to
+                # auto grid-fit, the same sanctioned escape hatch as
+                # anchor_source_px_height). best_phase maximizes intra-cell color
+                # agreement — the right proxy for "cell boundaries land on real
+                # edges" over large forms, but it actively REWARDS smearing where a
+                # face's brow/eye/nose/mouth bands are each thinner than one cell:
+                # a phase that averages two features into one flat dark cell scores
+                # HIGHER than one that separates them. For the standing anchor idle
+                # frame, whose face is ~13px of the 48px figure and whose legibility
+                # is this mission's binding gate, the auto offset collapses the eye
+                # row into a dark band; the phase is pinned to the offset that lands
+                # cell rows on the feature bands, verified by matched-zoom face
+                # render against the cited source (see t-141 log / MANIFEST.md).
+                dx, dy = r['phase']
+            else:
+                dx, dy = best_phase(img, box, pitch, bg, inner_tol, outer_tol)
+            colors, alphas, score, n_cols, n_rows = cell_vote_grid(
+                img, box, pitch, dx, dy, bg, inner_tol, outer_tol, edge_hue_tol,
+                edge_overshoot_tol, edge_complement_tol,
+                r.get('detail_dark_min_frac', m.get('detail_dark_min_frac')),
+                r.get('detail_dark_contrast', m.get('detail_dark_contrast', 18)))
             region_grids[r['name']] = {
                 'colors': colors, 'alphas': alphas, 'n_cols': n_cols, 'n_rows': n_rows,
                 'dx': dx, 'dy': dy, 'score': score, 'box': box,

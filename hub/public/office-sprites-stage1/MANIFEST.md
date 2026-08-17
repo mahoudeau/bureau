@@ -207,3 +207,59 @@ palette groups are independent of the `monitor` region change).
   from its own sheet's own measured 48px anchor figure — the canonical
   48px-agent system is what every sprite is expressed in regardless of
   each source sheet's own (inconsistent) generation scale.
+
+## Round-3 fixes (t-141, moneta's round-3 send-back — two reference-wins gaps)
+
+Both gaps were dispositive on their own; both are closed and re-verified at
+matched zoom against the exact cited source regions.
+
+1. **GAP 1 — idle-0 face legibility (the binding gate).** The standing anchor
+   idle frame's face was a peach smear with a dark bar across the eye/brow
+   row — skin *colour* was already correct (not the blue-face defect), but the
+   *features* collapsed, failing "a face that is not recognizably the sheet
+   face is an automatic send-back." Root cause is structural, not a bug in the
+   pipeline: `best_phase` maximizes intra-cell colour agreement, which is the
+   right proxy for "cell boundaries land on real edges" over large forms but
+   actively **rewards** smearing where the face's brow/eye/nose/mouth bands are
+   each thinner than one 7.4px cell — the highest-agreement phase is the one
+   that averages two features into a single flat dark cell. All 64 integer
+   phase offsets were rendered at the head at 26× against the cited source
+   (`24,22,150,115`); phase `[5,3]` lands cell rows on the feature bands and
+   yields a legible face (localized near-eye — the source is a 3/4 view with
+   one prominent eye — brow, nose ridge with highlight, red mouth, jaw,
+   undercut hair, matching the source's rightward gaze). Pinned as a manual
+   per-region `phase` override (the tool's sanctioned escape hatch, same class
+   as `anchor_source_px_height`); the four typing frames keep auto `best_phase`.
+   idle-0 is now `19×48` (1px narrower than the auto phase's 20px, still 48
+   tall — scale unchanged). An independent inner-critic pass confirmed the new
+   face clears the recognizability gate where the old `(1,1)` read as a hollow
+   dark bar.
+
+2. **GAP 2 — wall-tile flat fill.** `wall-tile.png` had resolved to exactly
+   one opaque colour `(88,117,124)` — the source's defining feature, a spidery
+   dark crack network, was gone (palette length 1). Root cause: the cracks are
+   1–2px-thin dark lines on a near-uniform teal field (region std ~4/channel);
+   at pitch 10.08 every 10×10 cell is ≥80% plaster, so whole-cell mode voting
+   outvotes the crack in every cell, and the collapsed palette is only the
+   downstream symptom. Added a **manifest/region-gated detail-preservation**
+   rule to `cell_vote_grid` (`detail_dark_min_frac`): an opaque cell whose
+   pixels darker than its own mode by ≥`detail_dark_contrast` (18) cover
+   ≥`detail_dark_min_frac` (0.12) of the cell re-votes among **only** those
+   dark pixels, so a crack that crosses a cell claims it. 16 cells now trace
+   the primary crack fork/diagonals (palette length 5), matching the source at
+   matched zoom, while the flat field is untouched. **Off by default** — every
+   other sprite is byte-identical; only `wall-tile` opts in. The floor group is
+   a separate palette and does **not** opt in (its plank seams already
+   survive), so `floor-tile` stays byte-identical. Calibrated so no spurious
+   dark cell fires on the flat field.
+
+**Secondary (moneta flagged, non-blocking):** the typing frames' desk/monitor
+cluster still rectifies muddy at this pitch. Left as-is this round — it is not
+a gate, and touching the agent-sheet cell vote risks the now-accepted typing
+faces; noted for a later fidelity pass if the boss wants it.
+
+**Re-verified this round (against the shipped PNGs, not the tool report):**
+zero magenta key-adjacent and zero green-fabrication pixels across all 11
+sprites; determinism byte-identical on a double re-run; report↔PNG sha256 chain
+matches; every agent face carries warm skin (~`[218,143,124]`); desk, chair,
+monitor, floor-tile and wall-monitor byte-identical to the round-2 set.

@@ -100,6 +100,26 @@
      88,
      117,
      124
+    ],
+    [
+     66,
+     92,
+     99
+    ],
+    [
+     61,
+     87,
+     93
+    ],
+    [
+     59,
+     84,
+     92
+    ],
+    [
+     70,
+     97,
+     104
     ]
    ],
    "rejected_key_adjacent_candidates": [],
@@ -119,7 +139,7 @@
      ],
      "grid_agreement": 0.9649,
      "file": "wall-tile.png",
-     "sha256": "194d53972fb153cab242b9f5caae26041d040cf48f9fa102756846e59df9f80a"
+     "sha256": "b1870dbd4007ef7aced534720d365c119349790a4c860af697da361dc7c6a88f"
     }
    }
   }
