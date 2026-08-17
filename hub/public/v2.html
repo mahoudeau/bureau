@@ -341,10 +341,19 @@
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
+  /* t-227: body is a column flexbox (topbar, fixed height, then .v2-shell
+     filling the rest) with its own overflow hidden — .v2-shell becomes the
+     one scrolling region, bounded to never reach the viewport's true bottom
+     edge (see .v2-shell's own padding-bottom below for why). position:fixed
+     children (the two floating triggers, the overlay panels, the palette)
+     are unaffected — fixed positioning escapes ancestor overflow clipping
+     regardless of this change, since nothing here sets a transform/filter
+     on html/body that would create a new containing block. */
   body.v2-app {
     margin: 0; background: var(--v2-bg); color: var(--v2-ink);
     font: var(--v2-font-size)/var(--v2-line) var(--v2-font);
     font-variant-numeric: tabular-nums;
+    display: flex; flex-direction: column; overflow: hidden;
   }
   .v2-skip-link {
     position: absolute; left: -9999px; top: 0; z-index: 100;
@@ -358,6 +367,7 @@
     padding: var(--v2-space-2) var(--v2-space-4);
     border-bottom: 1px solid var(--v2-hairline);
     height: calc(var(--v2-row-h) + var(--v2-space-2));
+    flex: none; /* t-227: fixed cross-size in the body flex column, never shrinks to make room for .v2-shell */
   }
   .v2-topbar__brand { font-weight: 600; display: flex; align-items: center; gap: var(--v2-space-2); }
   .v2-topbar__badge {
@@ -404,6 +414,39 @@
   .v2-conn__dot.v2-on { background: var(--v2-good); }
 
   /* ---- shell grid (§1 IA) ---- */
+  /* t-227 (goal: t-53): search.js/awaiting-merge.js each append a global
+     position:fixed trigger pinned to the viewport's bottom corners (see
+     the t-149 comment further down — same two elements, a different
+     defect). t-149 fixed the case where an OPEN overlay panel's own action
+     buttons landed underneath them; it did not cover the ordinary case —
+     no panel open, just the board or the needs-me-now list with enough
+     content (not necessarily scrolled at all — confirmed live at zero
+     scroll on both the reference repros AND a stacked-mobile board card
+     mid-list, not just the tail) that some card/row's bottom edge lands in
+     the last ~50px of the viewport, where the triggers live.
+
+     A first attempt reserved this space with padding-bottom on a bounded,
+     internally-scrolling .v2-shell — that closed the two reference repros
+     (both happened to be the true tail of their column) but NOT a third
+     live case caught before shipping: on the phone breakpoint the columns
+     stack into ONE column (main, then rail, then side), and a board card
+     in the middle of that stack (not the last thing on the page) still
+     rendered under the trigger at zero scroll. padding-bottom only reserves
+     room at the very END of the scrollable content; it does nothing for
+     content earlier in the stack that happens to fill the FIRST visible
+     window down to the container's own bottom edge — which, with the
+     container's outer box still sized to the full remaining viewport, is
+     the same screen position the trigger already occupies.
+
+     The fix that actually holds for every case: margin-bottom, not
+     padding-bottom, on .v2-shell. Margin sits OUTSIDE this flex item's own
+     border-box, so the body flex column's layout algorithm subtracts it
+     when computing how tall .v2-shell itself is allowed to render — the
+     shell's rendered box structurally ends this many px above the
+     viewport's true bottom edge, for ANY content amount and at EVERY
+     scroll position (including zero scroll and mid-stack content), because
+     it shrinks the box itself rather than reserving space inside an
+     unshrunk one. */
   .v2-shell {
     display: grid;
     grid-template-columns: var(--v2-rail-w) 1fr var(--v2-side-w);
@@ -411,6 +454,8 @@
     gap: var(--v2-space-4);
     max-width: 1600px; margin: 0 auto; padding: var(--v2-space-4);
     align-items: start;
+    flex: 1 1 auto; min-height: 0; overflow-y: auto;
+    margin-bottom: calc(var(--v2-space-3) + 44px + var(--v2-space-4));
   }
   .v2-rail { grid-area: rail; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
   .v2-main { grid-area: main; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
