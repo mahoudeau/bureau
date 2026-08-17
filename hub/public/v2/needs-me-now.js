@@ -172,13 +172,24 @@ import { icon } from './components.js';
       return sortOldestFirst ? sorted : sorted.reverse();
     }
 
+    // t-225: role="button" tabindex="0" gives every row a keyboard stop (the
+    // row previously had NO focus path at all, separate from the tap-target
+    // floor below); the matching keydown handler lives beside the click
+    // handler this row's data-open is wired to, in render()'s event-binding
+    // block. The title+meta pair is wrapped in its own .v2-list__row-body
+    // span so organisms.css can stack them as a column while the row itself
+    // stays a horizontal flex (dot/icon siblings sit beside that column,
+    // not inside it) — a markup change bundled into this same fix rather
+    // than a separate mission, since the keyboard attributes already touch
+    // this line.
     function missionRow(t, state) {
-      return '<div class="v2-list__row v2-needs-me-now__row" data-open="' + esc(t.id) + '">' +
+      return '<div class="v2-list__row v2-needs-me-now__row" data-open="' + esc(t.id) + '" role="button" tabindex="0">' +
+        '<span class="v2-list__row-body">' +
         '<span class="v2-list__row-title">' + esc(t.title) + '</span>' +
         '<span class="v2-list__row-meta">' + esc(t.id) + ' · P' + t.priority +
         (t.project ? ' · ' + esc(projLabel(state, t.project)) : '') +
         (t.assignee ? ' · ' + esc(t.assignee) : '') +
-        '</span></div>';
+        '</span></span></div>';
     }
 
     function messageRow(m) {
@@ -194,10 +205,16 @@ import { icon } from './components.js';
         : icon(isExpanded ? 'chevron-up' : 'chevron-down', 'v2-needs-me-now__row-action');
       var toggleAttrs = (hasTask ? ' data-open="' + esc(m.task_id) + '"' : ' data-toggle-msg="' + esc(m.id) + '"') +
         (m.id ? ' data-msg-id="' + esc(m.id) + '"' : '');
-      return '<div class="v2-list__row v2-needs-me-now__row v2-needs-me-now__msg-row' + (isRead ? '' : ' v2-needs-me-now__msg-row--unread') + '"' + toggleAttrs + '>' +
+      // t-225: same role/tabindex addition as missionRow, plus the
+      // .v2-list__row-body wrapper so the unread dot (leading) and action
+      // chevron (trailing) sit beside the stacked title+meta column instead
+      // of inside it.
+      return '<div class="v2-list__row v2-needs-me-now__row v2-needs-me-now__msg-row' + (isRead ? '' : ' v2-needs-me-now__msg-row--unread') + '"' + toggleAttrs + ' role="button" tabindex="0">' +
         (isRead ? '' : '<span class="v2-needs-me-now__unread-dot" aria-hidden="true"></span>') +
+        '<span class="v2-list__row-body">' +
         '<span class="v2-list__row-title">' + esc(bodyText) + '</span>' +
         '<span class="v2-list__row-meta">from ' + esc(m.from) + ' · ' + esc((m.ts || '').slice(0, 16).replace('T', ' ')) + (hasTask ? ' · ' + esc(m.task_id) : '') + '</span>' +
+        '</span>' +
         actionIcon +
         '</div>';
     }
@@ -332,20 +349,36 @@ import { icon } from './components.js';
       if (sortBtn) sortBtn.addEventListener('click', function () { sortOldestFirst = !sortOldestFirst; render(); });
       var msgToggleBtn = document.getElementById('v2-nmn-messages-toggle');
       if (msgToggleBtn) msgToggleBtn.addEventListener('click', function () { showAllMessages = !showAllMessages; render(); });
+      // t-225: rows carry role="button" tabindex="0" (above) but that alone
+      // gives no keyboard ACTIVATION path — a focused div ignores Enter/
+      // Space by default, unlike a real <button>. Each handler below is
+      // named so both the click and keydown listeners call the identical
+      // function instead of duplicating the body (and silently drifting).
       mount.querySelectorAll('[data-open]').forEach(function (el) {
-        el.addEventListener('click', function () {
+        function open() {
           var msgId = el.getAttribute('data-msg-id');
           var changed = msgId ? markRead(msgId) : false;
           V2.emit('v2:mission:open', { id: el.getAttribute('data-open') });
           if (changed) render(); // re-render so the unread dot/count reflect the click even though we're navigating away
+        }
+        el.addEventListener('click', open);
+        el.addEventListener('keydown', function (e) {
+          // Space also scrolls the page on a plain div by default (it isn't
+          // a real <button>, which suppresses that natively) - preventDefault
+          // on both keys, not just to stop double-activation.
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); }
         });
       });
       mount.querySelectorAll('[data-toggle-msg]').forEach(function (el) {
-        el.addEventListener('click', function () {
+        function toggle() {
           var id = el.getAttribute('data-toggle-msg');
           expandedIds[id] = !expandedIds[id];
           markRead(id);
           render();
+        }
+        el.addEventListener('click', toggle);
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
         });
       });
     }
