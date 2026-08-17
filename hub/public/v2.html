@@ -415,6 +415,37 @@
   .v2-rail { grid-area: rail; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
   .v2-main { grid-area: main; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
   .v2-side { grid-area: side; display: flex; flex-direction: column; gap: var(--v2-space-4); min-width: 0; }
+  /* t-227 (goal: t-53): the whole page scrolls as one document — neither
+     .v2-main (the board) nor .v2-side (needs-me-now, etc.) has its own
+     overflow:auto, confirmed by grep (only the peek/brain/goal-progress
+     panels and the cmd-K palette declare overflow-y anywhere in this
+     file). search.js's .v2-search-trigger and awaiting-merge.js's
+     .v2-awaitmerge-trigger are both `position: fixed` at the page's
+     bottom-left/-right corners with no reserved clearance anywhere — so
+     once a reviewer scrolls all the way to the bottom (the ordinary,
+     un-contrived resting position, not an edge case), the last board card
+     or the last needs-me-now row can land directly under one of them:
+     visually painted over AND click-intercepted (confirmed via
+     elementFromPoint, not just eyeballed — a tap there opens the trigger,
+     never the content underneath).
+     Same defect CLASS t-149 already fixed for the peek panel's own action
+     buttons, but t-149's technique (hide the triggers via `body:has()`
+     while a panel is open, above) doesn't apply here: there is no panel
+     open in this repro, ordinary scrolling is the whole cause. The fix
+     instead reserves the triggers' own footprint as bottom padding on the
+     ONE shared scroll container (.v2-shell — board and needs-me-now are
+     both grid children of it, not independent scrollers), so the
+     document's natural resting bottom always sits clear of both fixed
+     buttons regardless of which grid column happens to be tallest.
+     Derived from the triggers' own real numbers, not a guessed constant:
+     both buttons are `min-height: 44px` sitting `bottom: var(--v2-space-3)`
+     above the viewport edge, so the button's own TOP edge is already
+     `--v2-space-3 + 44px` up from the bottom — that sum is the bare
+     minimum for a settled scroll to clear the button at all. One more
+     `--v2-space-3` on top of that is genuine breathing room (a
+     pixel-perfect clearance still reads as content jammed against the
+     button), giving `--v2-space-3 * 2 + 44px` total. */
+  .v2-shell { padding-bottom: calc(var(--v2-space-3) * 2 + 44px); }
 
   /* t-93: sidebar nav (Board/Goals/Brain) — the approved t-58 sample's own
      top-of-rail structure, absent entirely before this round (the rail
