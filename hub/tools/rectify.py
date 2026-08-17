@@ -28,7 +28,13 @@
 #                     always snaps to the same output value in every frame
 #                     (the t-59 round-21 lesson: never quantize per-frame).
 #                     Small, rare, highly-saturated colors (status lights,
-#                     etc.) are exempted from reduction and kept exact.
+#                     etc.) are exempted from reduction and kept exact. A
+#                     second, lower-saturation minority-hue pass (t-141) also
+#                     preserves any hue that keeps a small but real presence
+#                     across the group even when no single shade of it is
+#                     frequent enough alone — the fix for the blue-face
+#                     defect, where a skin ramp's several true shades each
+#                     lost to the flat top-N frequency cutoff individually.
 #   4. Key to alpha — pixels near the sheet's magenta background become
 #                     transparent.
 #   5. The scaler  — pitch IS the scaling knob. Because pitch is derived from
@@ -85,6 +91,7 @@
 import sys
 import json
 import hashlib
+import colorsys
 from pathlib import Path
 
 from PIL import Image
@@ -275,7 +282,13 @@ def hsv_saturation(rgb):
     return (mx - mn) / mx
 
 
-def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol):
+def hsv_value(rgb):
+    return max(rgb) / 255.0
+
+
+def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol,
+                          minority_hue_min_saturation=0.28, minority_hue_cap=8,
+                          minority_hue_min_count_frac=0.0015, minority_hue_min_value=0.25):
     # all_votes: list of (color, count) already-collected non-background cell
     # colors across every region in a group, count = how many cells voted it.
     total = sum(c for _, c in all_votes)
@@ -316,9 +329,83 @@ def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_fr
             accents.append(avg)
         else:
             base.append((avg, b['count']))
-    base = base[:palette_size]
-    palette = [c for c, _ in base] + accents
-    return palette, rejected
+    base_all = base
+    base = base_all[:palette_size]
+    kept_colors = [c for c, _ in base] + accents
+
+    # Minority-hue preservation (t-141, the blue-face root cause): a small,
+    # real material — a face's skin, say — isn't ONE color, it has its own
+    # shading ramp (highlight/mid/shadow), so its votes land in several
+    # buckets, each individually too rare to survive the flat top-N cutoff
+    # above even though the material as a whole is a reliable, repeated
+    # presence across the group's frames. That is exactly THE PALETTE LAW's
+    # "collapses minority hues into the ambient color" failure mode, and it
+    # is distinct from the accent mechanism above (which is gated on HIGH
+    # saturation + a tiny area cap, meant for status-light-style highlights,
+    # not a whole shaded material). Fix: cluster the leftover buckets by hue
+    # (skip near-achromatic ones — that's the large flat fabric/material
+    # fields the frequency cutoff already handles correctly), and where a
+    # hue cluster's cumulative presence clears a small floor and no already-
+    # kept color sits near its hue, keep that cluster's single highest-count
+    # bucket verbatim (never a synthesized average, so the shipped color is
+    # always one truly observed on the sheet). Capped and floored so this
+    # stays a small, deliberate top-up, not a second uncapped palette.
+    def hue_of(c):
+        r, g, b = (v / 255.0 for v in c)
+        return colorsys.rgb_to_hsv(r, g, b)[0]
+
+    def hue_dist(h1, h2):
+        d = abs(h1 - h2) % 1.0
+        return min(d, 1.0 - d)
+
+    # A value (brightness) floor matters as much as the saturation one: HSV
+    # hue is numerically unstable near-black (a couple JPEG-noise units of
+    # channel difference on a near-zero pixel swings "hue" wildly even
+    # though the pixel reads as neutral shadow/outline, not a color), so
+    # without it a dark, hue-coincidental outline bucket can silently absorb
+    # a real minority material into its own (wrong, dark) cluster rather
+    # than the material getting its own — exactly what happened to skin
+    # tones before this floor was added (t-141 round 1: a near-black bucket
+    # at hue~0.03 swallowed the actual skin-hue cluster).
+    # Hue alone is not enough to tell materials apart: a dark wood/desk
+    # shadow and a bright skin highlight can share near-identical hue while
+    # obviously being different materials at a glance — value (brightness)
+    # is what actually separates them, so both dimensions must be close
+    # for two buckets to join the same cluster. Without this, a higher-
+    # count but WRONG-material bucket earns the cluster's "best" slot and
+    # a minority material several distinct-but-hue-adjacent shades of it,
+    # like a shaded skin ramp, is spoken for by a color that was never
+    # actually skin (t-141 round 2: a desk-brown bucket outranked and
+    # absorbed every skin bucket sharing its hue).
+    HUE_BIN = 1 / 24  # 15 degrees
+    VALUE_BIN = 0.22
+    kept_hues = [(hue_of(c), hsv_value(c)) for c in kept_colors if hsv_saturation(c) >= 0.15]
+    leftover = [(c, cnt, hue_of(c), hsv_value(c)) for c, cnt in base_all[palette_size:]
+                if hsv_saturation(c) >= minority_hue_min_saturation and hsv_value(c) >= minority_hue_min_value]
+    clusters = []  # frequency-ordered already (leftover inherits base_all's order) -> deterministic
+    for c, cnt, h, v in leftover:
+        target = next((cl for cl in clusters
+                        if hue_dist(cl['hue'], h) <= HUE_BIN and abs(cl['value'] - v) <= VALUE_BIN), None)
+        if target is None:
+            clusters.append({'hue': h, 'value': v, 'count': cnt, 'best': (c, cnt)})
+        else:
+            target['count'] += cnt
+            if cnt > target['best'][1]:
+                target['best'] = (c, cnt)
+
+    minority_additions = []
+    for cl in clusters:
+        if len(minority_additions) >= minority_hue_cap:
+            break
+        if cl['count'] / total < minority_hue_min_count_frac:
+            continue
+        if any(hue_dist(cl['hue'], kh) <= HUE_BIN and abs(kv - cl['value']) <= VALUE_BIN for kh, kv in kept_hues):
+            continue  # a nearby hue+value is already represented in base/accents
+        minority_additions.append(cl['best'][0])
+        kept_hues.append((cl['hue'], cl['value']))
+
+    palette = kept_colors + minority_additions
+    return palette, rejected, minority_additions
 
 
 def snap_to_palette(color, palette):
@@ -400,19 +487,26 @@ def main():
                     c = colors[row][col]
                     vote_counts[c] = vote_counts.get(c, 0) + 1
 
-        palette, rejected = build_shared_palette(
+        palette, rejected, minority_additions = build_shared_palette(
             list(vote_counts.items()),
             m.get('palette_size', 28),
             m.get('accent_saturation_min', 0.5),
             m.get('accent_max_area_frac', 0.01),
             bg, outer_tol,
+            m.get('minority_hue_min_saturation', 0.28),
+            m.get('minority_hue_cap', 8),
+            m.get('minority_hue_min_count_frac', 0.0015),
+            m.get('minority_hue_min_value', 0.25),
         )
         if rejected:
             print(f'  [{group_name}] rejected {len(rejected)} key-adjacent palette candidate(s): {rejected}')
+        if minority_additions:
+            print(f'  [{group_name}] preserved {len(minority_additions)} minority-hue color(s): {minority_additions}')
 
         report['groups'][group_name] = {
             'palette': [list(p) for p in palette],
             'rejected_key_adjacent_candidates': [list(p) for p in rejected],
+            'minority_hue_preserved': [list(p) for p in minority_additions],
             'regions': {},
         }
 

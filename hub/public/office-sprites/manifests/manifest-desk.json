@@ -1,0 +1,19 @@
+{
+ "sheet": "props/sheet-desks-workstations-v2.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [45, 10, 175, 455],
+ "anchor_logical_height": 48,
+ "palette_size": 24,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+   {"name": "desk-tidy", "x": 1035, "y": 254, "w": 350, "h": 201, "group": "desk"},
+   {"name": "chair", "x": 55, "y": 519, "w": 159, "h": 239, "group": "chair"},
+   {
+     "name": "crt-monitor", "x": 650, "y": 12, "w": 350, "h": 108, "group": "crt-monitor",
+     "_t141": "Row-1 col-2 desk cell (monitor-on/terminal-glow state), cropped to the monitor+keyboard+mouse unit only, NOT the desk it sits on (desk is its own separately-shipped sprite, group 'desk', so stage 2 composes them). The unit touches the desk surface with no magenta gap in the source art, so a thin sliver of desk-colored pixels along the bottom edge is unavoidable at this crop; the box is chosen to minimize it, not eliminate it."
+   }
+ ],
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) — download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in ../reports/report-desk.json against this set's own sprite hashes. Three groups, three independent palettes (desk / chair / crt-monitor) per THE PALETTE LAW — never shared across subjects."
+}

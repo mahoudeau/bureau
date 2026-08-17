@@ -1,0 +1,18 @@
+{
+ "sheet": "cast/sheet-agent-undercut-typing.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [24, 22, 150, 362],
+ "anchor_logical_height": 48,
+ "palette_size": 28,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+   {"name": "idle-anchor", "x": 24, "y": 22, "w": 150, "h": 362, "group": "agent"},
+   {"name": "typing-0", "x": 190, "y": 22, "w": 290, "h": 362, "group": "agent"},
+   {"name": "typing-1", "x": 496, "y": 22, "w": 292, "h": 362, "group": "agent"},
+   {"name": "typing-2", "x": 804, "y": 22, "w": 285, "h": 362, "group": "agent"},
+   {"name": "typing-3", "x": 1105, "y": 22, "w": 284, "h": 362, "group": "agent"}
+ ],
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) — download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in ../reports/report-cast.json against this set's own sprite hashes. All 5 regions share one 'agent' group palette (idle + all 4 typing frames) per THE PALETTE LAW — never split per-frame, that reintroduces cross-frame flicker. t-141 round 2: palette_size alone could not keep skin tones alive against the suit/desk/monitor bulk (see rectify.py's minority-hue preservation pass, added this round) — verify skin survives by eye on every regen, it is the automatic send-back gate."
+}

@@ -1,0 +1,17 @@
+{
+ "sheet": "props/sheet-lighting-states-v2.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [20, 0, 240, 560],
+ "anchor_logical_height": 48,
+ "palette_size": 20,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0.02,
+ "regions": [
+   {
+     "name": "wall-monitor", "x": 1078, "y": 205, "w": 147, "h": 170, "group": "wall-monitor",
+     "_t141": "Column 8 (CRT TV), the first 'glow-on' state (of 4 rows: off/glow/off/glow), floating cleanly on magenta — no touching-object crop compromise needed here, unlike the desk sheet's crt-monitor. Picked to register the same cool blue-white glow as the desk CRT monitor, per the goal's 'monitor glow' light register."
+   }
+ ],
+ "_comment": "Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1) — download it there first, the reference sheets are not committed to git. Re-run: python3 hub/tools/rectify.py <this-file> --out-dir /tmp/check (after adjusting 'sheet' to your local download path) and diff the sha256 in ../reports/report-lighting.json against this set's own sprite hashes."
+}
