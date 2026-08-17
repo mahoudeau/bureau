@@ -429,6 +429,18 @@
     padding: var(--v2-space-2) var(--v2-space-3); border-radius: var(--v2-radius);
     color: var(--v2-ink-2); font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent;
     text-align: left; width: 100%;
+    /* t-150 (goal: t-53): min-height 44px, not the .v2-hit44 pseudo-element
+       trick. .v2-navtabs stacks these with only a 2px gap, so a centered
+       invisible 44px zone on each item (extending ~10.5px above/below its
+       ~23px box) would overlap its neighbor's own hit zone by most of the
+       row — confirmed by the math before reaching for either tool: two
+       items packed this tight would fight over which one a boundary tap
+       resolves to (later DOM sibling wins the overlap, so a tap visually
+       over "Board" could actually open "Goals"). These are the whole
+       app's section switcher, so a mistargeted tap here is worse than the
+       modest height growth. align-items:center already keeps the label
+       centered in the taller row. */
+    min-height: 44px;
   }
   .v2-navitem svg { width: 15px; height: 15px; flex: none; }
   .v2-navitem:hover { background: var(--v2-surface); }
@@ -587,7 +599,14 @@
 
 <header class="v2-topbar" id="v2-topbar">
   <div class="v2-topbar__brand"><span class="v2-topbar__mark" aria-hidden="true">B</span>Bureau<span class="v2-topbar__badge">v2</span></div>
-  <button class="v2-search-entry" id="v2-search-entry" type="button" aria-label="Search missions and brain (opens the command palette)">
+  <!-- t-150 (goal: t-53): v2-hit44 (components.css), not min-height — the
+       topbar's own height is hard-pinned to var(--v2-row-h) (34px here),
+       so growing this control's real box to 44px would either overflow the
+       topbar or force growing every sibling in it (brand mark, mode-switch,
+       conn status) to match. Its own width is already >>44px, so hit44's
+       max(44px,100%) only grows the height, invisibly, without touching
+       the topbar's layout. -->
+  <button class="v2-search-entry v2-hit44" id="v2-search-entry" type="button" aria-label="Search missions and brain (opens the command palette)">
     <span class="v2-search-entry__label">Search or jump to…</span>
     <span class="v2-search-entry__hint">⌘K</span>
   </button>
