@@ -255,7 +255,15 @@
       return confirmed || readyRows.length;
     }
 
+    // t-128 fix, composed with the t-129 split: the trigger count must be
+    // the real, network-verified count from page load onward, tracking live
+    // updates while the panel stays closed — and per t-129 it counts the
+    // READY bucket only. render() always resolves the count on every call;
+    // only the panel BODY markup is gated on visibility (rebuilding hidden
+    // DOM is wasted work; fetchPrState's cache absorbs the repeat network
+    // cost across calls).
     function render() {
+      var showBody = !panel.hidden;
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
@@ -265,12 +273,12 @@
 
       if (!candidates.length) {
         countEl.textContent = '0';
-        bodyEl.innerHTML = '<div class="v2-empty">Nothing awaiting merge.</div>';
+        if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Nothing awaiting merge.</div>';
         return;
       }
 
-      if (!panel.hidden) bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
-      Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
+      if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
+      return Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
         // merged/closed PRs are filtered OUT — that mission isn't
         // "awaiting" anything anymore, even if bureau-side status hasn't
         // caught up. 'unconfirmed' (the GitHub call itself failed) stays
@@ -280,33 +288,31 @@
           .filter(function (o) { return o.state === 'open' || o.state === 'unconfirmed'; });
         var b = bucket(open);
         countEl.textContent = String(readyCount(b.ready));
-        if (panel.hidden) return; // trigger count stays live even closed; DOM body work waits for open
+        // Re-check panel.hidden at resolve time, not just at call time — a
+        // slow fetch resolving after the user toggled the panel must not
+        // repaint stale rows into a hidden node.
+        if (panel.hidden) return; // trigger count stays live even closed
         bodyEl.innerHTML = open.length
           ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
           : '<div class="v2-empty">Nothing awaiting merge.</div>';
       });
     }
 
-    // Re-render on live updates so a merge, a new PR artifact landing, or
-    // a mission's status/gate change (moving its row between READY and
-    // IN-LOOP) is reflected without needing to close/reopen the panel —
-    // same event set media.js already subscribes to for the identical
-    // reason. Runs whether the panel is open or closed: the trigger's
-    // own READY count has to stay live either way, and render() itself
-    // skips the DOM body work while closed.
+    // Every state refresh — initial load included, and every SSE tick or
+    // 60s poll after it — drives the trigger's real READY count, panel open
+    // or closed (t-128); a row's mission changing state moves it between
+    // READY and IN-LOOP live (t-129). render() skips DOM body work while
+    // closed.
     V2.on('v2:state', function () { render(); });
-    // Initial count on load (panel stays closed/lazy for its full render,
-    // but the trigger's own count should reflect reality before the boss
-    // ever opens it) — a light candidate-count pass without the network
-    // round-trip, refined to the real open-PR count once actually opened.
-    // Scoped to READY candidates only, same as the network-confirmed
-    // count, so the light pass and the real pass never disagree in kind
-    // — only in confidence.
+    // Instant light pass before the first network resolve: READY candidates
+    // only, same scope as the confirmed count, so the two passes never
+    // disagree in kind — only in confidence.
     (function initialCount() {
       var tasks = (V2.state && V2.state.tasks) || [];
       var n = tasks.filter(function (t) { return !!prLinkFor(t) && isReady(t); }).length;
       if (n) countEl.textContent = String(n);
     })();
+    render(); // cold-load network-verified count, before the panel is ever opened
   }
 
   function injectStyle() {

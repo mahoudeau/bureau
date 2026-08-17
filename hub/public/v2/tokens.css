@@ -288,37 +288,30 @@
   --v2-weight-semibold: 600;
   --v2-tabular-nums: tabular-nums;
 
-  /* ---- typeface (ADDED --v2-font-serif / --v2-font-mono — see note) -----
+  /* ---- typeface (--v2-font-serif / --v2-font-mono now @font-face-backed,
+     t-112) -----------------------------------------------------------------
      A genuine schema gap, not a value tweak: this token set had exactly
-     ONE font-family token (-sans) before this round. The sample's own
-     CSS carries a comment recording an explicit boss ruling embedded
-     right in the file (line ~85): "Boss's typography verdict (2026-08-16):
-     one face throughout read as no hierarchy at all. Three complementary
-     faces now, each doing a distinct job... Fraunces... carries every
-     title; Inter stays the body/UI workhorse; JBMono carries every
-     number/id/timestamp AND every tag." That is a structural, binding
-     decision this schema had no tokens to represent at all — not a value
-     this mission could fix by editing -sans alone. Added two new tokens,
-     per this mission's own "no variable added without a documented
-     reason" allowance, values taken from the sample's own declared
-     fallback stacks (`'Fraunces', Georgia, serif` / `'JBMono',
-     ui-monospace, 'SF Mono', monospace`, lines ~26/33/40 and every
-     font-family declaration using them).
-     IMPORTANT, flagged plainly: only the FALLBACK stacks are usable today.
-     The sample embeds its own Fraunces/JBMono as base64 data: URIs inline
-     in a throwaway HTML file — t-66 has already vendored a real Inter
-     Variable binary (hub/public/v2/fonts/), but nobody has yet extracted
-     Fraunces or JetBrains Mono into the repo as reusable, licensed font
-     assets. Until that happens (same shape of work t-66 already did for
-     Inter — a follow-up mission, not this one, since this mission owns
-     only tokens.css, not font files or components.css's @font-face
-     block), -font-serif/-font-mono resolve to Georgia/ui-monospace system
-     fallbacks, not the sample's actual look. -font-sans's own family name
-     ("Inter Variable") already matches t-66's vendored file, so body text
-     alone gets the real face today; titles and numbers/tags do not yet. */
+     ONE font-family token (-sans) before Wave 2 added these two. The
+     sample's own CSS carries a comment recording an explicit boss ruling
+     embedded right in the file (line ~85): "Boss's typography verdict
+     (2026-08-16): one face throughout read as no hierarchy at all. Three
+     complementary faces now, each doing a distinct job... Fraunces...
+     carries every title; Inter stays the body/UI workhorse; JBMono
+     carries every number/id/timestamp AND every tag."
+     t-112 closed the gap this note used to flag: components.css now vendors
+     real Fraunces Variable + JetBrains Mono (400/600) binaries — the exact
+     ones already embedded and approved in t-58's sample, extracted the same
+     way t-66 extracted Inter, not re-sourced — so both tokens below now
+     resolve to real @font-face-backed files, not the Georgia/ui-monospace
+     fallbacks that used to render in their place. Family names match
+     components.css's @font-face declarations exactly ("Fraunces Variable",
+     "JetBrains Mono"); the old bare-string fallback names ("Fraunces",
+     "JBMono") are dropped since nothing installs a system font under
+     those exact names — a stack should never carry a family name no
+     @font-face and no OS ships, since it can only ever silently no-op. */
   --v2-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --v2-font-serif: "Fraunces", Georgia, serif;
-  --v2-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  --v2-font-serif: "Fraunces Variable", Georgia, serif;
+  --v2-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
   /* ---- motion (bar: "soft, timely, sub-150ms, water-like and rare") ---
      Not sample-traceable: a static HTML sample has no transitions to

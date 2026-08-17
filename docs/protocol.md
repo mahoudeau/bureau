@@ -8,12 +8,13 @@
 
 Anything that can make HTTP calls. No SDK, no library, no framework. The reference connector is **curl**. Everything below is the complete integration surface.
 
-## The six calls (+ the stream)
+## The seven calls (+ the stream)
 
 | Call | Purpose |
 |---|---|
 | `POST /api/agents/register` | join the roster: `{name, kind, capabilities[]}` |
 | `POST /api/agents/heartbeat` | I'm alive: `{name, note?, activity?, sub_agents?}` |
+| `DELETE /api/agents/:name` | leave the roster: curation, not a ban. Clears the roster entry only - missions keep their historical assignee strings and logs untouched, and the bare name may freely re-register later. Refused (409) while the name holds a live lease (a `claimed`/`in_progress` mission): release or finish it first, so curation can never strand claimed work. `404` if the name isn't on the roster. |
 | `POST /api/tasks/claim` | claim by id, or highest-priority queued from a project with free capacity; returns lease |
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
@@ -32,6 +33,10 @@ A project can also carry a `repo` (an https clone URL, optional like `entity`): 
 Missions support itemized review: `PATCH /api/tasks/:id` with `{"items": [{title, body}]}` appends proposal items (server-assigned ids), and the review capability page and dashboard render each with Accept / Reject / Later plus a comment. Verdicts (`{"verdicts": [{id, verdict, comment}]}` on the same PATCH, or the review form) persist on the mission and land in its log, so a later session applies exactly what was approved.
 
 **Two-tier review: the `gate`.** Every mission carries `gate: "boss"` (default) or `"critic"`. A boss-gate mission in `review` moves out (`done` or `queued`) only when `agent` is `human`; the hub refuses anyone else. Anyone may raise a gate to `boss`; only the boss or the lead agent set `critic`. The irreversible list (deploys, merges to main, external sends, purchases, doctrine changes, credentials) is boss-gate by law. Discord review pings fire only for boss-gate missions.
+
+**Boss-gate review entry is hub-enforced, not conventional.** A `PATCH` that moves a mission with `gate: "boss"` INTO `status: "review"` is accepted only when the acting agent is authorized to clear boss-gate work: the critic, the lead, or the boss (`agent: "human"`). Any other agent gets a refusal naming the rule, telling the builder to hand the round to the critic instead - the mission's status and gate are left untouched, nothing partially applies. `gate: "critic"` missions are unaffected: any agent parks those into review exactly as always. This is what makes "the boss never sees an uncritiqued round" true by construction: every review ping he receives is critic-cleared, not just supposed to be.
+
+Authorization is role-based, never name-based (the vendor-neutrality rule applies to doctrine roles the same as it applies to vendors): "the lead" and "the critic" are whichever registered agent's own `capabilities` array includes the literal tag `"lead"` or `"critic"` - set at `POST /api/agents/register` like any other capability, nothing new to learn. The hub never compares an agent `name`; a role moves to a different agent, a different shift, a different session, just by that agent registering with the tag. `agent: "human"` is the existing sentinel for the boss's own actions (the review capability-link handlers already pass it) - itself a role word, not an individual's name, and always authorized. Concretely: `isLead(agent)` is `agent === "human"` or `capabilities.includes("lead")`; `isCriticOrLead(agent)` adds `capabilities.includes("critic")`. The same `isLead` check now also gates raising a mission's `gate` to `"critic"` (previously true anyway, just expressed generically instead of by name).
 
 Goals are a convention, not an API object: a mission titled `goal: ...` filed by the human, carrying a `## Bar` of concrete references. The lead agent decomposes it into missions with `## Acceptance` sections a fresh-context critic can verify; goal-titled missions do not occupy project capacity. See `architecture.md` for the gauntlet loop and perpetual goals.
 
