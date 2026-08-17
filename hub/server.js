@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
 const discord = require('./lib/discord');
+const poke = require('./lib/poke');
 
 const PORT = process.env.PORT || 8100;
 const HOST = process.env.HOST || '::';           // some shared hosts expect an IPv6 bind
@@ -16,9 +17,10 @@ if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set 
 
 // ---------- SSE ----------
 const sseClients = new Set();
-function broadcast(type, data) {
+function broadcast(type, data, extra) {
   store.logEvent(type, summarize(type, data));
   discord.mirror(type, data);
+  poke.send(type, data, extra);
   const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) { try { res.write(payload); } catch { sseClients.delete(res); } }
 }
@@ -184,7 +186,7 @@ const server = http.createServer(async (req, res) => {
         }).filter(Boolean);
         const r = store.updateTask({ id: task.id, agent: 'human', status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
         if (r.error) return sendPage(res, 400, 'Something went wrong', `<p>${escHtml(r.error)}</p>`);
-        broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' });
+        broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
         return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
           `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
       }
@@ -258,6 +260,17 @@ const server = http.createServer(async (req, res) => {
       if (a.error) return send(res, 400, a);
       broadcast('agent.heartbeat', { ...a, activity: a.activity });
       return send(res, 200, { agent: a });
+    }
+    // Roster curation: remove a name from the board. Curation, not a ban -
+    // missions/logs keep the historical string untouched and the name may
+    // freely re-register later. Refused while the name holds a live lease
+    // (a claimed/in_progress mission) so curation can never strand work.
+    const mAgent = p.match(/^\/api\/agents\/([^/]+)$/);
+    if (req.method === 'DELETE' && mAgent) {
+      const r = store.deleteAgent(decodeURIComponent(mAgent[1]));
+      if (r.error) return send(res, r.error === 'not_found' ? 404 : 409, r);
+      broadcast('agent.removed', { name: decodeURIComponent(mAgent[1]) });
+      return send(res, 200, r);
     }
 
     // ----- tasks -----
@@ -354,7 +367,7 @@ const server = http.createServer(async (req, res) => {
       const r = store.updateTask({ ...b, id: mTask[1] });
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[b.status] || 'task.updated';
-      broadcast(evt, { ...r.task, note: b.note });
+      broadcast(evt, { ...r.task, note: b.note }, { by: b.agent || 'unknown', prev_status: r.prev_status });
       return send(res, 200, r);
     }
 
@@ -470,7 +483,7 @@ function mcpToolCall(name, a = {}) {
       const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate });
       if (r.error) throw new Error(r.error);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[a.status] || 'task.updated';
-      broadcast(evt, { ...r.task, note: a.note });
+      broadcast(evt, { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
       return { id: r.task.id, status: r.task.status };
     }
     case 'write_knowledge': {
@@ -530,9 +543,12 @@ async function mcpHandle(msg) {
 }
 
 // Periodic lease sweep so expired work re-queues even with no traffic.
+// Also the standing-work bell: pokes ring for work that is already waiting
+// (see lib/poke.js standing()), not only for fresh transitions.
 setInterval(() => {
   for (const t of store.expireLeases()) broadcast('task.requeued', t);
-}, 60_000);
+  try { poke.standing(store.load()); } catch (e) { console.error('[poke] standing sweep failed:', e.message); }
+}, +process.env.BUREAU_SWEEP_MS || 60_000);
 
 // Periodic intake sweep: files the boss dropped over SFTP or edited by hand
 // become commits (author human) without anyone asking.
