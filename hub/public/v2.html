@@ -498,6 +498,32 @@
   #v2-brain-panel { z-index: 41; }
   #v2-goal-progress { z-index: 41; }
 
+  /* t-149: search.js and awaiting-merge.js each append a page-global,
+     position:fixed trigger button at z-index 44 — two layers above every
+     panel above (40-42). At any width where a panel's own action bar lands
+     near the viewport bottom (the normal case at the 390px phone
+     breakpoint, where #v2-peek-panel is a full-viewport 100dvh takeover —
+     see the phone-breakpoint block above), the triggers physically cover
+     the panel's buttons and intercept real taps (confirmed via
+     elementFromPoint: a tap on #v2-pp-approve/#v2-pp-answer/#v2-pp-sendback
+     resolves to .v2-search-trigger__label / .v2-awaitmerge-trigger
+     instead). Both trigger buttons are global chrome, not board-scoped, so
+     narrowing their own z-index would just move the collision elsewhere;
+     the correct fix is to cede the floating-chrome footprint to whichever
+     overlay panel is currently open. The panels already expose that state
+     via :not([hidden]) (line 496), so this is a pure CSS rule with no JS
+     wiring — :has() reads the panels' own hidden attribute from the
+     trigger buttons' shared ancestor (both triggers and all three panels
+     are appended as direct children of <body>, so `body:has(...)` sees
+     every one of them regardless of DOM insertion order). display:none
+     both hides the visual overlap and removes the elements from hit-testing,
+     which a lower z-index alone would not guarantee against subtree
+     pointer-event capture. */
+  body:has(.v2-panel:not([hidden]), .v2-brain-panel:not([hidden]), .v2-goal-progress-panel:not([hidden])) .v2-search-trigger,
+  body:has(.v2-panel:not([hidden]), .v2-brain-panel:not([hidden]), .v2-goal-progress-panel:not([hidden])) .v2-awaitmerge-trigger {
+    display: none;
+  }
+
   /* ---- cmd-K palette: centered overlay, not a <dialog> modal — no backdrop click-trap semantics ---- */
   .v2-palette {
     position: fixed; top: 12vh; left: 50%; transform: translateX(-50%);
