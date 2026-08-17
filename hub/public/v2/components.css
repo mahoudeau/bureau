@@ -528,6 +528,48 @@
   font-size: var(--v2-font-size-xs);
 }
 
+/* ---- list row: stacked variant (title over a muted meta line) --------
+   t-213: .v2-row above is the side-by-side variant (title + meta sharing
+   one line, meta flush right) — right for board/roster rows where meta is
+   a handful of short badges. needs-me-now.js's .v2-list__row needs the
+   other register this app's list rows already use elsewhere (crop-ux-
+   issue-list-row.png / crop-ux-settings-list-row.png: title on its own
+   line, a second muted metadata line below it, never run together) — this
+   was the missing rule; the JS emitted the class hooks with no CSS home
+   at all. Both title/meta are rendered as inline <span>s by the JS (not
+   worth a markup change for a display value), so `display: block` here is
+   load-bearing, not decorative — without it the two spans have no line
+   break between them regardless of any gap/margin. */
+.v2-list__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-1);
+  padding: var(--v2-space-4) var(--v2-space-6);
+  border-bottom: 1px solid var(--v2-color-border);
+  cursor: pointer;
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-list__row:last-child { border-bottom: none; }
+.v2-list__row:hover { background: var(--v2-color-surface-raised); }
+.v2-list__row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--v2-color-focus-ring);
+}
+.v2-list__row-title {
+  display: block;
+  color: var(--v2-color-text-primary);
+  font-size: var(--v2-font-size-md);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-list__row-meta {
+  display: block;
+  color: var(--v2-color-text-muted);
+  font-size: var(--v2-font-size-xs);
+  font-variant-numeric: var(--v2-tabular-nums);
+}
+
 /* ---- card / tile: flat hairline box, no shadow, no fill --------------- */
 .v2-card {
   border: 1px solid var(--v2-color-border);

@@ -768,7 +768,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // "Ziip", "General" all render one line at the true 234px rail width
       // now; only a deliberately 49-char stress-test label still
       // ellipsizes, which is the textbook fallback, not the bug.
-      '.v2-project-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); margin: 0 calc(-1 * var(--v2-space-2, 8px)); border-radius: var(--v2-radius-sm, 6px); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
+      '.v2-project-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); margin: 0 calc(-1 * var(--v2-space-2, 8px)); border-radius: var(--v2-radius-sm, 6px); border-bottom: 1px solid var(--v2-hairline); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       // Hover: same token .v2-task-card:hover already reads elsewhere in
       // this file, so a hovered row and a hovered board card carry the
@@ -841,7 +841,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // repo never splitting from EACH OTHER (the actual orphaning bug) —
       // satisfied either way — not a mandate to sacrifice the label.
       '.v2-project-row__name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
-      '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
+      '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent); }',
       // t-136 send-back on t-133: chips + repo used to be two independent
       // flex children of .v2-project-row, free to end up on different
       // lines from each other — that is exactly how the open-count chip
@@ -888,7 +888,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // Round 3: padding trimmed 8px -> 6px horizontal, same reclaim
       // rationale as the gap above — still the crop's own hairline-pill
       // grammar, just its tighter end.
-      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
+      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline)); color: var(--v2-color-text-secondary, var(--v2-muted)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
       '.v2-project-row__chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; flex: none; }',
       // Empty entity already gets its "—" placeholder from project-edit.js's
       // shared `[data-field][data-empty="true"]::before` rule; the dot
@@ -918,7 +918,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // into the row's one-line budget for a control nobody could see.
       // "No chrome at rest" should mean no LAYOUT footprint at rest too.
       '.v2-project-row__repo { display: inline-flex; align-items: center; flex: none; min-height: 20px; position: relative; }',
-      '.v2-repo-link { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--v2-radius-xs, 4px); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); position: relative; }',
+      '.v2-repo-link { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--v2-radius-xs, 4px); color: var(--v2-color-text-secondary, var(--v2-muted)); position: relative; }',
       '.v2-repo-link:hover, .v2-repo-link:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
       '.v2-repo-link:focus-visible, .v2-repo-editbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring, rgba(63,111,224,.4)); }',
       // Tooltip: the SAME dark-chip register as keyboard.js's .v2-kbd-hint
@@ -965,7 +965,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // has no business claiming the row's scarce one-line width budget
       // at rest. pointer-events:none while hidden so the invisible
       // overlap can't steal a click meant for whatever sits under it.
-      '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted, #999)); cursor: pointer; opacity: 0; position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 2px; pointer-events: none; }',
+      '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted)); cursor: pointer; opacity: 0; position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 2px; pointer-events: none; }',
       // No chrome at rest (bar rule): the edit affordance only appears
       // once you're already looking at this field, on hover OR keyboard
       // focus. See the (hover:none) rule below for the touch fallback —
@@ -1006,20 +1006,22 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // desktop rail's tightness never has room for.
       '@media (max-width: 720px) { .v2-project-row__meta { margin-left: 0; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
-      '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
+      '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink); cursor: pointer; }',
       // t-110: archive toggle — same tap-target treatment as the quick-add
       // button beside it (phone-usable, no hover-only affordance). The
       // count text lives INSIDE the button itself so it is visible whether
       // the toggle is on or off — only the list below is gated by state.
-      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink-2, #888); cursor: pointer; font-variant-numeric: tabular-nums; }',
-      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink, inherit); border-color: var(--v2-accent, #3f6fe0); }',
-      '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2, #888); display: flex; align-items: center; gap: 4px; }',
-      '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent, #3f6fe0); cursor: pointer; font: inherit; }',
+      // Shared board chrome: main's t-136/t-206 fallback-stripped versions
+      // (the t-87 alias block defines these tokens unconditionally).
+      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink-2); cursor: pointer; font-variant-numeric: tabular-nums; }',
+      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink); border-color: var(--v2-accent); }',
+      '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2); display: flex; align-items: center; gap: 4px; }',
+      '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent); cursor: pointer; font: inherit; }',
       '.v2-quickadd { display: flex; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-3, 12px); flex-wrap: wrap; }',
-      '.v2-quickadd__title { flex: 1; min-width: 160px; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      '.v2-quickadd__submit { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius, 6px); background: var(--v2-accent, #3f6fe0); color: var(--v2-on-accent, #fff); cursor: pointer; }',
-      '.v2-quickadd__err { color: var(--v2-critical, #c23434); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
+      '.v2-quickadd__title { flex: 1; min-width: 160px; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
+      '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
+      '.v2-quickadd__submit { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius); background: var(--v2-accent); color: var(--v2-on-accent); cursor: pointer; }',
+      '.v2-quickadd__err { color: var(--v2-critical); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
       // t-167: the board is a vertical stack of status swimlanes, not a
       // Kanban grid. #v2-board is declared `display:grid` (auto-fit columns)
       // in v2.html's own <style>; this file's stylesheet is appended to
@@ -1096,7 +1098,8 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // Archived swimlane (t-167): the discarded band reads as muted — the
       // whole group is dimmed and its own "Archived" label plus the muted
       // status glyph carry the signal, no per-row border treatment needed
-      // now that discarded rows share the one row anatomy.
+      // now that discarded rows share the one row anatomy (t-110's dashed
+      // card rule retired with the cards themselves).
       '.v2-swim__group--discarded { opacity: .72; }'
     ].join('\n');
     document.head.appendChild(style);
