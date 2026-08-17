@@ -13,6 +13,8 @@
 // wrap: "text" posts {"text":"<one human-readable line>"} instead of the raw
 //       payload, for endpoints that append the body as a message to a session
 //       (the woken agent reads why it was summoned). Absent = raw payload.
+// suffix: optional standing instruction appended to every wrapped summons
+//       line (e.g. a cost-discipline reminder); config-only per subscription.
 //
 // Standing work (the second bell): a subscription whose events include
 // "work.waiting" is evaluated on the hub's periodic sweep against work that is
@@ -90,7 +92,7 @@ async function send(type, data, extra) {
       await fetch(sub.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json', ...(sub.headers || {}) },
-        body: JSON.stringify(sub.wrap === 'text' ? { text: asLine(p) } : p),
+        body: JSON.stringify(sub.wrap === 'text' ? { text: asLine(p) + (sub.suffix ? ' · ' + sub.suffix : '') } : p),
       });
     } catch (e) {
       console.error('[poke] send failed:', String(sub.url).split('?')[0], e.message);
@@ -130,7 +132,7 @@ function standing(state) {
         await fetch(sub.url, {
           method: 'POST',
           headers: { 'content-type': 'application/json', ...(sub.headers || {}) },
-          body: JSON.stringify(sub.wrap === 'text' ? { text: asLine(p) + ` · waiting=${waiting.length}` } : p),
+          body: JSON.stringify(sub.wrap === 'text' ? { text: asLine(p) + ` · waiting=${waiting.length}` + (sub.suffix ? ' · ' + sub.suffix : '') } : p),
         });
       } catch (e) {
         console.error('[poke] standing send failed:', String(sub.url).split('?')[0], e.message);
