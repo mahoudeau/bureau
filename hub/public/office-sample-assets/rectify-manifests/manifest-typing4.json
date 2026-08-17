@@ -15,7 +15,7 @@
  "anchor_logical_height": 48,
  "palette_size": 28,
  "accent_saturation_min": 0.5,
- "accent_max_area_frac": 0,
+ "accent_max_area_frac": 0.01,
  "regions": [
   {
    "name": "idle-anchor",
