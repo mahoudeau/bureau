@@ -152,7 +152,18 @@
       // link at all (nothing to hijack), so a bare click there still
       // starts editing exactly like every other field — this is how you
       // add a first repo, unchanged from before this mission.
-      if (field.getAttribute('data-field') === 'repo' && e.target.closest('.v2-repo-link')) return;
+      // t-158: this early-return must ALSO stopPropagation() before
+      // bailing, same as the generic path below does. Without it, the
+      // click still bubbles past this capture-phase listener down to
+      // board.js's bubble-phase row click-to-filter handler, which
+      // toggles the row's project filter as a side effect of merely
+      // opening the repo link in a new tab. stopPropagation() only
+      // blocks other JS listeners, not the <a>'s own native
+      // navigation/new-tab default action, so the link still opens.
+      if (field.getAttribute('data-field') === 'repo' && e.target.closest('.v2-repo-link')) {
+        e.stopPropagation();
+        return;
+      }
       // Not yet editing: this click means "start editing" — take it over
       // from board.js's own row-level click-to-filter listener (bubble
       // phase, closer to the target, would otherwise fire first and
