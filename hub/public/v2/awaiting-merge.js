@@ -330,7 +330,13 @@
     // pre-split count used, just scoped to the ready bucket.
     function readyCount(readyRows) {
       var confirmed = readyRows.filter(function (o) { return o.state === 'open'; }).length;
-      return confirmed || readyRows.length;
+      // t-200 follow-up (boss saw "30 awaiting" during a rate-limit window):
+      // the trigger number counts CONFIRMED-open ready PRs only. Under total
+      // uncertainty it reads low-and-honest instead of high-and-wrong; the
+      // rows themselves still render (never hidden by a failed check), and
+      // the persisted closed-cache makes the confirmed count exact after one
+      // warm-up window, permanently.
+      return confirmed;
     }
 
     // t-128 fix, composed with the t-129 split: the trigger count must be
@@ -429,7 +435,15 @@
       // a single field) can never also be 'failed'/'discarded' - the two
       // predicates are already mutually exclusive, so adding the check
       // would be dead weight, not defense.
-      var n = tasks.filter(function (t) { return !!prLinkFor(t) && isReady(t); }).length;
+      // Consult the persisted closed-cache so the light pass excludes PRs
+      // already known merged: on any load after the first warm-up this pass
+      // is near-exact instead of counting the whole done-mission history.
+      var n = tasks.filter(function (t) {
+        var pr = prLinkFor(t);
+        if (!pr || !isReady(t)) return false;
+        var known = prState[pr.owner + '/' + pr.repo + '#' + pr.number];
+        return !(known && known.state === 'closed');
+      }).length;
       if (n) countEl.textContent = String(n);
     })();
     render(); // cold-load network-verified count, before the panel is ever opened
