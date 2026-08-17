@@ -450,15 +450,27 @@ import { icon } from './components.js';
     style.id = 'v2-board-style';
     style.textContent = [
       '.v2-region-body { display: contents; }',
-      '.v2-agent-card { padding: var(--v2-space-2, 8px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
+      // t-136: every fallback below of the form var(--v2-hairline, #hex) /
+      // --v2-accent / --v2-muted / --v2-radius / --v2-ink / --v2-ink-2 /
+      // --v2-surface / --v2-bg / --v2-border / --v2-on-accent / --v2-good /
+      // --v2-warning / --v2-critical had its literal hex/rgba escape hatch
+      // dropped — v2.html's own t-87 alias block defines every one of
+      // these unconditionally in bare :root (never gated behind a media
+      // query or a not-yet-loaded stylesheet), so by the time this style
+      // tag runs they always resolve; the hardcoded fallback was dead
+      // weight, not a real safety net (goal's drift floor). Selectors
+      // below with NO existing components.css/molecules.css/organisms.css
+      // equivalent otherwise render exactly as before — this pass only
+      // removed inert fallback values, it did not touch which token wins.
+      '.v2-agent-card { padding: var(--v2-space-2, 8px) 0; border-bottom: 1px solid var(--v2-hairline); }',
       '.v2-agent-card:last-child { border-bottom: none; }',
       '.v2-agent-card__name { font-weight: 600; display: flex; align-items: center; gap: var(--v2-space-2, 8px); }',
-      '.v2-agent-card__meta { color: var(--v2-ink-2, #888); font-size: 12px; margin-top: 2px; }',
-      '.v2-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px; border: 1px solid var(--v2-border, rgba(128,128,128,.3)); border-radius: 999px; color: var(--v2-ink-2, #888); }',
-      '.v2-badge__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--v2-muted, #999); display: inline-block; }',
-      '.v2-badge--active .v2-badge__dot { background: var(--v2-good, #17845a); }',
-      '.v2-badge--idle .v2-badge__dot { background: var(--v2-warning, #b5790a); }',
-      '.v2-badge--offline .v2-badge__dot { background: var(--v2-muted, #999); }',
+      '.v2-agent-card__meta { color: var(--v2-ink-2); font-size: 12px; margin-top: 2px; }',
+      '.v2-badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; padding: 1px 8px; border: 1px solid var(--v2-border); border-radius: 999px; color: var(--v2-ink-2); }',
+      '.v2-badge__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--v2-muted); display: inline-block; }',
+      '.v2-badge--active .v2-badge__dot { background: var(--v2-good); }',
+      '.v2-badge--idle .v2-badge__dot { background: var(--v2-warning); }',
+      '.v2-badge--offline .v2-badge__dot { background: var(--v2-muted); }',
       // Sub-agent fleets (t-109, goal: t-60). The count badge reuses the
       // existing .v2-badge shell (same precedent t-80 set on index.html)
       // but carries no dot of its own — a fleet is not a roster agent with
@@ -467,20 +479,20 @@ import { icon } from './components.js';
       // badge-pill shape — that visual language specifically means "this
       // has its own heartbeat history," which is exactly untrue of a
       // sub-agent, so it is withheld by construction, not by convention.
-      '.v2-badge--fleet { color: var(--v2-ink-2, #888); }',
+      '.v2-badge--fleet { color: var(--v2-ink-2); }',
       '.v2-fleet { margin-top: 4px; }',
-      '.v2-fleet summary { cursor: pointer; font-size: 11px; color: var(--v2-muted, #999); list-style: none; }',
+      '.v2-fleet summary { cursor: pointer; font-size: 11px; color: var(--v2-muted); list-style: none; }',
       '.v2-fleet summary::-webkit-details-marker { display: none; }',
       '.v2-fleet summary::before { content: "▸ "; }',
       '.v2-fleet[open] summary::before { content: "▾ "; }',
-      '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted, #999); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
+      '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted); border-bottom: 1px solid var(--v2-hairline); }',
       '.v2-fleet__subagent:last-child { border-bottom: none; }',
-      '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
+      '.v2-project-row { display: flex; align-items: baseline; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       '.v2-project-row__name { font-weight: 600; }',
-      '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
-      '.v2-project-row__entity { color: var(--v2-muted, #999); font-size: 11px; }',
-      '.v2-project-row__counts { color: var(--v2-ink-2, #888); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }',
+      '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent); }',
+      '.v2-project-row__entity { color: var(--v2-muted); font-size: 11px; }',
+      '.v2-project-row__counts { color: var(--v2-ink-2); font-size: 11.5px; margin-left: auto; font-variant-numeric: tabular-nums; }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
       // violation) — .v2-project-row is `display:flex` with no wrap, so
       // entering inline edit (project-edit.js swapping __name for a wider
@@ -497,13 +509,13 @@ import { icon } from './components.js';
       // from the same one-rule fix, not a second layout mechanism.
       '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { overflow-wrap: anywhere; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
-      '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
+      '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink); cursor: pointer; }',
       // t-110: archive toggle — same tap-target treatment as the quick-add
       // button beside it (phone-usable, no hover-only affordance). The
       // count text lives INSIDE the button itself so it is visible whether
       // the toggle is on or off — only the list below is gated by state.
-      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink-2, #888); cursor: pointer; font-variant-numeric: tabular-nums; }',
-      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink, inherit); border-color: var(--v2-accent, #3f6fe0); }',
+      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink-2); cursor: pointer; font-variant-numeric: tabular-nums; }',
+      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink); border-color: var(--v2-accent); }',
       // The archived strip sits below the six live columns (not mixed into
       // the grid), full-width, so it reads as a distinct, clearly-labeled
       // zone rather than a 7th equal column competing for the same grid
@@ -514,46 +526,69 @@ import { icon } from './components.js';
       // .v2-board__columns grid one level down) — without this, the strip
       // would land as an ordinary same-row grid item next to the toolbar
       // instead of a full-width band below the six columns.
-      '.v2-board__archive { grid-column: 1 / -1; margin-top: var(--v2-space-3, 12px); padding-top: var(--v2-space-3, 12px); border-top: 1px dashed var(--v2-hairline, rgba(128,128,128,.3)); }',
-      '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2, #888); display: flex; align-items: center; gap: 4px; }',
-      '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent, #3f6fe0); cursor: pointer; font: inherit; }',
+      '.v2-board__archive { grid-column: 1 / -1; margin-top: var(--v2-space-3, 12px); padding-top: var(--v2-space-3, 12px); border-top: 1px dashed var(--v2-hairline); }',
+      '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2); display: flex; align-items: center; gap: 4px; }',
+      '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent); cursor: pointer; font: inherit; }',
       '.v2-quickadd { display: flex; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-3, 12px); flex-wrap: wrap; }',
-      '.v2-quickadd__title { flex: 1; min-width: 160px; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
-      '.v2-quickadd__submit { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius, 6px); background: var(--v2-accent, #3f6fe0); color: var(--v2-on-accent, #fff); cursor: pointer; }',
-      '.v2-quickadd__err { color: var(--v2-critical, #c23434); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
+      '.v2-quickadd__title { flex: 1; min-width: 160px; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
+      '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
+      '.v2-quickadd__submit { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius); background: var(--v2-accent); color: var(--v2-on-accent); cursor: pointer; }',
+      '.v2-quickadd__err { color: var(--v2-critical); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
+      // t-136: .v2-board__columns's own `gap` overlaps organisms.css's
+      // plain `.v2-board__columns { gap: var(--v2-space-4); }` (t-78), but
+      // that CSS rule carries no `display`/`grid-template-columns` of its
+      // own — deleting just this file's `gap` sub-property (the only truly
+      // duplicated declaration) would swap the live 6px gap for organisms'
+      // un-cascaded 8px, a real pixel shift this mechanical pass isn't
+      // cleared to make. Left whole and flagged rather than silently
+      // reconciled — a genuine taste call for the follow-up tranche, not
+      // dead code like the rules removed below.
       '.v2-board__columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--v2-space-3, 12px); align-items: start; }',
-      '.v2-board__column-title { font-size: 12px; color: var(--v2-ink-2, #888); margin: 0 0 var(--v2-space-2, 8px); font-weight: 600; }',
-      /* t-93 round 3: card anatomy converged on the approved sample
-         (t-58-v2-sample.html.txt: .card/.chips/.mchip/.avatar) — a bordered
-         card (border appears on hover, matching the sample's own
-         `.card:hover{border-color:var(--border)}`), an id+avatar top row,
-         a clamped title, and a chip row (goal flag / colored project dot /
-         priority, plus this file's own extra fields folded into the same
-         chip language rather than dropped). These rules read the REAL
-         tokens.css custom properties (--v2-color-*, --v2-radius-*,
-         --v2-space-*) — the surrounding pre-existing rules in this file
-         were written against placeholder names (--v2-surface, --v2-ink,
-         --v2-hairline, --v2-radius…) that tokens.css never actually
-         defines, so they have silently run on hardcoded fallback values
-         only, un-themed, since t-64. Left AS-IS here (a file-wide token-
-         name audit is a bigger change than this round\'s two named gaps),
-         flagged plainly on the mission log rather than silently ignored
-         or silently fixed out of scope. */
-      '.v2-task-card { background: var(--v2-color-surface, transparent); border: 1px solid transparent; border-left: 3px solid var(--v2-color-text-muted, #999); border-radius: var(--v2-radius-sm, 6px); padding: var(--v2-space-4, 8px) var(--v2-space-5, 10px); margin-bottom: var(--v2-space-3, 6px); display: flex; gap: var(--v2-space-2, 4px); align-items: flex-start; }',
-      '.v2-task-card:hover { border-color: var(--v2-color-border, rgba(128,128,128,.25)); background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); }',
+      // t-136: .v2-board__column-title (font-size/color/margin/font-weight)
+      // deleted whole — organisms.css's `.v2-board__column-title.v2-board__
+      // column-title` (t-78) already wins every one of those properties at
+      // higher specificity (doubled class beats this file's plain one), so
+      // this rule was fully dead: confirmed via computed-style snapshot
+      // before removal, zero visual change.
+      /* t-93 round 3 (trimmed t-136): card anatomy converged on the
+         approved sample (t-58-v2-sample.html.txt: .card/.chips/.mchip/
+         .avatar) — id+avatar top row, a clamped title, a chip row (goal
+         flag / colored project dot / priority, plus this file's own extra
+         fields folded into the same chip language). t-77's molecules.css
+         later shipped `.v2-task-card(.v2-task-card)` / `__title` / `__meta`
+         at doubled-class specificity specifically to win over this file's
+         own then-placeholder-namespaced rules for the same selectors —
+         t-136 deletes what molecules.css had already made dead rather than
+         leaving the shadowed duplicate in place. What's left below is only
+         what molecules.css does NOT re-implement: the 2-line title clamp,
+         the hover background (molecules only overrides hover border-color),
+         and the rest of this card's own layout hooks. */
+      '.v2-task-card:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); }',
       '.v2-task-card__body { cursor: pointer; flex: 1; min-width: 0; }',
-      '.v2-task-card--queued { border-left-color: var(--v2-color-text-muted, #999); }',
-      '.v2-task-card--claimed, .v2-task-card--in_progress { border-left-color: var(--v2-color-status-at-risk, #f2a30f); }',
-      '.v2-task-card--blocked { border-left-color: var(--v2-color-status-bug, #eb5757); }',
-      '.v2-task-card--review { border-left-color: var(--v2-color-status-in-progress, #8b5cf6); }',
-      '.v2-task-card--done { border-left-color: var(--v2-color-status-done, #29a36a); }',
-      '.v2-task-card--failed { border-left-color: var(--v2-color-status-bug, #eb5757); }',
       '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
+      // t-136: near-identical in role to components.css's own .v2-id-badge
+      // (font-size/weight/muted-color/tabular-nums all match; only
+      // --v2-font-mono is missing) — not renamed here. t-123 (unmerged,
+      // in review as of this mission) is independently wiring idBadge()
+      // into this exact call site for the font-family verdict; renaming
+      // the class here too would collide with that in-flight branch.
+      // Flagged as a named follow-up, not silently left unreconciled.
       '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; font-variant-numeric: tabular-nums; }',
       '.v2-task-card__sp { flex: 1; }',
+      // t-136: components.css already ships a real .v2-avatar atom (+
+      // --sm/--md size modifiers) this file's markup never opts into (no
+      // v2-avatar--sm class on the span below) — adopting it as-is would
+      // move font-size from this rule's 9px to the atom's --v2-font-size-2xs
+      // (10px), a real 1px visual delta, not a mechanical no-op. Left
+      // whole and flagged as a follow-up needing an actual before/after
+      // check, not attempted here under the no-regression bar.
       '.v2-avatar { width: 18px; height: 18px; border-radius: 50%; background: var(--v2-color-surface-raised, #f4f4f6); border: 1px solid var(--v2-color-border, rgba(128,128,128,.2)); display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 600; color: var(--v2-color-text-secondary, #62636c); flex: none; }',
-      '.v2-task-card__title { font-weight: 450; font-size: 12.5px; line-height: 1.4; color: var(--v2-color-text-primary, inherit); overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: var(--v2-space-3, 6px); }',
+      // t-136: font-weight/font-size/line-height/color deleted — molecules.css's
+      // doubled-class `.v2-task-card__title.v2-task-card__title` (t-77) already
+      // wins all four at higher specificity (confirmed dead via computed-style
+      // snapshot). The clamp mechanics below have no molecules.css equivalent
+      // at all and stay live exactly as before.
+      '.v2-task-card__title { overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: var(--v2-space-3, 6px); }',
       '.v2-task-card__chips { display: flex; align-items: center; gap: var(--v2-space-3, 6px); flex-wrap: wrap; }',
       '.v2-mchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--v2-color-text-secondary, #62636c); }',
       '.v2-mchip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }',
@@ -570,9 +605,13 @@ import { icon } from './components.js';
       // molecules.css's doubled-class border reset (its documented technique),
       // so the dashed border genuinely renders; the word "archived" on the card
       // stays the primary signal per the glyph+label-never-color-alone rule.
-      '.v2-task-card.v2-task-card.v2-task-card--discarded { border-style: dashed; border-color: var(--v2-color-border, rgba(128,128,128,.4)); opacity: .75; }',
-      // Meta line used by the archive-strip cards (taskCard).
-      '.v2-task-card__meta { font-size: 11.5px; color: var(--v2-color-text-secondary, #62636c); margin-top: 3px; font-variant-numeric: tabular-nums; }'
+      '.v2-task-card.v2-task-card.v2-task-card--discarded { border-style: dashed; border-color: var(--v2-color-border, rgba(128,128,128,.4)); opacity: .75; }'
+      // t-136: .v2-task-card__meta (font-size/color/margin-top/font-variant-numeric),
+      // used by the archive-strip cards (taskCard()), deleted whole — molecules.css's
+      // doubled-class `.v2-task-card__meta.v2-task-card__meta` (t-77) already wins
+      // every one of those properties at higher specificity with its own (different)
+      // values; this file's rule was fully dead, confirmed via computed-style
+      // snapshot before removal.
     ].join('\n');
     document.head.appendChild(style);
   }
