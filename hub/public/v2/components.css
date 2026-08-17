@@ -141,6 +141,27 @@
 }
 .v2-chip__label { font-variant-numeric: var(--v2-tabular-nums); }
 
+/* Role tag override (t-131 round 2, critic send-back): the roster's role
+   chip ("Critic"/"Lead"/"Builder"/...) reused the base .v2-chip's tag
+   treatment verbatim — full pill, uppercase, tracked, mono — but
+   crop-ux-agent-tag-row.png's own "Agent" tag sitting next to a name is
+   the opposite on every one of those axes: a rounded-rect (not a full
+   pill), plain sentence case, regular sans, no letter-spacing. That's the
+   same status-vs-tag distinction the boss already ruled on for project
+   labels (t-66 round 1: a descriptor next to identity reads as plain
+   text/shape, never a pill) — a role next to a name is that same pattern.
+   Keeps the base .v2-chip's box (background/border/padding), unlike the
+   status overrides above which strip the box down to nothing; only the
+   shape/typography axes the reference actually contradicts are reset. */
+.v2-chip--role {
+  border-radius: var(--v2-radius-xs);
+  font-family: inherit;
+  font-weight: var(--v2-weight-regular);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--v2-color-text-muted);
+}
+
 /* ---- id badge: tabular-nums mission id ("t-79") -----------------------
    t-76: sample's own id treatment (.card .id and #peek .phead .id, both
    ~11-11.5px muted text at font-weight:500) already matched this file's
