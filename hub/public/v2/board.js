@@ -531,7 +531,20 @@ import { icon } from './components.js';
       // the nowrap/ellipsis trio truncates a too-long label with "…"
       // instead of the old bug (wrapping its own text mid-word once the
       // meta group below no longer had room beside it).
-      '.v2-project-row__name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      // Round 3 (verify pass): `flex-basis: auto` still failed the ONE-line
+      // bar the send-back actually asked for — .v2-project-row's flex-wrap
+      // groups items into lines using each item's HYPOTHETICAL size first,
+      // and with an auto basis that's __name's full intrinsic content
+      // width (not its shrunk render width), so a name of any real length
+      // already claimed the entire row width during line-grouping and
+      // pushed .v2-project-row__meta to its own line every time — verified
+      // empirically: every seeded row still rendered 2 lines against this
+      // branch's actual committed CSS. `flex-basis: 0%` makes the
+      // hypothetical size ~0 instead, so meta's fixed width is what
+      // actually competes for line 1, and __name only grows into whatever
+      // it leaves behind — the one-line result the named crop
+      // (crop-ux-list-row-density.png) actually shows.
+      '.v2-project-row__name { font-weight: 600; flex: 1 1 0%; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
       // t-136 send-back on t-133: chips + repo used to be two independent
       // flex children of .v2-project-row, free to end up on different
@@ -542,7 +555,7 @@ import { icon } from './components.js';
       // wrap together, never apart; margin-left:auto pins the whole
       // group to the row's trailing edge (name's own doc comment above
       // covers the other half of this same fix).
-      '.v2-project-row__meta { display: flex; align-items: center; gap: var(--v2-space-2, 8px); flex: none; min-width: 0; margin-left: auto; }',
+      '.v2-project-row__meta { display: flex; align-items: center; gap: 6px; flex: none; min-width: 0; margin-left: auto; }',
       // t-133 (goal: t-53): entity/capacity/open-count as quiet pill chips
       // — crop-ux-labels-chips.png's own grammar (hairline 1px border,
       // pill radius, leading dot-or-glyph, tight padding, small muted
@@ -560,7 +573,10 @@ import { icon } from './components.js';
       // individually only ever produced the orphaning bug above. See the
       // [data-editing] escape hatch below for the one case (inline-edit
       // widening a chip) where wrap needs to come back temporarily.
-      '.v2-project-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }',
+      // Round 3: gap trimmed 6px -> 4px — every px reclaimed here goes
+      // straight to __name's shrink budget above, the actual scarce
+      // resource in a 3-chip+repo row at the real 208px content width.
+      '.v2-project-row__chips { display: flex; align-items: center; gap: 4px; flex-wrap: nowrap; }',
       // Inner-critic catch before parking (concurrent round on this same
       // send-back): entity is free text up to the server's own 40-char
       // validated max (hub/lib/store.js) — plain `white-space: nowrap`
@@ -573,7 +589,10 @@ import { icon } from './components.js';
       // same "value visible on hover, not lost" principle the repo
       // icon's own tooltip already applies. 140px also fits well inside
       // this rule's own nowrap meta/chips budget above.
-      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
+      // Round 3: padding trimmed 8px -> 6px horizontal, same reclaim
+      // rationale as the gap above — still the crop's own hairline-pill
+      // grammar, just its tighter end.
+      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 6px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
       '.v2-project-row__chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; flex: none; }',
       // Empty entity already gets its "—" placeholder from project-edit.js's
       // shared `[data-field][data-empty="true"]::before` rule; the dot
@@ -597,7 +616,12 @@ import { icon } from './components.js';
       // "not clean" report). Sits at the trailing end of .v2-project-row__meta
       // (t-136 send-back: margin-left:auto moved to the meta group itself,
       // so it pins with the chips it now always travels with, not alone).
-      '.v2-project-row__repo { display: inline-flex; align-items: center; gap: 2px; flex: none; min-height: 20px; }',
+      // Round 3: `position: relative` anchors the edit button below, now
+      // taken OUT of flow — it sat in-flow-but-invisible (opacity:0) here,
+      // which still reserved its full 22px+gap at rest, silently eating
+      // into the row's one-line budget for a control nobody could see.
+      // "No chrome at rest" should mean no LAYOUT footprint at rest too.
+      '.v2-project-row__repo { display: inline-flex; align-items: center; flex: none; min-height: 20px; position: relative; }',
       '.v2-repo-link { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--v2-radius-xs, 4px); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); position: relative; }',
       '.v2-repo-link:hover, .v2-repo-link:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
       '.v2-repo-link:focus-visible, .v2-repo-editbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring, rgba(63,111,224,.4)); }',
@@ -627,26 +651,36 @@ import { icon } from './components.js';
       // log instead.
       '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: #17181a; color: #fff; font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
       '.v2-repo-link:hover .v2-repo-link__tip, .v2-repo-link:focus .v2-repo-link__tip, .v2-repo-link:focus-visible .v2-repo-link__tip { display: block; }',
-      '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted, #999)); cursor: pointer; opacity: 0; }',
+      // Round 3: absolutely positioned off .v2-project-row__repo's
+      // trailing edge (`right: 100%` = flush against the link's left
+      // side) instead of sitting in-flow — a hidden (opacity:0) control
+      // has no business claiming the row's scarce one-line width budget
+      // at rest. pointer-events:none while hidden so the invisible
+      // overlap can't steal a click meant for whatever sits under it.
+      '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted, #999)); cursor: pointer; opacity: 0; position: absolute; right: 100%; top: 50%; transform: translateY(-50%); margin-right: 2px; pointer-events: none; }',
       // No chrome at rest (bar rule): the edit affordance only appears
       // once you're already looking at this field, on hover OR keyboard
       // focus. See the (hover:none) rule below for the touch fallback —
       // without SOME baseline visibility there, this control would be
       // reachable-by-luck only, which fails the parity law's "operable,
       // not merely visible" bar for a real (if secondary) CRUD action.
-      '.v2-project-row__repo:hover .v2-repo-editbtn, .v2-project-row__repo:focus-within .v2-repo-editbtn { opacity: 1; }',
+      '.v2-project-row__repo:hover .v2-repo-editbtn, .v2-project-row__repo:focus-within .v2-repo-editbtn { opacity: 1; pointer-events: auto; }',
       '.v2-repo-editbtn:hover, .v2-repo-editbtn:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
-      // (hover: none): baseline-visible edit affordance (see comment
-      // above) PLUS a wider gap between the two icons — each carries a
-      // 44px .v2-hit44 halo (components.css/t-115) centered on a 22px
-      // glyph; at the 2px desktop gap those halos overlap in the middle
-      // and a touch tap landing there would resolve to whichever sibling
-      // paints last (DOM order), silently stealing taps meant for the
-      // link. 24px keeps both halos' centers >=44px apart (11+24+11) so
-      // they never overlap — verified empirically below, not just math.
-      // Desktop keeps the tight 2px gap: the 44px floor is the bar's own
-      // touch-target rule, named "at 390px", and a mouse is precise.
-      '@media (hover: none) { .v2-repo-editbtn { opacity: .55; } .v2-project-row__repo { gap: 24px; } }',
+      // (hover: none): touch has no hidden-affordance concept, so the edit
+      // button goes back to a normal in-flow sibling (position: static
+      // overrides the absolute rule above) — baseline-visible — PLUS a
+      // wider gap between the two icons — each carries a 44px .v2-hit44
+      // halo (components.css/t-115) centered on a 22px glyph; at a tight
+      // gap those halos overlap in the middle and a touch tap landing
+      // there would resolve to whichever sibling paints last (DOM order),
+      // silently stealing taps meant for the link. 24px keeps both halos'
+      // centers >=44px apart (11+24+11) so they never overlap — verified
+      // empirically below, not just math. This is the ONLY mode where the
+      // edit button reserves row width at rest — touch devices already
+      // get the data-editing escape hatch above for overflow safety, so
+      // the reclaimed desktop budget this round is fighting for does not
+      // apply here.
+      '@media (hover: none) { .v2-repo-editbtn { opacity: .55; position: static; transform: none; margin-right: 0; pointer-events: auto; } .v2-project-row__repo { gap: 24px; } }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
       // violation) — .v2-project-row used to be `display:flex` with no
       // wrap, so entering inline edit (project-edit.js swapping __name
