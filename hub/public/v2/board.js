@@ -264,6 +264,18 @@ import { icon } from './components.js';
       // CRUD contract survives) but its VIEW state is no longer plain
       // text — see repoIconName() below and the .v2-repo-link/-editbtn
       // styles in injectStyle() for the interaction split this required.
+      //
+      // t-136 send-back on t-133 (goal: t-53): at the REAL 240px rail width
+      // (208px content once .v2-card's padding is subtracted), name +
+      // chips + repo icon do not reliably fit one line — the critic caught
+      // .v2-project-row__chips wrapping INTERNALLY (flex-wrap:wrap) while
+      // its siblings didn't, which orphaned the trailing open-count chip
+      // onto its own dangling second line, and separately a long label
+      // with no wrap rule of its own broke mid-word. Fix: chips+repo now
+      // share one wrapper, .v2-project-row__meta, so they travel and wrap
+      // TOGETHER as a single unit (never split from each other) — see the
+      // .v2-project-row__meta/-chips (now nowrap) rules in injectStyle()
+      // for the mechanics.
       var body = ids.length ? ids.map(function (id) {
         var b = byProj[id];
         var pj = b.meta || {};
@@ -271,18 +283,20 @@ import { icon } from './components.js';
         var repoHost = pj.repo ? repoIconName(pj.repo) : null;
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
           '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
-          '<span class="v2-project-row__chips">' +
-            '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)' + (pj.entity ? ': @' + esc(pj.entity) : '') + '"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
-            '<span class="v2-project-row__chip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
-            '<span class="v2-project-row__chip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
+          '<span class="v2-project-row__meta">' +
+            '<span class="v2-project-row__chips">' +
+              '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)' + (pj.entity ? ': @' + esc(pj.entity) : '') + '"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
+              '<span class="v2-project-row__chip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
+              '<span class="v2-project-row__chip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
+            '</span>' +
+            '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + '>' + (pj.repo ?
+              '<a class="v2-repo-link v2-hit44" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" title="' + esc(pj.repo) + '" aria-label="Open repository (' + esc(pj.repo) + ') in a new tab">' +
+                icon(repoHost, 'v2-icon--xs') +
+                '<span class="v2-repo-link__tip">' + esc(pj.repo) + '</span>' +
+              '</a>' +
+              '<button type="button" class="v2-repo-editbtn v2-hit44" aria-label="Edit repository URL" title="Edit repository URL">' + icon('square-pen', 'v2-icon--xs') + '</button>'
+              : '') + '</span>' +
           '</span>' +
-          '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + '>' + (pj.repo ?
-            '<a class="v2-repo-link v2-hit44" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" title="' + esc(pj.repo) + '" aria-label="Open repository (' + esc(pj.repo) + ') in a new tab">' +
-              icon(repoHost, 'v2-icon--xs') +
-              '<span class="v2-repo-link__tip">' + esc(pj.repo) + '</span>' +
-            '</a>' +
-            '<button type="button" class="v2-repo-editbtn v2-hit44" aria-label="Edit repository URL" title="Edit repository URL">' + icon('square-pen', 'v2-icon--xs') + '</button>'
-            : '') + '</span>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
@@ -509,10 +523,26 @@ import { icon } from './components.js';
       '.v2-fleet[open] summary::before { content: "▾ "; }',
       '.v2-fleet__subagent { padding: 3px 0 3px 14px; font-size: 11px; color: var(--v2-muted, #999); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); }',
       '.v2-fleet__subagent:last-child { border-bottom: none; }',
-      '.v2-project-row { display: flex; align-items: center; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
+      '.v2-project-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) 0; border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
-      '.v2-project-row__name { font-weight: 600; }',
+      // t-136 send-back on t-133: the name is a real flex item now, not
+      // implicitly full-width — min-width:0 lets it actually shrink inside
+      // the row instead of forcing the row wider than its 240px rail, and
+      // the nowrap/ellipsis trio truncates a too-long label with "…"
+      // instead of the old bug (wrapping its own text mid-word once the
+      // meta group below no longer had room beside it).
+      '.v2-project-row__name { font-weight: 600; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       '.v2-project-row--active .v2-project-row__name { color: var(--v2-accent, #3f6fe0); }',
+      // t-136 send-back on t-133: chips + repo used to be two independent
+      // flex children of .v2-project-row, free to end up on different
+      // lines from each other — that is exactly how the open-count chip
+      // orphaned alone onto a dangling second line while the repo icon
+      // stayed elsewhere. .v2-project-row__meta wraps both as ONE flex
+      // item so they travel and (if the name doesn't fit beside them)
+      // wrap together, never apart; margin-left:auto pins the whole
+      // group to the row's trailing edge (name's own doc comment above
+      // covers the other half of this same fix).
+      '.v2-project-row__meta { display: flex; align-items: center; gap: var(--v2-space-2, 8px); flex: none; min-width: 0; margin-left: auto; }',
       // t-133 (goal: t-53): entity/capacity/open-count as quiet pill chips
       // — crop-ux-labels-chips.png's own grammar (hairline 1px border,
       // pill radius, leading dot-or-glyph, tight padding, small muted
@@ -522,17 +552,27 @@ import { icon } from './components.js';
       // to touch). [data-field]:hover's highlight (project-edit.js's own
       // generic rule) still applies for free since these stay data-field
       // elements.
-      '.v2-project-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
-      // Inner-critic catch before parking: entity is free text up to the
-      // server's own 40-char validated max (hub/lib/store.js) — plain
-      // `white-space: nowrap` with no cap let a long entity slug render a
-      // ~260px-wide chip inside this ~240px rail, overflowing past its
-      // right edge (a real regression the old plain <span> — no nowrap —
-      // never had). Capped + ellipsized here; the field's own title
-      // attribute (set below, in renderProjects()) now carries the real
-      // value so a native hover tooltip still discloses the full text
-      // when it truncates, the same "value visible on hover, not lost"
-      // principle the repo icon's own tooltip already applies.
+      //
+      // flex-wrap is NOWRAP here (t-136 send-back on t-133; used to be
+      // wrap) — three chips at their real rendered width (~150-190px,
+      // capped per-chip below) comfortably fit the meta group's own line
+      // at the true 208px rail content width, so letting them wrap
+      // individually only ever produced the orphaning bug above. See the
+      // [data-editing] escape hatch below for the one case (inline-edit
+      // widening a chip) where wrap needs to come back temporarily.
+      '.v2-project-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }',
+      // Inner-critic catch before parking (concurrent round on this same
+      // send-back): entity is free text up to the server's own 40-char
+      // validated max (hub/lib/store.js) — plain `white-space: nowrap`
+      // with no cap let a long entity slug render a ~260px-wide chip
+      // inside this ~240px rail, overflowing past its right edge (a real
+      // regression the old plain <span> — no nowrap — never had). Capped
+      // + ellipsized here; the field's own title attribute (set above, in
+      // renderProjects()) now carries the real value so a native hover
+      // tooltip still discloses the full text when it truncates, the
+      // same "value visible on hover, not lost" principle the repo
+      // icon's own tooltip already applies. 140px also fits well inside
+      // this rule's own nowrap meta/chips budget above.
       '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
       '.v2-project-row__chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; flex: none; }',
       // Empty entity already gets its "—" placeholder from project-edit.js's
@@ -540,11 +580,24 @@ import { icon } from './components.js';
       // above is a value marker and reads as visual noise stacked right
       // next to that dash when there is no value to mark.
       '.v2-project-row__chip[data-empty="true"] .v2-project-row__chip-dot { display: none; }',
+      // t-136 send-back on t-133: inline-editing entity or capacity swaps
+      // that chip for project-edit.js's wider .v2-pedit widget (input +
+      // ok/cancel); at the real 208px content width that can outgrow the
+      // now-nowrap meta/chips groups. board.js already flags the row
+      // data-editing="true" for the duration (project-edit.js's own
+      // contract, board.js skips its rebuild while the flag is set), so
+      // this is a safe, temporary widening: wrap comes back only while a
+      // field in THIS row is actually being edited, closing the same
+      // horizontal-overflow risk t-114 fixed for the row as a whole
+      // without giving up the tidy one-line rest-state above.
+      '.v2-project-row[data-editing="true"] .v2-project-row__meta, .v2-project-row[data-editing="true"] .v2-project-row__chips { flex-wrap: wrap; }',
       // Repo: icon-only view (host-derived glyph + hover/focus tooltip +
       // real link) plus a quiet, row-hover-revealed edit affordance —
       // replaces the old raw-clone-URL text entirely (the boss's own
-      // "not clean" report). Pinned to the row's trailing edge.
-      '.v2-project-row__repo { display: inline-flex; align-items: center; gap: 2px; margin-left: auto; flex: none; min-height: 20px; }',
+      // "not clean" report). Sits at the trailing end of .v2-project-row__meta
+      // (t-136 send-back: margin-left:auto moved to the meta group itself,
+      // so it pins with the chips it now always travels with, not alone).
+      '.v2-project-row__repo { display: inline-flex; align-items: center; gap: 2px; flex: none; min-height: 20px; }',
       '.v2-repo-link { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: var(--v2-radius-xs, 4px); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); position: relative; }',
       '.v2-repo-link:hover, .v2-repo-link:focus-visible { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
       '.v2-repo-link:focus-visible, .v2-repo-editbtn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--v2-color-focus-ring, rgba(63,111,224,.4)); }',
@@ -595,20 +648,20 @@ import { icon } from './components.js';
       // touch-target rule, named "at 390px", and a mouse is precise.
       '@media (hover: none) { .v2-repo-editbtn { opacity: .55; } .v2-project-row__repo { gap: 24px; } }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
-      // violation) — .v2-project-row is `display:flex` with no wrap, so
-      // entering inline edit (project-edit.js swapping __name for a wider
-      // .v2-pedit widget) shoves the other fields off the right edge of a
-      // 390px viewport, forcing real page-level horizontal scroll. project-
-      // edit.js already carries a matching phone-width wrap rule for its
-      // OWN inner .v2-pedit widget; this is the missing outer half. Same
-      // --v2-bp-phone breakpoint (720px) project-edit.js's own rule uses.
-      // Folds in finding #3 (LOW/polish) as a side effect: today, without
-      // row-level wrapping, each field individually shrinks and wraps its
-      // OWN text mid-word inside a squeezed box (the ragged multi-line
-      // look t-111 screenshotted) — letting the ROW wrap instead lets each
-      // field claim its natural width on its own line, a cleaner result
-      // from the same one-rule fix, not a second layout mechanism.
-      '@media (max-width: 720px) { .v2-project-row { flex-wrap: wrap; } .v2-project-row__repo { margin-left: 0; } }',
+      // violation) — .v2-project-row used to be `display:flex` with no
+      // wrap, so entering inline edit (project-edit.js swapping __name
+      // for a wider .v2-pedit widget) shoves the other fields off the
+      // right edge of a 390px viewport, forcing real page-level
+      // horizontal scroll. Superseded by t-136's send-back on t-133:
+      // .v2-project-row now wraps unconditionally (not just under
+      // 720px — the same orphaning bug this closed also hit the real
+      // 240px desktop rail), so the row-level half of this fix lives in
+      // the base .v2-project-row rule above. This query now only needs
+      // to left-align the meta group at phone width — at the much wider
+      // phone rail (full viewport, not 240px) flush-right would leave an
+      // odd, purely cosmetic gap between name and meta that the desktop
+      // rail's tightness never has room for.
+      '@media (max-width: 720px) { .v2-project-row__meta { margin-left: 0; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
       // t-110: archive toggle — same tap-target treatment as the quick-add
