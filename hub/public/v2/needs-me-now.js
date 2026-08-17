@@ -389,7 +389,7 @@ import { icon, idBadge, statusGlyph } from './components.js';
       var unreadMessages = messages.filter(function (m) { return !readIds[m.id]; }).length;
       var messagesCount = unreadMessages + ' unread · ' + messages.length + ' total';
       var messagesToggleHtml = messages.length > RECENT_MESSAGE_LIMIT
-        ? '<button type="button" class="v2-needs-me-now__messages-toggle" id="v2-nmn-messages-toggle">' +
+        ? '<button type="button" class="v2-btn v2-btn--ghost" id="v2-nmn-messages-toggle">' +
           (showAllMessages ? 'Show recent only' : 'Show all ' + messages.length) +
           '</button>'
         : '';
@@ -406,7 +406,7 @@ import { icon, idBadge, statusGlyph } from './components.js';
         '<div class="v2-needs-me-now__toolbar">' +
         '<span class="v2-needs-me-now__total">' + total + ' waiting on you</span>' +
         // t-150 (goal: t-53): v2-hit44 — invisible centered 44px tap zone.
-        '<button type="button" class="v2-needs-me-now__sort-toggle v2-hit44" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
+        '<button type="button" class="v2-btn v2-btn--ghost v2-hit44" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
         '</div>' +
         group('decisions', icon('flag') + ' Decisions', total === 0 ? '' :
           reviewBoss.map(function (t) { return decisionRow(t, state, 'review'); }).join('') +
