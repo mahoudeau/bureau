@@ -41,3 +41,24 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+t-133 (goal: t-53) added two more icons, sourced separately and recorded here:
+
+"square-pen" is a genuine Lucide icon (not Feather-derived), so it falls
+under this file's top ISC block same as folder/git-branch/etc. — fetched
+from lucide-static v1.31.0 (unpkg.com/lucide-static@1.31.0/icons/square-pen.svg),
+same shape/style as every other entry in this set.
+
+"github" is NOT from Lucide — Lucide ships no brand marks. It is the GitHub
+mark from Simple Icons (https://simpleicons.org), fetched from
+unpkg.com/simple-icons@16.28.0/icons/github.svg, used verbatim (path data
+unmodified) as the project-row repo indicator whenever a project's repo
+host is exactly github.com (see v2/board.js's repoIconName()). Simple
+Icons' brand-mark SVGs are released under CC0 1.0 Universal (public
+domain dedication; full text: https://creativecommons.org/publicdomain/zero/1.0/legalcode)
+— Simple Icons' own README notes trademark rights to the underlying brand
+are unaffected by that dedication, so this is used purely as a monochrome
+identifying glyph (no logo lockup, no color, no promotional use), not as a
+claim to any GitHub trademark.

@@ -227,6 +227,11 @@
      step up, pending a sample that actually shows two avatar sizes). */
   --v2-avatar-size-sm: 18px;
   --v2-avatar-size-md: 20px;
+  /* t-131: the roster's nested fleet sub-entries need a size one notch
+     below -sm (they are visually subordinate to their parent agent's own
+     avatar) — no sample pixel to trace this to, so picked as the next
+     round-number step down the existing 18/20 ladder. */
+  --v2-avatar-size-xs: 14px;
 
   /* Stacking order: unchanged — purely structural, no color/size to trace
      to a sample pixel, and the sample's own z-index usage (21 for #peek,
