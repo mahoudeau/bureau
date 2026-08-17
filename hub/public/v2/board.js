@@ -515,7 +515,13 @@ import { icon, avatar, chip, idBadge } from './components.js';
     // color alone — the register rule t-110 established).
     var V2_GROUPS = [
       { key: 'working', label: 'Working', glyph: 'circle-dot' },
-      { key: 'review', label: 'Review', glyph: 'circle-dot' },
+      // t-167 round 3 (critic gap): Working and Review used to share
+      // circle-dot, distinguished only by color (amber vs purple) — this
+      // codebase's own t-110 rule is glyph+color, never color alone, and the
+      // Linear reference gives every status a distinct glyph SHAPE. `clock`
+      // reads correctly for "awaiting a look" and is visually unmistakable
+      // from Working's dot at 15px.
+      { key: 'review', label: 'Review', glyph: 'clock' },
       { key: 'blocked', label: 'Blocked', glyph: 'circle-alert' },
       { key: 'queued', label: 'Queued', glyph: 'circle' },
       { key: 'done', label: 'Done', glyph: 'circle-check', collapsed: true },
