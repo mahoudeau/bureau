@@ -160,6 +160,24 @@ function heartbeat(name, note, activity, subAgents) {
   return a;
 }
 
+// Roster curation, not a ban: removing a name clears its roster entry only.
+// Missions keep their historical assignee strings and logs untouched (they
+// are never rewritten), and the bare name is free to register again later -
+// upsertAgent just creates a fresh entry since none matches by name anymore.
+// A name holding a live lease is refused so curation can never strand
+// claimed work; blocked/review missions hold no lease (see updateTask) so
+// only claimed/in_progress count.
+function deleteAgent(name) {
+  const s = load();
+  if (!s.agents.some(a => a.name === name)) return { error: 'not_found' };
+  expireLeases(); // a lease that already expired is not "live"
+  const held = s.tasks.filter(t => t.assignee === name && (t.status === 'claimed' || t.status === 'in_progress'));
+  if (held.length) return { error: `${name} holds a live lease on ${held.map(t => t.id).join(', ')}; release the mission(s) first` };
+  s.agents = s.agents.filter(a => a.name !== name);
+  save();
+  return { removed: true };
+}
+
 // ---- Tasks ----
 const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed', 'discarded'];
 
@@ -337,6 +355,23 @@ function claimTask({ id, agent, lease_minutes }) {
   return { task: t };
 }
 
+// Generic role check (t-119): "the lead" and "the critic" are roles, not
+// names, and the roster is exactly where an agent already self-declares
+// what it is (kind/capabilities, both free text since register's own
+// beginning). An agent holds a role here if it registered with that literal
+// tag in its capabilities array - no agent NAME is ever compared, so the
+// role can move to a different agent (a new shift, a different session)
+// just by that agent registering with the tag, with no hub code change.
+// 'human' is not a roster lookup: it is the existing sentinel the review
+// capability-link handlers already pass for boss actions (see server.js),
+// itself a role word, not an individual's name.
+function agentHasCapability(s, agentName, cap) {
+  const a = s.agents.find(x => x.name === agentName);
+  return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
+}
+function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
+function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+
 function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
@@ -345,9 +380,19 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
   if (gate !== undefined) {
     if (gate === 'boss') t.gate = 'boss';
-    else if (gate === 'critic' && (agent === 'human' || agent === 'ummon')) t.gate = 'critic';
-    else return { error: 'gate: anyone may raise to boss; only the boss or ummon set critic' };
+    else if (gate === 'critic' && isLead(s, agent)) t.gate = 'critic';
+    else return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
   }
+  // Boss-gate review entry, hub-enforced (t-119, boss ruling 2026-08-16 after
+  // t-59 rounds 22-23 reached his door with no critic pass): a mission with
+  // gate:boss may be PARKED into review only by an agent authorized to clear
+  // boss-gate work - the critic, the lead, or the boss himself. This is what
+  // makes "the boss never sees an uncritiqued round" true by construction,
+  // not by convention a builder has to remember. Critic-gate missions are
+  // unaffected: any agent parks those exactly as before (see the plain
+  // `status === 'review'` handling below, unguarded).
+  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent))
+    return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
@@ -406,7 +451,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (artifact) t.artifacts.push({ ts: nowISO(), by: agent || 'unknown', ...artifact });
   t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
   save();
-  return { task: t };
+  return { task: t, prev_status: prevStatus };
 }
 
 // ---- Review capability links ----
@@ -451,7 +496,7 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat, acquireLock,
+  load, save, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
