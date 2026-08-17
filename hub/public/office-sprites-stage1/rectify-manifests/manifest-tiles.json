@@ -1,0 +1,17 @@
+{
+ "sheet": "props/sheet-tiles-surfaces-v2.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [50, 10, 165, 240],
+ "anchor_logical_height": 48,
+ "palette_size": 32,
+ "accent_saturation_min": 0.15,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {"name": "floor-tile", "x": 270, "y": 20, "w": 265, "h": 220, "group": "floor",
+   "_note": "Row 1 col 1: first wood-plank floor tile. Region coordinates reused verbatim from t-59's committed manifest-tiles.json (floor-wood)."},
+  {"name": "wall-tile", "x": 1130, "y": 20, "w": 255, "h": 220, "group": "wall",
+   "_note": "Row 1 col 4: cracked-plaster wall texture, cool spy-HQ register. Region coordinates reused verbatim from t-59's committed manifest-tiles.json (wall-cracked)."}
+ ],
+ "_comment": "Every parameter reused verbatim from t-59's committed manifest-tiles.json (commit 3071ab5), except accent_max_area_frac forced to 0 per the t-59 round-25 fix. Floor and wall are two separate groups/palettes per THE PALETTE LAW even though they share one sheet. Sheet path is relative to projects/bureau/references/office/ in the brain."
+}

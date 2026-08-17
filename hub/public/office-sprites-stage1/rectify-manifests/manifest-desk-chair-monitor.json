@@ -1,0 +1,19 @@
+{
+ "sheet": "props/sheet-desks-workstations-v2.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [45, 10, 175, 455],
+ "anchor_logical_height": 48,
+ "palette_size": 24,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {"name": "desk", "x": 1035, "y": 254, "w": 350, "h": 201, "group": "desk",
+   "_note": "Row 2 col 3: 'a tidy desk' (own drawers, keyboard+mouse, no monitor) -- kept separate from the monitor so THE PALETTE LAW's per-subject grouping is honest (desk and monitor are two different subjects even though the source sheet also draws them combined in row 1). Region coordinates reused verbatim from t-59's committed manifest-desk.json (desk-tidy)."},
+  {"name": "chair", "x": 55, "y": 519, "w": 159, "h": 239, "group": "chair",
+   "_note": "Row 3 col 1: front-facing office chair, tight-cropped to its own connected component (backrest/seat/armrests/5-star base). Region coordinates reused verbatim from t-59's committed manifest-desk.json -- t-59 round 26 switched to this exact region after the earlier side-view chair (row 3, x515) mode-voted down to an illegible blob at this sheet's pitch; this citation is the already-verified fix, not a re-derivation."},
+  {"name": "monitor", "x": 660, "y": 16, "w": 353, "h": 233, "group": "monitor",
+   "_note": "Row 1 col 2: the full 'monitor glowing blue' desk-workstation unit (monitor+keyboard+desk, one continuous connected component -- tight-cropped automatically, same method as desk-tidy's own citation), not a screen-only sub-crop. Tried a screen-only manual crop first (just the bezel, ~13x10px after rectification at this sheet's pitch) and rejected it: at this sheet's 9.27px/output-px pitch a bare screen box mode-votes down to an indistinct small rectangle with no legible bezel/stand structure, failing the silhouette bar outright -- disclosed here rather than shipped. The full workstation unit is a DIFFERENT furniture piece from the plain 'desk' group above (own desk shape, own drawer count, monitor+keyboard on top) per the sheet's own row-1-vs-row-2 distinction in PROMPTS.md prompt 9 ('the same desk in three states' vs 'a tidy desk' as separate named items), so this is not a duplicate of the desk sprite -- it is t-141's 'CRT monitor' deliverable read as the monitor-equipped desk variant, own group/palette per THE PALETTE LAW."}
+ ],
+ "_comment": "anchor_region/anchor_logical_height/key_tolerance/palette_size/accent_saturation_min reused verbatim from t-59's committed manifest-desk.json for the desk and chair groups (same sheet, same pitch); accent_max_area_frac forced to 0 across every group per the t-59 round-25 fix (rare, highly-saturated JPEG-ringing pixels near hard edges were otherwise being preserved as if they were real design accents -- this sheet has no genuine accent-light content worth the tradeoff). Sheet path is relative to projects/bureau/references/office/ in the brain."
+}

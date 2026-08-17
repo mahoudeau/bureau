@@ -1,0 +1,15 @@
+{
+ "sheet": "props/sheet-lighting-states-v2.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [45, 19, 190, 365],
+ "anchor_logical_height": 48,
+ "palette_size": 20,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {"name": "wall-monitor", "x": 1080, "y": 198, "w": 138, "h": 178, "group": "wallmon",
+   "_note": "Row 2 col 7 of the lighting-fixtures sheet: the CRT TV in its glowing-blue-screen state, own connected component plus its glow halo on clean magenta -- no desk, no adjacent object, sits on the wall/mounted per the sheet's own framing (props/sheet-lighting-states-v2.jpg, prompt 14: 'a CRT TV ... shown both off and glowing with their light pool'). Distinct subject/group from the desk-mounted 'monitor' sprite in manifest-desk-chair-monitor.json (t-141's own 'CRT monitor' vs 'wall monitor' are two separate named deliverables in the mission body) -- own palette per THE PALETTE LAW even though both are CRT screens."}
+ ],
+ "_comment": "New manifest, new sheet -- not previously rectified in t-59. anchor_region is this sheet's own left-edge scale-anchor figure, measured directly (tight connected-component bbox, same method rectify.py uses internally): 45,19,190,365. accent_max_area_frac 0 per the t-59 round-25 fix (no genuine accent content here worth the tradeoff -- the screen's own green status LED is well inside the palette_size budget and survives the mode vote on its own merits, verified below). Sheet path is relative to projects/bureau/references/office/ in the brain."
+}

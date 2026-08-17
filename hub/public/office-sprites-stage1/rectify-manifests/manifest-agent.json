@@ -1,0 +1,19 @@
+{
+ "sheet": "cast/sheet-agent-undercut-typing.jpg",
+ "background_key": [255, 0, 255],
+ "key_tolerance": 170,
+ "anchor_region": [24, 22, 150, 362],
+ "anchor_logical_height": 48,
+ "palette_size": 80,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {"name": "idle-0", "x": 24, "y": 22, "w": 150, "h": 362, "group": "agent",
+   "_note": "The sheet's own left-edge scale-anchor figure (standing, not seated) reused as the idle pose -- honest flag carried from t-59: no sheet in the current set shows the character genuinely idle AT the desk without typing (PROMPTS.md kit item 28, 'seated idle', is still open). Same figure that anchors this manifest's pitch."},
+  {"name": "typing-0", "x": 190, "y": 22, "w": 290, "h": 362, "group": "agent"},
+  {"name": "typing-1", "x": 496, "y": 22, "w": 292, "h": 362, "group": "agent"},
+  {"name": "typing-2", "x": 804, "y": 22, "w": 285, "h": 362, "group": "agent"},
+  {"name": "typing-3", "x": 1105, "y": 22, "w": 284, "h": 362, "group": "agent"}
+ ],
+ "_comment": "Region coordinates, key_tolerance, and edge_hue_tolerance (default) reused verbatim from t-59-office-sample-scene's round-27 committed manifest (hub/public/office-sample-assets/rectify-manifests/manifest-typing4.json, commit 3071ab5) -- those citations were independently re-verified for determinism by two separate critic passes across rounds 24-27 (byte-identical re-runs, zero key-adjacent pixels, zero magenta-hue edge residue), confirmed byte-identical again in this manifest's own report. ONE deliberate deviation from the inherited manifest: palette_size raised from 28 to 80. THE PALETTE LAW fix (t-141 mission body): with palette_size=28, build_shared_palette's frequency-sorted greedy bucketing filled its entire budget with dark blue/navy jacket-hair-background shades before ever reaching a skin-toned bucket -- diagnosed directly by dumping the group's full ranked bucket list (5550 opaque votes, 357 buckets after quantization): the largest genuine skin cluster (218,137,118), 16 votes) doesn't rank until position 58, and NONE of the 28 buckets that made the old cutoff carry r>b+10 (a skin-hue heuristic). Every skin pixel was therefore forced by snap_to_palette onto the nearest dark-blue entry -- this IS the blue-face defect, reproduced and root-caused directly in this manifest's own agent group despite the group already being subject-isolated (no cross-subject mixing) per the existing per-subject grouping t-59 already had; the defect's actual mechanism is budget truncation within an already-correctly-scoped single-subject palette, not cross-subject contamination as such. The existing accent-color exemption doesn't rescue this: skin's own saturation (~0.46 for the lead skin bucket) sits just under accent_saturation_min's 0.5 threshold, and accent_max_area_frac is intentionally 0 per the t-59 round-25 fix (re-enabling it risks re-admitting JPEG-ringing noise, the exact bug that fix closed). Raising palette_size instead is a strictly frequency-budget fix, not a special-case: tested empirically (28->0 skin entries in the resulting palette, 40->1, 48->2, 64->3, 80->7), 80 was chosen as the first tested size giving a real gradient of skin shades (shadow through highlight) rather than a single flat tone, while still leaving the great majority of the budget (73 of 80 entries) for the jacket/hair/background material ramps that dominate the sprite's actual pixel area. Verified below (see the mission log / review note): the shipped idle-0 and typing-* sprites now carry visibly warm, skin-toned face pixels at matched-zoom side-by-side against the source. Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1)."
+}

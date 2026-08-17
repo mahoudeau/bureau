@@ -1,0 +1,133 @@
+{
+ "sheet": "/tmp/claude-0/-home-user-bureau/413be9eb-9cc6-525e-8f6d-747feda0d88d/scratchpad/sheets/sheet-lighting-states-v2.jpg",
+ "sheet_sha256": "76e60153e60878423f59b14dc620bfe0d4eb5d3a7d0e45644be0d94a2f8def07",
+ "anchor_source_px_height": 364,
+ "anchor_logical_height": 48,
+ "pitch": 7.583333333333333,
+ "groups": {
+  "wallmon": {
+   "palette": [
+    [
+     169,
+     216,
+     232
+    ],
+    [
+     55,
+     73,
+     88
+    ],
+    [
+     79,
+     113,
+     122
+    ],
+    [
+     54,
+     70,
+     85
+    ],
+    [
+     2,
+     7,
+     26
+    ],
+    [
+     2,
+     5,
+     20
+    ],
+    [
+     150,
+     150,
+     243
+    ],
+    [
+     7,
+     3,
+     37
+    ],
+    [
+     152,
+     135,
+     236
+    ],
+    [
+     166,
+     215,
+     234
+    ],
+    [
+     0,
+     2,
+     10
+    ],
+    [
+     93,
+     132,
+     146
+    ],
+    [
+     103,
+     140,
+     149
+    ],
+    [
+     70,
+     90,
+     103
+    ],
+    [
+     88,
+     124,
+     137
+    ],
+    [
+     138,
+     154,
+     234
+    ],
+    [
+     134,
+     168,
+     232
+    ],
+    [
+     153,
+     138,
+     243
+    ],
+    [
+     19,
+     28,
+     38
+    ],
+    [
+     50,
+     68,
+     82
+    ]
+   ],
+   "rejected_key_adjacent_candidates": [],
+   "regions": {
+    "wall-monitor": {
+     "w": 18,
+     "h": 23,
+     "source_box": [
+      1080,
+      198,
+      138,
+      178
+     ],
+     "phase": [
+      0,
+      3
+     ],
+     "grid_agreement": 0.4683,
+     "file": "wall-monitor.png",
+     "sha256": "24a03f38182b8e39c9212ab7c7da9cd4f4d284c204aedd1b3cd49ae4af9022f6"
+    }
+   }
+  }
+ }
+}

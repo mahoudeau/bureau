@@ -1,0 +1,187 @@
+{
+ "sheet": "/tmp/claude-0/-home-user-bureau/413be9eb-9cc6-525e-8f6d-747feda0d88d/scratchpad/sheets/sheet-tiles-surfaces-v2.jpg",
+ "sheet_sha256": "347acad918a4747aaa6fa0dd758bcdde00731acfe2cdde199bb9d428b28c7208",
+ "anchor_source_px_height": 230,
+ "anchor_logical_height": 48,
+ "pitch": 4.791666666666667,
+ "groups": {
+  "floor": {
+   "palette": [
+    [
+     92,
+     66,
+     54
+    ],
+    [
+     56,
+     38,
+     30
+    ],
+    [
+     105,
+     81,
+     67
+    ],
+    [
+     109,
+     85,
+     69
+    ],
+    [
+     54,
+     35,
+     28
+    ],
+    [
+     62,
+     44,
+     37
+    ],
+    [
+     74,
+     53,
+     44
+    ],
+    [
+     77,
+     58,
+     51
+    ],
+    [
+     62,
+     42,
+     34
+    ],
+    [
+     108,
+     82,
+     69
+    ],
+    [
+     70,
+     51,
+     42
+    ],
+    [
+     81,
+     61,
+     52
+    ],
+    [
+     59,
+     42,
+     37
+    ],
+    [
+     98,
+     72,
+     59
+    ],
+    [
+     107,
+     85,
+     69
+    ],
+    [
+     97,
+     70,
+     57
+    ],
+    [
+     91,
+     70,
+     61
+    ],
+    [
+     95,
+     72,
+     60
+    ],
+    [
+     108,
+     85,
+     72
+    ]
+   ],
+   "rejected_key_adjacent_candidates": [],
+   "regions": {
+    "floor-tile": {
+     "w": 55,
+     "h": 45,
+     "source_box": [
+      270,
+      20,
+      265,
+      220
+     ],
+     "phase": [
+      1,
+      1
+     ],
+     "grid_agreement": 0.7026,
+     "file": "floor-tile.png",
+     "sha256": "3cb9346ead438d9b667c615a1d4c18319c27b17423f7006a59873d74b59cb22e"
+    }
+   }
+  },
+  "wall": {
+   "palette": [
+    [
+     88,
+     117,
+     124
+    ],
+    [
+     66,
+     91,
+     99
+    ],
+    [
+     73,
+     101,
+     107
+    ],
+    [
+     74,
+     101,
+     108
+    ],
+    [
+     60,
+     85,
+     93
+    ],
+    [
+     104,
+     133,
+     138
+    ],
+    [
+     59,
+     87,
+     93
+    ]
+   ],
+   "rejected_key_adjacent_candidates": [],
+   "regions": {
+    "wall-tile": {
+     "w": 52,
+     "h": 45,
+     "source_box": [
+      1130,
+      20,
+      255,
+      220
+     ],
+     "phase": [
+      4,
+      2
+     ],
+     "grid_agreement": 0.9656,
+     "file": "wall-tile.png",
+     "sha256": "a100932e8583fe48d98b4d0b7e4c795e59e87acf5965f5e79c479f6ecd640f0c"
+    }
+   }
+  }
+ }
+}
