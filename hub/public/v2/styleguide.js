@@ -219,30 +219,59 @@ function group(title, ...children) {
   return wrap;
 }
 
+/** One labeled specimen: `builder()`'s element under a small caption,
+ * reusing the same sg-specimen-col/__label idiom statusGlyphsGroup()
+ * already uses for its own per-item captions. */
+function labeledSpecimen(label, node) {
+  const col = h('div', 'sg-specimen-col');
+  col.appendChild(node);
+  col.appendChild(h('div', 'sg-specimen-col__label', label));
+  return col;
+}
+
+/** Appends three labeled specimens to `row`: default, then two static
+ * forced-state siblings (hover, focus-visible) via the .sg-force-hover/
+ * .sg-force-focus companion classes styleguide.html defines — see that
+ * file's own comment for why a page-local class stands in for the live
+ * pseudo-class here. `builder` must return a fresh element each call
+ * (never share one node across the three specimens). */
+function stateTriplet(row, builder) {
+  row.appendChild(labeledSpecimen('default', builder()));
+  const hovered = builder();
+  hovered.classList.add('sg-force-hover');
+  row.appendChild(labeledSpecimen('hover', hovered));
+  const focused = builder();
+  focused.classList.add('sg-force-focus');
+  row.appendChild(labeledSpecimen('focus-visible', focused));
+}
+
 function buttonsGroup() {
   const grid = h('div', 'sg-row-grid');
   ['primary', 'secondary', 'ghost'].forEach(variant => {
     const col = h('div', 'sg-specimen-col');
     col.appendChild(h('div', 'sg-specimen-col__label', variant));
     const row = h('div', 'sg-specimen-row');
-    row.appendChild(button('Label', { variant, iconName: 'check' }));
-    row.appendChild(button('Label', { variant, state: 'disabled' }));
-    row.appendChild(button('Label', { variant, state: 'loading' }));
+    stateTriplet(row, () => button('Label', { variant, iconName: 'check' }));
+    row.appendChild(labeledSpecimen('disabled', button('Label', { variant, state: 'disabled' })));
+    row.appendChild(labeledSpecimen('loading', button('Label', { variant, state: 'loading' })));
+    row.appendChild(labeledSpecimen('error', button('Label', { variant, state: 'error' })));
     col.appendChild(row);
     grid.appendChild(col);
   });
-  return group('Buttons — default · disabled · loading (hover / Tab the first one for real :hover / :focus-visible)', grid);
+  return group('Buttons — every variant × default/hover/focus-visible/disabled/loading/error', grid);
 }
 
 function iconButtonsGroup() {
   const row = h('div', 'sg-specimen-row');
-  const plain = iconButton('paperclip', { title: 'Attach' });
-  row.appendChild(plain);
-  const primary = iconButton('send', { title: 'Send' });
-  primary.classList.add('v2-icon-btn--primary'); // the real usage pattern components.js's own panelFooter() applies to its trailing icon
-  row.appendChild(primary);
-  row.appendChild(iconButton('x', { title: 'Close', disabled: true }));
-  return group('Icon-only buttons — plain · primary · disabled', row);
+  stateTriplet(row, () => iconButton('paperclip', { title: 'Attach' }));
+  stateTriplet(row, () => {
+    // the real usage pattern components.js's own panelFooter() applies to its trailing icon
+    const b = iconButton('send', { title: 'Send' });
+    b.classList.add('v2-icon-btn--primary');
+    return b;
+  });
+  row.appendChild(labeledSpecimen('disabled', iconButton('x', { title: 'Close', disabled: true })));
+  return group('Icon-only buttons — plain × default/hover/focus-visible, primary × default/hover/focus-visible, disabled', row);
 }
 
 function chipsGroup() {
@@ -266,16 +295,25 @@ function statusGlyphsGroup() {
 
 function inputsGroup() {
   const row = h('div', 'sg-specimen-row sg-specimen-row--stack');
-  [
-    input({ placeholder: 'Single-line input…' }),
-    input({ placeholder: 'Multi-line input…', area: true }),
-    input({ placeholder: 'Disabled input', disabled: true }),
-  ].forEach(elm => {
+  const wide = (label, elm) => {
     const col = h('div', 'sg-specimen-col sg-specimen-col--wide');
     col.appendChild(elm);
+    col.appendChild(h('div', 'sg-specimen-col__label', label));
     row.appendChild(col);
-  });
-  return group('Inputs — single-line · multi-line · disabled (click or Tab into one for the real focus ring)', row);
+  };
+  wide('default', input({ placeholder: 'Single-line input…' }));
+  const hovered = input({ placeholder: 'Single-line input…' });
+  hovered.classList.add('sg-force-hover');
+  wide('hover', hovered);
+  const focused = input({ placeholder: 'Single-line input…' });
+  focused.classList.add('sg-force-focus');
+  wide('focus-visible', focused);
+  wide('multi-line', input({ placeholder: 'Multi-line input…', area: true }));
+  wide('disabled', input({ placeholder: 'Disabled input', disabled: true }));
+  const errored = input({ placeholder: 'Errored input' });
+  errored.classList.add('v2-is-error');
+  wide('error', errored);
+  return group('Inputs — default/hover/focus-visible · multi-line · disabled · error', row);
 }
 
 function avatarsGroup() {

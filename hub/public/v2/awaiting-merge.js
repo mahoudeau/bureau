@@ -85,7 +85,15 @@
     };
 
     var panel, trigger, countEl, bodyEl;
-    var prStateCache = {}; // "owner/repo#N" -> 'open' | 'closed' | 'unconfirmed', reused across renders/opens
+    // t-172 (boss law): a row leaves the list ONLY on a confirmed terminal
+    // fact — a genuine 200 saying the PR is closed/merged — never because a
+    // fetch failed, rate-limited, or a re-render raced. State is therefore
+    // kept as {state, ts} with per-state lifetimes: 'closed' is permanent,
+    // 'open' is rechecked after a TTL, and a FAILED check never overwrites
+    // the last known state at all (it only ever fills a void).
+    var prState = {};                 // "owner/repo#N" -> { state: 'open'|'closed'|'unconfirmed', ts }
+    var OPEN_TTL = 120000;            // recheck open PRs at most every 2 min (unauthenticated API is 60 req/h)
+    var inflight = {};                // key -> Promise, so bursts share one fetch instead of stacking
 
     buildTrigger();
     buildPanel();
@@ -186,25 +194,40 @@
 
     function fetchPrState(pr) {
       var key = pr.owner + '/' + pr.repo + '#' + pr.number;
-      if (prStateCache[key]) return Promise.resolve(prStateCache[key]);
+      var known = prState[key];
+      // Confirmed closed is forever; confirmed open is fresh enough within
+      // its TTL. Either way: answer from memory, no network.
+      if (known && (known.state === 'closed' || (known.state === 'open' && Date.now() - known.ts < OPEN_TTL))) {
+        return Promise.resolve(known.state);
+      }
+      if (inflight[key]) return inflight[key]; // a burst of renders shares one request
       var url = 'https://api.github.com/repos/' + pr.owner + '/' + pr.repo + '/pulls/' + pr.number;
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timeout = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
-      return fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal: controller ? controller.signal : undefined })
+      var lastKnownOr = function (fallback) {
+        // The boss law in one line: a failed check NEVER downgrades or
+        // removes what we already knew; it only fills a void.
+        return (prState[key] && prState[key].state) || fallback;
+      };
+      inflight[key] = fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal: controller ? controller.signal : undefined })
         .then(function (r) {
           if (timeout) clearTimeout(timeout);
-          if (!r.ok) return 'unconfirmed'; // rate-limited (403) or any other non-200 — degrade, don't throw
-          return r.json();
-        })
-        .then(function (data) {
-          var state = data && typeof data === 'object' && data.state ? data.state : 'unconfirmed';
-          prStateCache[key] = state;
-          return state;
+          if (!r.ok) return lastKnownOr('unconfirmed'); // 403 rate limit or any non-200: keep last known
+          return r.json().then(function (data) {
+            var state = data && typeof data === 'object' && data.state ? data.state : null;
+            if (state === 'open' || state === 'closed') {
+              prState[key] = { state: state, ts: Date.now() }; // only genuine answers are ever recorded
+              return state;
+            }
+            return lastKnownOr('unconfirmed');
+          });
         })
         .catch(function () {
           if (timeout) clearTimeout(timeout);
-          return 'unconfirmed'; // network error, CORS block, abort — never throw into the caller
-        });
+          return lastKnownOr('unconfirmed'); // network/CORS/abort: keep last known
+        })
+        .then(function (state) { delete inflight[key]; return state; });
+      return inflight[key];
     }
 
     function row(task, pr, state, ready) {
@@ -265,8 +288,25 @@
     // only the panel BODY markup is gated on visibility (rebuilding hidden
     // DOM is wasted work; fetchPrState's cache absorbs the repeat network
     // cost across calls).
+    // t-172: renders are sequenced (a stale async resolve may never paint
+    // over a newer one) and differential (the DOM is only touched when the
+    // computed markup actually changed — no interstitial "Checking…" wipe,
+    // which was the visible flicker: every SSE tick blanked the open panel
+    // and repainted it, making rows "disappear" dozens of times an hour).
+    var renderSeq = 0;
+    var lastBodyHtml = null, lastCount = null;
+
+    function paintCount(v) {
+      var s = String(v);
+      if (s !== lastCount) { lastCount = s; countEl.textContent = s; }
+    }
+    function paintBody(html) {
+      if (panel.hidden) return;               // body work only while visible
+      if (html !== lastBodyHtml) { lastBodyHtml = html; bodyEl.innerHTML = html; }
+    }
+
     function render() {
-      var showBody = !panel.hidden;
+      var seq = ++renderSeq;
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
@@ -275,38 +315,47 @@
       }).filter(Boolean);
 
       if (!candidates.length) {
-        countEl.textContent = '0';
-        if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Nothing awaiting merge.</div>';
+        paintCount('0');
+        paintBody('<div class="v2-empty">Nothing awaiting merge.</div>');
         return;
       }
 
-      if (showBody) bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
+      // First-ever open with nothing painted yet: show the checking note
+      // ONCE. Any later render keeps the existing rows on screen while the
+      // refresh resolves behind them.
+      if (!panel.hidden && lastBodyHtml === null) {
+        bodyEl.innerHTML = '<div class="v2-empty">Checking PR state…</div>';
+      }
+
       return Promise.all(candidates.map(function (c) { return fetchPrState(c.pr); })).then(function (states) {
-        // merged/closed PRs are filtered OUT — that mission isn't
-        // "awaiting" anything anymore, even if bureau-side status hasn't
-        // caught up. 'unconfirmed' (the GitHub call itself failed) stays
-        // IN per this file's own fail-safe direction: never hide a real
-        // tranche because a network call quietly ate it.
+        if (seq !== renderSeq) return; // a newer render superseded this one: never paint stale
+        // Only a CONFIRMED closed/merged PR leaves the list (fetchPrState
+        // guarantees 'closed' can only come from a genuine 200); a failed
+        // check keeps the row with its last known state, per the boss law.
         var open = candidates.map(function (c, i) { return { task: c.task, pr: c.pr, state: states[i] }; })
-          .filter(function (o) { return o.state === 'open' || o.state === 'unconfirmed'; });
+          .filter(function (o) { return o.state !== 'closed'; });
         var b = bucket(open);
-        countEl.textContent = String(readyCount(b.ready));
-        // Re-check panel.hidden at resolve time, not just at call time — a
-        // slow fetch resolving after the user toggled the panel must not
-        // repaint stale rows into a hidden node.
-        if (panel.hidden) return; // trigger count stays live even closed
-        bodyEl.innerHTML = open.length
+        paintCount(readyCount(b.ready));
+        paintBody(open.length
           ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
-          : '<div class="v2-empty">Nothing awaiting merge.</div>';
+          : '<div class="v2-empty">Nothing awaiting merge.</div>');
       });
     }
 
-    // Every state refresh — initial load included, and every SSE tick or
-    // 60s poll after it — drives the trigger's real READY count, panel open
-    // or closed (t-128); a row's mission changing state moves it between
-    // READY and IN-LOOP live (t-129). render() skips DOM body work while
-    // closed.
-    V2.on('v2:state', function () { render(); });
+    // SSE ticks arrive far faster than PR reality changes (eight agents
+    // heartbeating, every mission note). Coalesce them: leading render for
+    // immediacy, then at most one trailing render per window.
+    var renderTimer = null, renderQueued = false;
+    function requestRender() {
+      if (renderTimer) { renderQueued = true; return; }
+      render();
+      renderTimer = setTimeout(function () {
+        renderTimer = null;
+        if (renderQueued) { renderQueued = false; requestRender(); }
+      }, 3000);
+    }
+
+    V2.on('v2:state', function () { requestRender(); });
     // Instant light pass before the first network resolve: READY candidates
     // only, same scope as the confirmed count, so the two passes never
     // disagree in kind — only in confidence.
