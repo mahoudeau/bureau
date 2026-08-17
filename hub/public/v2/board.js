@@ -1022,8 +1022,13 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // flow — keeping the redesign a single-file change with no v2.html edit
       // (and no drift on that repeatedly-contested file).
       '#v2-board { display: block; }',
-      '.v2-swim { display: flex; flex-direction: column; gap: var(--v2-space-5, 12px); }',
-      '.v2-swim__group { border: 1px solid var(--v2-color-border, rgba(128,128,128,.12)); border-radius: var(--v2-radius-md, 8px); overflow: hidden; background: var(--v2-color-surface, transparent); }',
+      // t-167 round 2 (critic send-back): Linear's issue list is ONE
+      // continuous flat surface — bands are separated only by the header
+      // strip's own hairline, never by a boxed card. No group border,
+      // radius, overflow-clip or inter-band gap here; the header tint plus
+      // the row-level hairlines below carry all the separation.
+      '.v2-swim { display: flex; flex-direction: column; }',
+      '.v2-swim__group { background: transparent; }',
       '.v2-swim__head { display: flex; align-items: center; gap: var(--v2-space-3, 6px); padding: var(--v2-space-3, 6px) var(--v2-space-4, 8px); cursor: pointer; user-select: none; background: var(--v2-color-surface-raised, rgba(128,128,128,.05)); border-bottom: 1px solid var(--v2-color-border, rgba(128,128,128,.1)); }',
       '.v2-swim__group.is-collapsed .v2-swim__head { border-bottom-color: transparent; }',
       '.v2-swim__head:hover { background: var(--v2-color-border, rgba(128,128,128,.08)); }',
