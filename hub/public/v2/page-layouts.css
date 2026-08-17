@@ -9,7 +9,9 @@
  * Every rule below composes classes already shipped by tokens.css (t-63/
  * t-75), components.css (t-66), molecules.css (t-77) and organisms.css
  * (t-78) — this file adds no new atom-level visual treatment (color,
- * type, chip/button/row chrome), only placement.
+ * type, chip/button/row chrome), only placement. ONE documented
+ * exception: the OVERLAY template's own background/border (not just
+ * position) — see that template's own comment for why.
  *
  * NAMING: hub/public/v2/templates.js already means something unrelated
  * (t-72's quick-add mission-template picker). This file is deliberately
@@ -50,21 +52,41 @@
  * this mission's own required naming and because each is independently
  * demonstrable in the styleguide without the other.
  *
- * ZERO MAGIC NUMBERS, one documented exemption: every color/spacing/
- * radius/shadow/type/icon/z-index value below reads a tokens.css custom
- * property, most through a calc()/minmax() built on --v2-row-height (the
- * one already-established "atomic row unit" this schema exposes) since
- * tokens.css defines no rail-width/panel-width/breakpoint token of its
- * own to cite directly — flagged as an estimate extrapolated from the
- * cited crops, the same honest posture tokens.css's own header comment
- * uses for --v2-row-height itself (measured/estimated, not exact-pixel-
- * cited like a color). The one EXEMPTED category is the phone media-query
+ * ZERO MAGIC NUMBERS: every spacing/gap/padding value below reads a
+ * tokens.css custom property directly (`gap`/`padding` on the grid are
+ * `--v2-space-4`, an EXACT match to v2.html's own already-token-driven
+ * `.v2-shell { gap: var(--v2-space-4); padding: var(--v2-space-4) }` —
+ * not reinvented). The two structural widths tokens.css has no
+ * dedicated slot for (rail column width, overlay surface width) are
+ * composed below as `--v2-layout-rail-w` / `--v2-layout-overlay-w`,
+ * local constants scoped to this file (prefixed `--v2-layout-`, not
+ * `--v2-space-`, so they never read as tokens.css schema additions,
+ * which this mission does not touch) — each a calc() on
+ * `--v2-space-8` landing on an EXACT citable pixel value (224px / 560px)
+ * rather than an estimated range, see each constant's own comment below
+ * for the citation. The one EXEMPTED category is the phone media-query
  * threshold (720px, below): tokens.css carries no breakpoint token at
  * all (by design — every sibling CSS file in this system is breakpoint-
  * free, that's a page-level-only concern), so this reuses the live app's
  * OWN existing phone threshold (v2.html's `@media (max-width: 720px)`)
  * for consistency rather than inventing an uncited second one.
  */
+
+:root {
+  /* Rail (agent/project nav) column width. calc(--v2-space-8 * 7) =
+     224px, an EXACT match to the approved sample's own #rail rule
+     (projects/bureau/deliverables/t-58-v2-sample.html.txt line 125:
+     `#rail { width: 224px; ... }`) — not an approximation, the
+     space-8 unit happens to divide it evenly. */
+  --v2-layout-rail-w: calc(var(--v2-space-8) * 7);
+
+  /* Floating overlay surface width (cmd-K palette / settings). calc
+     (--v2-space-8 * 17 + --v2-space-6) = 544px + 16px = 560px, an EXACT
+     match to the live shell's own .v2-palette width (hub/public/v2.html,
+     `width: min(560px, 92vw)`), which itself traces to the sample's
+     #palette (t-58-v2-sample.html.txt). */
+  --v2-layout-overlay-w: calc(var(--v2-space-8) * 17 + var(--v2-space-6));
+}
 
 /* Self-contained box-sizing: the critic's scratch demo links only
    tokens.css + components.css + molecules.css + organisms.css + this
@@ -114,25 +136,22 @@
 .v2-layout--two-pane,
 .v2-layout--three-pane {
   display: grid;
-  grid-template-columns:
-    minmax(calc(var(--v2-row-height) * 7), calc(var(--v2-row-height) * 9))
-    minmax(0, 1fr);
+  grid-template-columns: var(--v2-layout-rail-w) minmax(0, 1fr);
   grid-template-areas: "rail main";
-  gap: var(--v2-space-6);
-  padding: var(--v2-space-6);
+  gap: var(--v2-space-4);
+  padding: var(--v2-space-4);
   min-height: 100dvh;
-  background: var(--v2-color-bg);
   align-items: start;
 }
-/* Rail track: minmax(7, 9) row-heights (210-270px) — extrapolated from
-   crop-ux-sidebar-item.png's own icon+label+padding register (icon
-   --v2-icon-size-sm, gap --v2-space-5, label text, .v2-card's own
-   --v2-space-6 outer padding on both sides), the same "estimate flagged
-   honestly" posture tokens.css uses for --v2-row-height itself — the
-   crop is a partial crop of a wider sidebar, not a full-width reference,
-   so this is a reasoned range, not an exact citation. .v2-row__title's
-   existing ellipsis (components.css) absorbs any label longer than the
-   range allows, by design. */
+/* No background here: tokens.css's own `html { background:
+   var(--v2-color-bg) }` (base + tabular numerals section) already
+   paints the canvas on any page that links tokens.css, which every
+   consumer of this file does — repeating it here would be dead,
+   redundant CSS, not a structural need. */
+/* Rail track: --v2-layout-rail-w (224px, see its own citation above) —
+   an exact figure, not the estimated row-height range an earlier draft
+   of this file used. .v2-row__title's existing ellipsis (components.css)
+   absorbs any label the fixed width can't fit, by design. */
 .v2-layout__rail {
   grid-area: rail;
   display: flex;
@@ -171,33 +190,45 @@
    TEMPLATE: OVERLAY (palette/settings surface floating over whichever
    pane layout is active)
    Organism placed: an anchored floating surface — the closest existing
-   molecule is .v2-palette (molecules.css/t-77, border-radius/shadow
-   only; its actual fixed positioning/width today lives inline in
-   v2.html, out of this mission's scope to touch or copy verbatim). This
-   template re-derives the same STRUCTURAL shape token-first: anchored
-   near the top (not vertically centered — STUDY's own cited pattern,
-   Screenshot-2024-08-03-at-16.40.34.png's inline popover and the cmd-K
-   convention generally, is an anchored surface, never a centered
-   splash), non-modal (no scrim) by default, matching STUDY-lead.md's own
-   "filters/creation are token-and-pill, not forms" register and
-   tokens.css's own note that this system's cmd-K surface has no
-   backdrop. Width lands at calc(row-height * 18) = 540px, independently
-   close to (not copied from) v2.html's own existing cmd-K width
-   (min(560px, 92vw)) — a confirming coincidence from a token-derived
-   formula, not a citation of that inline value. For a genuinely modal
-   settings variant that DOES need a backdrop, pair this class with the
-   existing `.v2-panel__scrim` element (components.css, already reads
+   molecule is .v2-palette (molecules.css/t-77: border-radius + box-
+   shadow only, confirmed by reading it before writing this rule — no
+   position, width, background or border anywhere in that file; its
+   fixed positioning/width today lives ONLY inline in v2.html, out of
+   this mission's scope to touch). Calibrated against
+   crop-ux-command-palette.png: anchored near the top of the viewport
+   (not vertically centered), rounded top corners, hairline row
+   dividers, right-aligned kbd hint chips — confirms the anchored-not-
+   centered pattern Screenshot-2024-08-03-at-16.40.34.png's inline
+   popover also shows. Non-modal (no scrim) by default, matching
+   STUDY-lead.md's "filters/creation are token-and-pill, not forms"
+   register. `top: 12vh` / `width: min(..., 92vw)` are EXACT matches to
+   the live shell's own already-shipped `.v2-palette` placement
+   (hub/public/v2.html) — cited directly rather than re-derived from an
+   unrelated unit, since the goal is convergence on one shape, not a
+   second, merely-similar one. `--v2-layout-overlay-w` (560px, see its
+   own citation above) is the same live width exactly. THE ONE
+   DOCUMENTED COLOR/CHROME EXCEPTION in this file: background/border
+   are set directly below, because no reusable floating-surface molecule
+   exists yet for the "future settings surface" this class also names —
+   without them the class would render invisible on its own. Combined
+   with `.v2-palette` (which already carries the identical
+   --v2-radius-lg/--v2-shadow-overlay values), the cascade ties resolve
+   to the same rendered pixels either way — confirmed live, not assumed
+   — so this is a safety net for the no-molecule-yet case, not a
+   competing implementation. For a genuinely modal settings variant that
+   DOES need a backdrop, pair this class with the existing
+   `.v2-panel__scrim` element (components.css, already reads
    --v2-color-overlay-scrim) as a preceding sibling — this template does
    not bake a scrim in, so the common non-modal case stays scrim-free by
    default rather than by override.
    ============================================================ */
 .v2-layout--overlay {
   position: fixed;
-  top: var(--v2-space-8);
+  top: 12vh;
   left: 50%;
   transform: translateX(-50%);
-  width: min(calc(var(--v2-row-height) * 18), calc(100% - var(--v2-space-8) * 2));
-  max-height: 60dvh;
+  width: min(var(--v2-layout-overlay-w), 92vw);
+  max-height: 60vh;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
