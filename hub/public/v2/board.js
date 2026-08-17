@@ -575,7 +575,7 @@ import { icon, idBadge } from './components.js';
          sample, fed from the real state.knowledge.recent (git log over the
          brain repo), not a placeholder link. */
       '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
-      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
+      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #71727c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
       '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       // Discarded cards (t-110): dashed border + reduced opacity, distinguishable
