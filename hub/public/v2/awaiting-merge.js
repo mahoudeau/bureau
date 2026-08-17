@@ -84,7 +84,6 @@
       return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
     };
 
-    var panel, trigger, countEl, bodyEl;
     // t-172 (boss law): a row leaves the list ONLY on a confirmed terminal
     // fact — a genuine 200 saying the PR is closed/merged — never because a
     // fetch failed, rate-limited, or a re-render raced. State is therefore
@@ -116,44 +115,12 @@
     // happens only on the metered ticker below, never on render.
     var rateLimitedUntil = 0;
 
-    buildTrigger();
-    buildPanel();
-
-    document.addEventListener('keydown', function (e) {
-      if (!panel.hidden && e.key === 'Escape') close();
-    });
-
-    function open() { panel.hidden = false; render(); }
-    function close() { panel.hidden = true; }
-
-    function buildTrigger() {
-      trigger = document.createElement('button');
-      trigger.type = 'button';
-      trigger.className = 'v2-awaitmerge-trigger';
-      trigger.setAttribute('aria-label', 'Missions awaiting merge');
-      trigger.innerHTML = '⎇ <span id="v2-awaitmerge-count">0</span> awaiting merge';
-      trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });
-      document.body.appendChild(trigger);
-      countEl = trigger.querySelector('#v2-awaitmerge-count');
-    }
-
-    function buildPanel() {
-      panel = document.createElement('div');
-      panel.className = 'v2-awaitmerge-panel';
-      panel.hidden = true;
-      panel.setAttribute('role', 'dialog');
-      panel.setAttribute('aria-modal', 'false');
-      panel.setAttribute('aria-label', 'Missions awaiting merge');
-      panel.innerHTML =
-        '<div class="v2-awaitmerge-panel__head">' +
-        '<strong>Awaiting merge</strong>' +
-        '<button type="button" class="v2-awaitmerge-panel__close" aria-label="Close">✕</button>' +
-        '</div>' +
-        '<div class="v2-awaitmerge-panel__body"></div>';
-      document.body.appendChild(panel);
-      bodyEl = panel.querySelector('.v2-awaitmerge-panel__body');
-      panel.querySelector('.v2-awaitmerge-panel__close').addEventListener('click', close);
-    }
+    // t-240 (the Desk): the floating trigger + popover are retired. This
+    // surface now renders into the #v2-desk-merge slot the Desk reserves
+    // in the side rail (needs-me-now.js emits 'v2:desk:merge-mount' after
+    // each of its own renders, since re-rendering the rail replaces the
+    // slot element). PR-state logic is unchanged; only presentation moved.
+    function mergeMount() { return document.getElementById('v2-desk-merge'); }
 
     // A mission "carries" a PR if the LAST github.com/.../pull/N link in
     // its own artifacts list matches — last, not first, so a mission
@@ -280,35 +247,22 @@
       return inflight[key];
     }
 
-    function row(task, pr, state, ready) {
-      var badge = state === 'open' ? '' : state === 'unconfirmed' ? '<span class="v2-awaitmerge-row__unconfirmed">PR state unconfirmed</span>' : '';
-      return '<div class="v2-awaitmerge-row' + (ready ? '' : ' v2-awaitmerge-row--inloop') + '">' +
-        '<div class="v2-awaitmerge-row__head">' +
-        '<span class="v2-awaitmerge-row__title">' + esc(task.id) + ' · ' + esc(task.title) + '</span>' +
-        // t-145 (goal: t-53): .v2-hit44 (components.css) — invisible 44px
-        // hit zone around the small "PR #N →" link, same pattern as t-115
-        // (closes t-111). Keeps the compact visual, grows only the tap area.
-        '<a class="v2-awaitmerge-row__pr v2-hit44" href="' + esc(pr.url) + '" target="_blank" rel="noopener">PR #' + esc(pr.number) + ' →</a>' +
-        '</div>' +
-        '<div class="v2-awaitmerge-row__meta">' +
-        (ready ? '' : '<span class="v2-awaitmerge-row__status">' + esc(statusLabel(task)) + '</span>') +
-        badge +
-        '</div>' +
-        thumbsFor(task) +
-        '</div>';
-    }
-
-    // A section is only worth its own header once it has rows; an empty
-    // READY (or empty IN-LOOP) section renders nothing rather than an
-    // empty header, so "one done PR + one looping PR" reads as exactly
-    // two labeled blocks, not two-plus-a-hollow-third.
-    function section(key, label, rows, ready) {
-      if (!rows.length) return '';
-      return '<div class="v2-awaitmerge-section v2-awaitmerge-section--' + key + '">' +
-        '<div class="v2-awaitmerge-section__head">' + esc(label) +
-        ' <span class="v2-awaitmerge-section__count">' + rows.length + '</span></div>' +
-        rows.map(function (o) { return row(o.task, o.pr, o.state, ready); }).join('') +
-        '</div>';
+    // t-240: a Desk-grammar row — one dense line (PR link + ellipsized
+    // mission title), evidence collapsed behind a native <details> so the
+    // rail stays a column of lines until the boss asks for pixels.
+    function row(task, pr, state) {
+      var badge = state === 'unconfirmed' ? '<span class="v2-awaitmerge-row__unconfirmed">unconfirmed</span>' : '';
+      var thumbs = thumbsFor(task);
+      var evidence = thumbs.indexOf('v2-media__thumb') !== -1
+        ? '<details class="v2-awaitmerge-row__evidence"><summary>evidence</summary>' + thumbs + '</details>'
+        : '';
+      return '<div class="v2-list__row v2-awaitmerge-row">' +
+        // t-145 (goal: t-53): .v2-hit44 — invisible 44px hit zone on the link.
+        '<a class="v2-awaitmerge-row__pr v2-hit44" href="' + esc(pr.url) + '" target="_blank" rel="noopener">#' + esc(pr.number) + '</a>' +
+        '<span class="v2-list__row-body">' +
+        '<span class="v2-list__row-title v2-awaitmerge-row__title">' + esc(task.id) + ' · ' + esc(task.title) + '</span>' +
+        (badge || evidence ? '<span class="v2-list__row-meta">' + badge + evidence + '</span>' : '') +
+        '</span></div>';
     }
 
     // Splits the states-resolved candidate list into READY (rendered
@@ -349,31 +303,28 @@
     // which was the visible flicker). Since the t-200 metered ticker they
     // are also fully synchronous cache reads, so ordering races are gone
     // by construction.
-    var lastBodyHtml = null, lastCount = null;
+    var lastBodyHtml = null;
 
-    function paintCount(v) {
-      var s = String(v);
-      if (s !== lastCount) { lastCount = s; countEl.textContent = s; }
-    }
     function paintBody(html) {
-      if (panel.hidden) return;               // body work only while visible
-      if (html !== lastBodyHtml) { lastBodyHtml = html; bodyEl.innerHTML = html; }
+      var el = mergeMount();
+      if (!el) return; // the Desk hasn't rendered its slot yet
+      // The Desk replaces the slot element on every rail render, so compare
+      // against the slot's actual content, not just our last string.
+      if (html !== lastBodyHtml || el.innerHTML === '') { lastBodyHtml = html; el.innerHTML = html; }
     }
 
+    // t-240: rendered as a Desk section — header with the honest confirmed
+    // count, READY rows only. In-loop PR-bearing missions no longer render
+    // here at all: loop state is the board's job (the boss's own governing
+    // rule for the rail: only what the board structurally cannot show).
     function render() {
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
-        if (isAbandoned(t)) return null; // t-164: discarded/failed missions never enter the list, not even IN-LOOP
+        if (isAbandoned(t)) return null; // t-164: discarded/failed missions never enter the list
         var pr = prLinkFor(t);
         return pr ? { task: t, pr: pr } : null;
       }).filter(Boolean);
-
-      if (!candidates.length) {
-        paintCount('0');
-        paintBody('<div class="v2-empty">Nothing awaiting merge.</div>');
-        return;
-      }
 
       // t-200 metered ticker (boss ruling): renders NEVER fetch. They read
       // the cache synchronously and paint; the background ticker below is
@@ -386,10 +337,10 @@
         return { task: c.task, pr: c.pr, state: (known && known.state) || 'unconfirmed' };
       }).filter(function (o) { return o.state !== 'closed'; });
       var b = bucket(open);
-      paintCount(readyCount(b.ready));
-      paintBody(open.length
-        ? section('ready', 'Ready to merge', b.ready, true) + section('inloop', 'Still in the loop', b.inLoop, false)
-        : '<div class="v2-empty">Nothing awaiting merge.</div>');
+      var head = '<h3 class="v2-needs-me-now__group-title">⎇ Awaiting merge · ' + readyCount(b.ready) + '</h3>';
+      paintBody(head + (b.ready.length
+        ? '<div class="v2-list">' + b.ready.map(function (o) { return row(o.task, o.pr, o.state, true); }).join('') + '</div>'
+        : '<div class="v2-empty">Nothing ready to merge.</div>'));
     }
 
     // The metered ticker: once a minute, refresh exactly ONE PR's state —
@@ -438,6 +389,9 @@
     }
 
     V2.on('v2:state', function () { requestRender(); });
+    // The Desk re-emits this after every rail render (its innerHTML replace
+    // destroys our slot's content), so we repaint into the fresh slot.
+    V2.on('v2:desk:merge-mount', function () { lastBodyHtml = null; render(); });
     render(); // cold-load paint from the persisted cache; the ticker refines it
   }
 
@@ -445,45 +399,19 @@
     if (document.getElementById('v2-awaitmerge-style')) return;
     var style = document.createElement('style');
     style.id = 'v2-awaitmerge-style';
+    // t-240: trigger/popover styles retired with the floating surface; the
+    // Desk section reuses .v2-list row grammar (organisms.css) — only the
+    // handful of merge-specific hooks remain here.
     style.textContent = [
-      // t-145 (goal: t-53): min-height 44px — the trigger sits alone in the
-      // bottom-right thumb zone (no neighboring controls to keep visually
-      // compact against), so growing its own box is simpler than the
-      // hit44 pseudo-element trick and there's no `position: relative`
-      // clash with the `position: fixed` this element needs to stay pinned.
-      '.v2-awaitmerge-trigger { position: fixed; right: var(--v2-space-3, 12px); bottom: var(--v2-space-3, 12px); z-index: 44; display: flex; align-items: center; gap: var(--v2-space-2, 6px); font: inherit; font-size: var(--v2-font-size-xs, 12px); font-variant-numeric: tabular-nums; padding: var(--v2-space-2, 6px) var(--v2-space-4, 10px); min-height: 44px; border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-surface, var(--v2-surface, #fff)); color: var(--v2-color-text-secondary, var(--v2-ink-2, inherit)); cursor: pointer; }',
-      '.v2-awaitmerge-trigger:hover { border-color: var(--v2-color-border-strong, var(--v2-hairline, rgba(128,128,128,.5))); }',
-      '.v2-awaitmerge-panel { position: fixed; right: var(--v2-space-3, 12px); bottom: calc(var(--v2-space-3, 12px) + 40px); width: min(420px, 92vw); max-height: 70vh; display: flex; flex-direction: column; background: var(--v2-color-surface, var(--v2-surface, #fff)); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 8px); box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 50; overflow: hidden; }',
-      '@media (max-width: 720px) { .v2-awaitmerge-panel { top: 0; left: 0; right: 0; bottom: 0; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }',
-      '.v2-awaitmerge-panel__head { display: flex; align-items: center; justify-content: space-between; padding: var(--v2-space-4, 12px); border-bottom: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.2))); font-size: var(--v2-font-size-md, 14px); }',
-      '.v2-awaitmerge-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); cursor: pointer; font-size: 14px; }',
-      '.v2-awaitmerge-panel__body { overflow-y: auto; padding: var(--v2-space-3, 12px); display: flex; flex-direction: column; gap: var(--v2-space-5, 16px); }',
-      // Section header: small caps-weight label + a tabular-numeral count
-      // pill. READY gets the done/green accent (it's a positive, "this is
-      // for you" signal); IN-LOOP gets the neutral muted text — visually
-      // distinct without needing a second color vocabulary.
-      '.v2-awaitmerge-section { display: flex; flex-direction: column; gap: var(--v2-space-3, 10px); }',
-      '.v2-awaitmerge-section__head { display: flex; align-items: center; gap: var(--v2-space-2, 6px); font-weight: 600; font-size: 11px; letter-spacing: .04em; text-transform: uppercase; }',
-      '.v2-awaitmerge-section--ready .v2-awaitmerge-section__head { color: var(--v2-color-status-done, #29a36a); }',
-      '.v2-awaitmerge-section--inloop .v2-awaitmerge-section__head { color: var(--v2-color-text-muted, #71727c); }',
-      '.v2-awaitmerge-section__count { font-variant-numeric: tabular-nums; font-weight: 600; }',
-      '.v2-awaitmerge-row { border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.2))); border-radius: var(--v2-radius, 6px); padding: var(--v2-space-3, 10px); }',
-      // READY rows: a full-strength left accent so the section reads as
-      // "yours to act on" even scanned quickly. IN-LOOP rows: dimmed as a
-      // whole (border, text, thumbnails) so the muted section reads as
-      // background context, not a second to-do list competing for
-      // attention — per t-129's own "visually distinct" instruction.
-      '.v2-awaitmerge-section--ready .v2-awaitmerge-row { border-left: 3px solid var(--v2-color-status-done, #29a36a); }',
-      '.v2-awaitmerge-row--inloop { opacity: .6; }',
-      '.v2-awaitmerge-row--inloop:hover, .v2-awaitmerge-row--inloop:focus-within { opacity: .85; }',
-      '.v2-awaitmerge-row__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 6px); }',
-      '.v2-awaitmerge-row__title { font-weight: 600; font-size: 13px; overflow-wrap: break-word; }',
-      '.v2-awaitmerge-row__pr { flex: none; font-size: 12px; color: var(--v2-color-accent, #3f6fe0); text-decoration: none; white-space: nowrap; }',
+      '.v2-awaitmerge-row { cursor: default; }',
+      '.v2-awaitmerge-row__pr { flex: none; font-size: 12px; color: var(--v2-color-accent, #3f6fe0); text-decoration: none; white-space: nowrap; font-variant-numeric: tabular-nums; }',
       '.v2-awaitmerge-row__pr:hover { text-decoration: underline; }',
-      '.v2-awaitmerge-row__meta { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 6px); }',
-      '.v2-awaitmerge-row__meta:empty { display: none; margin: 0; }',
-      '.v2-awaitmerge-row__status { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--v2-color-text-muted, #71727c); }',
-      '.v2-awaitmerge-row__unconfirmed { font-size: 11px; color: var(--v2-color-status-at-risk, #f2a30f); }'
+      '.v2-awaitmerge-row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.v2-awaitmerge-row__unconfirmed { font-size: 11px; color: var(--v2-color-status-at-risk, #f2a30f); margin-right: var(--v2-space-2, 6px); }',
+      '.v2-awaitmerge-row__evidence summary { cursor: pointer; font-size: 11px; color: var(--v2-color-text-muted, #71727c); list-style: none; }',
+      '.v2-awaitmerge-row__evidence summary::-webkit-details-marker { display: none; }',
+      '.v2-awaitmerge-row__evidence summary::before { content: "▸ "; }',
+      '.v2-awaitmerge-row__evidence[open] summary::before { content: "▾ "; }'
     ].join('\n');
     document.head.appendChild(style);
   }

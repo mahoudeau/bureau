@@ -219,6 +219,66 @@ import { icon } from './components.js';
         '</div>';
     }
 
+    // t-240 (the Desk): relative time for the activity timeline.
+    function relTime(ts) {
+      var d = Date.now() - Date.parse(ts || 0);
+      if (!isFinite(d) || d < 0) d = 0;
+      var m = Math.floor(d / 60000);
+      if (m < 1) return 'now';
+      if (m < 60) return m + 'm';
+      var h = Math.floor(m / 60);
+      if (h < 24) return h + 'h';
+      return Math.floor(h / 24) + 'd';
+    }
+
+    // Hub event types worth a timeline line, with their human verbs.
+    // agent.heartbeat is deliberately absent: eight agents pinging every few
+    // minutes is noise, not pulse.
+    var EVENT_VERBS = {
+      'task.created': 'filed', 'task.claimed': 'claimed', 'task.review': 'parked for review',
+      'task.done': 'completed', 'task.failed': 'failed', 'task.requeued': 'sent back',
+      'task.blocked': 'blocked', 'task.updated': 'updated',
+      'agent.registered': 'clocked in', 'message.posted': 'messaged',
+      'knowledge.written': 'wrote', 'project.created': 'created project'
+    };
+
+    function activityRow(ev) {
+      var verb = EVENT_VERBS[ev.type];
+      if (!verb) return '';
+      var actor = ev.assignee || ev.by || ev.author || ev.from || ev.name || '';
+      var target = ev.id || ev.file || ev.to || '';
+      var label = ev.title || ev.note || ev.body || '';
+      var openAttr = ev.id ? ' data-open="' + esc(ev.id) + '" role="button" tabindex="0"' : '';
+      return '<div class="v2-list__row v2-desk__event"' + openAttr + '>' +
+        '<span class="v2-desk__event-time">' + esc(relTime(ev.ts)) + '</span>' +
+        '<span class="v2-list__row-body">' +
+        '<span class="v2-list__row-meta v2-desk__event-line">' +
+        (actor ? '<b>' + esc(actor) + '</b> ' : '') + esc(verb) +
+        (target ? ' <span class="v2-desk__event-target">' + esc(target) + '</span>' : '') +
+        '</span>' +
+        (label ? '<span class="v2-list__row-meta v2-desk__event-label">' + esc(truncate(label, 70)) + '</span>' : '') +
+        '</span></div>';
+    }
+
+    // t-240: a Decisions row is an ACTION TRAY row — the mission line plus
+    // inline controls, so a verdict is one gesture instead of a trip through
+    // the peek. Approve files done; Send back / Answer require a note and
+    // re-queue (the same PATCH shape peek-panel.js submits).
+    function decisionRow(t, state, kind) {
+      var actions = kind === 'review'
+        ? '<button type="button" class="v2-desk__act v2-desk__act--approve" data-act="done" data-task="' + esc(t.id) + '">Approve</button>' +
+          '<button type="button" class="v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Send back</button>'
+        : '<button type="button" class="v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Answer</button>';
+      return '<div class="v2-desk__decision" data-decision="' + esc(t.id) + '">' +
+        missionRow(t, state) +
+        '<div class="v2-desk__tray">' +
+        '<input type="text" class="v2-desk__note" data-note="' + esc(t.id) + '" placeholder="' + (kind === 'review' ? 'Note (required to send back)' : 'Your answer') + '">' +
+        actions +
+        '</div>' +
+        '<div class="v2-desk__err" data-err="' + esc(t.id) + '" hidden></div>' +
+        '</div>';
+    }
+
     function group(key, title, rowsHtml, count, extraHtml) {
       // t-89: title is NOT esc()'d — every call site below passes a fixed
       // string literal (never state/user data), and two of them now embed
@@ -326,29 +386,65 @@ import { icon } from './components.js';
           '</button>'
         : '';
 
+      // t-240 (the Desk): four sections, each carrying what the board
+      // structurally cannot — actions-in-place, pull requests, events,
+      // messages. The old "not yours to act on" groups (review-critic,
+      // blocked-on-other-work) are gone: the swimlane board is where
+      // mission STATE lives; duplicating it here earned nothing.
+      var activityEvents = (state.log || []).slice().reverse()
+        .filter(function (ev) { return EVENT_VERBS[ev.type]; }).slice(0, 25);
+
       mount.innerHTML =
         '<div class="v2-needs-me-now__toolbar">' +
         '<span class="v2-needs-me-now__total">' + total + ' waiting on you</span>' +
-        // t-150 (goal: t-53): v2-hit44 (components.css) — a pre-existing,
-        // purely functional class hook (zero visible style, an invisible
-        // centered 44px tap zone), not the "hand-rolled visual language"
-        // this file's own header comment rules out. Its only neighbor is
-        // the plain-text total span to its left, so the grown zone has
-        // nothing clickable to collide with.
+        // t-150 (goal: t-53): v2-hit44 — invisible centered 44px tap zone.
         '<button type="button" class="v2-needs-me-now__sort-toggle v2-hit44" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
         '</div>' +
-        (total === 0 && !reviewCritic.length && !blockedOnWork.length && !toBoss.length
-          ? '<div class="v2-empty">Nothing waiting on you.</div>'
-          : group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
-          group('blocked', '⏸ Blocked, awaiting your answer', blockedOnBoss.map(function (t) { return missionRow(t, state); }).join(''), blockedOnBoss.length) +
-          group('review-critic', icon('flag') + ' Review · critic (not yours to act on)', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
-          group('blocked-other', '⏸ Blocked on other work (not yours to act on)', blockedOnWork.map(function (t) { return missionRow(t, state); }).join(''), blockedOnWork.length) +
-          group('messages', icon('message-square') + ' Messages to boss (already delivered)', toBoss.map(messageRow).join(''), messagesCount, messagesToggleHtml));
+        group('decisions', icon('flag') + ' Decisions', total === 0 ? '' :
+          reviewBoss.map(function (t) { return decisionRow(t, state, 'review'); }).join('') +
+          blockedOnBoss.map(function (t) { return decisionRow(t, state, 'blocked'); }).join(''), total) +
+        // Awaiting merge renders itself into this mount (awaiting-merge.js
+        // owns PR state; this file only reserves the slot in the order).
+        '<section class="v2-needs-me-now__group" data-group="merge"><div id="v2-desk-merge"></div></section>' +
+        group('activity', icon('git-branch') + ' Activity', activityEvents.map(activityRow).join(''), activityEvents.length) +
+        group('messages', icon('message-square') + ' Messages', toBoss.map(messageRow).join(''), messagesCount, messagesToggleHtml);
 
       var sortBtn = document.getElementById('v2-nmn-sort');
       if (sortBtn) sortBtn.addEventListener('click', function () { sortOldestFirst = !sortOldestFirst; render(); });
       var msgToggleBtn = document.getElementById('v2-nmn-messages-toggle');
       if (msgToggleBtn) msgToggleBtn.addEventListener('click', function () { showAllMessages = !showAllMessages; render(); });
+
+      // t-240: the Desk's verdict tray. Same PATCH shape peek-panel.js
+      // submits; Approve needs no note, Send back / Answer require one so
+      // the agent knows what to change.
+      mount.querySelectorAll('.v2-desk__act').forEach(function (btn) {
+        btn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var id = btn.getAttribute('data-task');
+          var status = btn.getAttribute('data-act');
+          var noteEl = mount.querySelector('[data-note="' + id + '"]');
+          var errEl = mount.querySelector('[data-err="' + id + '"]');
+          var note = noteEl ? noteEl.value.trim() : '';
+          if (status === 'queued' && !note) {
+            if (errEl) { errEl.textContent = 'A note is required so the agent knows what to change.'; errEl.hidden = false; }
+            return;
+          }
+          btn.disabled = true;
+          V2.api('/api/tasks/' + id, {
+            method: 'PATCH',
+            body: JSON.stringify({ agent: 'human', status: status, note: note || 'approved' })
+          }).then(function (r) {
+            if (r && r.error) { btn.disabled = false; if (errEl) { errEl.textContent = r.error; errEl.hidden = false; } return; }
+            V2.refresh();
+          });
+        });
+      });
+      // The tray's input must not trigger the row's open-peek click.
+      mount.querySelectorAll('.v2-desk__note, .v2-desk__tray').forEach(function (el) {
+        el.addEventListener('click', function (e) { e.stopPropagation(); });
+      });
+      // Let awaiting-merge.js (re)render its section now that its mount exists.
+      V2.emit('v2:desk:merge-mount', {});
       // t-225: rows carry role="button" tabindex="0" (above) but that alone
       // gives no keyboard ACTIVATION path — a focused div ignores Enter/
       // Space by default, unlike a real <button>. Each handler below is
