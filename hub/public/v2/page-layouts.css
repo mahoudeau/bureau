@@ -184,6 +184,31 @@
    a centered <dialog> with a click-trapping backdrop (the scrim dims but
    the overlay wrapper itself does not intercept clicks outside the
    surface — see pointer-events below).
+   CRITIC ROUND 1 (moneta): radius/shadow chrome is real but .v2-palette
+   carries no `background` anywhere in the 5 files this mission's own
+   acceptance renders with — in the live app it's covered only by v2.html's
+   inline (differently-tokened, legacy-namespace) rule, which the
+   standalone harness correctly excludes. Result over a scrim with no fill:
+   illegible. Fixed below on .v2-tmpl__overlay-surface (this file's own
+   selector, not a molecules.css touch, which stays out of this mission's
+   single-new-file scope) with --v2-color-surface, so the template is
+   self-sufficient the way three-pane/two-pane already are.
+   Self-caught while re-rendering the fix: .v2-tmpl__overlay is `display:
+   flex` with no `align-items` set, so the default `stretch` was silently
+   pulling .v2-tmpl__overlay-surface to the full cross-axis height (the
+   missing background masked this too — an invisible box doesn't show its
+   own wrong height). Added `align-items: flex-start` so the surface is
+   only as tall as its content, anchored under the padding-top offset,
+   matching a command-palette's real shape instead of a screen-height panel.
+   Second self-caught bug, same re-render: .v2-panel__scrim (components.css)
+   carries an explicit z-index:var(--v2-z-scrim) (55); .v2-tmpl__overlay-
+   surface had none (z-index:auto), which per CSS stacking rules paints
+   BELOW any positive-z-index sibling regardless of DOM order — the scrim
+   was rendering on top of the newly-opaque surface, tinting it through the
+   scrim's own 32%-alpha color (again invisible before the surface had a
+   background to tint). Given z-index: var(--v2-z-popover) (60, already the
+   token this template's own outer .v2-tmpl__overlay uses) so the surface
+   clears the scrim inside their shared local stacking context.
    The palette's own centered-floating POSITION (not its internal chrome)
    has never lived in molecules.css — only inline in v2.html — so this is
    this file's own real contribution, extracted from that inline rule's
@@ -200,20 +225,24 @@
   z-index: var(--v2-z-popover);
   display: flex;
   justify-content: center;
+  align-items: flex-start;
   padding-top: 12vh;
   pointer-events: none;
 }
 .v2-tmpl__overlay .v2-panel__scrim { pointer-events: auto; }
 .v2-tmpl__overlay-surface {
   position: relative;
+  z-index: var(--v2-z-popover);
   width: min(var(--v2-tmpl-overlay-w), 92vw);
   max-height: 60vh;
   overflow-y: auto;
   pointer-events: auto;
+  background: var(--v2-color-surface);
+  border-radius: var(--v2-radius-lg);
 }
 
 @media (max-width: 720px) {
   .v2-tmpl__overlay { padding-top: 0; }
-  .v2-tmpl__overlay-surface { width: 100%; max-height: 100%; height: 100%; }
+  .v2-tmpl__overlay-surface { width: 100%; max-height: 100%; height: 100%; border-radius: 0; }
   .v2-tmpl__overlay-surface .v2-palette.v2-palette { border-radius: 0; height: 100%; }
 }
