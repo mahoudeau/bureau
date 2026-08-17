@@ -63,6 +63,7 @@
 #   "key_tolerance": 60,                    // OUTER band edge: channel-distance beyond which a cell is fully opaque
 #   "key_inner_tolerance": 21,               // INNER band edge (default: 0.35 * key_tolerance): fully background within this distance. Between the two, alpha ramps and color is decontaminated — this is what kills fringe halos that a single hard threshold can't.
 #   "edge_hue_tolerance": 40,                // (round 27) an edge cell's DECONTAMINATED color is still checked for the key's own hue signature (min(R,B)-G, see magenta_hue_score) — decontamination is a linear approximation and can leave a residual tint on isolated cells; one that scores above this is dropped to fully transparent rather than shipped tinted. Default 40 is calibrated against this atlas's committed sprites (real content <=28, prior defects 62-92); tune per-sheet only with evidence, same as the other tolerances.
+#   "palette_hue_tolerance": 25,             // (round 28) same magenta_hue_score() test as edge_hue_tolerance, applied instead to build_shared_palette's OPAQUE candidates — a second, independent gate alongside the existing distance-to-background check, catching palette entries that clear outer_tol by distance but still read as key-hued. THE PALETTE LAW's enabling fix: this is what makes it safe to run accent_max_area_frac above 0 again (see below) without reintroducing round 25's fringe-noise regression, because hue is now what's keeping noise out, not the accent toggle.
 #   "anchor_region": [x, y, w, h],          // rough box containing the sheet's
 #                                            // own 48px-tall anchor figure —
 #                                            // padding is fine, tight-cropped
@@ -275,7 +276,8 @@ def hsv_saturation(rgb):
     return (mx - mn) / mx
 
 
-def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol):
+def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol,
+                          palette_hue_tol=25):
     # all_votes: list of (color, count) already-collected non-background cell
     # colors across every region in a group, count = how many cells voted it.
     total = sum(c for _, c in all_votes)
@@ -307,7 +309,27 @@ def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_fr
         # back into key-adjacent territory is exactly what caused fringe-
         # colored blotches in round 23: reject it outright rather than let
         # snap_to_palette ever hand it out as a "safe" target.
-        if color_dist(np.array([avg]), bg_color)[0] < outer_tol:
+        # (round 28, t-141 lead-in) A second, independent gate alongside the
+        # distance check above: magenta_hue_score() (round 27's own function,
+        # reused here) catches candidates that clear outer_tol on raw
+        # Euclidean distance but still carry the key's own hue — the same
+        # failure class round 27 fixed for the edge-band decontamination
+        # path, but that fix never touched THIS path (the opaque/base-vs-
+        # accent palette build), which is where round 25's accent_max_area_
+        # frac=0 was actually doing its collateral damage: with the accent
+        # exemption disabled, every rare-but-real color (skin, eye, brow —
+        # exactly the "status lights" class the exemption exists to protect)
+        # got funneled through frequency-ranked `base` and cut off by
+        # palette_size, since a face's few dozen cells can never outrank a
+        # suit's thousands. Restoring the exemption is only safe once THIS
+        # gate exists too — it is what was supposed to keep noise out
+        # instead of the accent toggle. Calibrated (see t-59 round-27/28
+        # logs) against every disclosed bad-pixel example (min score 38,
+        # excluding one historical value from an already-replaced region)
+        # and every legitimate color actually present in these sheets (max
+        # score 17) — palette_hue_tol=25 sits with wide margin on both
+        # sides.
+        if color_dist(np.array([avg]), bg_color)[0] < outer_tol or magenta_hue_score(avg, bg_color) > palette_hue_tol:
             rejected.append(avg)
             continue
         frac = b['count'] / total if total else 0
@@ -406,6 +428,7 @@ def main():
             m.get('accent_saturation_min', 0.5),
             m.get('accent_max_area_frac', 0.01),
             bg, outer_tol,
+            m.get('palette_hue_tolerance', 25),
         )
         if rejected:
             print(f'  [{group_name}] rejected {len(rejected)} key-adjacent palette candidate(s): {rejected}')

@@ -99,20 +99,55 @@ entries survive in the resulting palette, 40→1, 48→2, 64→3, 80→7), and 8
 was the first size tested that yields a real skin gradient (shadow through
 highlight) rather than one flat tone, while still leaving 73 of 80 slots
 for the jacket/hair/background material ramps that dominate the sprite's
-actual pixel area. Re-verified after the fix: side-by-side against source
-at matched zoom, every agent frame now carries visibly warm, skin-toned
-face and hand pixels (see the review note / mission log for the comparison
-images).
+actual pixel area.
+
+**Second, independent fix, adopted mid-mission.** A concurrent builder
+session (bettik) reached the same root-cause diagnosis via a different path
+and pushed a tool-level fix to `hub/tools/rectify.py` on a side branch
+(`bettik-t141-palette-law-handoff`, commit `58ad5b9`): a second gate in
+`build_shared_palette`'s opaque-candidate path, reusing round 27's own
+`magenta_hue_score()` against a new `palette_hue_tolerance` (default 25) —
+catching palette candidates that clear the Euclidean distance-to-background
+check but still carry the key's own hue (the same convex-combination-drift
+class round 24 fixed for individual votes, reachable again once a bucket
+*average* survives frequency ranking). Diffing my own already-raised
+`palette_size=80` agent palette against this gate found it was a **live,
+undisclosed defect in my own shipped work**, not a hypothetical: 3 palette
+entries (e.g. `(54,2,56)`, hue score 52) had exactly this signature and
+were present as scattered pixels (5-12 instances each) across all 5 agent
+sprites — dark purple/violet flecks, the same "fringe-colored blotches"
+class t-54's own chroma-key mechanical floor names as an automatic
+send-back. Adopted bettik's fix verbatim (cherry-picked from their branch)
+rather than re-deriving it, re-ran every manifest, and re-verified from
+scratch: the hue gate rejects 25 candidates in the `agent` group (the 3
+found plus 22 more, none previously flagged by any other check), 7
+skin-tone entries still survive in the resulting palette (unchanged from
+before), and the other three manifests (desk/chair/monitor, tiles,
+wallmonitor) are byte-identical to their pre-fix output — none of their
+palettes had an entry scoring above 25, so the new gate is a no-op for
+them. Determinism and the full mechanical scan (now including opaque-pixel
+hue, not just distance) both re-confirmed clean after adopting the fix —
+see below.
+
+A third independent session (a second concurrent bettik instance) reached
+the same diagnosis and pushed a third variant (hue gate + `palette_size`
+128, kept `accent_max_area_frac=0`) to `t-59-office-sample-scene` commit
+`0298b16` — not adopted here since bettik's `bettik-t141-palette-law-handoff`
+fix was simpler to integrate against this mission's own already-verified
+`palette_size=80` and equally well-calibrated; flagged for the lead in case
+the two diverge on some future sheet.
 
 ## Mechanical floor: verified, not assumed
 
 - **Zero key-adjacent pixels**: full scan of all 11 shipped sprites
-  (11,947 fully-opaque pixels + 223 edge-band pixels) — zero fully-opaque
-  pixels within `key_tolerance` of the magenta background, zero edge-band
-  pixels scoring above `edge_hue_tolerance` on the magenta-hue test. Script
-  logic mirrors `rectify.py`'s own two safety nets (Euclidean distance for
-  opaque votes, hue score for decontaminated edge pixels), run independently
-  against the shipped PNGs rather than trusted from the tool's own report.
+  (11,947 fully-opaque pixels + 223 edge-band pixels) against THREE
+  independent nets — zero fully-opaque pixels within `key_tolerance` of the
+  magenta background (Euclidean distance), zero fully-opaque pixels scoring
+  above 25 on the magenta-hue test (the palette-drift class the mid-mission
+  fix above closes), zero edge-band pixels scoring above `edge_hue_tolerance`
+  (decontamination residue). Script logic mirrors `rectify.py`'s own three
+  safety nets, run independently against the shipped PNGs rather than
+  trusted from the tool's own report.
 - **Determinism**: every manifest re-run twice from a fresh download of its
   cited sheet; both runs and the originally-shipped set are byte-identical
   (`diff -rq`, zero differences) at every sprite.
