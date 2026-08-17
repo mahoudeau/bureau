@@ -276,6 +276,25 @@ import { icon } from './components.js';
       // TOGETHER as a single unit (never split from each other) — see the
       // .v2-project-row__meta/-chips (now nowrap) rules in injectStyle()
       // for the mechanics.
+      //
+      // Round 4 (moneta's fresh reproduction on this same send-back): the
+      // outer row's own flex-wrap:wrap (see that rule's comment) was the
+      // actual remaining cause of short, ordinary labels ("Job Hunt",
+      // "Trace Bingo") breaking onto a second line — fixed there. Turning
+      // that off alone reduced every row to one line but at a real
+      // readability cost (capacity/count as full bordered pills, on top of
+      // entity's own, left __name only enough shrink budget for ~4-5
+      // legible characters) — exactly the "give the mutable part shrink
+      // priority" gap this send-back names. capacity and open-count move
+      // from .v2-project-row__chip (bordered pill — entity's own register,
+      // kept there since entity is the one genuinely optional/categorical
+      // fact) to .v2-mchip, the SAME plain icon+text register this file
+      // already uses for task-card meta above — reclaims the pill's
+      // border+padding on both, verified live: every real project label in
+      // this app's registry (Bureau, Job Hunt, Trace Bingo, General, Ziip,
+      // Allmiibo Sync, Dungeon Storyteller, Jobs platform, Test) now
+      // renders in full on one line at the true 240px rail width; only a
+      // deliberately long stress-test name still ellipsizes.
       var body = ids.length ? ids.map(function (id) {
         var b = byProj[id];
         var pj = b.meta || {};
@@ -286,8 +305,8 @@ import { icon } from './components.js';
           '<span class="v2-project-row__meta">' +
             '<span class="v2-project-row__chips">' +
               '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)' + (pj.entity ? ': @' + esc(pj.entity) : '') + '"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
-              '<span class="v2-project-row__chip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
-              '<span class="v2-project-row__chip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
+              '<span class="v2-mchip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
+              '<span class="v2-mchip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
             '</span>' +
             '<span class="v2-project-row__repo" data-field="repo"' + (pj.repo ? '' : ' data-empty="true"') + '>' + (pj.repo ?
               '<a class="v2-repo-link v2-hit44" href="' + esc(pj.repo) + '" target="_blank" rel="noopener noreferrer" title="' + esc(pj.repo) + '" aria-label="Open repository (' + esc(pj.repo) + ') in a new tab">' +
@@ -534,7 +553,30 @@ import { icon } from './components.js';
       // -2px -4px) — the highlight can extend to the row's true edge-to-
       // edge width without shifting where the name/chips/repo content
       // actually sits relative to the "PROJECTS" header above it.
-      '.v2-project-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); margin: 0 calc(-1 * var(--v2-space-2, 8px)); border-radius: var(--v2-radius-sm, 6px); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
+      // Round 4 (post moneta's fresh reproduction, this send-back):
+      // flex-wrap:wrap HERE — on the OUTER row, wrapping name against meta
+      // — is the actual root cause of "Job Hunt"/"Trace Bingo" (short,
+      // ordinary labels) rendering as two physical lines. It predates the
+      // __meta unification below (originally added to stop the open-count
+      // chip orphaning from its sibling chips onto its own line) but that
+      // orphaning bug is now independently closed by __meta being ONE
+      // flex:none item the chips/repo travel and wrap together inside —
+      // the outer row never needed to wrap for that anymore, it was just
+      // never turned back off. With it on, ANY row whose name+meta combined
+      // width exceeds the ~234px rail lets the two top-level children
+      // split onto separate lines UNCONDITIONALLY, before __name's own
+      // flex:1/min-width:0/ellipsis rule ever gets a chance to shrink+
+      // truncate instead — exactly backwards from "the mutable part (meta)
+      // should give ground before the name does" (this send-back's own
+      // wording). nowrap here restores that ordering: the row's only two
+      // children stay on one line always, __meta keeps its fixed intrinsic
+      // width (flex:none), and every byte of unavoidable overflow lands on
+      // __name's own shrink+ellipsis instead of a line-break. Verified live
+      // (real hub + Playwright): "Job Hunt", "Trace Bingo", "Bureau",
+      // "Ziip", "General" all render one line at the true 234px rail width
+      // now; only a deliberately 49-char stress-test label still
+      // ellipsizes, which is the textbook fallback, not the bug.
+      '.v2-project-row { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--v2-space-2, 8px); padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); margin: 0 calc(-1 * var(--v2-space-2, 8px)); border-radius: var(--v2-radius-sm, 6px); border-bottom: 1px solid var(--v2-hairline, rgba(128,128,128,.2)); font-size: 13px; cursor: pointer; }',
       '.v2-project-row:last-child { border-bottom: none; }',
       // Hover: same token .v2-task-card:hover already reads elsewhere in
       // this file, so a hovered row and a hovered board card carry the
@@ -744,19 +786,20 @@ import { icon } from './components.js';
       // apply here.
       '@media (hover: none) { .v2-repo-editbtn { opacity: .55; position: static; transform: none; margin-right: 0; pointer-events: auto; } .v2-project-row__repo { gap: 24px; } }',
       // t-114 (goal: t-53): closes t-111's finding #1 (HIGH, parity
-      // violation) — .v2-project-row used to be `display:flex` with no
-      // wrap, so entering inline edit (project-edit.js swapping __name
-      // for a wider .v2-pedit widget) shoves the other fields off the
-      // right edge of a 390px viewport, forcing real page-level
-      // horizontal scroll. Superseded by t-136's send-back on t-133:
-      // .v2-project-row now wraps unconditionally (not just under
-      // 720px — the same orphaning bug this closed also hit the real
-      // 240px desktop rail), so the row-level half of this fix lives in
-      // the base .v2-project-row rule above. This query now only needs
-      // to left-align the meta group at phone width — at the much wider
-      // phone rail (full viewport, not 240px) flush-right would leave an
-      // odd, purely cosmetic gap between name and meta that the desktop
-      // rail's tightness never has room for.
+      // violation) — entering inline edit (project-edit.js swapping a
+      // field for a wider .v2-pedit widget) used to shove other fields off
+      // the right edge of a 390px viewport, forcing real page-level
+      // horizontal scroll. That's now handled by the [data-editing="true"]
+      // escape hatch above (wraps __meta/__chips internally, temporarily,
+      // only while a field in this row is actually being edited) rather
+      // than by the outer row wrapping — round 4 turned the outer row's
+      // own flex-wrap back to nowrap (see that rule's own comment: it was
+      // the actual cause of ordinary short labels breaking onto two
+      // lines, not a fix this query still depends on). This query now only
+      // needs to left-align the meta group at phone width — at the much
+      // wider phone rail (full viewport, not 240px) flush-right would
+      // leave an odd, purely cosmetic gap between name and meta that the
+      // desktop rail's tightness never has room for.
       '@media (max-width: 720px) { .v2-project-row__meta { margin-left: 0; } }',
       '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
       '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-surface, transparent); color: var(--v2-ink, inherit); cursor: pointer; }',
