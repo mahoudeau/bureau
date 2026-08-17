@@ -419,6 +419,12 @@
   display: block;
   width: 100%;
   height: calc(var(--v2-row-height) * 0.78);
+  /* t-173 (goal: t-53): 44px tap-target floor by construction. Unlike the
+     compact button atoms (which take the invisible .v2-hit44 halo), a text
+     field's visible height is its affordance and must not be overlaid, so the
+     input grows for real. min-height wins over the compact `height` above; the
+     .v2-input--area variant sets its own larger min-height and is unaffected. */
+  min-height: 44px;
   padding: 0 var(--v2-space-5);
   border: 1px solid var(--v2-color-border);
   border-radius: var(--v2-radius-sm);
@@ -505,8 +511,21 @@
    and on <button>: a pseudo-element's hit box is dispatched to its host
    element, confirmed empirically via Playwright click tests at the edge
    of the expanded zone, not just measured. */
-.v2-hit44 { position: relative; }
-.v2-hit44::before {
+/* t-173 (goal: t-53): the floor belongs in the shared builder atoms, not at
+   each call site. .v2-btn (button()) and .v2-icon-btn (iconButton()) are
+   compact by design — 23px / 22px tall — and both live in height-constrained
+   contexts (.v2-icon-btn sits inside the 30px .v2-panel__header, where a
+   visually-44px control cannot fit). So they inherit the SAME invisible halo
+   as .v2-hit44 rather than a visible min-height: the glyph/label stays
+   compact, only the tappable region grows to >=44px. This makes every
+   button()/iconButton() pass the tap floor by construction; the manual
+   .v2-hit44 some call sites already add (e.g. palette compose actions) is now
+   redundant but harmless (one ::before, identical rule). .v2-input takes a
+   real min-height instead (below) — a text field's visible height IS its
+   affordance, and an invisible overlay over an editable field would intercept
+   caret placement and text selection. */
+.v2-hit44, .v2-btn, .v2-icon-btn { position: relative; }
+.v2-hit44::before, .v2-btn::before, .v2-icon-btn::before {
   content: "";
   position: absolute;
   top: 50%;
