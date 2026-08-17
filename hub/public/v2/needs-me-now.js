@@ -34,6 +34,53 @@
 // not a colorful emoji — U+23F8 has no default emoji presentation and no
 // variation selector forcing one here, same register as a plain "x" or
 // arrow character, not what this mission's emoji-as-icon sweep targets.
+//
+// t-163 (boss-filed, gate:boss): "Messages to boss" dumped every message
+// ever addressed to the boss, full body text, unpaginated, no read state
+// — boss's own words, "a huge list", asking for inbox treatment. This
+// mission's own scope is the messages group ONLY (the review/blocked
+// groups are unaffected, unclaimed here) — filed under project "Test" by
+// what reads like a UI mis-click while looking at the wrong project view
+// (its content is unambiguously about this file's own messages group,
+// and "Test" carries no repo to build against), noted on the mission log
+// rather than silently reassigned (the hub's PATCH /api/tasks/:id has no
+// project field to reassign it through).
+//
+// WHO/WHAT/WHEN/TYPE/ACTION, the mission's own open question on what to
+// summarize:
+//   - who: m.from (unchanged)
+//   - when: m.ts (unchanged, same slice/format as before)
+//   - what: the body, now TRUNCATED to one line (~100 chars) rather than
+//     dumped in full — full text was exactly what made the list feel
+//     huge; click to read the rest (see ACTION)
+//   - type: implicit in whether a task_id is attached (shown in the meta
+//     line, unchanged) — a message tied to a mission's own thread reads
+//     differently from a free-standing one, not worth a second explicit
+//     label on top of the id already shown
+//   - action: rendered as a trailing chevron, the row's own affordance —
+//     chevron-right on task-linked messages (click opens that mission,
+//     existing behavior, unchanged) vs chevron-down/-up on free-standing
+//     ones (click expands/collapses full text in place, since there is
+//     nowhere else for a message with no task_id to "open" to)
+//
+// READ STATE: no hub-side field for this (messages have no read flag in
+// the protocol) — tracked client-side in localStorage, keyed by message
+// id, boss's own browser only. This is a display convenience, not a
+// synced feature; a second device starts fresh. Read is set on click
+// (open OR expand, either counts as "seen"). The group header shows
+// unread/total; the OVERALL "N waiting on you" total (below) still sums
+// every message ever sent to boss, unaffected by read state or the
+// recent-only slice — narrowing what is SHOWN must not silently shrink
+// what the total counts as outstanding, that redefinition (if wanted at
+// all) is t-162's own separate, already-claimed scope, not folded in
+// here to avoid two missions racing the same total-count line.
+//
+// RECENT-ONLY DEFAULT: only the most recent N (by actual timestamp, not
+// by the oldest/newest DISPLAY toggle already on this panel — that toggle
+// only reorders whatever's currently visible) are shown by default; a
+// "Show all" control reveals the rest. Kept as a per-group control (not
+// wired into the existing sort-toggle) since the mission body scopes this
+// to messages only — review/blocked groups aren't sized to need it.
 import { icon } from './components.js';
 
 (function () {
@@ -72,6 +119,48 @@ import { icon } from './components.js';
     var sortOldestFirst = true; // default per the mission's own acceptance line
     var messages = [];
 
+    // t-163: read state persisted client-side only (see file header note).
+    var READ_KEY = 'bureauV2.nmn.readMessageIds';
+    function loadReadIds() {
+      try {
+        var raw = window.localStorage.getItem(READ_KEY);
+        var arr = raw ? JSON.parse(raw) : [];
+        var set = {};
+        arr.forEach(function (id) { set[id] = true; });
+        return set;
+      } catch (e) { return {}; } // storage unavailable/corrupt - read-state is a nice-to-have, fail to "nothing read" rather than throw
+    }
+    function saveReadIds(set) {
+      try { window.localStorage.setItem(READ_KEY, JSON.stringify(Object.keys(set))); } catch (e) { /* quota/unavailable - drop silently, same posture as loadReadIds */ }
+    }
+    var readIds = loadReadIds();
+    function markRead(id) {
+      if (!id || readIds[id]) return false;
+      readIds[id] = true;
+      saveReadIds(readIds);
+      return true;
+    }
+
+    var expandedIds = {}; // in-memory only - expand/collapse doesn't need to survive reload
+    var RECENT_MESSAGE_LIMIT = 5;
+    var showAllMessages = false; // recent-only by default, per this mission's own ask
+
+    function truncate(s, n) {
+      s = String(s == null ? '' : s);
+      if (s.length <= n) return s;
+      return s.slice(0, n).replace(/\s+\S*$/, '') + '…';
+    }
+
+    // Recent = the N chronologically newest messages, independent of the
+    // oldest/newest DISPLAY toggle (that toggle only reorders whatever's
+    // already selected to show) - sort ascending by ts first so "recent"
+    // means the same thing regardless of the array's own arrival order.
+    function visibleMessages() {
+      var asc = messages.slice().sort(function (a, b) { return (a.ts || '').localeCompare(b.ts || ''); });
+      var base = showAllMessages ? asc : asc.slice(-RECENT_MESSAGE_LIMIT);
+      return sortOldestFirst ? base : base.slice().reverse();
+    }
+
     function projLabel(state, id) {
       var p = (state.projects || []).find(function (pj) { return (typeof pj === 'string' ? pj : pj.id) === id; });
       if (!p) return id;
@@ -93,13 +182,27 @@ import { icon } from './components.js';
     }
 
     function messageRow(m) {
-      var openAttr = m.task_id ? ' data-open="' + esc(m.task_id) + '"' : '';
-      return '<div class="v2-list__row v2-needs-me-now__row"' + openAttr + '>' +
-        '<span class="v2-list__row-title">' + esc(m.body) + '</span>' +
-        '<span class="v2-list__row-meta">from ' + esc(m.from) + ' · ' + esc((m.ts || '').slice(0, 16).replace('T', ' ')) + (m.task_id ? ' · ' + esc(m.task_id) : '') + '</span></div>';
+      var isRead = !!readIds[m.id];
+      var isExpanded = !!expandedIds[m.id];
+      var hasTask = !!m.task_id;
+      var bodyText = isExpanded ? m.body : truncate(m.body, 100);
+      // action affordance, per-row: task-linked messages open that mission
+      // (existing behavior, unchanged); free-standing ones have nowhere
+      // else to "open" to, so they expand/collapse in place instead.
+      var actionIcon = hasTask
+        ? icon('chevron-right', 'v2-needs-me-now__row-action')
+        : icon(isExpanded ? 'chevron-up' : 'chevron-down', 'v2-needs-me-now__row-action');
+      var toggleAttrs = (hasTask ? ' data-open="' + esc(m.task_id) + '"' : ' data-toggle-msg="' + esc(m.id) + '"') +
+        (m.id ? ' data-msg-id="' + esc(m.id) + '"' : '');
+      return '<div class="v2-list__row v2-needs-me-now__row v2-needs-me-now__msg-row' + (isRead ? '' : ' v2-needs-me-now__msg-row--unread') + '"' + toggleAttrs + '>' +
+        (isRead ? '' : '<span class="v2-needs-me-now__unread-dot" aria-hidden="true"></span>') +
+        '<span class="v2-list__row-title">' + esc(bodyText) + '</span>' +
+        '<span class="v2-list__row-meta">from ' + esc(m.from) + ' · ' + esc((m.ts || '').slice(0, 16).replace('T', ' ')) + (hasTask ? ' · ' + esc(m.task_id) : '') + '</span>' +
+        actionIcon +
+        '</div>';
     }
 
-    function group(key, title, rowsHtml, count) {
+    function group(key, title, rowsHtml, count, extraHtml) {
       // t-89: title is NOT esc()'d — every call site below passes a fixed
       // string literal (never state/user data), and two of them now embed
       // icon()'s own raw SVG markup rather than plain text (the emoji-swap
@@ -109,40 +212,141 @@ import { icon } from './components.js';
       // instead of rendering an icon. If a future caller ever needs to
       // pass real user/state-derived text here, that caller must esc() it
       // itself before calling group() — this function no longer does it.
+      // count (t-163): still plain text interpolated as-is; the messages
+      // call site below now passes a composed "N unread · M total" string
+      // instead of a bare number - group() doesn't care, it only ever
+      // concatenates whatever it's given.
+      // extraHtml (t-163): optional markup appended after the row list,
+      // inside the section - used by the messages group for its "Show
+      // all"/"Show recent" control. Omitted (undefined) elsewhere, so the
+      // review/blocked groups render exactly as before.
       return '<section class="v2-needs-me-now__group" data-group="' + key + '">' +
         '<h3 class="v2-needs-me-now__group-title">' + title + ' · ' + count + '</h3>' +
         '<div class="v2-list">' + (rowsHtml || '<div class="v2-empty">Nothing here.</div>') + '</div>' +
+        (extraHtml || '') +
         '</section>';
+    }
+
+    // t-162: the total used to be reviewCritic + reviewBoss + blocked + toBoss
+    // — every review, every blocked mission, every message ever sent to
+    // boss, unconditionally. Boss's own report (screenshot: 1+0+4+15=20,
+    // "Boss technically has nothing to do now"): the badge was counting
+    // things that don't actually need HIM. Three separate over-counts,
+    // fixed independently below — none of them invents new backend state,
+    // each reads only what's already on the task/message.
+    //
+    // (1) Review · critic doesn't need the boss — per docs/protocol.md's
+    // own two-tier gate design, a critic-gate review is the CRITIC's job
+    // ("only the boss or the lead agent set critic" implies critic-gate
+    // exists precisely so routine work does NOT queue on the boss). Kept
+    // visible for context (the boss can still look), just not counted.
+    //
+    // (2) A `blocked` mission is not always blocked ON THE BOSS — this
+    // codebase's own convention (bureau-process.md / this shift's own
+    // t-143/t-158) is "set status blocked with a note starting 'waiting
+    // on:'" for BOTH "waiting on a human answer" and "waiting on a
+    // sibling mission to finish," with no structured field distinguishing
+    // the two. blockedOnMission() below reads the mission's own most
+    // recent log note (the one written in the same PATCH that set
+    // status=blocked, per that convention) for a `waiting on: t-N`
+    // reference, and treats it as NOT the boss's problem only when that
+    // referenced task still exists and is still open — the moment the
+    // dependency closes, the same mission (unchanged) starts counting
+    // again on its own next render, no re-classification needed. A block
+    // with no such reference (a genuine human question, external-access
+    // wall, etc.) still counts, unchanged from before.
+    //
+    // (3) Messages to boss have no read/unread state anywhere in this
+    // hub's data model (checked: the store has no such field, and adding
+    // one is a real backend change out of this display-only mission's
+    // scope) — but a message already rang the boss's Discord in real time
+    // per protocol.md ("it rings his Discord"); re-presenting the SAME
+    // notification forever in a persistent "still waiting" badge conflates
+    // "was notified once" with "still needs an action," which is exactly
+    // the miscount this mission reports. Uncounted, kept visible as a
+    // reference list (so nothing about total message volume is hidden),
+    // relabeled so its own header no longer implies it's part of the tally.
+    function blockedOnMission(t, tasksById) {
+      var log = t.log || [];
+      var last = log.length ? log[log.length - 1] : null;
+      var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
+      if (!m) return false; // no mission reference at all -> a real human-facing block
+      var ref = tasksById[m[1]];
+      // Unknown/deleted id: can't confirm the dependency is still open, so
+      // don't silently drop it from the boss's count — safer to over-count
+      // by one than to hide something that might genuinely need him.
+      if (!ref) return false;
+      return ref.status !== 'done' && ref.status !== 'failed' && ref.status !== 'discarded';
     }
 
     function render() {
       var state = V2.state;
       if (!state) return;
       var tasks = state.tasks || [];
+      var tasksById = {};
+      tasks.forEach(function (t) { tasksById[t.id] = t; });
 
       var reviewCritic = sortByCreated(tasks.filter(function (t) { return t.status === 'review' && t.gate === 'critic'; }));
       var reviewBoss = sortByCreated(tasks.filter(function (t) { return t.status === 'review' && t.gate !== 'critic'; }));
-      var blocked = sortByCreated(tasks.filter(function (t) { return t.status === 'blocked'; }));
-      var toBoss = sortOldestFirst ? messages.slice() : messages.slice().reverse();
+      var blockedAll = sortByCreated(tasks.filter(function (t) { return t.status === 'blocked'; }));
+      var blockedOnBoss = blockedAll.filter(function (t) { return !blockedOnMission(t, tasksById); });
+      var blockedOnWork = blockedAll.filter(function (t) { return blockedOnMission(t, tasksById); });
+      var toBoss = visibleMessages(); // t-163: recent-only slice (or all, if toggled), display-ordered
 
-      var total = reviewCritic.length + reviewBoss.length + blocked.length + toBoss.length;
+      // t-162: only the two genuinely boss-actionable groups count toward
+      // the headline number: a boss-gate review (needs his own click, per
+      // protocol.md's "moves out... only when agent is human") and a block
+      // that isn't waiting on another mission to close first. t-163's
+      // recent-only message slice is a DISPLAY narrowing and messages never
+      // touch this sum at all.
+      var total = reviewBoss.length + blockedOnBoss.length;
+
+      var unreadMessages = messages.filter(function (m) { return !readIds[m.id]; }).length;
+      var messagesCount = unreadMessages + ' unread · ' + messages.length + ' total';
+      var messagesToggleHtml = messages.length > RECENT_MESSAGE_LIMIT
+        ? '<button type="button" class="v2-needs-me-now__messages-toggle" id="v2-nmn-messages-toggle">' +
+          (showAllMessages ? 'Show recent only' : 'Show all ' + messages.length) +
+          '</button>'
+        : '';
 
       mount.innerHTML =
         '<div class="v2-needs-me-now__toolbar">' +
         '<span class="v2-needs-me-now__total">' + total + ' waiting on you</span>' +
-        '<button type="button" class="v2-needs-me-now__sort-toggle" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
+        // t-150 (goal: t-53): v2-hit44 (components.css) — a pre-existing,
+        // purely functional class hook (zero visible style, an invisible
+        // centered 44px tap zone), not the "hand-rolled visual language"
+        // this file's own header comment rules out. Its only neighbor is
+        // the plain-text total span to its left, so the grown zone has
+        // nothing clickable to collide with.
+        '<button type="button" class="v2-needs-me-now__sort-toggle v2-hit44" id="v2-nmn-sort">' + (sortOldestFirst ? 'Oldest first' : 'Newest first') + '</button>' +
         '</div>' +
-        (total === 0
+        (total === 0 && !reviewCritic.length && !blockedOnWork.length && !toBoss.length
           ? '<div class="v2-empty">Nothing waiting on you.</div>'
-          : group('review-critic', icon('flag') + ' Review · critic', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
-          group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
-          group('blocked', '⏸ Blocked, awaiting an answer', blocked.map(function (t) { return missionRow(t, state); }).join(''), blocked.length) +
-          group('messages', icon('message-square') + ' Messages to boss', toBoss.map(messageRow).join(''), toBoss.length));
+          : group('review-boss', icon('flag') + ' Review · boss', reviewBoss.map(function (t) { return missionRow(t, state); }).join(''), reviewBoss.length) +
+          group('blocked', '⏸ Blocked, awaiting your answer', blockedOnBoss.map(function (t) { return missionRow(t, state); }).join(''), blockedOnBoss.length) +
+          group('review-critic', icon('flag') + ' Review · critic (not yours to act on)', reviewCritic.map(function (t) { return missionRow(t, state); }).join(''), reviewCritic.length) +
+          group('blocked-other', '⏸ Blocked on other work (not yours to act on)', blockedOnWork.map(function (t) { return missionRow(t, state); }).join(''), blockedOnWork.length) +
+          group('messages', icon('message-square') + ' Messages to boss (already delivered)', toBoss.map(messageRow).join(''), messagesCount, messagesToggleHtml));
 
       var sortBtn = document.getElementById('v2-nmn-sort');
       if (sortBtn) sortBtn.addEventListener('click', function () { sortOldestFirst = !sortOldestFirst; render(); });
+      var msgToggleBtn = document.getElementById('v2-nmn-messages-toggle');
+      if (msgToggleBtn) msgToggleBtn.addEventListener('click', function () { showAllMessages = !showAllMessages; render(); });
       mount.querySelectorAll('[data-open]').forEach(function (el) {
-        el.addEventListener('click', function () { V2.emit('v2:mission:open', { id: el.getAttribute('data-open') }); });
+        el.addEventListener('click', function () {
+          var msgId = el.getAttribute('data-msg-id');
+          var changed = msgId ? markRead(msgId) : false;
+          V2.emit('v2:mission:open', { id: el.getAttribute('data-open') });
+          if (changed) render(); // re-render so the unread dot/count reflect the click even though we're navigating away
+        });
+      });
+      mount.querySelectorAll('[data-toggle-msg]').forEach(function (el) {
+        el.addEventListener('click', function () {
+          var id = el.getAttribute('data-toggle-msg');
+          expandedIds[id] = !expandedIds[id];
+          markRead(id);
+          render();
+        });
       });
     }
 

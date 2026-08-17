@@ -139,6 +139,20 @@
       // live browser and finding no PATCH request was ever sent, not by
       // reading the code.
       if (row.getAttribute('data-editing') === 'true') return;
+      // t-133 (goal: t-53): the repo field's non-empty VIEW state is now a
+      // real navigable link + hover/focus tooltip (board.js's own
+      // .v2-repo-link — icon + tooltip + click-opens-new-tab, replacing
+      // the old raw-URL text this field used to show). A bare field click
+      // must NOT hijack that click into starting an edit, or the link
+      // could never be followed. Editing an existing repo moves to the
+      // small adjacent .v2-repo-editbtn (board.js renders it inside the
+      // same [data-field="repo"] span, outside .v2-repo-link) instead —
+      // that one still matches the generic path below unmodified, since
+      // it is NOT inside .v2-repo-link. An EMPTY repo field renders no
+      // link at all (nothing to hijack), so a bare click there still
+      // starts editing exactly like every other field — this is how you
+      // add a first repo, unchanged from before this mission.
+      if (field.getAttribute('data-field') === 'repo' && e.target.closest('.v2-repo-link')) return;
       // Not yet editing: this click means "start editing" — take it over
       // from board.js's own row-level click-to-filter listener (bubble
       // phase, closer to the target, would otherwise fire first and
