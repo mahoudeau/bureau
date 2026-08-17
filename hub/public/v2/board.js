@@ -121,7 +121,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       '<button type="submit" class="v2-quickadd__submit">Add</button>' +
       '<p class="v2-quickadd__err" id="v2-qa-err" hidden></p>' +
       '</form>' +
-      '<div class="v2-board__columns" id="v2-board-columns"></div>';
+      '<div class="v2-swim" id="v2-board-columns"></div>';
 
     var columnsEl = document.getElementById('v2-board-columns');
     var qaTrigger = document.getElementById('v2-qa-trigger');
@@ -501,48 +501,97 @@ import { icon, avatar, chip, idBadge } from './components.js';
       });
     }
 
-    var V2_COLS = [
-      ['queued', 'Queued'],
-      ['working', 'Working'],
-      ['blocked', '⏸ Blocked'],
-      ['review', '👀 Review'],
-      ['done', '✅ Done'],
-      ['failed', '❌ Failed']
+    // t-167: the board is a Linear-style stack of status SWIMLANES, not the
+    // six side-by-side Kanban columns it used to be (the boss's own report:
+    // "a lot of wasted space and multiple rows... rethink the order/
+    // disposition of columns, this is main view"). Each group is a full-
+    // width band with a collapsible header (glyph + label + count) and dense
+    // single-line rows. Order rethought: live work first (Working/Review/
+    // Blocked/Queued), terminal states (Done/Failed) last and collapsed by
+    // default so they never dominate the fold. `glyph` is a lucide status
+    // ring (components.js); `tone`/the group key drives color via the SAME
+    // status token the old card border-left used, so the signal stays
+    // consistent with the rest of the app (glyph + color + label, never
+    // color alone — the register rule t-110 established).
+    var V2_GROUPS = [
+      { key: 'working', label: 'Working', glyph: 'circle-dot' },
+      // t-167 round 3 (critic gap): Working and Review used to share
+      // circle-dot, distinguished only by color (amber vs purple) — this
+      // codebase's own t-110 rule is glyph+color, never color alone, and the
+      // Linear reference gives every status a distinct glyph SHAPE. `clock`
+      // reads correctly for "awaiting a look" and is visually unmistakable
+      // from Working's dot at 15px.
+      { key: 'review', label: 'Review', glyph: 'clock' },
+      { key: 'blocked', label: 'Blocked', glyph: 'circle-alert' },
+      { key: 'queued', label: 'Queued', glyph: 'circle' },
+      { key: 'done', label: 'Done', glyph: 'circle-check', collapsed: true },
+      { key: 'failed', label: 'Failed', glyph: 'circle-x', collapsed: true }
     ];
-    function statusOf(col, t) { return col === 'working' ? (t.status === 'claimed' || t.status === 'in_progress') : t.status === col; }
+    var DISCARDED_GROUP = { key: 'discarded', label: 'Archived', glyph: 'circle', collapsed: true };
+    function statusOf(key, t) { return key === 'working' ? (t.status === 'claimed' || t.status === 'in_progress') : t.status === key; }
 
-    function taskCard(t, key, goalKids) {
+    // Per-group collapse state, persisted client-side so a fold survives a
+    // reload (messages carry no such flag; this is a display convenience,
+    // never synced task state). First visit seeds from each group's own
+    // `collapsed` default (Done/Failed/Archived start folded).
+    var COLLAPSE_KEY = 'v2.board.collapsed';
+    var collapsed = (function () {
+      try { var v = JSON.parse(localStorage.getItem(COLLAPSE_KEY)); if (Array.isArray(v)) return new Set(v); } catch (e) {}
+      return new Set(V2_GROUPS.concat(DISCARDED_GROUP).filter(function (g) { return g.collapsed; }).map(function (g) { return g.key; }));
+    })();
+    function saveCollapsed() { try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(Array.from(collapsed))); } catch (e) {} }
+
+    // One dense row. Anatomy (single line, ~32px): [review checkbox] · status
+    // glyph · id badge · title (ellipsized, grows) · chips (goal/project/
+    // priority/kids/reserved/gate, the sample's chip language) · assignee
+    // avatar. Row click opens the mission (v2:mission:open, the one app-wide
+    // "open detail" event); the review checkbox drives batch selection.
+    function swimRow(state, t, group, goalKids) {
       var isGoal = /^goal:/i.test(t.title);
-      var isDiscarded = t.status === 'discarded';
       var kids = isGoal ? goalKids[t.id] : null;
-      var checkbox = key === 'review'
-        ? '<input type="checkbox" class="v2-task-card__select" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
+      var checkbox = group.key === 'review'
+        ? '<input type="checkbox" class="v2-task-card__select v2-hit44 v2-swim__select" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
         : '';
-      return '<div class="v2-task-card v2-task-card--' + esc(t.status) + '" data-id="' + esc(t.id) + '">' +
+      var chips = '' +
+        (isGoal ? '<span class="v2-mchip v2-mchip--goal">' + icon('flag', 'v2-icon--xs') + 'Goal</span>' : '') +
+        (t.project ? '<span class="v2-mchip"><span class="v2-mchip__dot" style="background:' + projColor(state, t.project) + '"></span>' + esc(t.project) + '</span>' : '') +
+        '<span class="v2-mchip v2-tabular-nums">P' + t.priority + '</span>' +
+        (kids ? '<span class="v2-mchip v2-tabular-nums">' + icon('git-branch', 'v2-icon--xs') + kids.done + '/' + kids.total + '</span>' : '') +
+        (t.reserved_for ? '<span class="v2-mchip">' + icon('user', 'v2-icon--xs') + esc(t.reserved_for) + '</span>' : '') +
+        (t.status === 'review' ? '<span class="v2-mchip">' + icon('tag', 'v2-icon--xs') + (t.gate === 'critic' ? 'critic' : 'boss') + '</span>' : '');
+      return '<div class="v2-swim__row' + (selectedReviewIds.has(t.id) ? ' is-selected' : '') + '" data-open="' + esc(t.id) + '" role="button" tabindex="0" title="' + esc(t.title) + '">' +
         checkbox +
-        '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
-        // t-110: glyph + text, never color alone, per the Bar's own "status is
-        // glyph + color" register rule — deliberately NOT relying only on the
-        // border-left-color system (molecules.css/t-77 already flattens
-        // .v2-task-card's border to 1px solid transparent at rest via a
-        // higher-specificity doubled-class rule, so a color-only signal here
-        // would be invisible in the live app for EVERY status, not just this
-        // one; a glyph+label survives that regardless of border cascade).
-        '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
-        // t-123: the id itself renders through components.js's idBadge()
-        // (a real DOM node, serialized via outerHTML into this string
-        // template — the rest of this file builds markup as strings, and
-        // idBadge()'s own element already carries the exact classes/markup
-        // the CSS layer expects) instead of a plain esc()'d string, so the
-        // vendored JetBrains Mono token (t-112) actually reaches a live id
-        // once that mission's CSS lands.
-        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + idBadge(t.id).outerHTML + ' · P' + t.priority +
-        (t.assignee ? ' · ' + esc(t.assignee) : '') +
-        (t.project ? ' · ' + esc(t.project) : '') +
-        (kids ? ' · ' + kids.done + '/' + kids.total + ' missions' : '') +
-        (t.reserved_for ? ' · reserved: ' + esc(t.reserved_for) : '') +
-        (t.status === 'review' ? (t.gate === 'critic' ? ' · critic gate' : ' · boss gate') : '') +
-        '</div></div></div>';
+        '<span class="v2-swim__glyph v2-swim__glyph--' + esc(group.key) + '" aria-hidden="true">' + icon(group.glyph) + '</span>' +
+        idBadge(t.id).outerHTML +
+        '<span class="v2-swim__title">' + esc(t.title) + '</span>' +
+        '<span class="v2-swim__chips">' + chips + '</span>' +
+        // t-131's merge deleted the legacy bare `.v2-avatar { width:18px }`
+        // rule from injectStyle (below); sizing now comes only from
+        // components.css's tokenized --xs/--sm/--md modifiers, so every call
+        // site must name its own size or render width-less.
+        (t.assignee ? '<span class="v2-avatar v2-avatar--sm" title="' + esc(t.assignee) + '">' + esc(initials(t.assignee)) + '</span>' : '') +
+        '</div>';
+    }
+
+    // One collapsible band. Empty non-archive groups are dropped entirely
+    // (Linear's default, and the direct fix for the "wasted space" report) —
+    // a status with nothing in it costs zero vertical space instead of an
+    // empty column.
+    function swimGroup(state, group, ts, goalKids) {
+      var isCol = collapsed.has(group.key);
+      var cap = group.key === 'done' ? 12 : 0;
+      var shown = cap ? ts.slice(0, cap) : ts;
+      var rows = shown.map(function (t) { return swimRow(state, t, group, goalKids); }).join('');
+      var more = ts.length > shown.length ? '<div class="v2-swim__more">+ ' + (ts.length - shown.length) + ' more</div>' : '';
+      return '<section class="v2-swim__group v2-swim__group--' + group.key + (isCol ? ' is-collapsed' : '') + '" data-status="' + group.key + '">' +
+        '<div class="v2-swim__head" role="button" tabindex="0" aria-expanded="' + (isCol ? 'false' : 'true') + '" data-toggle="' + group.key + '">' +
+        '<span class="v2-swim__caret" aria-hidden="true">' + icon(isCol ? 'chevron-right' : 'chevron-down') + '</span>' +
+        '<span class="v2-swim__glyph v2-swim__glyph--' + group.key + '" aria-hidden="true">' + icon(group.glyph) + '</span>' +
+        '<span class="v2-swim__label">' + esc(group.label) + '</span>' +
+        '<span class="v2-swim__count v2-tabular-nums">' + ts.length + '</span>' +
+        '</div>' +
+        '<div class="v2-swim__rows">' + (rows || '<div class="v2-swim__more">Nothing here.</div>') + more + '</div>' +
+        '</section>';
     }
 
     function renderBoard(state) {
@@ -553,93 +602,65 @@ import { icon, avatar, chip, idBadge } from './components.js';
         var m = /goal:\s*(t-\d+)/.exec(t.body || '');
         if (m) { var g = goalKids[m[1]] = goalKids[m[1]] || { done: 0, total: 0 }; g.total++; if (t.status === 'done') g.done++; }
       });
-      columnsEl.innerHTML = V2_COLS.map(function (col) {
-        var key = col[0], label = col[1];
-        var ts = visible.filter(function (t) { return statusOf(key, t); })
-          .sort(function (a, b) { return a.priority - b.priority || b.created_at.localeCompare(a.created_at); });
-        var shown = key === 'done' ? ts.slice(0, 8) : ts;
-        var cards = shown.map(function (t) {
-          var isGoal = /^goal:/i.test(t.title);
-          var kids = isGoal ? goalKids[t.id] : null;
-          // t-115 (goal: t-53): .v2-hit44 (components.css) — closes t-111
-          // finding #2's "batch-verdicts per-card selection checkbox
-          // (board.js): 13x13px" line, the highest-frequency tap in the
-          // review flow (one per card, every time the boss triages review).
-          var checkbox = key === 'review'
-            ? '<input type="checkbox" class="v2-task-card__select v2-hit44" data-id="' + esc(t.id) + '" ' + (selectedReviewIds.has(t.id) ? 'checked' : '') + ' aria-label="Select ' + esc(t.id) + ' for batch verdict">'
-            : '';
-          // Chips: goal (flag) + project (colored dot) + priority, the
-          // sample's own three (t-58-v2-sample.html.txt, .card .chips).
-          // Everything the sample's narrow demo data never needed to show
-          // — assignee reservation, gate, goal children progress — rides
-          // as additional chips in the SAME visual language instead of
-          // being dropped; this is a chrome convergence, not a feature cut.
-          var chips = '' +
-            (isGoal ? '<span class="v2-mchip v2-mchip--goal">' + icon('flag', 'v2-icon--xs') + 'Goal</span>' : '') +
-            (t.project ? '<span class="v2-mchip"><span class="v2-mchip__dot" style="background:' + projColor(state, t.project) + '"></span>' + esc(t.project) + '</span>' : '') +
-            '<span class="v2-mchip v2-tabular-nums">P' + t.priority + '</span>' +
-            (kids ? '<span class="v2-mchip v2-tabular-nums">' + icon('git-branch', 'v2-icon--xs') + kids.done + '/' + kids.total + '</span>' : '') +
-            (t.reserved_for ? '<span class="v2-mchip">' + icon('user', 'v2-icon--xs') + esc(t.reserved_for) + '</span>' : '') +
-            (t.status === 'review' ? '<span class="v2-mchip">' + icon('tag', 'v2-icon--xs') + (t.gate === 'critic' ? 'critic' : 'boss') + '</span>' : '');
-          return '<div class="v2-task-card v2-task-card--' + esc(t.status) + '" data-id="' + esc(t.id) + '">' +
-            checkbox +
-            '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
-            '<div class="v2-task-card__top">' +
-            // t-123: this is the PRIMARY board-card id (every live column
-            // renders through here, not through taskCard()/.v2-task-card__meta
-            // below, which only the archived-toggle strip uses) — wired to
-            // idBadge() same as that path, so both id call sites render
-            // through the one component. .v2-task-card__id carried no
-            // layout role, purely typographic (see the removed CSS rule
-            // this replaces), so no wrapper is needed.
-            idBadge(t.id).outerHTML + '<span class="v2-task-card__sp"></span>' +
-            // t-131 merge: keep the explicit --sm (18px) modifier here. This
-            // merge removed injectStyle's legacy bare `.v2-avatar { width:18px }`
-            // rule, so sizing now comes only from components.css's tokenized
-            // --xs/--sm/--md modifiers — a bare `.v2-avatar` would render
-            // width-less on the composed page.
-            (t.assignee ? '<span class="v2-avatar v2-avatar--sm" title="' + esc(t.assignee) + '">' + esc(initials(t.assignee)) + '</span>' : '') +
-            '</div>' +
-            '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
-            '<div class="v2-task-card__chips">' + chips + '</div>' +
-            '</div></div>';
-        }).join('');
-        return '<div class="v2-board__column"><h3 class="v2-board__column-title">' + esc(label) + ' · ' + ts.length + '</h3>' + (cards || '<div class="v2-empty">Nothing here.</div>') + '</div>';
+      function byPrio(a, b) { return a.priority - b.priority || b.created_at.localeCompare(a.created_at); }
+
+      // Live status bands. An empty band renders nothing at all — the direct
+      // answer to the "wasted space" report: only groups that hold work take
+      // vertical room.
+      var html = V2_GROUPS.map(function (g) {
+        var ts = visible.filter(function (t) { return statusOf(g.key, t); }).sort(byPrio);
+        return ts.length ? swimGroup(state, g, ts, goalKids) : '';
       }).join('');
 
-      // t-110: discarded (fixtures, duplicates, re-scope tombstones — protocol.md's
-      // terminal-status doctrine) never occupies one of the six live columns above,
-      // matching current daily-view behavior. Its count stays visible on the toggle
-      // itself regardless of toggle state (never hidden, only the list is); the list
-      // renders as its own clearly-labeled strip, distinct from Failed at a glance
-      // (dashed muted border via .v2-task-card--discarded, not the solid critical-red
-      // Failed uses), only while the toggle is on.
+      // Discarded (fixtures, duplicates, re-scope tombstones — protocol.md's
+      // terminal-status doctrine) never renders in the live bands. Its count
+      // stays on the toolbar toggle regardless of state; the band itself only
+      // renders while the toggle is on, as one more swimlane at the bottom.
       var discarded = visible.filter(function (t) { return t.status === 'discarded'; })
         .sort(function (a, b) { return b.created_at.localeCompare(a.created_at); });
       archiveCountEl.textContent = String(discarded.length);
-      var archiveEl = document.getElementById('v2-board-archive');
-      if (archiveEl) archiveEl.remove();
-      if (archiveOpen) {
-        var strip = document.createElement('div');
-        strip.className = 'v2-board__archive';
-        strip.id = 'v2-board-archive';
-        strip.innerHTML = '<h3 class="v2-board__column-title">Archived · ' + discarded.length + '</h3>' +
-          (discarded.length ? discarded.map(function (t) { return taskCard(t, 'discarded', goalKids); }).join('') : '<div class="v2-empty">Nothing archived.</div>');
-        columnsEl.parentNode.insertBefore(strip, columnsEl.nextSibling);
-      }
+      if (archiveOpen) html += swimGroup(state, DISCARDED_GROUP, discarded, goalKids);
 
-      var openTargets = columnsEl.querySelectorAll('[data-open]');
-      var archiveEl2 = document.getElementById('v2-board-archive');
-      if (archiveEl2) openTargets = Array.prototype.concat.call(Array.prototype.slice.call(openTargets), Array.prototype.slice.call(archiveEl2.querySelectorAll('[data-open]')));
-      Array.prototype.forEach.call(openTargets, function (el) {
-        el.addEventListener('click', function () { V2.emit('v2:mission:open', { id: el.getAttribute('data-open') }); });
+      columnsEl.innerHTML = html || '<div class="v2-empty">Nothing on the board' + (projectFilter ? ' for this project' : '') + '.</div>';
+
+      // Row → open mission (click or keyboard). The checkbox is a child of the
+      // row, so its own click is stopped from bubbling into an open.
+      function openFrom(el) { V2.emit('v2:mission:open', { id: el.getAttribute('data-open') }); }
+      columnsEl.querySelectorAll('[data-open]').forEach(function (el) {
+        el.addEventListener('click', function () { openFrom(el); });
+        el.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openFrom(el); }
+        });
       });
       columnsEl.querySelectorAll('.v2-task-card__select').forEach(function (cb) {
         cb.addEventListener('click', function (e) { e.stopPropagation(); });
+        cb.addEventListener('keydown', function (e) { e.stopPropagation(); });
         cb.addEventListener('change', function () {
           var id = cb.getAttribute('data-id');
           if (cb.checked) selectedReviewIds.add(id); else selectedReviewIds.delete(id);
+          var row = cb.closest('.v2-swim__row');
+          if (row) row.classList.toggle('is-selected', cb.checked);
           V2.emit('v2:batch:selection', { ids: Array.from(selectedReviewIds) });
+        });
+      });
+
+      // Group header → collapse/expand (in place, no full re-render, so
+      // scroll and unrelated regions are untouched). State persists.
+      columnsEl.querySelectorAll('[data-toggle]').forEach(function (head) {
+        function toggle() {
+          var key = head.getAttribute('data-toggle');
+          var section = head.closest('.v2-swim__group');
+          var nowCol = !collapsed.has(key);
+          if (nowCol) collapsed.add(key); else collapsed.delete(key);
+          saveCollapsed();
+          if (section) section.classList.toggle('is-collapsed', nowCol);
+          head.setAttribute('aria-expanded', String(!nowCol));
+          var caret = head.querySelector('.v2-swim__caret');
+          if (caret) caret.innerHTML = icon(nowCol ? 'chevron-right' : 'chevron-down');
+        }
+        head.addEventListener('click', toggle);
+        head.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
         });
       });
     }
@@ -990,19 +1011,10 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // button beside it (phone-usable, no hover-only affordance). The
       // count text lives INSIDE the button itself so it is visible whether
       // the toggle is on or off — only the list below is gated by state.
+      // Shared board chrome: main's t-136/t-206 fallback-stripped versions
+      // (the t-87 alias block defines these tokens unconditionally).
       '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink-2); cursor: pointer; font-variant-numeric: tabular-nums; }',
       '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink); border-color: var(--v2-accent); }',
-      // The archived strip sits below the six live columns (not mixed into
-      // the grid), full-width, so it reads as a distinct, clearly-labeled
-      // zone rather than a 7th equal column competing for the same grid
-      // track — legible at 390px without the auto-fit grid squeezing it.
-      // grid-column spans every track: this strip is a sibling of both the
-      // toolbar and #v2-board-columns inside #v2-board, which is ITSELF a
-      // grid (v2.html's own #v2-board rule, separate from board.js's own
-      // .v2-board__columns grid one level down) — without this, the strip
-      // would land as an ordinary same-row grid item next to the toolbar
-      // instead of a full-width band below the six columns.
-      '.v2-board__archive { grid-column: 1 / -1; margin-top: var(--v2-space-3, 12px); padding-top: var(--v2-space-3, 12px); border-top: 1px dashed var(--v2-hairline); }',
       '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2); display: flex; align-items: center; gap: 4px; }',
       '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent); cursor: pointer; font: inherit; }',
       '.v2-quickadd { display: flex; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-3, 12px); flex-wrap: wrap; }',
@@ -1010,67 +1022,70 @@ import { icon, avatar, chip, idBadge } from './components.js';
       '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
       '.v2-quickadd__submit { font: inherit; font-weight: 600; padding: var(--v2-space-2, 8px) var(--v2-space-3, 12px); border: none; border-radius: var(--v2-radius); background: var(--v2-accent); color: var(--v2-on-accent); cursor: pointer; }',
       '.v2-quickadd__err { color: var(--v2-critical); font-size: 12px; margin: var(--v2-space-1, 4px) 0 0; width: 100%; }',
-      // t-136: .v2-board__columns's own `gap` overlaps organisms.css's
-      // plain `.v2-board__columns { gap: var(--v2-space-4); }` (t-78), but
-      // that CSS rule carries no `display`/`grid-template-columns` of its
-      // own — deleting just this file's `gap` sub-property (the only truly
-      // duplicated declaration) would swap the live 6px gap for organisms'
-      // un-cascaded 8px, a real pixel shift this mechanical pass isn't
-      // cleared to make. Left whole and flagged rather than silently
-      // reconciled — a genuine taste call for the follow-up tranche, not
-      // dead code like the rules removed below.
-      '.v2-board__columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--v2-space-3, 12px); align-items: start; }',
-      // t-136: .v2-board__column-title (font-size/color/margin/font-weight)
-      // deleted whole — organisms.css's `.v2-board__column-title.v2-board__
-      // column-title` (t-78) already wins every one of those properties at
-      // higher specificity (doubled class beats this file's plain one), so
-      // this rule was fully dead: confirmed via computed-style snapshot
-      // before removal, zero visual change.
-      /* t-93 round 3 (trimmed t-136): card anatomy converged on the
-         approved sample (t-58-v2-sample.html.txt: .card/.chips/.mchip/
-         .avatar) — id+avatar top row, a clamped title, a chip row (goal
-         flag / colored project dot / priority, plus this file's own extra
-         fields folded into the same chip language). t-77's molecules.css
-         later shipped `.v2-task-card(.v2-task-card)` / `__title` / `__meta`
-         at doubled-class specificity specifically to win over this file's
-         own then-placeholder-namespaced rules for the same selectors —
-         t-136 deletes what molecules.css had already made dead rather than
-         leaving the shadowed duplicate in place. What's left below is only
-         what molecules.css does NOT re-implement: the 2-line title clamp,
-         the hover background (molecules only overrides hover border-color),
-         and the rest of this card's own layout hooks. */
-      '.v2-task-card:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); }',
-      '.v2-task-card__body { cursor: pointer; flex: 1; min-width: 0; }',
-      '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
-      // t-136 flagged .v2-task-card__id as a near-match follow-up for
-      // components.css's .v2-id-badge, deferred because t-123 was still
-      // unmerged and independently wiring idBadge() into this exact call
-      // site. t-123 has since merged (main's markup above now renders
-      // through idBadge() directly, see the t-123 comment there) — the
-      // class this rule targeted no longer appears in this file's markup
-      // at all, so the rule itself is dead. Dropped on merge rather than
-      // carried forward as a second, now-pointless drift source; the
-      // follow-up t-136 named is closed by t-123, not by this file.
-      '.v2-task-card__sp { flex: 1; }',
-      // t-131 round N (critic gap 1): this legacy bare `.v2-avatar { width:
-      // 18px; height: 18px; ... }` rule used to be the ONLY source of size
-      // for the task card's assignee avatar (no --sm/--xs modifier was ever
-      // applied at its call site) — but this <style> tag is injected into
-      // <head> at runtime, after components.css's own <link>, so at equal
-      // (0,1,0) specificity this rule always won the cascade, including over
-      // components.css's real `.v2-avatar--xs` (14px) token-driven rule the
-      // roster's fleet rows depend on. Root cause, not a coincidence: fleet
-      // avatars were rendering at 18px instead of the 14px
-      // --v2-avatar-size-xs token calls for. Fix: give the task-card's own
-      // avatar the same explicit `.v2-avatar--sm` modifier the roster's
-      // other avatar() call sites already use (components.css's real
-      // .v2-avatar--sm is 18px too, so this call site's own size is
-      // unchanged) and delete the legacy rule outright — the shared
-      // `.v2-avatar` base + size modifiers in components.css are now the
-      // only source of truth, and every call site names its own size.
-      '.v2-task-card__title { overflow-wrap: break-word; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin-bottom: var(--v2-space-3, 6px); }',
-      '.v2-task-card__chips { display: flex; align-items: center; gap: var(--v2-space-3, 6px); flex-wrap: wrap; }',
-      '.v2-mchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--v2-color-text-secondary, #62636c); }',
+      // t-167: the board is a vertical stack of status swimlanes, not a
+      // Kanban grid. #v2-board is declared `display:grid` (auto-fit columns)
+      // in v2.html's own <style>; this file's stylesheet is appended to
+      // <head> AFTER that inline block, so an equal-specificity `#v2-board`
+      // rule here wins on source order and flips the whole surface to block
+      // flow — keeping the redesign a single-file change with no v2.html edit
+      // (and no drift on that repeatedly-contested file).
+      '#v2-board { display: block; }',
+      // t-167 round 2 (critic send-back): Linear's issue list is ONE
+      // continuous flat surface — bands are separated only by the header
+      // strip's own hairline, never by a boxed card. No group border,
+      // radius, overflow-clip or inter-band gap here; the header tint plus
+      // the row-level hairlines below carry all the separation.
+      '.v2-swim { display: flex; flex-direction: column; }',
+      '.v2-swim__group { background: transparent; }',
+      '.v2-swim__head { display: flex; align-items: center; gap: var(--v2-space-3, 6px); padding: var(--v2-space-3, 6px) var(--v2-space-4, 8px); cursor: pointer; user-select: none; background: var(--v2-color-surface-raised, rgba(128,128,128,.05)); border-bottom: 1px solid var(--v2-color-border, rgba(128,128,128,.1)); }',
+      '.v2-swim__group.is-collapsed .v2-swim__head { border-bottom-color: transparent; }',
+      '.v2-swim__head:hover { background: var(--v2-color-border, rgba(128,128,128,.08)); }',
+      '.v2-swim__head:focus-visible { outline: 2px solid var(--v2-color-focus-ring, rgba(94,106,210,.4)); outline-offset: -2px; }',
+      '.v2-swim__caret { display: inline-flex; flex: none; color: var(--v2-color-text-muted, #999); }',
+      '.v2-swim__caret .v2-icon { width: 15px; height: 15px; }',
+      '.v2-swim__label { font-weight: 600; font-size: 13px; color: var(--v2-color-text-primary, inherit); }',
+      '.v2-swim__count { color: var(--v2-color-text-muted, #999); font-size: 12px; }',
+      '.v2-swim__group.is-collapsed .v2-swim__rows { display: none; }',
+      // A dense single-line row. Row height ~32px; title ellipsizes so the
+      // row never wraps to a second line (the "multiple rows" complaint).
+      '.v2-swim__row { display: flex; align-items: center; gap: var(--v2-space-3, 6px); padding: var(--v2-space-2, 4px) var(--v2-space-4, 8px); min-height: 32px; cursor: pointer; border-bottom: 1px solid var(--v2-color-border, rgba(128,128,128,.06)); }',
+      '.v2-swim__row:last-child { border-bottom: none; }',
+      '.v2-swim__row:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.05)); }',
+      '.v2-swim__row:focus-visible { outline: 2px solid var(--v2-color-focus-ring, rgba(94,106,210,.4)); outline-offset: -2px; }',
+      '.v2-swim__row.is-selected { background: var(--v2-color-row-selected-bg, rgba(94,106,210,.1)); }',
+      '.v2-swim__select { flex: none; margin: 0; }',
+      // Status glyph — color mapping identical to the old card border-left,
+      // so the signal is unchanged from the rest of the app.
+      '.v2-swim__glyph { display: inline-flex; flex: none; }',
+      '.v2-swim__glyph .v2-icon { width: 15px; height: 15px; }',
+      '.v2-swim__glyph--queued { color: var(--v2-color-text-muted, #999); }',
+      '.v2-swim__glyph--working { color: var(--v2-color-status-at-risk, #f2a30f); }',
+      '.v2-swim__glyph--blocked { color: var(--v2-color-status-bug, #eb5757); }',
+      '.v2-swim__glyph--review { color: var(--v2-color-status-in-progress, #8b5cf6); }',
+      '.v2-swim__glyph--done { color: var(--v2-color-status-done, #29a36a); }',
+      '.v2-swim__glyph--failed { color: var(--v2-color-status-bug, #eb5757); }',
+      '.v2-swim__glyph--discarded { color: var(--v2-color-text-muted, #999); }',
+      '.v2-swim__title { flex: 1; min-width: 0; font-size: 13px; color: var(--v2-color-text-primary, inherit); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }',
+      '.v2-swim__chips { display: flex; align-items: center; gap: var(--v2-space-4, 8px); flex: none; }',
+      '.v2-swim__more { padding: var(--v2-space-2, 4px) var(--v2-space-4, 8px); font-size: 11.5px; color: var(--v2-color-text-muted, #999); }',
+      // On a phone the chip cluster is the first thing to sacrifice — the id,
+      // status glyph, title and avatar carry the row; project/priority/gate
+      // chips hide below the phone breakpoint so the row stays one clean line.
+      '@media (max-width: 720px) { .v2-swim__chips { display: none; } }',
+      // t-167: the multi-line card anatomy (t-93's converged .v2-task-card /
+      // __top / __title / __chips) is retired with the Kanban board it lived
+      // in — the swimlane row above replaces it. .v2-mchip* is kept verbatim:
+      // the row reuses it. molecules.css still carries a
+      // `.v2-task-card.v2-task-card` doubled-class rule that now matches
+      // nothing on this surface (board.js no longer emits .v2-task-card);
+      // that dead rule is left for the design-system pass (t-139) rather
+      // than reached into from here. NOT re-declaring a bare `.v2-avatar`
+      // rule here — t-131's merge already deleted the legacy bare-avatar
+      // sizing rule from this file on main (components.css's tokenized
+      // --xs/--sm/--md modifiers are the one source of truth now); every
+      // call site in this file (swimRow's assignee avatar, fleetRows') names
+      // its own size modifier instead.
+      '.v2-mchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--v2-color-text-secondary, #62636c); white-space: nowrap; }',
       '.v2-mchip__dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }',
       '.v2-mchip--goal { color: var(--v2-color-status-bug, #eb5757); font-weight: 600; }',
       /* Brain · recent (t-93 round 3) — same commit-row anatomy as the
@@ -1080,18 +1095,12 @@ import { icon, avatar, chip, idBadge } from './components.js';
       '.v2-commit-row__ts { color: var(--v2-color-text-muted, #71727c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
       '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
-      // Discarded cards (t-110): dashed border + reduced opacity, distinguishable
-      // from Failed at a glance without a new color token. Tripled class beats
-      // molecules.css's doubled-class border reset (its documented technique),
-      // so the dashed border genuinely renders; the word "archived" on the card
-      // stays the primary signal per the glyph+label-never-color-alone rule.
-      '.v2-task-card.v2-task-card.v2-task-card--discarded { border-style: dashed; border-color: var(--v2-color-border, rgba(128,128,128,.4)); opacity: .75; }'
-      // t-136: .v2-task-card__meta (font-size/color/margin-top/font-variant-numeric),
-      // used by the archive-strip cards (taskCard()), deleted whole — molecules.css's
-      // doubled-class `.v2-task-card__meta.v2-task-card__meta` (t-77) already wins
-      // every one of those properties at higher specificity with its own (different)
-      // values; this file's rule was fully dead, confirmed via computed-style
-      // snapshot before removal.
+      // Archived swimlane (t-167): the discarded band reads as muted — the
+      // whole group is dimmed and its own "Archived" label plus the muted
+      // status glyph carry the signal, no per-row border treatment needed
+      // now that discarded rows share the one row anatomy (t-110's dashed
+      // card rule retired with the cards themselves).
+      '.v2-swim__group--discarded { opacity: .72; }'
     ].join('\n');
     document.head.appendChild(style);
   }
