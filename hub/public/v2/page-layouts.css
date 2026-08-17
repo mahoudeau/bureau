@@ -1,0 +1,222 @@
+/*
+ * Dashboard v2 — page-level templates (t-138, goal: t-134)
+ *
+ * Atomic design's fourth output: page-level structural grids that place
+ * ORGANISMS (rail listing, board, peek panel) into a layout, with no real
+ * data — placeholder/lorem marker content only. This is a NEW file, owned
+ * only by this mission, not linked from v2.html (out of scope per this
+ * mission's own body — the styleguide route links and demonstrates it).
+ * Every rule below composes classes already shipped by tokens.css (t-63/
+ * t-75), components.css (t-66), molecules.css (t-77) and organisms.css
+ * (t-78) — this file adds no new atom-level visual treatment (color,
+ * type, chip/button/row chrome), only placement.
+ *
+ * NAMING: hub/public/v2/templates.js already means something unrelated
+ * (t-72's quick-add mission-template picker). This file is deliberately
+ * named page-layouts.css, not templates.css, to avoid that collision.
+ *
+ * Cites: projects/bureau/references/ux-v2/STUDY-lead.md ("density with
+ * air, not whitespace theatre" / "panels over modals" / hairline
+ * structure) and STUDY-lead-t134.md (this goal's addendum — the
+ * Templates layer is wireframe placement, not a second place to invent
+ * component looks). Crop citations are per-template below, not repeated
+ * here.
+ *
+ * INTENT EXTRACTED FROM v2.html, NOT COPIED VERBATIM: v2.html's own
+ * inline <style> block already lays out a rail/main/side CSS Grid
+ * (.v2-shell, --v2-rail-w/--v2-side-w/--v2-panel-w) and a fixed-position
+ * peek panel/cmd-K overlay — but that block reads the OLDER placeholder
+ * variable namespace (--v2-hairline, --v2-ink, --v2-muted, hardcoded
+ * --v2-rail-w:240px/--v2-panel-w:380px) t-134's own addendum names as
+ * this design system's live dogfood-test failure, not a pattern to
+ * reproduce. This file re-derives the same STRUCTURAL SHAPE (rail beside
+ * main, peek panel floating over it, an anchored overlay for palette/
+ * settings) from the real --v2-color-*, --v2-space-*, --v2-radius-* schema
+ * and this system's own already-shipped organisms, rather than importing
+ * v2.html's hardcoded pixel widths or its old token names.
+ *
+ * A GENUINE STRUCTURAL FINDING, stated once here rather than per-
+ * template: components.css's own `.v2-panel` (the peek panel, t-66) is
+ * ALREADY `position: fixed; top:0; right:0; bottom:0` with its own width
+ * and open/closed transform (`.v2-is-open`) — it does not participate in
+ * document flow at all. Per STUDY-lead.md's own citation (SCR-20260816-
+ * cums.png: "a panel slides in from the right OVER the list... never
+ * covers the whole screen, the list stays visible underneath"), that is
+ * correct and this file does not re-position or re-size it. The
+ * consequence: THREE-PANE and TWO-PANE below share one identical
+ * rail+main CSS Grid — peek is not a third grid track, it overlays
+ * whichever of the two is underneath. Both template names are kept
+ * (rather than collapsing three-pane into "two-pane with peek open") per
+ * this mission's own required naming and because each is independently
+ * demonstrable in the styleguide without the other.
+ *
+ * ZERO MAGIC NUMBERS, one documented exemption: every color/spacing/
+ * radius/shadow/type/icon/z-index value below reads a tokens.css custom
+ * property, most through a calc()/minmax() built on --v2-row-height (the
+ * one already-established "atomic row unit" this schema exposes) since
+ * tokens.css defines no rail-width/panel-width/breakpoint token of its
+ * own to cite directly — flagged as an estimate extrapolated from the
+ * cited crops, the same honest posture tokens.css's own header comment
+ * uses for --v2-row-height itself (measured/estimated, not exact-pixel-
+ * cited like a color). The one EXEMPTED category is the phone media-query
+ * threshold (720px, below): tokens.css carries no breakpoint token at
+ * all (by design — every sibling CSS file in this system is breakpoint-
+ * free, that's a page-level-only concern), so this reuses the live app's
+ * OWN existing phone threshold (v2.html's `@media (max-width: 720px)`)
+ * for consistency rather than inventing an uncited second one.
+ */
+
+/* Self-contained box-sizing: the critic's scratch demo links only
+   tokens.css + components.css + molecules.css + organisms.css + this
+   file, none of which carry a `* { box-sizing: border-box }` reset
+   (v2.html's own global reset is out of scope/not linked in that demo).
+   Scoped to this file's own template subtrees only — no global `*`
+   selector — so this stays a self-contained addition, harmless and
+   redundant once a page that already has the global reset (v2.html
+   itself, eventually) also links this file. */
+.v2-layout--two-pane, .v2-layout--two-pane *,
+.v2-layout--three-pane, .v2-layout--three-pane *,
+.v2-layout--overlay, .v2-layout--overlay * {
+  box-sizing: border-box;
+}
+
+/* ============================================================
+   TEMPLATE: THREE-PANE (the live default layout)
+   Organisms placed:
+     - rail: an agent/project LISTING organism — no dedicated rail-level
+       organism class exists yet in organisms.css (t-78 covered board
+       columns + peek chrome only, a real gap this template does not
+       invent styling to fill), so the rail composes two already-shipped
+       atoms directly: .v2-card (component.css, section container) each
+       holding .v2-row items (components.css, dense list row — already
+       ships hover/selected states matching the crop's own highlighted
+       first item, plus .v2-row__title's ellipsis for long names). Cited
+       against crop-ux-sidebar-item.png: icon-leading label rows under a
+       small muted section heading (.v2-card__label), the first item
+       shown in its :hover/.v2-is-selected highlighted state exactly as
+       the crop shows.
+     - main: the board organism, .v2-board__columns (organisms.css/t-78).
+     - peek: .v2-panel + .v2-panel__header/__title/__controls/__body
+       (components.css/t-66, organisms.css/t-78's title/close/media
+       rules) — placed in `.v2-is-open` state to demonstrate the
+       three-pane composition. Its header proportions (icon + name +
+       model-tag chip, trailing minimize/expand/close icon-buttons, a
+       hairline-divided log row below) are cited against
+       crop-ux-peek-header.png: app icon -> .v2-avatar, "Linear" ->
+       .v2-panel__title, "Opus 5" tag -> .v2-agent-tag (bordered muted
+       pill, the closest existing atom to the crop's model-tag chip),
+       the three trailing glyphs -> .v2-icon-btn x3 in .v2-panel__controls,
+       the "jori connected..." row -> .v2-panel__logrow (organisms.css)
+       with a leading .v2-avatar--sm. Panel positioning itself is NOT
+       redefined here — see the file header's structural finding: it is
+       already a self-positioning fixed overlay in components.css.
+   ============================================================ */
+.v2-layout--two-pane,
+.v2-layout--three-pane {
+  display: grid;
+  grid-template-columns:
+    minmax(calc(var(--v2-row-height) * 7), calc(var(--v2-row-height) * 9))
+    minmax(0, 1fr);
+  grid-template-areas: "rail main";
+  gap: var(--v2-space-6);
+  padding: var(--v2-space-6);
+  min-height: 100dvh;
+  background: var(--v2-color-bg);
+  align-items: start;
+}
+/* Rail track: minmax(7, 9) row-heights (210-270px) — extrapolated from
+   crop-ux-sidebar-item.png's own icon+label+padding register (icon
+   --v2-icon-size-sm, gap --v2-space-5, label text, .v2-card's own
+   --v2-space-6 outer padding on both sides), the same "estimate flagged
+   honestly" posture tokens.css uses for --v2-row-height itself — the
+   crop is a partial crop of a wider sidebar, not a full-width reference,
+   so this is a reasoned range, not an exact citation. .v2-row__title's
+   existing ellipsis (components.css) absorbs any label longer than the
+   range allows, by design. */
+.v2-layout__rail {
+  grid-area: rail;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-5);
+  min-width: 0;
+}
+.v2-layout__main {
+  grid-area: main;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-5);
+  min-width: 0;
+}
+
+/* ============================================================
+   TEMPLATE: TWO-PANE (rail + board only, peek closed)
+   Organisms placed: identical rail + main organisms as three-pane above
+   (same citations: crop-ux-sidebar-item.png for the rail, .v2-board__
+   columns for main) — this is the SAME grid (see the file header's
+   structural finding: peek was never a grid track to begin with, so
+   "closing" it is simply omitting/leaving `.v2-panel` un-opened, not a
+   different grid). Kept as its own named selector, sharing the grid rule
+   above via one comma-joined declaration, so the styleguide can render
+   this state standalone without also having to reason about the panel.
+   ============================================================ */
+@media (max-width: 720px) {
+  .v2-layout--two-pane,
+  .v2-layout--three-pane {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "main" "rail";
+  }
+}
+
+/* ============================================================
+   TEMPLATE: OVERLAY (palette/settings surface floating over whichever
+   pane layout is active)
+   Organism placed: an anchored floating surface — the closest existing
+   molecule is .v2-palette (molecules.css/t-77, border-radius/shadow
+   only; its actual fixed positioning/width today lives inline in
+   v2.html, out of this mission's scope to touch or copy verbatim). This
+   template re-derives the same STRUCTURAL shape token-first: anchored
+   near the top (not vertically centered — STUDY's own cited pattern,
+   Screenshot-2024-08-03-at-16.40.34.png's inline popover and the cmd-K
+   convention generally, is an anchored surface, never a centered
+   splash), non-modal (no scrim) by default, matching STUDY-lead.md's own
+   "filters/creation are token-and-pill, not forms" register and
+   tokens.css's own note that this system's cmd-K surface has no
+   backdrop. Width lands at calc(row-height * 18) = 540px, independently
+   close to (not copied from) v2.html's own existing cmd-K width
+   (min(560px, 92vw)) — a confirming coincidence from a token-derived
+   formula, not a citation of that inline value. For a genuinely modal
+   settings variant that DOES need a backdrop, pair this class with the
+   existing `.v2-panel__scrim` element (components.css, already reads
+   --v2-color-overlay-scrim) as a preceding sibling — this template does
+   not bake a scrim in, so the common non-modal case stays scrim-free by
+   default rather than by override.
+   ============================================================ */
+.v2-layout--overlay {
+  position: fixed;
+  top: var(--v2-space-8);
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(calc(var(--v2-row-height) * 18), calc(100% - var(--v2-space-8) * 2));
+  max-height: 60dvh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--v2-space-3);
+  padding: var(--v2-space-4);
+  background: var(--v2-color-surface);
+  border: 1px solid var(--v2-color-border);
+  border-radius: var(--v2-radius-lg);
+  box-shadow: var(--v2-shadow-overlay);
+  z-index: var(--v2-z-popover);
+}
+@media (max-width: 720px) {
+  .v2-layout--overlay {
+    top: 0;
+    left: 0;
+    transform: none;
+    width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+}
