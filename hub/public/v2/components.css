@@ -18,6 +18,12 @@
  *     sample; extracted from that sample's own embedded font rather than
  *     re-sourced, so the vendored asset is identical, already-vetted, and
  *     not a second independent font choice drifting from what the boss saw.
+ *   - fonts/Fraunces-Variable.woff2 + fonts/JetBrainsMono-{Regular,SemiBold}.
+ *     woff2 (t-112, both OFL-1.1, licenses in fonts/) — the display serif
+ *     (titles) and monospace (ids/counts/tags) faces t-93's own closing
+ *     note flagged as left out of scope, same extraction method as Inter
+ *     above: the exact binaries already embedded and approved in t-58's
+ *     sample, not re-sourced.
  *   - icons/lucide-icons.json (ISC, license in icons/) — the same 24 Lucide
  *     glyphs used in t-58, plus 5 more this mission needed (peek-panel
  *     minimize/maximize, a loading spinner, an error glyph, chevron-up).
@@ -43,6 +49,40 @@
   font-family: "Inter Variable";
   src: url("fonts/Inter-Variable.woff2") format("woff2-variations"), url("fonts/Inter-Variable.woff2") format("woff2");
   font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* t-112 (goal: t-53): the two faces t-93's own closing note flagged as the
+   one item it left out of scope — extracted from the SAME approved t-58
+   sample's own embedded base64 data: URIs t-66 already used for Inter above
+   (not re-sourced independently), so the vendored assets are byte-identical
+   to what the boss already saw, not a second, drifting font choice.
+   Family names match tokens.css's --v2-font-serif / --v2-font-mono first
+   choices exactly, same pattern as Inter Variable above. Licenses: SIL
+   OFL-1.1 for both, recorded alongside each binary in fonts/ (per the
+   sample's own header comment, all three vendored faces share that
+   license) — fonts/Fraunces-OFL.txt and fonts/JetBrainsMono-OFL.txt,
+   fetched from each project's own canonical GitHub repo (not
+   reconstructed), so the copyright preamble names the correct authors. */
+@font-face {
+  font-family: "Fraunces Variable";
+  src: url("fonts/Fraunces-Variable.woff2") format("woff2-variations"), url("fonts/Fraunces-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("fonts/JetBrainsMono-SemiBold.woff2") format("woff2");
+  font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
@@ -174,12 +214,21 @@
    ~11-11.5px muted text at font-weight:500) already matched this file's
    size/color; only font-weight was missing (this file had no explicit
    weight, inheriting whatever ambient regular/400 weight surrounded it —
-   the sample's id text reads slightly heavier than that, medium/500). */
+   the sample's id text reads slightly heavier than that, medium/500).
+   t-112, lead ruling 2026-08-16: font-family added — this is a real,
+   already-rendered live consumer of --v2-font-mono (every mission-id
+   badge on every card/peek header), precisely the "id" context the
+   boss's own typography verdict named ("JBMono carries every number/id/
+   timestamp AND every tag"), unlike .v2-chip below (also reads the same
+   token, but chip()/.v2-chip has no call site anywhere yet — dead
+   markup, correctly out of this mission's own font-only scope to wire
+   up). Stays in-file, in-scope: no third file touched, no JS edited. */
 .v2-id-badge {
   font-size: var(--v2-font-size-xs);
   font-weight: var(--v2-weight-medium);
   color: var(--v2-color-text-muted);
   font-variant-numeric: var(--v2-tabular-nums);
+  font-family: var(--v2-font-mono);
 }
 
 /* ---- avatar / agent tag ------------------------------------------------

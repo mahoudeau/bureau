@@ -119,6 +119,16 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2.html')));
     }
+    // t-139 (goal: t-134): the living style guide — same static-serve pattern
+    // as /v2 just above, its own shell (hub/public/v2/styleguide.html) plus
+    // the sibling v2/styleguide.js already covered by the mV2Asset route
+    // below. Deliberately its own top-level route, not folded into the /v2
+    // shell: the goal's own bar treats the style guide as a first-class Page
+    // of the system, not a tab bolted onto the dashboard.
+    if (req.method === 'GET' && p === '/v2/styleguide') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2', 'styleguide.html')));
+    }
     // t-92: components.css's vendored @font-face (fonts/Inter-Variable.woff2)
     // 404'd here even once the CSS layer itself was wired in — this route
     // only ever matched a single flat segment directly under v2/, so any
@@ -260,6 +270,17 @@ const server = http.createServer(async (req, res) => {
       if (a.error) return send(res, 400, a);
       broadcast('agent.heartbeat', { ...a, activity: a.activity });
       return send(res, 200, { agent: a });
+    }
+    // Roster curation: remove a name from the board. Curation, not a ban -
+    // missions/logs keep the historical string untouched and the name may
+    // freely re-register later. Refused while the name holds a live lease
+    // (a claimed/in_progress mission) so curation can never strand work.
+    const mAgent = p.match(/^\/api\/agents\/([^/]+)$/);
+    if (req.method === 'DELETE' && mAgent) {
+      const r = store.deleteAgent(decodeURIComponent(mAgent[1]));
+      if (r.error) return send(res, r.error === 'not_found' ? 404 : 409, r);
+      broadcast('agent.removed', { name: decodeURIComponent(mAgent[1]) });
+      return send(res, 200, r);
     }
 
     // ----- tasks -----

@@ -58,10 +58,27 @@
   --v2-color-overlay-scrim: rgb(20 20 22 / 32%);
 
   /* ---- color: text ----------------------------------------------------
-     Sample line 50: --text/--text2/--text3. */
+     Sample line 50: --text/--text2/--text3.
+     --v2-color-text-muted (t-151): the sample's literal #93949c/#6c6d76
+     (light/dark) failed WCAG AA at the sizes this token is actually used
+     at (mission meta lines, ~11.5px, well under the large-text exemption)
+     — 2.92-3.85:1 measured against this file's own bg/surface pairs,
+     against a 4.5:1 floor. Darkened (light) / lightened (dark) in HSL,
+     hue and saturation held exactly, only lightness moved, to the least
+     change that clears 4.5:1 against BOTH bg and surface with a small
+     safety margin for hex rounding (light: L .594->.469, dark: L
+     .443->.502) — still visibly less contrasty than -secondary in both
+     modes (light 4.6-4.8:1 vs secondary's 5.8-6.0:1; dark 4.6-4.8:1 vs
+     secondary's 6.8-7.2:1), so the muted-vs-secondary hierarchy the
+     sample intended is preserved, just no longer below the mechanical
+     floor. Sample wins in general per t-53's rule, but a sample value
+     that fails the mission's own named mechanical floor cannot be the
+     binding source for that one value — same logic as this file's
+     existing shadow/radius sample-overrides, applied to accessibility
+     instead of layout. */
   --v2-color-text-primary: #1a1a1f;
   --v2-color-text-secondary: #62636c;
-  --v2-color-text-muted: #93949c;
+  --v2-color-text-muted: #71727c;
   --v2-color-text-on-accent: #ffffff;
 
   /* ---- color: border (hairline, low alpha per STUDY) -------------------
@@ -293,37 +310,30 @@
   --v2-weight-semibold: 600;
   --v2-tabular-nums: tabular-nums;
 
-  /* ---- typeface (ADDED --v2-font-serif / --v2-font-mono — see note) -----
+  /* ---- typeface (--v2-font-serif / --v2-font-mono now @font-face-backed,
+     t-112) -----------------------------------------------------------------
      A genuine schema gap, not a value tweak: this token set had exactly
-     ONE font-family token (-sans) before this round. The sample's own
-     CSS carries a comment recording an explicit boss ruling embedded
-     right in the file (line ~85): "Boss's typography verdict (2026-08-16):
-     one face throughout read as no hierarchy at all. Three complementary
-     faces now, each doing a distinct job... Fraunces... carries every
-     title; Inter stays the body/UI workhorse; JBMono carries every
-     number/id/timestamp AND every tag." That is a structural, binding
-     decision this schema had no tokens to represent at all — not a value
-     this mission could fix by editing -sans alone. Added two new tokens,
-     per this mission's own "no variable added without a documented
-     reason" allowance, values taken from the sample's own declared
-     fallback stacks (`'Fraunces', Georgia, serif` / `'JBMono',
-     ui-monospace, 'SF Mono', monospace`, lines ~26/33/40 and every
-     font-family declaration using them).
-     IMPORTANT, flagged plainly: only the FALLBACK stacks are usable today.
-     The sample embeds its own Fraunces/JBMono as base64 data: URIs inline
-     in a throwaway HTML file — t-66 has already vendored a real Inter
-     Variable binary (hub/public/v2/fonts/), but nobody has yet extracted
-     Fraunces or JetBrains Mono into the repo as reusable, licensed font
-     assets. Until that happens (same shape of work t-66 already did for
-     Inter — a follow-up mission, not this one, since this mission owns
-     only tokens.css, not font files or components.css's @font-face
-     block), -font-serif/-font-mono resolve to Georgia/ui-monospace system
-     fallbacks, not the sample's actual look. -font-sans's own family name
-     ("Inter Variable") already matches t-66's vendored file, so body text
-     alone gets the real face today; titles and numbers/tags do not yet. */
+     ONE font-family token (-sans) before Wave 2 added these two. The
+     sample's own CSS carries a comment recording an explicit boss ruling
+     embedded right in the file (line ~85): "Boss's typography verdict
+     (2026-08-16): one face throughout read as no hierarchy at all. Three
+     complementary faces now, each doing a distinct job... Fraunces...
+     carries every title; Inter stays the body/UI workhorse; JBMono
+     carries every number/id/timestamp AND every tag."
+     t-112 closed the gap this note used to flag: components.css now vendors
+     real Fraunces Variable + JetBrains Mono (400/600) binaries — the exact
+     ones already embedded and approved in t-58's sample, extracted the same
+     way t-66 extracted Inter, not re-sourced — so both tokens below now
+     resolve to real @font-face-backed files, not the Georgia/ui-monospace
+     fallbacks that used to render in their place. Family names match
+     components.css's @font-face declarations exactly ("Fraunces Variable",
+     "JetBrains Mono"); the old bare-string fallback names ("Fraunces",
+     "JBMono") are dropped since nothing installs a system font under
+     those exact names — a stack should never carry a family name no
+     @font-face and no OS ships, since it can only ever silently no-op. */
   --v2-font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --v2-font-serif: "Fraunces", Georgia, serif;
-  --v2-font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  --v2-font-serif: "Fraunces Variable", Georgia, serif;
+  --v2-font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
   /* ---- motion (bar: "soft, timely, sub-150ms, water-like and rare") ---
      Not sample-traceable: a static HTML sample has no transitions to
@@ -347,7 +357,9 @@
 
     --v2-color-text-primary: #edeef0;
     --v2-color-text-secondary: #9a9ba3;
-    --v2-color-text-muted: #6c6d76;
+    /* -muted lightened for AA contrast, see the light block's t-151 note
+       above (same fix, dark direction: L .443->.502, hue/sat unchanged). */
+    --v2-color-text-muted: #7b7d87;
     --v2-color-text-on-accent: #ffffff;
 
     --v2-color-border: rgb(255 255 255 / 8%);
@@ -386,7 +398,7 @@
 
   --v2-color-text-primary: #edeef0;
   --v2-color-text-secondary: #9a9ba3;
-  --v2-color-text-muted: #6c6d76;
+  --v2-color-text-muted: #7b7d87;
   --v2-color-text-on-accent: #ffffff;
 
   --v2-color-border: rgb(255 255 255 / 8%);

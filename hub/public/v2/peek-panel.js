@@ -44,7 +44,7 @@
 // 'after-body' is the only slot today — the one the sample's own order
 // needs) that media.js now uses instead of its MutationObserver/trailing-
 // append workaround.
-import { icon } from './components.js';
+import { icon, idBadge } from './components.js';
 
 (function () {
   'use strict';
@@ -269,7 +269,14 @@ import { icon } from './components.js';
         // to dodge an absolutely-positioned close button — the round-3
         // critic reproduced a real overlap bug on long titles from the old
         // single-button-no-wrapper markup, at both desktop and phone width.
-        '<div class="v2-panel__head"><span class="v2-panel__id v2-tabular-nums">' + esc(t.id) + '</span>' +
+        // t-123: the id itself renders through components.js's idBadge()
+        // (its markup/typography, including the vendored JetBrains Mono
+        // token once t-112 lands, is that component's own concern) —
+        // .v2-panel__id keeps only the flex:1 layout role that pushes the
+        // close button right; the font-size/weight/color/tabular-nums it
+        // used to carry directly are now idBadge()'s own (near-identical
+        // values, see this file's own .v2-panel__id rule below).
+        '<div class="v2-panel__head"><span class="v2-panel__id">' + idBadge(t.id).outerHTML + '</span>' +
         // t-115: .v2-hit44 — closes finding #2's "shared panel close
         // button: 30x30px" line (this file's own instance of the pattern;
         // brain-browser.js's and goal-progress.js's own close buttons use
@@ -355,7 +362,7 @@ import { icon } from './components.js';
       // width. The id sits where the sample's own .phead .id sits; the
       // close button no longer needs to reserve title margin to dodge it.
       '.v2-panel__head { display: flex; align-items: center; gap: var(--v2-space-3, 8px); margin-bottom: var(--v2-space-3, 10px); }',
-      '.v2-panel__id { font-size: 11.5px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; flex: 1; }',
+      '.v2-panel__id { flex: 1; }', // t-123: typography now lives on idBadge()'s own .v2-id-badge (components.css); this rule keeps only the layout role
       '.v2-panel__close { border: none; background: transparent; color: var(--v2-color-text-muted, #888); display: flex; cursor: pointer; padding: 2px; flex: none; }',
       '.v2-panel__close:hover { color: var(--v2-color-text-primary, inherit); }',
       // t-93 round 5: components.css:352 (`.v2-panel__title { flex: 1 1
