@@ -188,7 +188,21 @@ import { icon, idBadge } from './components.js';
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
-        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" value="' + esc(it.comment || '') + '">' +
+        // t-194 (goal: t-53): Enter, pressed while typing in THIS item's own
+        // comment field, is this item's quick-submit trigger (wired below,
+        // after render() inserts this markup) — the timed floor ("rule on
+        // an item with a comment in <=3 interactions from landing") can't
+        // be met while finishing a comment always requires a separate trip
+        // to the shared Approve/Send-back button at the bottom of the
+        // panel. The title attribute is a hover-taught hint, same register
+        // as keyboard.js's own '⌨' tooltip — never a resting legend.
+        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" title="Enter submits just this item" value="' + esc(it.comment || '') + '">' +
+        // Transient per-item save confirmation (hidden until a quick-submit
+        // succeeds; re-hidden the moment this item's own verdict/comment
+        // changes again, see the 'dirty' wiring below) — batch review via
+        // the shared Approve/Send-back button is untouched by any of this
+        // and still submits every item's current radio+comment in one pass.
+        '<span class="v2-panel__item-saved" id="s_' + esc(it.id) + '" hidden>' + icon('circle-check', 'v2-icon--xs') + ' Saved</span>' +
         '</div>';
     }
 
@@ -311,10 +325,15 @@ import { icon, idBadge } from './components.js';
       var replacementBtn = document.getElementById('v2-pp-replacement');
       if (replacementBtn) replacementBtn.addEventListener('click', function () { V2.emit('v2:mission:open', { id: replacementId }); });
 
-      function collectVerdicts() {
+      // t-194: onlyId narrows this to a single item's own radio (used by
+      // quick-submit below); omitted, it walks every checked radio in the
+      // panel exactly as before — the shared Approve/Send-back batch path
+      // (submitStatus, unchanged) still calls this with no argument.
+      function collectVerdicts(onlyId) {
         var verdicts = [];
         panel.querySelectorAll('input[type=radio]:checked').forEach(function (r) {
           var iid = r.name.slice(2);
+          if (onlyId && iid !== onlyId) return;
           var c = ((document.getElementById('c_' + iid) || {}).value || '').trim();
           if (r.value || c) verdicts.push(Object.assign({ id: iid }, r.value ? { verdict: r.value } : {}, c ? { comment: c } : {}));
         });
@@ -325,6 +344,68 @@ import { icon, idBadge } from './components.js';
         if (!el) return;
         el.textContent = msg; el.hidden = false;
       }
+      // t-194 (goal: t-53): per-item quick-submit. brawne's baseline sweep
+      // (m-154) measured the live flow at a hard minimum of 4 discrete
+      // interactions to rule on one item with a comment — open card, pick
+      // a verdict, type the comment, THEN a separate click on the shared
+      // Approve/Send-back button to actually persist it — because that
+      // button was the only submit path, batching every item's verdict
+      // into one PATCH regardless of how many items the reviewer actually
+      // touched. Lead ruling (t-194 body): the bar wins, route is the
+      // builder's choice, batch review must not regress. This wires
+      // exactly the route the ruling itself named as an option — a
+      // shortcut that submits on Enter — as its OWN PATCH (verdicts only,
+      // no status field, so the mission's own status/gate is untouched),
+      // independent of and in addition to the shared batch button below.
+      var itemRows = panel.querySelectorAll('.v2-panel__item');
+      itemRows.forEach(function (row) {
+        var iid = row.getAttribute('data-item-id');
+        var commentEl = document.getElementById('c_' + iid);
+        var savedEl = document.getElementById('s_' + iid);
+        if (!commentEl || !savedEl) return; // read-only render (t.status !== 'review'): no inputs to wire
+        var submitting = false;
+        function markDirty() { savedEl.hidden = true; }
+        row.querySelectorAll('input[type=radio]').forEach(function (r) {
+          r.addEventListener('change', markDirty);
+        });
+        commentEl.addEventListener('input', markDirty);
+        commentEl.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter' || submitting) return;
+          e.preventDefault();
+          e.stopPropagation(); // keyboard.js's own document-level Enter (Approve) already skips text-input targets, but this is this item's own event to consume, not the whole panel's
+          var verdicts = collectVerdicts(iid);
+          if (!verdicts.length) return; // nothing selected/typed for this item yet — Enter does nothing, same as an empty batch submit would
+          submitting = true;
+          V2.api('/api/tasks/' + t.id, {
+            method: 'PATCH',
+            body: JSON.stringify({ agent: 'human', verdicts: verdicts })
+          }).then(function (r) {
+            submitting = false;
+            if (r && r.error) { showErr(r.error); return; }
+            // Reflect the save in-memory (lastTask) so a later full
+            // re-render — panel reopened, refreshSections() — starts from
+            // what's now actually persisted, without a fresh fetch.
+            var it = (t.items || []).find(function (x) { return x.id === iid; });
+            if (it) {
+              var v = verdicts[0];
+              if (v.verdict) it.verdict = v.verdict;
+              if (v.comment) it.comment = v.comment;
+            }
+            // Re-query by id rather than trusting the closured savedEl:
+            // media.js's own 'v2:mission:open' handler fetches its MEDIA
+            // section async and calls V2.peekPanel.refreshSections() when
+            // it resolves, which re-runs render() and replaces this whole
+            // panel's innerHTML wholesale. If that race lands between this
+            // PATCH firing and it resolving, the node captured at wiring
+            // time is already detached; the live one (same id, freshly
+            // rendered from the now-updated t.items above, so it already
+            // starts from the right values either way) is what the
+            // reviewer is actually looking at.
+            var liveSaved = document.getElementById('s_' + iid);
+            if (liveSaved) liveSaved.hidden = false;
+          });
+        });
+      });
       function submitStatus(status, requireNote, doneDefaultNote) {
         var noteEl = document.getElementById('v2-pp-note');
         var note = noteEl ? noteEl.value.trim() : '';
@@ -395,6 +476,12 @@ import { icon, idBadge } from './components.js';
       '.v2-panel__item label { margin-right: var(--v2-space-2, 8px); font-size: 12.5px; }',
       '.v2-panel__item-body { white-space: pre-wrap; background: var(--v2-bg, rgba(128,128,128,.08)); padding: var(--v2-space-2, 8px); border-radius: var(--v2-radius, 6px); font-size: 12px; overflow-x: auto; }',
       '.v2-panel__item-comment { width: 100%; box-sizing: border-box; margin-top: var(--v2-space-1, 4px); font: inherit; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); border-radius: var(--v2-radius, 6px); background: var(--v2-bg, transparent); color: var(--v2-ink, inherit); }',
+      // t-194: transient per-item quick-submit confirmation (hidden by
+      // default, shown briefly after Enter in this item's own comment
+      // field persists it — see the render()-time wiring). Same status-
+      // green token idBadge()/STATUS_META's own 'done' pill reads, so a
+      // saved item and a done mission read as the same "settled" color.
+      '.v2-panel__item-saved { display: inline-flex; align-items: center; gap: 4px; margin-top: var(--v2-space-1, 4px); font-size: 11.5px; font-weight: 600; color: var(--v2-color-status-done, #29a36a); }',
       '.v2-panel__artifact { margin: var(--v2-space-2, 8px) 0; }',
       '.v2-panel__artifact img { max-width: 100%; border-radius: var(--v2-radius, 6px); border: 1px solid var(--v2-hairline, rgba(128,128,128,.3)); }',
       '.v2-panel__artifact figcaption { color: var(--v2-muted, #999); font-size: 12px; }',
