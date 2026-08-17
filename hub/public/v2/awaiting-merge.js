@@ -160,6 +160,20 @@
       return task.status === 'done' || (task.status === 'review' && task.gate === 'boss');
     }
 
+    // t-164 (boss-filed): a discarded/failed mission isn't "still in the
+    // loop" — it's dead, there's nothing left to merge or wait on, even
+    // if its PR happens to still be technically open on GitHub (nobody
+    // closes the PR when a mission is discarded; that's a separate gap,
+    // not this file's to fix). hub/lib/store.js's own TASK_STATUSES names
+    // exactly two terminal-abandoned states distinct from the successful
+    // terminal 'done' — 'failed' and 'discarded' (same pair store.js
+    // itself already excludes from "open work" project-capacity counts,
+    // e.g. line ~218's isOpen-style filter) — reused here rather than
+    // inventing a second definition of "abandoned" for this file alone.
+    function isAbandoned(task) {
+      return task.status === 'failed' || task.status === 'discarded';
+    }
+
     // Short human label for why a row sits where it sits — shown on
     // IN-LOOP rows so the muted section reads as "still cooking, here's
     // the stage" rather than an unexplained dimming.
@@ -310,6 +324,7 @@
       var state = V2.state;
       var tasks = (state && state.tasks) || [];
       var candidates = tasks.map(function (t) {
+        if (isAbandoned(t)) return null; // t-164: discarded/failed missions never enter the list, not even IN-LOOP
         var pr = prLinkFor(t);
         return pr ? { task: t, pr: pr } : null;
       }).filter(Boolean);
@@ -361,6 +376,11 @@
     // disagree in kind — only in confidence.
     (function initialCount() {
       var tasks = (V2.state && V2.state.tasks) || [];
+      // isAbandoned() not re-checked here: isReady() only ever returns true
+      // for 'done' or 'review'+gate:boss, which by construction (status is
+      // a single field) can never also be 'failed'/'discarded' - the two
+      // predicates are already mutually exclusive, so adding the check
+      // would be dead weight, not defense.
       var n = tasks.filter(function (t) { return !!prLinkFor(t) && isReady(t); }).length;
       if (n) countEl.textContent = String(n);
     })();
