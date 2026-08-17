@@ -460,6 +460,20 @@ def main():
         anchor_h_px, _ = measure_anchor_height(img, m['anchor_region'], bg, outer_tol)
     anchor_logical_h = m.get('anchor_logical_height', 48)
     pitch = anchor_h_px / anchor_logical_h
+    if 'pitch' in m:
+        # Direct native-pitch override (t-141 THE RESOLUTION LAW, boss send-back
+        # 2026-08-17): the deliverable is native source resolution, output never
+        # coarser than the cited region. "pitch": 1.0 means one output pixel per
+        # source pixel — a true 1:1 extraction (key-to-alpha + per-subject palette
+        # snap, no downscaling, per-cell vote collapses to the identity at 1px
+        # cells). This bypasses the anchor->logical-height normalization entirely
+        # (that normalization, the old "48px system", WAS the resolution defect).
+        # anchor_region / anchor_logical_height stay in the manifest as scale
+        # documentation but no longer drive the output size. Scale consistency is
+        # satisfied by construction: at a shared pitch every sprite's output equals
+        # its cited source region, so relative proportions between sprites match the
+        # relative proportions between their cited regions exactly.
+        pitch = m['pitch']
 
     groups = {}
     for r in m['regions']:
