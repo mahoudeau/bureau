@@ -164,19 +164,26 @@
   <!-- icons filled in by styleguide.js via components.js's icon() — no
        hand-written SVG in this file, same rule as every specimen below. -->
   <div class="sg-modeswitch" id="sg-modeswitch" role="group" aria-label="Color theme">
-    <button type="button" class="sg-modeswitch__btn" data-mode="light" title="Light" aria-label="Light theme"></button>
-    <button type="button" class="sg-modeswitch__btn" data-mode="dark" title="Dark" aria-label="Dark theme"></button>
-    <button type="button" class="sg-modeswitch__btn" data-mode="system" title="System" aria-label="System theme"></button>
+    <!-- t-173 (goal: t-53): .v2-hit44 (components.css, linked above) gives this
+         header chrome the same invisible 44px tap floor as the atom builders.
+         These live in the compact 2px-padded switch pill and cannot grow
+         visibly, so they take the halo, not a min-height. -->
+    <button type="button" class="sg-modeswitch__btn v2-hit44" data-mode="light" title="Light" aria-label="Light theme"></button>
+    <button type="button" class="sg-modeswitch__btn v2-hit44" data-mode="dark" title="Dark" aria-label="Dark theme"></button>
+    <button type="button" class="sg-modeswitch__btn v2-hit44" data-mode="system" title="System" aria-label="System theme"></button>
   </div>
 </header>
 
 <div class="sg-shell">
   <nav class="sg-nav" aria-label="Style guide sections">
-    <a class="sg-nav__item" href="#tokens">Tokens</a>
-    <a class="sg-nav__item" href="#atoms">Atoms</a>
-    <span class="sg-nav__item" aria-disabled="true">Molecules</span>
-    <span class="sg-nav__item" aria-disabled="true">Organisms</span>
-    <span class="sg-nav__item" aria-disabled="true">Templates</span>
+    <!-- t-173 (goal: t-53): .v2-hit44 halo floors these nav links at 44px tap
+         height without changing their compact look; applied to the "soon"
+         items too so they already clear the bar when they go live. -->
+    <a class="sg-nav__item v2-hit44" href="#tokens">Tokens</a>
+    <a class="sg-nav__item v2-hit44" href="#atoms">Atoms</a>
+    <span class="sg-nav__item v2-hit44" aria-disabled="true">Molecules</span>
+    <span class="sg-nav__item v2-hit44" aria-disabled="true">Organisms</span>
+    <span class="sg-nav__item v2-hit44" aria-disabled="true">Templates</span>
   </nav>
 
   <main class="sg-main">
