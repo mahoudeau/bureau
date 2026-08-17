@@ -251,7 +251,14 @@ import { icon } from './components.js';
     var style = document.createElement('style');
     style.id = 'v2-search-style';
     style.textContent = [
-      '.v2-search-trigger { position: fixed; left: var(--v2-space-3, 12px); bottom: var(--v2-space-3, 12px); z-index: 44; display: flex; align-items: center; gap: var(--v2-space-2, 6px); font: inherit; font-size: var(--v2-font-size-xs, 12px); padding: var(--v2-space-2, 6px) var(--v2-space-4, 10px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-surface, var(--v2-surface, #fff)); color: var(--v2-color-text-secondary, var(--v2-ink-2, inherit)); cursor: pointer; }',
+      // t-150 (goal: t-53): min-height 44px — same treatment t-145 already
+      // gave this trigger's twin (.v2-awaitmerge-trigger): it sits alone in
+      // the bottom-left thumb zone (no neighboring controls to keep
+      // visually compact against), so growing its own box is simpler than
+      // the .v2-hit44 pseudo-element trick, and .v2-hit44 hard-codes
+      // `position: relative` on its host, which would clobber the
+      // `position: fixed` this element needs to stay pinned.
+      '.v2-search-trigger { position: fixed; left: var(--v2-space-3, 12px); bottom: var(--v2-space-3, 12px); z-index: 44; display: flex; align-items: center; gap: var(--v2-space-2, 6px); font: inherit; font-size: var(--v2-font-size-xs, 12px); padding: var(--v2-space-2, 6px) var(--v2-space-4, 10px); min-height: 44px; border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 6px); background: var(--v2-color-surface, var(--v2-surface, #fff)); color: var(--v2-color-text-secondary, var(--v2-ink-2, inherit)); cursor: pointer; }',
       '.v2-search-trigger:hover { border-color: var(--v2-color-border-strong, var(--v2-hairline, rgba(128,128,128,.5))); }',
       '.v2-search-panel { position: fixed; left: 50%; top: 10vh; transform: translateX(-50%); width: min(560px, 92vw); max-height: 76vh; display: flex; flex-direction: column; background: var(--v2-color-surface, var(--v2-surface, #fff)); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); border-radius: var(--v2-radius-sm, 8px); box-shadow: 0 8px 28px rgba(0,0,0,.18); z-index: 50; padding: var(--v2-space-5, 14px); }',
       '@media (max-width: 720px) { .v2-search-panel { top: 0; left: 0; transform: none; width: 100%; max-height: 100%; height: 100%; border-radius: 0; } }',
