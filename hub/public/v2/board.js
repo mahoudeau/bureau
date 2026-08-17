@@ -272,7 +272,7 @@ import { icon } from './components.js';
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
           '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
           '<span class="v2-project-row__chips">' +
-            '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
+            '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)' + (pj.entity ? ': @' + esc(pj.entity) : '') + '"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
             '<span class="v2-project-row__chip v2-tabular-nums" data-field="capacity" title="capacity (parallel desks)">' + icon('monitor', 'v2-icon--xs') + (pj.capacity || 1) + '</span>' +
             '<span class="v2-project-row__chip v2-tabular-nums" title="' + openCount + ' open mission' + (openCount === 1 ? '' : 's') + ' (queued, working or in review)">' + icon('circle-dot', 'v2-icon--xs') + openCount + '</span>' +
           '</span>' +
@@ -523,7 +523,17 @@ import { icon } from './components.js';
       // generic rule) still applies for free since these stay data-field
       // elements.
       '.v2-project-row__chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }',
-      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; }',
+      // Inner-critic catch before parking: entity is free text up to the
+      // server's own 40-char validated max (hub/lib/store.js) — plain
+      // `white-space: nowrap` with no cap let a long entity slug render a
+      // ~260px-wide chip inside this ~240px rail, overflowing past its
+      // right edge (a real regression the old plain <span> — no nowrap —
+      // never had). Capped + ellipsized here; the field's own title
+      // attribute (set below, in renderProjects()) now carries the real
+      // value so a native hover tooltip still discloses the full text
+      // when it truncates, the same "value visible on hover, not lost"
+      // principle the repo icon's own tooltip already applies.
+      '.v2-project-row__chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; line-height: 1; padding: 3px 8px; border-radius: var(--v2-radius-full, 999px); border: 1px solid var(--v2-color-border, var(--v2-hairline, rgba(128,128,128,.3))); color: var(--v2-color-text-secondary, var(--v2-muted, #999)); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }',
       '.v2-project-row__chip-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; opacity: .55; flex: none; }',
       // Empty entity already gets its "—" placeholder from project-edit.js's
       // shared `[data-field][data-empty="true"]::before` rule; the dot
@@ -547,7 +557,22 @@ import { icon } from './components.js';
       // a native long-press preview/context menu on touch for free (not
       // independently screenshot-able from a headless run, but structural
       // by construction — there is no onclick here to race a long-press).
-      '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: var(--v2-color-text-primary, #17181a); color: var(--v2-color-text-on-accent, var(--v2-on-accent, #fff)); font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
+      //
+      // Inner-critic catch before parking: keyboard.js's own .v2-kbd-hint__tip
+      // (the pattern this was copied from) reads its dark background off
+      // --v2-color-text-primary, a THEME-RELATIVE token (#1a1a1f in light,
+      // #edeef0 in dark) while its text stays the theme-INVARIANT
+      // --v2-color-text-on-accent (#fff both modes) — correct by accident
+      // in light mode, but in dark mode that is white text on a #edeef0
+      // near-white background, 1.16:1, illegible. The chip is deliberately
+      // "always dark regardless of theme" (the comment above says so) so
+      // it has no business reading a theme-relative token for either
+      // channel — fixed literals instead, matching the ORIGINAL fallback
+      // values that were already sitting unused in the var()'s second
+      // argument. Out of scope to fix keyboard.js's own copy of this same
+      // bug here (different mission's file); flagging it in the mission
+      // log instead.
+      '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: #17181a; color: #fff; font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
       '.v2-repo-link:hover .v2-repo-link__tip, .v2-repo-link:focus .v2-repo-link__tip, .v2-repo-link:focus-visible .v2-repo-link__tip { display: block; }',
       '.v2-repo-editbtn { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border: none; border-radius: var(--v2-radius-xs, 4px); background: transparent; color: var(--v2-color-text-secondary, var(--v2-muted, #999)); cursor: pointer; opacity: 0; }',
       // No chrome at rest (bar rule): the edit affordance only appears
