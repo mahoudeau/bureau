@@ -13,7 +13,8 @@
   362
  ],
  "anchor_logical_height": 48,
- "palette_size": 28,
+ "palette_size": 128,
+ "_comment_palette_size": "Round 28: raised from 28. Root cause of the round-14..27 face/hair craft gap (moneta's round-26 23:54 lead) was NOT an inherent scale limit — raw cell-vote inspection (pre-palette-snap) showed a genuine multi-tone skin ramp (highlight ~(229,151,123) to deep shadow ~(40,4,1)) and hair variation present in the source votes. build_shared_palette's frequency-sorted 'base = base[:palette_size]' truncation was dropping every warm/skin bucket before the top-28 cut: skin/hair occupy a small fraction of total cell area next to the navy suit + cool background + monitor bezel that dominate all 5 frames in this shared-palette group, so their buckets always ranked below the cut regardless of how visually distinct they are. This is NOT the accent_max_area_frac=0 exemption's job (round 25's fix, left untouched here) — skin saturation measured ~0.38-0.46, under accent_saturation_min's 0.5 floor, so it was never accent-eligible and was never meant to be; the real fix is giving the base palette enough room to keep small-area-but-distinct material ramps instead of starving them. 128 chosen empirically: warm/skin candidates in the resulting palette go 0 (at 28) -> 1 (48) -> 2 (64) -> 6 (96) -> 12 (128) -> 12 (160) -> 13 (200) — diminishing returns clearly set in by 128, so it captures the real ramp without needlessly ballooning past the point of new information. Verified: does not touch accent_max_area_frac, does not touch cell_vote_grid/chroma-key logic at all — palette_size only changes how many BASE (already-outer_tol-cleared, non-accent) buckets survive truncation.",
  "accent_saturation_min": 0.5,
  "accent_max_area_frac": 0,
  "regions": [

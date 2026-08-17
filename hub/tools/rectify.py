@@ -275,7 +275,7 @@ def hsv_saturation(rgb):
     return (mx - mn) / mx
 
 
-def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol):
+def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_frac, bg_color, outer_tol, edge_hue_tol=40):
     # all_votes: list of (color, count) already-collected non-background cell
     # colors across every region in a group, count = how many cells voted it.
     total = sum(c for _, c in all_votes)
@@ -308,6 +308,30 @@ def build_shared_palette(all_votes, palette_size, accent_sat_min, accent_area_fr
         # colored blotches in round 23: reject it outright rather than let
         # snap_to_palette ever hand it out as a "safe" target.
         if color_dist(np.array([avg]), bg_color)[0] < outer_tol:
+            rejected.append(avg)
+            continue
+        # Round 28: the Euclidean-distance net above only catches a bucket
+        # average that drifted NUMERICALLY close to the key — it does not
+        # catch a bucket that is numerically far (safe by that test) but
+        # still carries the key's own HUE signature (dark, low-saturation
+        # magenta/violet: R and B both meaningfully above G). Round 27 added
+        # exactly this hue check (magenta_hue_score) for cell_vote_grid's
+        # edge band, but scoped it there because that round's own defects
+        # were all edge-band cells; it was never threaded into the palette
+        # path. Raising palette_size (t-59 round 28, recovering the
+        # face/hair shading ramp a too-small palette was truncating away)
+        # gave several dark-violet buckets — e.g. (54,2,56), hue score 52 —
+        # enough vote count to survive the frequency cut for the first time;
+        # they cleared this function's own Euclidean net by a wide margin
+        # (dist ~283 vs outer_tol) but scored 52-54 on the same hue test,
+        # over the edge band's own edge_hue_tol=40 bound. Same defect class
+        # round 25's comment above already names ("fringe-colored blotches"),
+        # just reachable via a path (opaque interior votes -> palette
+        # candidate) that only a bigger palette exposes — so the fix belongs
+        # here, at the one place ALL palette candidates pass through,
+        # not as a per-pixel patch and not by shrinking palette_size back
+        # down (which would just re-hide it behind starvation again).
+        if magenta_hue_score(avg, bg_color) > edge_hue_tol:
             rejected.append(avg)
             continue
         frac = b['count'] / total if total else 0
@@ -405,7 +429,7 @@ def main():
             m.get('palette_size', 28),
             m.get('accent_saturation_min', 0.5),
             m.get('accent_max_area_frac', 0.01),
-            bg, outer_tol,
+            bg, outer_tol, edge_hue_tol,
         )
         if rejected:
             print(f'  [{group_name}] rejected {len(rejected)} key-adjacent palette candidate(s): {rejected}')
