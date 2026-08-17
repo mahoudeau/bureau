@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · office stage 2 — corner composition (t-143)</title>
+<style>
+  :root { --ink:#e9e4da; --muted:#9b9186; --panel:#15100f; --panel2:#1d1614; --hairline:#332723; --accent:#e0a94a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #0b0807; color: var(--ink); font: 13px/1.4 system-ui, sans-serif; }
+  header { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--hairline); }
+  header b { color: var(--accent); letter-spacing: .5px; }
+  header .sep { color: var(--muted); }
+  header .r { margin-left: auto; color: var(--muted); font-size: 11.5px; }
+  main { padding: 18px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  #stage-wrap { border: 1px solid var(--hairline); background: #000; line-height: 0; }
+  canvas { image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
+  details { width: 900px; max-width: 94vw; background: var(--panel2); border: 1px solid var(--hairline); border-radius: 8px; padding: 10px 14px; }
+  summary { cursor: pointer; font-weight: 700; color: var(--accent); font-size: 12.5px; }
+  details .body { font-size: 12px; line-height: 1.6; color: #cfc7ba; margin-top: 8px; }
+  details .body code { background: #0f0b0a; border: 1px solid var(--hairline); padding: 1px 5px; border-radius: 4px; color: #ffd9a0; }
+  details .body ul { margin: 4px 0 10px 18px; padding: 0; }
+  .seam-note { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <b>BUREAU</b><span class="sep">·</span>office · stage 2 — one-desk corner (t-143)<span class="r">composition only, static · frozen sprites from t-141</span>
+</header>
+<main>
+  <div id="stage-wrap"><canvas id="stage"></canvas></div>
+  <p class="seam-note">Rendered directly from <code>stage2-corner.json</code> — the layout is data, not code. Sprites are drawn byte-identical from <code>/office-sprites/sprites/</code>.</p>
+  <details open>
+    <summary>About this composition</summary>
+    <div class="body">
+      <p>Back wall (2 tiled rows of <code>wall-cracked.png</code>) meets the floor (1 tiled row of <code>floor-wood.png</code>) at a single clean seam. The wall-monitor is mounted on the wall at a believable height, clear of the desk. The desk unit is <code>typing-0.png</code> — stage 1's self-contained agent+chair+desk+CRT sprite — grounded with its bottom edge exactly on the seam so nothing floats.</p>
+      <p>Per t-141's <code>MANIFEST.md</code>: the standalone <code>desk-tidy.png</code>/<code>chair.png</code>/<code>crt-monitor.png</code> sprites are deliberately NOT composited here — the typing frames already ship the full seated-at-desk-with-monitor illustration as one unit, and layering the standalone pieces underneath would duplicate (and likely misalign) furniture that's already inside that sprite.</p>
+      <ul>
+        <li>World: 160×135 logical px, integer-scaled below.</li>
+        <li>Seam (wall/floor line): y=90.</li>
+        <li>All sprite scale traces to the shared 48px agent anchor (t-141 MANIFEST.md) — no rescaling applied here.</li>
+      </ul>
+    </div>
+  </details>
+</main>
+<script>
+const wrap = document.getElementById('stage-wrap');
+const cv = document.getElementById('stage');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+function loadImg(src) {
+  return new Promise((resolve, reject) => {
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = reject;
+    im.src = src;
+  });
+}
+
+async function main() {
+  const scene = await (await fetch('stage2-corner.json')).json();
+  const base = scene.spriteBase;
+
+  cv.width = scene.world.w;
+  cv.height = scene.world.h;
+  const SCALE = 6;
+  cv.style.width = (scene.world.w * SCALE) + 'px';
+  cv.style.height = (scene.world.h * SCALE) + 'px';
+
+  const [wallImg, floorImg] = await Promise.all([
+    loadImg(base + scene.wall.sprite),
+    loadImg(base + scene.floor.sprite),
+  ]);
+
+  // wall, tiled
+  for (let y = scene.wall.y0; y < scene.wall.y1; y += scene.wall.h) {
+    for (let x = 0; x < scene.world.w; x += scene.wall.w) {
+      ctx.drawImage(wallImg, x, y);
+    }
+  }
+  // floor, tiled
+  for (let y = scene.floor.y0; y < scene.floor.y1; y += scene.floor.h) {
+    for (let x = 0; x < scene.world.w; x += scene.floor.w) {
+      ctx.drawImage(floorImg, x, y);
+    }
+  }
+
+  // objects, in the order given (wall-mounted first, then floor objects) so
+  // anything on the floor plane correctly draws in front of the wall.
+  for (const obj of scene.objects) {
+    const img = await loadImg(base + obj.sprite);
+    ctx.drawImage(img, obj.x, obj.y, obj.w, obj.h);
+  }
+
+  document.getElementById('stage-wrap').dataset.ready = '1';
+}
+main();
+</script>
+</body>
+</html>
