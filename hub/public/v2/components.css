@@ -159,7 +159,14 @@
   font-weight: var(--v2-weight-regular);
   text-transform: none;
   letter-spacing: normal;
-  color: var(--v2-color-text-muted);
+  /* text-secondary, not text-muted: at this chip's small size, text-muted
+     on surface-raised sits marginal (~2.7:1 light / ~3.5:1 dark — checked
+     numerically), below the mission's own "AA contrast both modes"
+     mechanical floor. Same pre-existing token condition already flagged
+     elsewhere (.v2-id-badge) but not one to newly extend onto a fresh
+     component when a token that actually clears AA (>5:1 both modes) is
+     right there and reads just as quiet against the base .v2-chip's box. */
+  color: var(--v2-color-text-secondary);
 }
 
 /* ---- id badge: tabular-nums mission id ("t-79") -----------------------
