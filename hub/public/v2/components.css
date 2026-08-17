@@ -181,6 +181,34 @@
 }
 .v2-chip__label { font-variant-numeric: var(--v2-tabular-nums); }
 
+/* Role tag override (t-131 round 2, critic send-back): the roster's role
+   chip ("Critic"/"Lead"/"Builder"/...) reused the base .v2-chip's tag
+   treatment verbatim — full pill, uppercase, tracked, mono — but
+   crop-ux-agent-tag-row.png's own "Agent" tag sitting next to a name is
+   the opposite on every one of those axes: a rounded-rect (not a full
+   pill), plain sentence case, regular sans, no letter-spacing. That's the
+   same status-vs-tag distinction the boss already ruled on for project
+   labels (t-66 round 1: a descriptor next to identity reads as plain
+   text/shape, never a pill) — a role next to a name is that same pattern.
+   Keeps the base .v2-chip's box (background/border/padding), unlike the
+   status overrides above which strip the box down to nothing; only the
+   shape/typography axes the reference actually contradicts are reset. */
+.v2-chip--role {
+  border-radius: var(--v2-radius-xs);
+  font-family: inherit;
+  font-weight: var(--v2-weight-regular);
+  text-transform: none;
+  letter-spacing: normal;
+  /* text-secondary, not text-muted: at this chip's small size, text-muted
+     on surface-raised sits marginal (~2.7:1 light / ~3.5:1 dark — checked
+     numerically), below the mission's own "AA contrast both modes"
+     mechanical floor. Same pre-existing token condition already flagged
+     elsewhere (.v2-id-badge) but not one to newly extend onto a fresh
+     component when a token that actually clears AA (>5:1 both modes) is
+     right there and reads just as quiet against the base .v2-chip's box. */
+  color: var(--v2-color-text-secondary);
+}
+
 /* ---- id badge: tabular-nums mission id ("t-79") -----------------------
    t-76: sample's own id treatment (.card .id and #peek .phead .id, both
    ~11-11.5px muted text at font-weight:500) already matched this file's
@@ -219,6 +247,7 @@
   font-size: var(--v2-font-size-2xs);
   font-weight: var(--v2-weight-semibold);
 }
+.v2-avatar--xs { width: var(--v2-avatar-size-xs); height: var(--v2-avatar-size-xs); font-size: 8px; }
 .v2-avatar--sm { width: var(--v2-avatar-size-sm); height: var(--v2-avatar-size-sm); }
 .v2-avatar--md { width: var(--v2-avatar-size-md); height: var(--v2-avatar-size-md); }
 
@@ -234,9 +263,173 @@
   font-size: var(--v2-font-size-2xs);
   font-weight: var(--v2-weight-medium);
 }
+.v2-agent-tag--xs { height: var(--v2-avatar-size-xs); padding: 0 var(--v2-space-2); font-size: 9px; }
 .v2-agent-tag--sm { height: var(--v2-avatar-size-sm); }
 .v2-agent-tag--md { height: var(--v2-avatar-size-md); }
 .v2-agent-tag__icon .v2-icon { width: var(--v2-icon-size-xs); height: var(--v2-icon-size-xs); }
+.v2-agent-tag--xs .v2-agent-tag__icon .v2-icon { width: 9px; height: 9px; }
+
+/* ---- agent roster (t-131, goal: t-53) ----------------------------------
+   The left rail's #v2-agents-rail body: "who works here", not a raw
+   registration dump (boss order 2026-08-17). Row grammar follows
+   crop-ux-agent-tag-row.png (avatar/tag + name, quiet role trailing) and
+   crop-ux-sidebar-item.png (row height/rhythm, rounded hover/selected
+   background instead of a hairline divider between rows). Nested fleet
+   sub-entries use an elbow connector — crop-ux-status-glyphs.png's own
+   nested "Linear" row under "jori", and crop-ux-list-row-density.png's
+   parent/child tree — a vertical rail off the parent's own avatar center
+   with a horizontal stub into each child row, so subordinate rows read as
+   branches, not a second flat list glued underneath. */
+.v2-roster-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--v2-space-4);
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-radius: var(--v2-radius-sm);
+  cursor: default;
+}
+/* Hover only, no :focus-visible rule — the row carries no tabindex/click
+   action (board.js's own comment on the row markup explains why), so
+   there is nothing for a focus ring to ever attach to; a hover-only cue
+   is the honest state to design for a display-only row. */
+.v2-roster-row:hover {
+  background: var(--v2-color-surface-raised);
+}
+/* Two lines, not one: round 1 packed avatar+name+role+activity onto a
+   single line and the rail's real width (~230px) crushed the name down
+   to 1-2 characters (a roster whose own name field is unreadable fails
+   its one job). __main stacks name+role above activity so the name
+   always gets a full line to itself before anything competes with it. */
+.v2-roster-row__main { flex: 1; min-width: 0; padding-top: 1px; }
+.v2-roster-row__top { display: flex; align-items: center; gap: var(--v2-space-3); }
+/* Round 3 (inner critic): name previously carried flex:1, stretching to
+   fill the row and shoving the role chip out to the row's far edge with
+   a large gap — the crop's own role/tag sits quiet and snug immediately
+   after the name, not detached across a wide gap. Name now takes only
+   its own content width (shrinking, not growing, under real pressure);
+   the chip sits right beside it. */
+.v2-roster-row__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-weight: var(--v2-weight-semibold);
+  font-size: var(--v2-font-size-sm);
+  color: var(--v2-color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-roster-row__activity {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-2);
+  margin-top: var(--v2-space-1);
+  color: var(--v2-color-text-secondary);
+  font-size: var(--v2-font-size-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Idle-for-days tier: still in the live team, never dropped into Visitors
+   (that group is for non-team registrations, a different axis), but
+   visually deemphasized and always sorted last within the team so it
+   never interleaves with who is actually active right now.
+   Round N (critic gap): a blanket opacity multiplied down colors that were
+   already at/near the AA floor — measured as low as 1.74:1 on the offline
+   clock glyph and 2.34:1 on the activity text, both well under 4.5:1.
+   Contrast doesn't scale with visual weight the way opacity implies; an
+   explicit color swap on just the name (the one element that was at full
+   text-primary strength) gets the same quieter read without touching
+   colors that already carry their own deliberate, AA-checked tone — the
+   activity text (text-secondary) and the liveness glyph (its own per-tier
+   colorVar, text-muted for offline) are untouched. */
+.v2-roster-row--muted .v2-roster-row__name { color: var(--v2-color-text-secondary); }
+
+.v2-roster-fleet {
+  position: relative;
+  margin: 0 0 var(--v2-space-2) calc(var(--v2-space-3) + var(--v2-avatar-size-sm) / 2);
+  padding-left: var(--v2-space-6);
+}
+.v2-roster-fleet::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: calc(-1 * var(--v2-space-2));
+  /* Stop one radius above the last child's centre: the last row's own
+     curved elbow (below) supplies that final segment, so trunk + curve
+     meet flush instead of the trunk overshooting into a hard right angle. */
+  bottom: calc(var(--v2-row-height) * 0.45 + var(--v2-radius-sm));
+  width: 1px;
+  background: var(--v2-color-border-strong);
+}
+.v2-roster-fleet__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  min-height: calc(var(--v2-row-height) * 0.9);
+  color: var(--v2-color-text-secondary);
+  font-size: var(--v2-font-size-xs);
+}
+.v2-roster-fleet__row::before {
+  content: "";
+  position: absolute;
+  left: calc(-1 * var(--v2-space-6));
+  top: 50%;
+  width: var(--v2-space-6);
+  height: 1px;
+  background: var(--v2-color-border-strong);
+}
+/* Last child (and the single-child fleet, which is the reference crop's own
+   jori -> Linear case) turns the corner on a curve, not a hard 90 degrees —
+   crop-ux-status-glyphs.png's elbow is rounded. Replace the straight stub
+   with an L-shaped border whose bottom-left corner is radiused: the vertical
+   leg (radius tall) rises to meet the shortened trunk, the horizontal leg
+   runs into the row at the same centre line as the straight stubs above it. */
+.v2-roster-fleet__row:last-child::before {
+  top: auto;
+  bottom: 50%;
+  height: var(--v2-radius-sm);
+  background: none;
+  border-left: 1px solid var(--v2-color-border-strong);
+  border-bottom: 1px solid var(--v2-color-border-strong);
+  border-bottom-left-radius: var(--v2-radius-sm);
+}
+.v2-roster-fleet__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v2-roster-fleet__activity { margin-left: auto; color: var(--v2-color-text-muted); white-space: nowrap; }
+
+/* Visitors: fixture/probe/demo registrations, collapsed by default (native
+   <details>, zero JS) so they never compete with the working team for
+   attention, per the mission's own "collapsed under a single muted group,
+   hidden by default" order. */
+.v2-roster-visitors { margin-top: var(--v2-space-3); }
+.v2-roster-visitors summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  /* t-131 round N (critic gap 2): this is the rail's only interactive
+     control, and it measured 360x27px at 390px — under the 44px tap-
+     target floor this mission's own Acceptance names. min-height (not
+     more padding alone) reaches 44px without inflating the row's visible
+     text box; can't reuse the shared .v2-hit44 utility here since that
+     utility also occupies ::before, and this element's own ::before
+     already carries the disclosure triangle two rules down. */
+  min-height: 44px;
+  font-size: var(--v2-font-size-2xs);
+  font-weight: var(--v2-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* Round N: was --v2-color-text-muted (measured 3.02:1 in light mode, under
+     the 4.5:1 AA floor for this bold/uppercase-but-still-normal-size label)
+     — text-secondary is the token already confirmed AA-comfortable both
+     modes (round 2's own contrast check). */
+  color: var(--v2-color-text-secondary);
+  padding: var(--v2-space-3);
+}
+.v2-roster-visitors summary::-webkit-details-marker { display: none; }
+.v2-roster-visitors summary::before { content: "▸ "; }
+.v2-roster-visitors[open] summary::before { content: "▾ "; }
+.v2-roster-visitors .v2-roster-row { opacity: 0.7; }
 
 /* ---- button ------------------------------------------------------------
    variants: primary (accent fill), secondary (hairline outline, default),
