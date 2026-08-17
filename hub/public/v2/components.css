@@ -283,9 +283,17 @@
 /* Idle-for-days tier: still in the live team, never dropped into Visitors
    (that group is for non-team registrations, a different axis), but
    visually deemphasized and always sorted last within the team so it
-   never interleaves with who is actually active right now. */
-.v2-roster-row--muted { opacity: 0.55; }
-.v2-roster-row--muted:hover, .v2-roster-row--muted:focus-visible { opacity: 0.85; }
+   never interleaves with who is actually active right now.
+   Round N (critic gap): a blanket opacity multiplied down colors that were
+   already at/near the AA floor — measured as low as 1.74:1 on the offline
+   clock glyph and 2.34:1 on the activity text, both well under 4.5:1.
+   Contrast doesn't scale with visual weight the way opacity implies; an
+   explicit color swap on just the name (the one element that was at full
+   text-primary strength) gets the same quieter read without touching
+   colors that already carry their own deliberate, AA-checked tone — the
+   activity text (text-secondary) and the liveness glyph (its own per-tier
+   colorVar, text-muted for offline) are untouched. */
+.v2-roster-row--muted .v2-roster-row__name { color: var(--v2-color-text-secondary); }
 
 .v2-roster-fleet {
   position: relative;
@@ -330,11 +338,25 @@
 .v2-roster-visitors summary {
   cursor: pointer;
   list-style: none;
+  display: flex;
+  align-items: center;
+  /* t-131 round N (critic gap 2): this is the rail's only interactive
+     control, and it measured 360x27px at 390px — under the 44px tap-
+     target floor this mission's own Acceptance names. min-height (not
+     more padding alone) reaches 44px without inflating the row's visible
+     text box; can't reuse the shared .v2-hit44 utility here since that
+     utility also occupies ::before, and this element's own ::before
+     already carries the disclosure triangle two rules down. */
+  min-height: 44px;
   font-size: var(--v2-font-size-2xs);
   font-weight: var(--v2-weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--v2-color-text-muted);
+  /* Round N: was --v2-color-text-muted (measured 3.02:1 in light mode, under
+     the 4.5:1 AA floor for this bold/uppercase-but-still-normal-size label)
+     — text-secondary is the token already confirmed AA-comfortable both
+     modes (round 2's own contrast check). */
+  color: var(--v2-color-text-secondary);
   padding: var(--v2-space-3);
 }
 .v2-roster-visitors summary::-webkit-details-marker { display: none; }
