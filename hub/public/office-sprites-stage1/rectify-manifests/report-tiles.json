@@ -1,86 +1,46 @@
 {
- "sheet": "/tmp/claude-0/-home-user-bureau/413be9eb-9cc6-525e-8f6d-747feda0d88d/scratchpad/sheets/sheet-tiles-surfaces-v2.jpg",
+ "sheet": "props/sheet-tiles-surfaces-v2.jpg",
  "sheet_sha256": "347acad918a4747aaa6fa0dd758bcdde00731acfe2cdde199bb9d428b28c7208",
- "anchor_source_px_height": 230,
+ "anchor_source_px_height": 484,
  "anchor_logical_height": 48,
- "pitch": 4.791666666666667,
+ "pitch": 10.083333333333334,
  "groups": {
   "floor": {
    "palette": [
     [
-     92,
+     91,
      66,
      54
     ],
     [
-     56,
-     38,
-     30
-    ],
-    [
-     105,
-     81,
-     67
-    ],
-    [
-     109,
-     85,
-     69
-    ],
-    [
-     54,
-     35,
-     28
-    ],
-    [
-     62,
-     44,
-     37
-    ],
-    [
-     74,
-     53,
-     44
+     106,
+     82,
+     68
     ],
     [
      77,
      58,
-     51
+     50
     ],
     [
-     62,
-     42,
-     34
+     73,
+     53,
+     45
     ],
     [
      108,
-     82,
-     69
+     83,
+     68
     ],
     [
-     70,
-     51,
-     42
-    ],
-    [
-     81,
-     61,
-     52
-    ],
-    [
-     59,
+     60,
      42,
      37
     ],
     [
-     98,
-     72,
-     59
-    ],
-    [
-     107,
-     85,
-     69
+     83,
+     62,
+     50
     ],
     [
      97,
@@ -88,26 +48,36 @@
      57
     ],
     [
-     91,
-     70,
-     61
+     56,
+     36,
+     28
     ],
     [
-     95,
-     72,
-     60
+     61,
+     42,
+     35
     ],
     [
-     108,
-     85,
-     72
+     71,
+     52,
+     44
+    ],
+    [
+     107,
+     84,
+     69
+    ],
+    [
+     109,
+     84,
+     70
     ]
    ],
    "rejected_key_adjacent_candidates": [],
    "regions": {
     "floor-tile": {
-     "w": 55,
-     "h": 45,
+     "w": 26,
+     "h": 21,
      "source_box": [
       270,
       20,
@@ -115,12 +85,12 @@
       220
      ],
      "phase": [
-      1,
-      1
+      0,
+      0
      ],
-     "grid_agreement": 0.7026,
+     "grid_agreement": 0.6209,
      "file": "floor-tile.png",
-     "sha256": "3cb9346ead438d9b667c615a1d4c18319c27b17423f7006a59873d74b59cb22e"
+     "sha256": "819b781f55e74bcf0cd1dae95e6096d9953fc55bd05b1ed5940ac340b8bf83f4"
     }
    }
   },
@@ -130,43 +100,13 @@
      88,
      117,
      124
-    ],
-    [
-     66,
-     91,
-     99
-    ],
-    [
-     73,
-     101,
-     107
-    ],
-    [
-     74,
-     101,
-     108
-    ],
-    [
-     60,
-     85,
-     93
-    ],
-    [
-     104,
-     133,
-     138
-    ],
-    [
-     59,
-     87,
-     93
     ]
    ],
    "rejected_key_adjacent_candidates": [],
    "regions": {
     "wall-tile": {
-     "w": 52,
-     "h": 45,
+     "w": 24,
+     "h": 21,
      "source_box": [
       1130,
       20,
@@ -174,12 +114,12 @@
       220
      ],
      "phase": [
-      4,
-      2
+      5,
+      0
      ],
-     "grid_agreement": 0.9656,
+     "grid_agreement": 0.9649,
      "file": "wall-tile.png",
-     "sha256": "a100932e8583fe48d98b4d0b7e4c795e59e87acf5965f5e79c479f6ecd640f0c"
+     "sha256": "194d53972fb153cab242b9f5caae26041d040cf48f9fa102756846e59df9f80a"
     }
    }
   }

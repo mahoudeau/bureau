@@ -1,5 +1,5 @@
 {
- "sheet": "/tmp/claude-0/-home-user-bureau/413be9eb-9cc6-525e-8f6d-747feda0d88d/scratchpad/sheets/sheet-agent-undercut-typing.jpg",
+ "sheet": "cast/sheet-agent-undercut-typing.jpg",
  "sheet_sha256": "3d20b2e3a35577ec624293ded91e123bd7120e7f2d3587ea09b5b7cc8c958521",
  "anchor_source_px_height": 356,
  "anchor_logical_height": 48,
@@ -551,7 +551,7 @@
      ],
      "grid_agreement": 0.5084,
      "file": "idle-0.png",
-     "sha256": "bb3fa2ead4415b8ca8fb03af9f993c8ca5c7f0bce3f2e523e3295158b970a3c1"
+     "sha256": "2df5bac2ed3efba7cef357d69ef076fac596c03c32a1386b39a1e928539a1870"
     },
     "typing-0": {
      "w": 38,
@@ -568,7 +568,7 @@
      ],
      "grid_agreement": 0.537,
      "file": "typing-0.png",
-     "sha256": "892f12778e2cf1939f25f94d552cc6407fafbf279e3b86905b2a7960bb7789f5"
+     "sha256": "e54392ef21c94c37a06e39274bdcfb061c9437e04d0ec5e407fdfe98876d42f8"
     },
     "typing-1": {
      "w": 39,
@@ -585,7 +585,7 @@
      ],
      "grid_agreement": 0.5365,
      "file": "typing-1.png",
-     "sha256": "087c87a7598b3a5f14bac89eb230338bd1bad2d42fab4ac0e28a308a6b8e3483"
+     "sha256": "03ed5a3301f07b6bd11ca30dc636f110671be7cd03ffa60554050cb7fd122a3f"
     },
     "typing-2": {
      "w": 37,
@@ -602,7 +602,7 @@
      ],
      "grid_agreement": 0.5264,
      "file": "typing-2.png",
-     "sha256": "a09774bd43bee2b15e27623e095be40c460e7cc78212a15469473851cf7c47e3"
+     "sha256": "bb55cc7e51ac7e9fdf65b4643ba9c09b3a3bf58f15a9ac1d0178d98223248810"
     },
     "typing-3": {
      "w": 38,
@@ -619,7 +619,7 @@
      ],
      "grid_agreement": 0.5367,
      "file": "typing-3.png",
-     "sha256": "021157f6e31c842f0382a709f9dfe91ececc091581e1172853477e1563bde258"
+     "sha256": "129ba60af449684d7b0e8ddeb2f9b422bc65345ae31024e3f83c45ad09e6fa7b"
     }
    }
   }

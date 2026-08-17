@@ -64,6 +64,8 @@
 #   "key_inner_tolerance": 21,               // INNER band edge (default: 0.35 * key_tolerance): fully background within this distance. Between the two, alpha ramps and color is decontaminated — this is what kills fringe halos that a single hard threshold can't.
 #   "edge_hue_tolerance": 40,                // (round 27) an edge cell's DECONTAMINATED color is still checked for the key's own hue signature (min(R,B)-G, see magenta_hue_score) — decontamination is a linear approximation and can leave a residual tint on isolated cells; one that scores above this is dropped to fully transparent rather than shipped tinted. Default 40 is calibrated against this atlas's committed sprites (real content <=28, prior defects 62-92); tune per-sheet only with evidence, same as the other tolerances.
 #   "palette_hue_tolerance": 25,             // (round 28) same magenta_hue_score() test as edge_hue_tolerance, applied instead to build_shared_palette's OPAQUE candidates — a second, independent gate alongside the existing distance-to-background check, catching palette entries that clear outer_tol by distance but still read as key-hued. THE PALETTE LAW's enabling fix: this is what makes it safe to run accent_max_area_frac above 0 again (see below) without reintroducing round 25's fringe-noise regression, because hue is now what's keeping noise out, not the accent toggle.
+#   "edge_overshoot_tolerance": 16,          // (t-141) edge-band gamut gate: an edge cell whose PRE-CLIP decontaminated fg lands more than this many units outside [0,255] is dropped to transparent instead of clipped-and-shipped. The unmix divides by frac; at tiny frac it amplifies channel noise into an out-of-gamut color that np.clip then snaps onto a saturated primary — fabricating pure (0,255,0) green against a magenta key, which the magenta hue net can't catch (green scores negative on min(R,B)-G). Default 16 (= mode_color's own quantum): measured atlas-wide, legitimate edge cells overshoot <=5, fabricated ones >=17.
+#   "edge_complement_tolerance": 12,         // (t-141) edge-band complement gate (magenta_complement_score): catches the SUBTLER sibling of the overshoot artifact — a mostly-background edge cell whose faint green blip unmixes to a green-peaked fg that stays IN gamut (overshoot 0) yet is a saturated green/teal absent from these sheets. Score g-max(R,B); dropped above this. Default 12: legitimate opaque content scores <=1, fabricated survivors >=23. Uses max(R,B) not min(R,B) so legitimate cyan (high G≈B) is not caught.
 #   "anchor_region": [x, y, w, h],          // rough box containing the sheet's
 #                                            // own 48px-tall anchor figure —
 #                                            // padding is fine, tight-cropped
@@ -169,7 +171,31 @@ def magenta_hue_score(rgb, bg_color):
     return min(r, b) - g
 
 
-def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, edge_hue_tol=40):
+def magenta_complement_score(rgb, bg_color):
+    # The COMPLEMENT artifact of magenta_hue_score, for the same magenta key.
+    # The edge-band unmix extrapolates a cell's color AWAY from the background:
+    # fg = (observed - (1-frac)*bg) / frac. Against a magenta key (255,0,255)
+    # the two high channels (R,B) get bg subtracted and pushed down, while the
+    # LOW channel (G, bg_g=0) only gets divided up — so a mostly-background
+    # cell carrying a faint green blip of JPEG noise unmixes to a spuriously
+    # GREEN-peaked fg. When the blip is large the result blows out of gamut and
+    # the pre-clip overshoot gate catches it; when it's small the fg stays
+    # in-gamut (overshoot 0) yet is still a saturated green that exists nowhere
+    # on these warm-skin / blue-suit / wood / plaster / blue-screen sheets.
+    # This is that in-gamut residue's gate: how strongly fg peaks in the key's
+    # own LOW channel, g - max(r, b). Unlike magenta_hue_score's min(r,b)-g,
+    # this uses max(r,b), so legitimate CYAN (low R, high G≈B) does NOT trip it
+    # (b >= g there). Calibrated atlas-wide: every legitimate opaque color
+    # scores <=1, every fabricated edge survivor >=23 (see t-141 log).
+    r, g, b = rgb
+    bg_r, bg_g, bg_b = bg_color
+    if min(bg_r, bg_b) - bg_g <= 0:
+        return 0  # background isn't magenta-hued; this net doesn't apply
+    return g - max(r, b)
+
+
+def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, edge_hue_tol=40,
+                   edge_overshoot_tol=16, edge_complement_tol=12):
     # Soft chroma-key with decontamination, not a hard threshold. A cell
     # voted color's distance to the background color puts it in one of
     # three bands:
@@ -227,9 +253,29 @@ def cell_vote_grid(img, region, pitch, dx, dy, bg_color, inner_tol, outer_tol, e
             else:
                 frac = (d - inner_tol) / (outer_tol - inner_tol)
                 fg = (np.array(col, dtype=np.float64) - (1 - frac) * bg_arr) / max(frac, 1e-6)
+                # Gamut-overshoot gate (t-141): the unmix divides by frac, so a
+                # tiny frac (an edge cell only just past inner_tol, alpha ~1-5/255)
+                # amplifies a few units of JPEG/anti-alias noise in the observed
+                # color into a wildly out-of-gamut fg. np.clip below then SNAPS
+                # that blow-up onto a saturated primary: against this magenta key
+                # the G channel (bg_g=0) divides up toward 255 while R and B
+                # (bg high) go negative and clip to 0, fabricating pure (0,255,0)
+                # green that exists nowhere in the source. The magenta hue net
+                # can't catch it — green scores NEGATIVE on min(R,B)-G. Signal:
+                # when the raw, pre-clip unmix lands more than one color-quantum
+                # (mode_color's own 16) outside [0,255], the observed color is
+                # not explicable as frac*fg + (1-frac)*bg for any valid fg (the
+                # scalar-distance alpha_frac is simply wrong for this cell), so
+                # drop it to transparent rather than ship a clipped fabrication —
+                # the sprite's real edge is carried by the next cell in. Measured
+                # atlas-wide: every legitimate edge cell overshoots <=5, every
+                # fabricated one >=17 (see t-141 log), a wide clean margin.
+                overshoot = max(float(fg.max()) - 255.0, -float(fg.min()), 0.0)
                 fg = np.clip(fg, 0, 255)
                 fg_tuple = tuple(int(round(v)) for v in fg)
-                if magenta_hue_score(fg_tuple, bg_color) > edge_hue_tol:
+                if (overshoot > edge_overshoot_tol
+                        or magenta_hue_score(fg_tuple, bg_color) > edge_hue_tol
+                        or magenta_complement_score(fg_tuple, bg_color) > edge_complement_tol):
                     alphas[r][c] = 0
                     colors[r][c] = col
                 else:
@@ -375,6 +421,8 @@ def main():
     outer_tol = m.get('key_tolerance', 60)
     inner_tol = m.get('key_inner_tolerance', outer_tol * 0.35)
     edge_hue_tol = m.get('edge_hue_tolerance', 40)
+    edge_overshoot_tol = m.get('edge_overshoot_tolerance', 16)
+    edge_complement_tol = m.get('edge_complement_tolerance', 12)
     if 'anchor_source_px_height' in m:
         # Manual override (spec's "or manual parameter" alternative to
         # auto grid-fit) — for sheets where connected-component detection
@@ -406,7 +454,7 @@ def main():
         for r in regions:
             box = (r['x'], r['y'], r['w'], r['h'])
             dx, dy = best_phase(img, box, pitch, bg, inner_tol, outer_tol)
-            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol, edge_hue_tol)
+            colors, alphas, score, n_cols, n_rows = cell_vote_grid(img, box, pitch, dx, dy, bg, inner_tol, outer_tol, edge_hue_tol, edge_overshoot_tol, edge_complement_tol)
             region_grids[r['name']] = {
                 'colors': colors, 'alphas': alphas, 'n_cols': n_cols, 'n_rows': n_rows,
                 'dx': dx, 'dy': dy, 'score': score, 'box': box,

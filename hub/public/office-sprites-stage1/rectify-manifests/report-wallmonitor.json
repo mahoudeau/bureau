@@ -1,5 +1,5 @@
 {
- "sheet": "/tmp/claude-0/-home-user-bureau/413be9eb-9cc6-525e-8f6d-747feda0d88d/scratchpad/sheets/sheet-lighting-states-v2.jpg",
+ "sheet": "props/sheet-lighting-states-v2.jpg",
  "sheet_sha256": "76e60153e60878423f59b14dc620bfe0d4eb5d3a7d0e45644be0d94a2f8def07",
  "anchor_source_px_height": 364,
  "anchor_logical_height": 48,
@@ -125,7 +125,7 @@
      ],
      "grid_agreement": 0.4683,
      "file": "wall-monitor.png",
-     "sha256": "24a03f38182b8e39c9212ab7c7da9cd4f4d284c204aedd1b3cd49ae4af9022f6"
+     "sha256": "1e68cc1ed94ef7a7638f96794553fbef8e05de8ce46235348907d510f1067280"
     }
    }
   }
