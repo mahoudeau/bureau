@@ -40,7 +40,7 @@
 // (tokens.css/t-63; project-dot colors are the one deliberate exception,
 // same as the sample's own PCOLORS — a categorical per-project palette
 // isn't a semantic token, see projColor() below).
-import { icon, avatar, chip } from './components.js';
+import { icon, avatar, chip, idBadge } from './components.js';
 
 (function () {
   'use strict';
@@ -462,7 +462,14 @@ import { icon, avatar, chip } from './components.js';
         // would be invisible in the live app for EVERY status, not just this
         // one; a glyph+label survives that regardless of border cascade).
         '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
-        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + esc(t.id) + ' · P' + t.priority +
+        // t-123: the id itself renders through components.js's idBadge()
+        // (a real DOM node, serialized via outerHTML into this string
+        // template — the rest of this file builds markup as strings, and
+        // idBadge()'s own element already carries the exact classes/markup
+        // the CSS layer expects) instead of a plain esc()'d string, so the
+        // vendored JetBrains Mono token (t-112) actually reaches a live id
+        // once that mission's CSS lands.
+        '<div class="v2-task-card__meta">' + (isDiscarded ? 'archived · ' : '') + (isGoal ? 'goal · ' : '') + idBadge(t.id).outerHTML + ' · P' + t.priority +
         (t.assignee ? ' · ' + esc(t.assignee) : '') +
         (t.project ? ' · ' + esc(t.project) : '') +
         (kids ? ' · ' + kids.done + '/' + kids.total + ' missions' : '') +
@@ -511,7 +518,19 @@ import { icon, avatar, chip } from './components.js';
             checkbox +
             '<div class="v2-task-card__body" data-open="' + esc(t.id) + '">' +
             '<div class="v2-task-card__top">' +
-            '<span class="v2-task-card__id v2-tabular-nums">' + esc(t.id) + '</span><span class="v2-task-card__sp"></span>' +
+            // t-123: this is the PRIMARY board-card id (every live column
+            // renders through here, not through taskCard()/.v2-task-card__meta
+            // below, which only the archived-toggle strip uses) — wired to
+            // idBadge() same as that path, so both id call sites render
+            // through the one component. .v2-task-card__id carried no
+            // layout role, purely typographic (see the removed CSS rule
+            // this replaces), so no wrapper is needed.
+            idBadge(t.id).outerHTML + '<span class="v2-task-card__sp"></span>' +
+            // t-131 merge: keep the explicit --sm (18px) modifier here. This
+            // merge removed injectStyle's legacy bare `.v2-avatar { width:18px }`
+            // rule, so sizing now comes only from components.css's tokenized
+            // --xs/--sm/--md modifiers — a bare `.v2-avatar` would render
+            // width-less on the composed page.
             (t.assignee ? '<span class="v2-avatar v2-avatar--sm" title="' + esc(t.assignee) + '">' + esc(initials(t.assignee)) + '</span>' : '') +
             '</div>' +
             '<div class="v2-task-card__title">' + esc(t.title) + '</div>' +
@@ -702,7 +721,6 @@ import { icon, avatar, chip } from './components.js';
       '.v2-task-card--done { border-left-color: var(--v2-color-status-done, #29a36a); }',
       '.v2-task-card--failed { border-left-color: var(--v2-color-status-bug, #eb5757); }',
       '.v2-task-card__top { display: flex; align-items: center; gap: var(--v2-space-2, 4px); margin-bottom: var(--v2-space-3, 6px); }',
-      '.v2-task-card__id { font-size: 11px; color: var(--v2-color-text-muted, #93949c); font-weight: 500; font-variant-numeric: tabular-nums; }',
       '.v2-task-card__sp { flex: 1; }',
       // t-131 round N (critic gap 1): this legacy bare `.v2-avatar { width:
       // 18px; height: 18px; ... }` rule used to be the ONLY source of size
@@ -729,7 +747,7 @@ import { icon, avatar, chip } from './components.js';
          sample, fed from the real state.knowledge.recent (git log over the
          brain repo), not a placeholder link. */
       '.v2-commit-row { padding: var(--v2-space-2, 4px) 0; font-size: 11.5px; display: block; }',
-      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #93949c); font-size: 10.5px; margin-right: 5px; }',
+      '.v2-commit-row__ts { color: var(--v2-color-text-muted, #71727c); font-size: 10.5px; margin-right: 5px; }',
       '.v2-commit-row__who { font-weight: 600; margin-right: 4px; }',
       '.v2-commit-row__msg { color: var(--v2-color-text-secondary, #62636c); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
       // Discarded cards (t-110): dashed border + reduced opacity, distinguishable
