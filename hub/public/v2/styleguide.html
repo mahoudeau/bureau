@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · Design System</title>
+<!--
+  ============================================================================
+  STYLE GUIDE (t-139, goal: t-134) — a Page, not a wiki
+  ============================================================================
+  Per STUDY-lead-t134.md ("The styleguide is a Page, not a wiki"): this shell
+  loads the SAME tokens.css + components.css the app ships, and its own
+  styleguide.js imports components.js and calls the real icon()/chip()/
+  button()/idBadge()/... builder functions to render every specimen below.
+  Nothing in this file or styleguide.js hand-copies a token value or a piece
+  of component markup — token swatches read getComputedStyle() at render
+  time, atom specimens are literal calls into components.js. Edit a value in
+  tokens.css and reload: the swatch for that token moves with it, because it
+  was never a copy to begin with.
+
+  Cascade order matches v2.html's own committed contract (t-92): tokens
+  first, components second. No molecules.css/organisms.css here — those
+  sections don't exist yet (tranche 2, seeded by t-136's completeness audit;
+  this mission does not guess-fill them).
+
+  This file's own <style> block below is PAGE CHROME ONLY (nav, section
+  layout, specimen-card grid) — every value in it reads a var(--v2-...)
+  token, same discipline as v2.html's own inline <style> block. It is not a
+  second visual system: it's the same system, laying out a different page.
+  -->
+<!-- absolute paths, not relative: this shell is served at /v2/styleguide (one
+     segment deeper than /v2 itself), where a v2.html-style relative
+     "v2/tokens.css" would resolve against /v2/'s own directory and 404 at
+     /v2/v2/tokens.css instead. -->
+<link rel="stylesheet" href="/v2/tokens.css">
+<link rel="stylesheet" href="/v2/components.css">
+<style>
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--v2-color-bg);
+    color: var(--v2-color-text-primary);
+    font-family: var(--v2-font-sans);
+    font-size: var(--v2-font-size-base);
+    line-height: var(--v2-line-height-base);
+    font-variant-numeric: var(--v2-tabular-nums);
+  }
+  code { font-family: var(--v2-font-mono); }
+
+  /* ---- topbar: brand + theme mode-switch (reuses tokens.css's existing
+     [data-theme] mechanism and v2.html's own 'bureau_v2_theme' localStorage
+     key, so a choice made here and on /v2 stay in sync) ---- */
+  .sg-topbar {
+    display: flex; align-items: center; gap: var(--v2-space-4);
+    padding: var(--v2-space-3) var(--v2-space-6);
+    border-bottom: 1px solid var(--v2-color-border);
+    position: sticky; top: 0; background: var(--v2-color-surface); z-index: 10;
+  }
+  .sg-topbar__brand { display: flex; align-items: center; gap: var(--v2-space-2); font-weight: var(--v2-weight-semibold); font-family: var(--v2-font-serif); font-size: var(--v2-font-size-lg); }
+  .sg-topbar__mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 20px; border-radius: var(--v2-radius-xs);
+    background: var(--v2-color-accent); color: var(--v2-color-text-on-accent);
+    font-family: var(--v2-font-sans); font-size: 12px; font-weight: 700;
+  }
+  .sg-topbar__badge {
+    font-size: var(--v2-font-size-2xs); color: var(--v2-color-text-muted);
+    border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-xs);
+    padding: 1px 5px; font-family: var(--v2-font-mono);
+  }
+  .sg-modeswitch { display: flex; gap: 2px; margin-left: auto; border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-sm); padding: 2px; }
+  .sg-modeswitch__btn {
+    display: flex; align-items: center; justify-content: center; width: 26px; height: 24px;
+    border: none; border-radius: var(--v2-radius-xs); background: transparent; color: var(--v2-color-text-muted); cursor: pointer;
+  }
+  .sg-modeswitch__btn .v2-icon { width: 13px; height: 13px; }
+  .sg-modeswitch__btn.v2-on { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); box-shadow: 0 0 0 1px var(--v2-color-border); }
+
+  /* ---- shell: side nav (5 atomic-design tiers, only Tokens/Atoms live) + main ---- */
+  .sg-shell { display: grid; grid-template-columns: 200px 1fr; gap: var(--v2-space-6); max-width: 1400px; margin: 0 auto; padding: var(--v2-space-6); align-items: start; }
+  .sg-nav { position: sticky; top: calc(var(--v2-row-height) + var(--v2-space-8)); display: flex; flex-direction: column; gap: 2px; }
+  .sg-nav__item {
+    display: flex; align-items: center; padding: var(--v2-space-2) var(--v2-space-3);
+    border-radius: var(--v2-radius-sm); color: var(--v2-color-text-secondary);
+    font-size: var(--v2-font-size-sm); font-weight: var(--v2-weight-medium); text-decoration: none;
+  }
+  a.sg-nav__item:hover { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
+  .sg-nav__item[aria-disabled="true"] { color: var(--v2-color-text-muted); opacity: 0.6; }
+  .sg-nav__item[aria-disabled="true"]::after { content: "soon"; margin-left: auto; font-size: var(--v2-font-size-2xs); font-family: var(--v2-font-mono); }
+
+  .sg-main { display: flex; flex-direction: column; gap: var(--v2-space-8); min-width: 0; }
+  .sg-section { display: flex; flex-direction: column; gap: var(--v2-space-5); scroll-margin-top: calc(var(--v2-row-height) + var(--v2-space-4)); }
+  .sg-section__title { font-family: var(--v2-font-serif); font-size: var(--v2-font-size-2xl); font-weight: var(--v2-weight-semibold); margin: 0; }
+  .sg-section__intro { color: var(--v2-color-text-secondary); font-size: var(--v2-font-size-sm); max-width: 640px; margin: 0; }
+
+  .sg-group { display: flex; flex-direction: column; gap: var(--v2-space-3); }
+  .sg-group__title { font-size: var(--v2-font-size-xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--v2-color-text-muted); font-weight: var(--v2-weight-semibold); margin: 0; }
+
+  /* token specimen grid */
+  .sg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--v2-space-4); }
+  .sg-token-card { display: flex; flex-direction: column; gap: var(--v2-space-3); }
+  .sg-token-card__swatch { display: flex; align-items: center; justify-content: center; min-height: 44px; }
+  .sg-token-card__value { font-family: var(--v2-font-mono); font-size: var(--v2-font-size-2xs); color: var(--v2-color-text-secondary); word-break: break-all; }
+
+  .sg-swatch__color { width: 100%; height: 40px; border-radius: var(--v2-radius-sm); border: 1px solid var(--v2-color-border); }
+  .sg-swatch__bar { height: 12px; background: var(--v2-color-accent); border-radius: 2px; min-width: 2px; max-width: 100%; }
+  .sg-swatch__box { width: 36px; height: 36px; background: var(--v2-color-surface-raised); border: 1px solid var(--v2-color-border-strong); }
+  .sg-swatch__shadow { width: 48px; height: 32px; background: var(--v2-color-surface); border-radius: var(--v2-radius-sm); }
+  .sg-swatch__row { width: 100%; background: var(--v2-color-surface-raised); border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-xs); }
+  .sg-swatch__text { font-family: var(--v2-font-sans); color: var(--v2-color-text-primary); }
+  .sg-swatch__icon { display: inline-flex; color: var(--v2-color-text-primary); }
+
+  /* atom specimen rows */
+  .sg-row-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--v2-space-6); }
+  .sg-specimen-col { display: flex; flex-direction: column; gap: var(--v2-space-3); }
+  .sg-specimen-col__label { font-size: var(--v2-font-size-xs); color: var(--v2-color-text-muted); text-transform: capitalize; }
+  .sg-specimen-col--wide { width: 100%; max-width: 360px; }
+  .sg-specimen-row { display: flex; align-items: center; gap: var(--v2-space-4); flex-wrap: wrap; }
+  .sg-specimen-row--stack { flex-direction: column; align-items: stretch; }
+  .sg-hint { font-size: var(--v2-font-size-xs); color: var(--v2-color-text-muted); margin: 0; }
+
+  .sg-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: var(--v2-space-4); }
+  .sg-icon-cell { display: flex; flex-direction: column; align-items: center; gap: var(--v2-space-2); padding: var(--v2-space-3); border: 1px solid var(--v2-color-border); border-radius: var(--v2-radius-sm); }
+  .sg-icon-cell__name { font-family: var(--v2-font-mono); font-size: var(--v2-font-size-2xs); color: var(--v2-color-text-secondary); }
+
+  @media (max-width: 720px) {
+    .sg-shell { grid-template-columns: 1fr; padding: var(--v2-space-4); gap: var(--v2-space-4); }
+    .sg-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+    .sg-nav__item[aria-disabled="true"]::after { content: none; }
+  }
+</style>
+</head>
+<body>
+<header class="sg-topbar">
+  <div class="sg-topbar__brand"><span class="sg-topbar__mark" aria-hidden="true">B</span>Bureau design system<span class="sg-topbar__badge">v2</span></div>
+  <!-- icons filled in by styleguide.js via components.js's icon() — no
+       hand-written SVG in this file, same rule as every specimen below. -->
+  <div class="sg-modeswitch" id="sg-modeswitch" role="group" aria-label="Color theme">
+    <button type="button" class="sg-modeswitch__btn" data-mode="light" title="Light" aria-label="Light theme"></button>
+    <button type="button" class="sg-modeswitch__btn" data-mode="dark" title="Dark" aria-label="Dark theme"></button>
+    <button type="button" class="sg-modeswitch__btn" data-mode="system" title="System" aria-label="System theme"></button>
+  </div>
+</header>
+
+<div class="sg-shell">
+  <nav class="sg-nav" aria-label="Style guide sections">
+    <a class="sg-nav__item" href="#tokens">Tokens</a>
+    <a class="sg-nav__item" href="#atoms">Atoms</a>
+    <span class="sg-nav__item" aria-disabled="true">Molecules</span>
+    <span class="sg-nav__item" aria-disabled="true">Organisms</span>
+    <span class="sg-nav__item" aria-disabled="true">Templates</span>
+  </nav>
+
+  <main class="sg-main">
+    <section class="sg-section" id="tokens" aria-label="Design tokens">
+      <h1 class="sg-section__title">Tokens</h1>
+      <p class="sg-section__intro">Every custom property in <code>tokens.css</code>, grouped and read live via <code>getComputedStyle</code> at render time — not a copied hex list. Edit a value in that file and reload: the swatch below moves with it.</p>
+      <div id="sg-tokens-body"><p class="sg-hint">Loading…</p></div>
+    </section>
+
+    <section class="sg-section" id="atoms" aria-label="Atoms">
+      <h1 class="sg-section__title">Atoms</h1>
+      <p class="sg-section__intro">Every specimen below is produced by calling the real builder functions in <code>components.js</code> — buttons, chips/labels, status glyphs and inputs are the literal DOM the rest of the app renders, not a hand-copied likeness. Hover or Tab into any control to see its real <code>:hover</code> / <code>:focus-visible</code> state — this page never fakes a pseudo-class.</p>
+      <div id="sg-atoms-body"><p class="sg-hint">Loading…</p></div>
+    </section>
+  </main>
+</div>
+
+<script type="module" src="/v2/styleguide.js"></script>
+</body>
+</html>
