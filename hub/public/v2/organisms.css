@@ -148,3 +148,81 @@
   line-height: var(--v2-line-height-base);
   color: var(--v2-color-text-secondary);
 }
+
+/* ============================================================
+   4. NEEDS-ME-NOW PANEL ROWS (t-225)
+   #v2-needs-me-now (t-68) is out of this file's original t-78 scope
+   (that mission covered board columns, peek panel chrome, and panel-
+   internal card layouts only) — its own header comment deliberately
+   ships PLAIN, UNSTYLED v2--prefixed class hooks and forbids an
+   injected <style> tag, "waiting on composition... once landed". No
+   composition pass ever landed for it: grepped every CSS file in this
+   directory, .v2-list__row and every v2-needs-me-now__* class had zero
+   rules anywhere before this section. That's the actual root cause a
+   QA sweep (t-225) surfaced as a tap-target/keyboard bug: with no CSS
+   at all, row "height" was just the raw line-height of two adjacent
+   inline <span>s and their content's own natural wrap point — 20.25px
+   for a row whose title+meta happened to fit as flowed inline text,
+   40.5px wherever the flow broke onto a second line, entirely a
+   function of string length, never a deliberate size. No cursor
+   affordance, no focus stop, either.
+   A real min-height (not the .v2-hit44 invisible-halo pattern
+   components.css/.v2-btn/.v2-icon-btn use) because these rows are
+   stacked full-width in a vertical list, not isolated compact
+   controls: a halo grown past a short row's true content height would
+   overlap the row above/below at the shared edge and could steal taps
+   there — the same failure class t-152's own 24px-gap fix had to work
+   around for two ADJACENT icon buttons, worse here with an unbounded
+   number of stacked rows. .v2-input took the same real-min-height
+   route in t-173 for the identical reason ("a text field's visible
+   height IS its affordance"); a list row's visible height is too.
+   Markup gained a .v2-list__row-body wrapper (needs-me-now.js, same
+   mission) around the existing title+meta spans so this rule can stack
+   them as a column while the row itself stays a horizontal flex — the
+   unread dot and action chevron are siblings of that column, not
+   inside it, and sit at the row's leading/trailing edge unaffected by
+   title/meta wrap length.
+   ============================================================ */
+.v2-list { display: flex; flex-direction: column; }
+.v2-list__row {
+  display: flex;
+  align-items: center;
+  gap: var(--v2-space-3);
+  min-height: 44px;
+  padding: var(--v2-space-2) var(--v2-space-3);
+  border-bottom: 1px solid var(--v2-color-border);
+  cursor: pointer;
+  transition: background-color var(--v2-motion-fast) var(--v2-motion-ease);
+}
+.v2-list__row:last-child { border-bottom: none; }
+.v2-list__row:hover { background: var(--v2-color-surface-raised); }
+.v2-list__row:focus-visible { outline: 2px solid var(--v2-color-focus-ring); outline-offset: -2px; }
+.v2-list__row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.v2-list__row-title {
+  font-size: var(--v2-font-size-sm);
+  color: var(--v2-color-text-primary);
+  line-height: var(--v2-line-height-base);
+  /* Title is allowed to WRAP (no nowrap/ellipsis here), not clipped to one
+     line: messageRow's expand affordance shows the message's real full
+     body text on click, and clamping this span would keep it visually
+     truncated even once bodyText itself holds the untruncated string.
+     min-height above is a FLOOR, so a wrapped multi-line title simply
+     grows the row past 44px instead of overflowing or clipping. */
+}
+.v2-list__row-meta {
+  font-size: var(--v2-font-size-xs);
+  color: var(--v2-color-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.v2-needs-me-now__unread-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--v2-color-accent);
+  flex: none;
+}
+.v2-needs-me-now__row-action { flex: none; color: var(--v2-color-text-muted); }
+.v2-needs-me-now__row-action .v2-icon { width: 15px; height: 15px; }
