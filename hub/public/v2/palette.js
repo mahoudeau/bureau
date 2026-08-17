@@ -141,11 +141,25 @@ import { icon } from './components.js';
     var pendingImages = []; // { id, blob, ext, name, previewUrl }
     var pendingSeq = 0;
     var creating = false;
+    // Bumped by every open()/close(). createMission() snapshots this before
+    // its async POST/attach chain and checks it again in every completion
+    // branch before touching `creating`, the compose DOM, or calling
+    // close() — otherwise a submit started in one open/close session that
+    // resolves after the user has already closed and reopened the palette
+    // (a perfectly ordinary Escape-then-Cmd-K-again sequence, well within
+    // normal network latency) would silently close the NEW session out
+    // from under the user and leave `creating` permanently stuck true,
+    // relocating this mission's own bug class rather than fixing it. Found
+    // by this mission's own inner-critic pass, reproduced with an
+    // artificially delayed POST before this guard existed.
+    var epoch = 0;
 
     V2.on('v2:palette:open', function () { open(); });
 
     function open() {
       activeProject = null;
+      epoch++;
+      creating = false;
       clearPendingImages(); // drop anything left over from a prior open that was closed without submitting
       buildShell();
       palette.hidden = false;
@@ -153,7 +167,12 @@ import { icon } from './components.js';
       inputEl.focus();
       renderResults('');
     }
-    function close() { palette.hidden = true; }
+    function close() {
+      palette.hidden = true;
+      epoch++;
+      creating = false;
+      clearPendingImages(); // revoke any staged-but-unsubmitted image blob URLs right away, not on the next open()
+    }
 
     document.addEventListener('keydown', function (e) {
       if (palette.hidden) return;
@@ -257,27 +276,33 @@ import { icon } from './components.js';
       if (!project) { showErr('No projects are registered on this board — create one first.'); return; }
       hideErr();
       setBusy(true);
+      // This submit's own session id: open()/close() bump `epoch` (see its
+      // declaration above for why). Every completion branch below checks
+      // this before touching `creating`, submitBtn/errEl, or close() — if
+      // the palette was closed and/or reopened while this request was in
+      // flight, those DOM refs and `creating` now belong to a DIFFERENT
+      // session and must be left alone. Attaching images and toasting the
+      // result still happen unconditionally: the mission was genuinely
+      // created server-side regardless of what the UI did meanwhile, and
+      // neither touches session-owned DOM state.
+      var myEpoch = epoch;
       var payload = { title: title, project: project, priority: 3, created_by: 'human' };
       var bodyText = bodyEl ? bodyEl.value.trim() : '';
       if (bodyText) payload.body = bodyText;
       var images = pendingImages.slice();
       V2.api('/api/tasks', { method: 'POST', body: JSON.stringify(payload) }).then(function (r) {
         if (!r || r.error) {
-          setBusy(false);
-          showErr((r && r.error) || 'Could not reach the hub — try again.');
+          if (myEpoch === epoch) { setBusy(false); showErr((r && r.error) || 'Could not reach the hub — try again.'); }
           return;
         }
         var taskId = r.task.id;
         attachImages(taskId, project, images).then(function (failed) {
-          setBusy(false);
-          clearPendingImages();
           toast(taskId + ' created' + (images.length ? (failed ? ' — ' + failed + ' of ' + images.length + ' image(s) failed to attach' : ' with ' + images.length + ' image(s)') : ''));
-          close();
           V2.refresh();
+          if (myEpoch === epoch) { setBusy(false); clearPendingImages(); close(); }
         });
       }, function () {
-        setBusy(false);
-        showErr('Could not reach the hub — try again.');
+        if (myEpoch === epoch) { setBusy(false); showErr('Could not reach the hub — try again.'); }
       });
     }
 
