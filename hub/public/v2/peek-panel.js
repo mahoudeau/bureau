@@ -188,15 +188,16 @@ import { icon, idBadge } from './components.js';
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
-        // t-194 (goal: t-53): Enter, pressed while typing in THIS item's own
-        // comment field, is this item's quick-submit trigger (wired below,
-        // after render() inserts this markup) — the timed floor ("rule on
-        // an item with a comment in <=3 interactions from landing") can't
-        // be met while finishing a comment always requires a separate trip
-        // to the shared Approve/Send-back button at the bottom of the
-        // panel. The title attribute is a hover-taught hint, same register
-        // as keyboard.js's own '⌨' tooltip — never a resting legend.
-        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" title="Enter submits just this item" value="' + esc(it.comment || '') + '">' +
+        // t-194 (goal: t-53): leaving THIS item's own comment field (click
+        // elsewhere, Tab, or Enter for an immediate save without waiting)
+        // is this item's quick-submit trigger (wired below, after render()
+        // inserts this markup) — the timed floor ("rule on an item with a
+        // comment in <=3 interactions from landing") can't be met while
+        // finishing a comment always requires a separate trip to the
+        // shared Approve/Send-back button at the bottom of the panel. The
+        // title attribute is a hover-taught hint, same register as
+        // keyboard.js's own '⌨' tooltip — never a resting legend.
+        '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" title="Saves this item when you click away (or press Enter)" value="' + esc(it.comment || '') + '">' +
         // Transient per-item save confirmation (hidden until a quick-submit
         // succeeds; re-hidden the moment this item's own verdict/comment
         // changes again, see the 'dirty' wiring below) — batch review via
@@ -216,7 +217,35 @@ import { icon, idBadge } from './components.js';
       });
     }
 
+    // t-194 round 2 (mechanically caught, not a hypothetical): media.js
+    // subscribes to task.updated/etc. for whatever mission is currently
+    // open and calls refreshSections() -> render() again on EVERY one —
+    // including the verdicts-only broadcast a per-item quick-submit itself
+    // just caused. Rebuilding the item rows straight from `t.items` would
+    // silently overwrite any OTHER item's radio/comment the reviewer had
+    // already touched in the live DOM but not yet submitted anywhere —
+    // batch review depends on exactly that in-progress state surviving
+    // until the shared Approve/Send-back click. Snapshot the live DOM back
+    // onto `t.items` before the rebuild, but only when this is genuinely a
+    // re-render of the SAME open mission (lastTask already at this t.id) —
+    // a fresh openPanel() draw of a DIFFERENT mission must not carry the
+    // previous mission's item ids (i1, i2, … are per-mission, not global)
+    // onto this one's.
+    function preserveUnsavedItemEdits(t) {
+      if (!lastTask || lastTask.id !== t.id || !t.items || !t.items.length) return;
+      panel.querySelectorAll('.v2-panel__item[data-item-id]').forEach(function (row) {
+        var iid = row.getAttribute('data-item-id');
+        var it = t.items.find(function (x) { return x.id === iid; });
+        if (!it) return;
+        var checked = row.querySelector('input[type=radio]:checked');
+        var commentEl = row.querySelector('.v2-panel__item-comment');
+        if (checked) it.verdict = checked.value || 'proposed'; // radio value="" is the "Later" option
+        if (commentEl) it.comment = commentEl.value;
+      });
+    }
+
     function render(t) {
+      preserveUnsavedItemEdits(t);
       lastTask = t;
       var state = V2.state || { projects: [], tasks: [] };
       var isGoal = /^goal:/i.test(t.title);
@@ -352,11 +381,23 @@ import { icon, idBadge } from './components.js';
       // button was the only submit path, batching every item's verdict
       // into one PATCH regardless of how many items the reviewer actually
       // touched. Lead ruling (t-194 body): the bar wins, route is the
-      // builder's choice, batch review must not regress. This wires
-      // exactly the route the ruling itself named as an option — a
-      // shortcut that submits on Enter — as its OWN PATCH (verdicts only,
-      // no status field, so the mission's own status/gate is untouched),
-      // independent of and in addition to the shared batch button below.
+      // builder's choice, batch review must not regress.
+      //
+      // Round 2 (critic send-back): an Enter keypress is its own discrete
+      // interaction by the acceptance's own definition ("one click OR one
+      // intent keypress"), so open+radio+type+Enter still measures 4, not
+      // <=3 — Enter changed the submit's MODALITY, not the count. Fixed by
+      // wiring the OTHER route the mission body itself named — "per-item
+      // submit when a comment field blurs" — as the counted path: blur is
+      // not a discrete interaction (the critic's own send-back: "type-
+      // then-blur(3) = a true 3, no extra keypress"), so open(1) / verdict
+      // radio(2) / type-then-blur(3) clears the floor unambiguously under
+      // either reading of the Enter question. Enter is KEPT as a
+      // convenience — a reviewer who wants an immediate save without
+      // moving focus away still gets one — but it is no longer the counted
+      // path; blur is. Both funnel through the same submitItem() so there
+      // is exactly one PATCH shape and one saved-confirmation path,
+      // regardless of which trigger fired it.
       var itemRows = panel.querySelectorAll('.v2-panel__item');
       itemRows.forEach(function (row) {
         var iid = row.getAttribute('data-item-id');
@@ -365,16 +406,16 @@ import { icon, idBadge } from './components.js';
         if (!commentEl || !savedEl) return; // read-only render (t.status !== 'review'): no inputs to wire
         var submitting = false;
         function markDirty() { savedEl.hidden = true; }
-        row.querySelectorAll('input[type=radio]').forEach(function (r) {
-          r.addEventListener('change', markDirty);
-        });
-        commentEl.addEventListener('input', markDirty);
-        commentEl.addEventListener('keydown', function (e) {
-          if (e.key !== 'Enter' || submitting) return;
-          e.preventDefault();
-          e.stopPropagation(); // keyboard.js's own document-level Enter (Approve) already skips text-input targets, but this is this item's own event to consume, not the whole panel's
+        function submitItem() {
+          // savedEl.hidden === false means this item's current radio+
+          // comment state is already what the server has (either nothing
+          // has changed since the last successful save, or nothing has
+          // ever been touched and there is nothing worth a round-trip for)
+          // — skip a redundant PATCH so blurring a field the reviewer
+          // never actually edited (e.g. tabbing through) is a no-op.
+          if (submitting || !savedEl.hidden) return;
           var verdicts = collectVerdicts(iid);
-          if (!verdicts.length) return; // nothing selected/typed for this item yet — Enter does nothing, same as an empty batch submit would
+          if (!verdicts.length) return; // nothing selected/typed for this item yet
           submitting = true;
           V2.api('/api/tasks/' + t.id, {
             method: 'PATCH',
@@ -394,16 +435,35 @@ import { icon, idBadge } from './components.js';
             // Re-query by id rather than trusting the closured savedEl:
             // media.js's own 'v2:mission:open' handler fetches its MEDIA
             // section async and calls V2.peekPanel.refreshSections() when
-            // it resolves, which re-runs render() and replaces this whole
-            // panel's innerHTML wholesale. If that race lands between this
-            // PATCH firing and it resolving, the node captured at wiring
-            // time is already detached; the live one (same id, freshly
-            // rendered from the now-updated t.items above, so it already
-            // starts from the right values either way) is what the
-            // reviewer is actually looking at.
+            // it resolves, which re-renders the whole panel's innerHTML
+            // wholesale. If that race lands between this PATCH firing and
+            // it resolving, the node captured at wiring time is already
+            // detached; the live one (same id, freshly rendered from the
+            // now-updated t.items above, so it already starts from the
+            // right values either way) is what the reviewer is actually
+            // looking at.
             var liveSaved = document.getElementById('s_' + iid);
             if (liveSaved) liveSaved.hidden = false;
           });
+        }
+        row.querySelectorAll('input[type=radio]').forEach(function (r) {
+          r.addEventListener('change', markDirty);
+        });
+        commentEl.addEventListener('input', markDirty);
+        // The counted route: losing focus on this item's own comment field
+        // (click elsewhere, Tab, or the browser closing the panel) submits
+        // whatever this item currently holds — no keypress required.
+        commentEl.addEventListener('blur', submitItem);
+        // Convenience, not the counted route: Enter submits immediately
+        // without waiting for the field to lose focus. stopPropagation so
+        // keyboard.js's document-level Enter (Approve) — which already
+        // skips text-input targets — never also fires from the same
+        // keypress; this is this item's own event to consume.
+        commentEl.addEventListener('keydown', function (e) {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          e.stopPropagation();
+          submitItem();
         });
       });
       function submitStatus(status, requireNote, doneDefaultNote) {
