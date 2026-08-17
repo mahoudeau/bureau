@@ -301,7 +301,7 @@ import { icon } from './components.js';
         var openCount = b.queued + b.active + b.review;
         var repoHost = pj.repo ? repoIconName(pj.repo) : null;
         return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
-          '<span class="v2-project-row__name" data-field="label">' + esc(projLabel(state, id)) + '</span>' +
+          '<span class="v2-project-row__name" data-field="label" title="' + esc(projLabel(state, id)) + '">' + esc(projLabel(state, id)) + '</span>' +
           '<span class="v2-project-row__meta">' +
             '<span class="v2-project-row__chips">' +
               '<span class="v2-project-row__chip" data-field="entity"' + (pj.entity ? '' : ' data-empty="true"') + ' title="entity (scope wall)' + (pj.entity ? ': @' + esc(pj.entity) : '') + '"><span class="v2-project-row__chip-dot"></span>' + (pj.entity ? esc('@' + pj.entity) : '') + '</span>' +
@@ -753,7 +753,19 @@ import { icon } from './components.js';
       // argument. Out of scope to fix keyboard.js's own copy of this same
       // bug here (different mission's file); flagging it in the mission
       // log instead.
-      '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: #17181a; color: #fff; font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
+      // Round 5 (t-133): viewport clamp. The repo icon sits at the right edge
+      // of the narrow left project rail, so a right:0-anchored tooltip grows
+      // LEFTWARD and, for URLs past ~40 chars, clips off the left viewport edge
+      // (measured: the engineering-platform-modernization repo tooltip landed at
+      // left:-193px at 1440w). Fix: on desktop anchor left:0 so it grows RIGHT
+      // into the wide main pane, always on-screen (icon-left + 60vw stays well
+      // inside the viewport at every desktop width). The phone override below
+      // keeps the original right:0 (there the row is full-width, the icon sits
+      // near the right edge, and 60vw grows left without clipping — verified).
+      // The <a>'s native title= is the always-clamped browser-positioned
+      // fallback in both registers.
+      '.v2-repo-link__tip { display: none; position: absolute; bottom: 100%; left: 0; right: auto; margin-bottom: 6px; white-space: nowrap; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; background: #17181a; color: #fff; font-size: 11px; font-weight: var(--v2-weight-regular, 400); padding: 6px 8px; border-radius: var(--v2-radius-sm, 5px); z-index: var(--v2-z-toast, 70); }',
+      '@media (max-width: 720px) { .v2-repo-link__tip { left: auto; right: 0; } }',
       '.v2-repo-link:hover .v2-repo-link__tip, .v2-repo-link:focus .v2-repo-link__tip, .v2-repo-link:focus-visible .v2-repo-link__tip { display: block; }',
       // Round 3: absolutely positioned off .v2-project-row__repo's
       // trailing edge (`right: 100%` = flush against the link's left
