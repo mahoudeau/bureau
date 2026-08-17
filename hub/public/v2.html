@@ -491,19 +491,42 @@
     background: var(--v2-surface); border-left: 1px solid var(--v2-hairline);
     box-shadow: -8px 0 24px rgba(0,0,0,.12);
     transform: translateX(100%); transition: transform .18s ease;
-    z-index: 40; overflow-y: auto; padding: var(--v2-space-4);
+    /* t-149 (goal: t-53): was a hardcoded 40 here — below search.js's and
+       awaiting-merge.js's global floating triggers (z-index: 44, fixed to
+       the viewport on every view), so at any width where a panel's own
+       action bar lands near the viewport bottom (the normal case at
+       ≤720px, where peek-panel is 100dvh) the triggers physically covered
+       the panel's own buttons and ate the tap — root cause of t-149.
+       tokens.css already names the real stacking scale for exactly this
+       ("open overlay surface" = --v2-z-panel: 50, above every fixed
+       global-chrome trigger); this rule just wasn't wired to it. Fixed by
+       reading the token instead of reinventing a number. */
+    z-index: var(--v2-z-panel); overflow-y: auto; padding: var(--v2-space-4);
   }
   .v2-panel:not([hidden]), .v2-brain-panel:not([hidden]), .v2-goal-progress-panel:not([hidden]) { transform: translateX(0); }
-  #v2-peek-panel { z-index: 42; }
-  #v2-brain-panel { z-index: 41; }
-  #v2-goal-progress { z-index: 41; }
+  /* peek-panel keeps a deliberate +1 over its siblings — see goal-progress.js's
+     own comment on the peek+goal-progress simultaneous-open case (t-70). */
+  #v2-peek-panel { z-index: calc(var(--v2-z-panel) + 1); }
 
   /* ---- cmd-K palette: centered overlay, not a <dialog> modal — no backdrop click-trap semantics ---- */
   .v2-palette {
     position: fixed; top: 12vh; left: 50%; transform: translateX(-50%);
     width: min(560px, 92vw); max-height: 60vh; overflow-y: auto;
     background: var(--v2-surface); border: 1px solid var(--v2-border); border-radius: var(--v2-radius);
-    box-shadow: 0 12px 40px rgba(0,0,0,.22); z-index: 50; padding: var(--v2-space-2);
+    box-shadow: 0 12px 40px rgba(0,0,0,.22);
+    /* t-149: keyboard.js's Cmd/Ctrl+K is a global shortcut, live even while
+       a peek/brain/goal-progress panel is already open (no auto-close on
+       either side) — confirmed reachable during this fix's own regression
+       check. It was a same-valued 50 coincidence with the panel base
+       before this mission touched that number; once the panel rule above
+       started reading the real --v2-z-panel token, the tie broke and the
+       palette rendered BEHIND an open panel (full-screen at ≤720px), a new
+       overlap this mission would otherwise have shipped. Moved to the
+       --v2-z-popover tier (60) instead — the same tier keyboard.js's own
+       kbd-hint tip and palette.js's own hint tip already use for a
+       transient, user-invoked surface that must stay reachable over
+       whatever persistent panel is open. */
+    z-index: var(--v2-z-popover); padding: var(--v2-space-2);
   }
   @media (max-width: 720px) { .v2-palette { top: 0; left: 0; transform: none; width: 100%; height: 100%; max-height: 100%; border-radius: 0; } }
 

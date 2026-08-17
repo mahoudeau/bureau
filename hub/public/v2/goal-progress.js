@@ -27,9 +27,10 @@
 // unconditionally for every mission id, including goals. So opening a
 // goal mission via the shared 'v2:mission:open' event today opens BOTH
 // #v2-peek-panel and #v2-goal-progress at once. v2.html's own CSS
-// already gives peek-panel a higher z-index (42) than this panel (41),
-// so the two don't visually fight — peek-panel simply wins and this
-// panel's content sits hidden behind it, not a clean single-surface
+// already gives peek-panel a deliberately higher z-index than this panel
+// (both now keyed off tokens.css's --v2-z-panel scale as of t-149; peek
+// gets +1), so the two don't visually fight — peek-panel simply wins and
+// this panel's content sits hidden behind it, not a clean single-surface
 // hand-off. Not a regression this mission introduces (the documented IA
 // already anticipated the z-index ordering); flagging for whoever next
 // gives peek-panel.js a goal-type check, or builds the #v2-goals card
