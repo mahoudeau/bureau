@@ -261,6 +261,17 @@ const server = http.createServer(async (req, res) => {
       broadcast('agent.heartbeat', { ...a, activity: a.activity });
       return send(res, 200, { agent: a });
     }
+    // Roster curation: remove a name from the board. Curation, not a ban -
+    // missions/logs keep the historical string untouched and the name may
+    // freely re-register later. Refused while the name holds a live lease
+    // (a claimed/in_progress mission) so curation can never strand work.
+    const mAgent = p.match(/^\/api\/agents\/([^/]+)$/);
+    if (req.method === 'DELETE' && mAgent) {
+      const r = store.deleteAgent(decodeURIComponent(mAgent[1]));
+      if (r.error) return send(res, r.error === 'not_found' ? 404 : 409, r);
+      broadcast('agent.removed', { name: decodeURIComponent(mAgent[1]) });
+      return send(res, 200, r);
+    }
 
     // ----- tasks -----
     if (req.method === 'GET' && p === '/api/tasks') {
