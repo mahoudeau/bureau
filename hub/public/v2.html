@@ -452,7 +452,14 @@
     grid-template-columns: var(--v2-rail-w) 1fr var(--v2-side-w);
     grid-template-areas: "rail main side";
     gap: var(--v2-space-4);
-    max-width: 1600px; margin: 0 auto; padding: var(--v2-space-4);
+    /* t-264: width MUST be explicit. As a flex item with `margin: 0 auto`,
+       auto horizontal margins disable the flex line's cross-axis stretch,
+       so without a width the shell falls back to shrink-to-fit and the
+       whole layout's width follows board CONTENT (reproduced live: 1600px
+       full board -> 834px with a filter matching zero missions). 100%
+       (capped by max-width, centered by the auto margins) pins the three
+       grid tracks to the viewport regardless of what the board holds. */
+    width: 100%; max-width: 1600px; margin: 0 auto; padding: var(--v2-space-4);
     align-items: start;
     flex: 1 1 auto; min-height: 0; overflow-y: auto;
     margin-bottom: calc(var(--v2-space-3) + 44px + var(--v2-space-4));
