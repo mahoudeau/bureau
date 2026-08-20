@@ -353,11 +353,11 @@ function renderAtoms() {
 function initModeSwitch() {
   const KEY = 'bureau_v2_theme';
   const buttons = Array.from(document.querySelectorAll('.sg-modeswitch__btn'));
-  const glyphs = { light: 'sun', dark: 'moon', system: 'monitor' };
+  const glyphs = { light: 'sun', dark: 'moon', retro: 'lamp-desk', system: 'monitor' };
   buttons.forEach(b => { b.innerHTML = icon(glyphs[b.dataset.mode]); }); // filled via components.js, not hand-written SVG
 
   function apply(mode) {
-    if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-theme', mode);
+    if (mode === 'light' || mode === 'dark' || mode === 'retro') document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     buttons.forEach(b => b.classList.toggle('v2-on', b.dataset.mode === (mode || 'system')));
     refreshTokenValues();

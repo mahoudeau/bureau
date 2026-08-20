@@ -334,10 +334,12 @@
      shadow tokens.css's real dark values with this file's old hardcoded
      ones, defeating the alias. */
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) { color-scheme: dark; }
+    :root:not([data-theme="light"]):not([data-theme="retro"]) { color-scheme: dark; }
   }
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="dark"] { color-scheme: dark; }
+  /* t-266: retro is a light-family theme (cream canvas). */
+  :root[data-theme="retro"] { color-scheme: light; }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -350,7 +352,11 @@
      regardless of this change, since nothing here sets a transform/filter
      on html/body that would create a new containing block. */
   body.v2-app {
-    margin: 0; background: var(--v2-bg); color: var(--v2-ink);
+    /* t-266: background-image carries the retro paper grain when that
+       theme sets --v2-texture-grain; the fallback none is a no-op
+       everywhere else. Needed here as well as on html (tokens.css):
+       this body paints an opaque background over html's own. */
+    margin: 0; background: var(--v2-bg); background-image: var(--v2-texture-grain, none); color: var(--v2-ink);
     font: var(--v2-font-size)/var(--v2-line) var(--v2-font);
     font-variant-numeric: tabular-nums;
     display: flex; flex-direction: column; overflow: hidden;
@@ -382,12 +388,15 @@
      read by CSS (see the data-theme selectors just above) but nothing
      in this file ever SET the attribute — dark mode was reachable only
      by a manual DOM edit, never a real control. */
+  /* t-266 follow-up (boss 2026-08-20): the mark is the Minitel logo now —
+     no accent square behind it, in any theme; the machine carries its own
+     colors. Slightly larger than the old 20px square so the silhouette
+     (screen + keyboard) stays readable at topbar scale. */
   .v2-topbar__mark {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 20px; height: 20px; border-radius: 5px;
-    background: var(--v2-accent); color: var(--v2-on-accent, #fff);
-    font-size: 12px; font-weight: 700;
+    width: 28px; height: 28px;
   }
+  .v2-topbar__mark svg { width: 28px; height: 28px; }
   .v2-modeswitch { display: flex; gap: 2px; margin-left: var(--v2-space-2); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); padding: 2px; }
   .v2-modeswitch__btn {
     display: flex; align-items: center; justify-content: center; width: 24px; height: 22px;
@@ -496,7 +505,11 @@
   }
   .v2-navitem svg { width: 15px; height: 15px; flex: none; }
   .v2-navitem:hover { background: var(--v2-surface); }
-  .v2-navitem.v2-on { background: var(--v2-surface); color: var(--v2-ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--v2-accent); }
+  /* t-265 (boss report): the active state is the filled rounded row ONLY —
+     crop-ux-sidebar-item.png's selected item carries a raised fill and
+     brighter text, no accent edge; the old inset 2px left bar was an
+     invention outside the register. */
+  .v2-navitem.v2-on { background: var(--v2-surface); color: var(--v2-ink); font-weight: 600; }
 
   .v2-region-title {
     font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--v2-muted);
@@ -650,7 +663,107 @@
 </div>
 
 <header class="v2-topbar" id="v2-topbar">
-  <div class="v2-topbar__brand"><span class="v2-topbar__mark" aria-hidden="true">B</span>Bureau<span class="v2-topbar__badge">v2</span></div>
+  <!-- Brand mark: the boss's Minitel (2026-08-20), replacing the accent
+       square + glyph for every theme. Inlined because the /v2 asset route
+       serves only css/js/woff2 (no svg), and adapted for page-chrome use:
+       viewBox tightened from the source's 1000x850 canvas to the artwork's
+       real bounds (200 180 560 520) so it fills the mark box; the <style>
+       selectors and filter/gradient ids are scoped/prefixed under
+       #v2-brand-logo because inline-SVG styles and ids are DOCUMENT-global
+       and would otherwise leak onto any page element. Colors are the
+       machine's own (fixed beige/amber) by design — a physical object, not
+       a themed glyph, so it stays itself in light, dark and retro. -->
+  <div class="v2-topbar__brand"><span class="v2-topbar__mark" aria-hidden="true"><svg id="v2-brand-logo" viewBox="200 180 560 520">
+    <defs>
+      <filter id="v2logo-glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+      <linearGradient id="v2logo-glare" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stop-color="#ffffff" stop-opacity="0.12"/><stop offset="35%" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+      <style>
+        #v2-brand-logo .key { fill: #2B2421; stroke: #151211; stroke-width: 1.2; rx: 2.5; ry: 2.5; }
+        #v2-brand-logo .key-func-or { fill: #c75000; stroke: #662700; stroke-width: 1; rx: 2; ry: 2; }
+        #v2-brand-logo .key-func-gr { fill: #485c25; stroke: #233010; stroke-width: 1; rx: 2; ry: 2; }
+        #v2-brand-logo .key-text { fill: #D6C2AC; font-family: 'Courier New', monospace; font-size: 8px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+        #v2-brand-logo .func-text { fill: #F5EAE1; font-family: 'Courier New', monospace; font-size: 4px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+        #v2-brand-logo .screen-text { fill: #FFB347; font-family: 'Courier New', monospace; font-size: 32px; font-weight: bold; text-anchor: middle; dominant-baseline: middle; letter-spacing: 2px; }
+      </style>
+    </defs>
+    <g transform="matrix(-1, -0.5, 0, 1, 400, 400)">
+      <rect width="200" height="220" fill="#C5AE96"/>
+      <line x1="30" y1="30" x2="80" y2="30" stroke="#A3907B" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="45" x2="80" y2="45" stroke="#A3907B" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="60" x2="80" y2="60" stroke="#A3907B" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="75" x2="80" y2="75" stroke="#A3907B" stroke-width="4" stroke-linecap="round"/>
+      <line x1="30" y1="90" x2="80" y2="90" stroke="#A3907B" stroke-width="4" stroke-linecap="round"/>
+    </g>
+    <g transform="matrix(1, -0.5, -1, -0.5, 400, 400)">
+      <rect width="240" height="200" fill="#EFE2D3"/>
+      <rect x="80" y="140" width="80" height="40" rx="6" fill="#D6C2AC"/>
+      <rect x="82" y="142" width="76" height="36" rx="4" fill="#C5AE96"/>
+    </g>
+    <g transform="matrix(1, -0.5, 0, 1, 400, 400)">
+      <rect width="240" height="220" fill="#D6C2AC"/>
+      <line x1="0" y1="5" x2="240" y2="5" stroke="#C5AE96" stroke-width="1.5"/>
+      <rect x="20" y="20" width="200" height="170" rx="12" fill="#37312C"/>
+      <rect x="25" y="25" width="190" height="160" rx="10" fill="#24201C"/>
+      <rect x="35" y="35" width="170" height="140" rx="25" fill="#221C18"/>
+      <rect x="40" y="40" width="160" height="130" rx="20" fill="#E89634" opacity="0.08"/>
+      <text x="120" y="105" class="screen-text" filter="url(#v2logo-glow)">BUREAU</text>
+      <rect x="35" y="35" width="170" height="140" rx="25" fill="url(#v2logo-glare)"/>
+    </g>
+    <polygon points="400,620 520,680 520,700 400,640" fill="#181412"/>
+    <polygon points="520,680 760,560 760,580 520,700" fill="#1F1A18"/>
+    <g transform="matrix(1, -0.5, 1, 0.5, 400, 620)">
+      <rect width="240" height="120" fill="#362E2B"/>
+      <rect x="6" y="6" width="228" height="108" rx="2" fill="#2B2421"/>
+      <g transform="translate(0, 12)">
+        <rect x="12" y="0" width="16" height="10" class="key-func-or"/><text x="20" y="5.5" class="func-text">Suite</text>
+        <rect x="32" y="0" width="16" height="10" class="key-func-or"/><text x="40" y="5.5" class="func-text">Rep</text>
+        <rect x="52" y="0" width="16" height="10" class="key-func-or"/><text x="60" y="5.5" class="func-text">Som</text>
+        <rect x="72" y="0" width="16" height="10" class="key-func-or"/><text x="80" y="5.5" class="func-text">Ann</text>
+        <rect x="92" y="0" width="16" height="10" class="key-func-or"/><text x="100" y="5.5" class="func-text">Corr</text>
+        <rect x="112" y="0" width="16" height="10" class="key-func-or"/><text x="120" y="5.5" class="func-text">Mise</text>
+        <rect x="132" y="0" width="16" height="10" class="key-func-gr"/><text x="140" y="5.5" class="func-text">Env</text>
+        <rect x="152" y="0" width="16" height="10" class="key"/><text x="160" y="5.5" class="func-text">←</text>
+      </g>
+      <g transform="translate(0, 32)">
+        <rect x="15" y="0" width="14" height="14" class="key"/><text x="22" y="7.5" class="key-text">A</text>
+        <rect x="35" y="0" width="14" height="14" class="key"/><text x="42" y="7.5" class="key-text">Z</text>
+        <rect x="55" y="0" width="14" height="14" class="key"/><text x="62" y="7.5" class="key-text">E</text>
+        <rect x="75" y="0" width="14" height="14" class="key"/><text x="82" y="7.5" class="key-text">R</text>
+        <rect x="95" y="0" width="14" height="14" class="key"/><text x="102" y="7.5" class="key-text">T</text>
+        <rect x="115" y="0" width="14" height="14" class="key"/><text x="122" y="7.5" class="key-text">Y</text>
+        <rect x="135" y="0" width="14" height="14" class="key"/><text x="142" y="7.5" class="key-text">U</text>
+        <rect x="155" y="0" width="14" height="14" class="key"/><text x="162" y="7.5" class="key-text">I</text>
+        <rect x="175" y="0" width="14" height="14" class="key"/><text x="182" y="7.5" class="key-text">O</text>
+        <rect x="195" y="0" width="14" height="14" class="key"/><text x="202" y="7.5" class="key-text">P</text>
+        <rect x="215" y="0" width="14" height="34" class="key"/><text x="222" y="17" class="key-text">↵</text>
+      </g>
+      <g transform="translate(0, 52)">
+        <rect x="20" y="0" width="14" height="14" class="key"/><text x="27" y="7.5" class="key-text">Q</text>
+        <rect x="40" y="0" width="14" height="14" class="key"/><text x="47" y="7.5" class="key-text">S</text>
+        <rect x="60" y="0" width="14" height="14" class="key"/><text x="67" y="7.5" class="key-text">D</text>
+        <rect x="80" y="0" width="14" height="14" class="key"/><text x="87" y="7.5" class="key-text">F</text>
+        <rect x="100" y="0" width="14" height="14" class="key"/><text x="107" y="7.5" class="key-text">G</text>
+        <rect x="120" y="0" width="14" height="14" class="key"/><text x="127" y="7.5" class="key-text">H</text>
+        <rect x="140" y="0" width="14" height="14" class="key"/><text x="147" y="7.5" class="key-text">J</text>
+        <rect x="160" y="0" width="14" height="14" class="key"/><text x="167" y="7.5" class="key-text">K</text>
+        <rect x="180" y="0" width="14" height="14" class="key"/><text x="187" y="7.5" class="key-text">L</text>
+        <rect x="200" y="0" width="14" height="14" class="key"/><text x="207" y="7.5" class="key-text">M</text>
+      </g>
+      <g transform="translate(0, 72)">
+        <rect x="35" y="0" width="14" height="14" class="key"/><text x="42" y="7.5" class="key-text">W</text>
+        <rect x="55" y="0" width="14" height="14" class="key"/><text x="62" y="7.5" class="key-text">X</text>
+        <rect x="75" y="0" width="14" height="14" class="key"/><text x="82" y="7.5" class="key-text">C</text>
+        <rect x="95" y="0" width="14" height="14" class="key"/><text x="102" y="7.5" class="key-text">V</text>
+        <rect x="115" y="0" width="14" height="14" class="key"/><text x="122" y="7.5" class="key-text">B</text>
+        <rect x="135" y="0" width="14" height="14" class="key"/><text x="142" y="7.5" class="key-text">N</text>
+        <rect x="155" y="0" width="14" height="14" class="key"/><text x="162" y="7.5" class="key-text">,</text>
+        <rect x="175" y="0" width="14" height="14" class="key"/><text x="182" y="7.5" class="key-text">.</text>
+      </g>
+      <g transform="translate(0, 92)">
+        <rect x="65" y="0" width="110" height="14" class="key"/>
+      </g>
+    </g>
+  </svg></span>Bureau<span class="v2-topbar__badge">v2</span></div>
   <!-- t-150 (goal: t-53): v2-hit44 (components.css), not min-height — the
        topbar's own height is hard-pinned to var(--v2-row-h) (34px here),
        so growing this control's real box to 44px would either overflow the
@@ -665,6 +778,7 @@
   <div class="v2-modeswitch" id="v2-modeswitch" role="group" aria-label="Color theme">
     <button type="button" class="v2-modeswitch__btn" data-mode="light" title="Light" aria-label="Light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></button>
     <button type="button" class="v2-modeswitch__btn" data-mode="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></button>
+    <button type="button" class="v2-modeswitch__btn" data-mode="retro" title="Retro" aria-label="Retro theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5-3 3 2 7 8-8-7-2Z"/><path d="m14 5-3 3-3-3 3-3 3 3Z"/><path d="M9.5 6.5 4 12l3 6"/><path d="M3 22v-2c0-1.1.9-2 2-2h4a2 2 0 0 1 2 2v2H3Z"/></svg></button>
     <button type="button" class="v2-modeswitch__btn" data-mode="system" title="System" aria-label="System theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg></button>
   </div>
   <div class="v2-conn" id="v2-conn"><span class="v2-conn__dot" id="v2-conn-dot"></span><span id="v2-conn-text">connecting…</span></div>
@@ -692,10 +806,14 @@
   </aside>
 
   <main class="v2-main" id="v2-main">
-    <section class="v2-card" id="v2-insights-strip" aria-label="Activity insights">
-      <h2 class="v2-region-title">Insights</h2>
-      <div class="v2-empty">Loading…</div>
-    </section>
+    <!-- t-265: the i8 activity-insights strip is BACKLOG, unbuilt by design
+         (needs-me-now.js's own header) — its mount used to sit here with a
+         permanent "Loading…" placeholder no module ever replaced (the boss's
+         report). The section returns WITH the feature; until then a dead
+         region promising content is worse than no region. The boot script's
+         mounts.insightsStrip lookup and the Goals-view toggle both already
+         null-check. -->
+
     <section id="v2-goals" aria-label="Goals">
       <h2 class="v2-region-title">Goals</h2>
       <div class="v2-empty">No goals yet.</div>
@@ -849,9 +967,9 @@
   // 'bureau_token', unrelated concern) so a choice survives reload.
   (function initModeSwitch() {
     var KEY = 'bureau_v2_theme';
-    var saved = localStorage.getItem(KEY); // 'light' | 'dark' | null (system)
+    var saved = localStorage.getItem(KEY); // 'light' | 'dark' | 'retro' | null (system)
     function apply(mode) {
-      if (mode === 'light' || mode === 'dark') document.documentElement.setAttribute('data-theme', mode);
+      if (mode === 'light' || mode === 'dark' || mode === 'retro') document.documentElement.setAttribute('data-theme', mode);
       else document.documentElement.removeAttribute('data-theme');
       document.querySelectorAll('.v2-modeswitch__btn').forEach(function (b) {
         b.classList.toggle('v2-on', b.getAttribute('data-mode') === (mode || 'system'));

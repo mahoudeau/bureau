@@ -149,6 +149,17 @@
   --v2-color-status-done: #29a36a;
   --v2-color-status-done-soft: color-mix(in srgb, var(--v2-color-status-done) 14%, transparent);
 
+  /* ---- positive ACTION fill (t-266 boss ruling: an Approve button in the
+     accent hue reads wrong — positive verdicts wear green, the accent is
+     for neutral CTAs). A separate pair from status-on-track because a
+     BUTTON FILL must hold 4.5:1 under its own label text, which the
+     status hues (calibrated as text ON surfaces) do not: light's #29a36a
+     under white measures 3.0:1. Per theme: light darkens the green for
+     white text (5.3:1); dark inverts — bright green fill, near-black ink
+     (8.5:1); retro uses its sage with cream (6.0:1). */
+  --v2-color-positive-action: #1e7a4c;
+  --v2-color-positive-action-fg: #ffffff;
+
   /* ---- spacing scale (8 steps) ----------------------------------------
      Unchanged: every one of these 8 round numbers (2/4/6/8/12/16/24/32)
      already appears directly as a real gap/padding value somewhere in the
@@ -349,7 +360,10 @@
 /* ---- dark mode: system-following default ------------------------------
    Values from the sample's own :root[data-theme="dark"] block (line 57). */
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  /* t-266: retro is a light-family theme — it must not inherit the dark
+     media values under a dark system preference, so it is excluded here
+     exactly like an explicit light choice. */
+  :root:not([data-theme="light"]):not([data-theme="retro"]) {
     --v2-color-bg: #0a0a0c;
     --v2-color-surface: #111114;
     --v2-color-surface-raised: #17171b;
@@ -379,6 +393,12 @@
     --v2-color-status-on-track: #3ec080;
     --v2-color-status-in-progress: #a48bf5;
     --v2-color-status-done: #3ec080;
+
+    /* Positive action inverts on dark: bright green fill, near-black ink
+       (8.5:1) — the light direction (dark fill, white text) reads muddy
+       against a near-black canvas. */
+    --v2-color-positive-action: #3ec080;
+    --v2-color-positive-action-fg: #0a0a0c;
 
     /* Dark shadow needs to be much darker/heavier to read against a
        near-black surface than light's needs against near-white — sample's
@@ -416,6 +436,9 @@
   --v2-color-status-in-progress: #a48bf5;
   --v2-color-status-done: #3ec080;
 
+  --v2-color-positive-action: #3ec080;
+  --v2-color-positive-action-fg: #0a0a0c;
+
   --v2-shadow-overlay: 0 10px 32px rgb(0 0 0 / 50%), 0 1px 2px rgb(0 0 0 / 40%);
 }
 
@@ -423,9 +446,105 @@
    values, and not matching :not([data-theme="light"]) is what keeps the
    dark media query from repainting it — see the switcher note above. */
 
+/* ---- explicit override: [data-theme="retro"] — "Retro Corporate" ------
+   t-266 (boss spec 2026-08-20): a third theme inspired by the 60s/70s
+   office. Warm organic palette (burnt orange, avocado, cream, walnut,
+   mustard), chunkier molded-plastic radii, hard offset shadows with no
+   blur (tactile desk-accessory depth), and a subtle paper-grain texture.
+   Light-family: builds on the bare :root light values and is excluded
+   from the dark media query above, same as an explicit light choice.
+   Every hue was contrast-checked against the mechanical 4.5:1 AA floor
+   this file already holds elsewhere (the t-151 rule): the spec's literal
+   #D35400 primary measures 3.9:1 under cream text so the ACCENT token
+   carries #AD4600 (5.35:1 on-accent, 5.20:1 as text on bg) — the spec's
+   orange survives as the hover brightness range instead. Same treatment
+   for mustard (#F1C40F is decorative-only bright; the at-risk STATUS
+   token carries #7D6300, 5.19:1) and brick (#A93226, 5.98:1). */
+:root[data-theme="retro"] {
+  /* Round 2 (boss reference images 2026-08-20: a 60s executive office
+     render, striped-wallpaper walnut lounge, the Zwentendorf control
+     room, an archive room): the palette warmed and rebalanced from the
+     spec's literal hexes toward what the photos actually share — an
+     amber-cream cast on every surface (not the first round's green-beige
+     #f5f5dc), dark WALNUT rather than cool blue-charcoal for ink, sage/
+     celadon greens (curtains, vinyl seating) over dark avocado, a
+     desaturated 70s teal (wallpaper stripes, baseboards) replacing the
+     plum that appears nowhere in the era's rooms, terracotta-brick from
+     the herringbone carpet, and ochre/harvest gold from the drawer
+     units. Every value re-passed the 4.5:1 floor against BOTH bg and
+     surface-raised (raised is darker this round, so several hues sit a
+     notch deeper than round 1). */
+  --v2-color-bg: #f2e8d2;             /* amber-cream canvas (control-room bone) */
+  --v2-color-surface: #fbf4e2;        /* warm paper white, whiter than bg (system direction) */
+  --v2-color-surface-raised: #e9dfc5; /* warm tan: hover states, tag fills */
+  --v2-color-overlay-scrim: rgb(62 44 34 / 42%); /* walnut-tinted */
+
+  --v2-color-text-primary: #362e24;   /* dark walnut ink, never pure black (11.0:1) */
+  --v2-color-text-secondary: #5c5240; /* 6.3:1 bg / 5.6:1 raised */
+  --v2-color-text-muted: #675b45;     /* 5.5:1 bg / 5.0:1 raised */
+  --v2-color-text-on-accent: #fff4df; /* cream-white on terracotta, 5.7:1 */
+
+  /* Walnut hairlines at a deliberately heavier alpha than light's 8/14%:
+     the "chunky" structural read the spec asks for, without touching any
+     border-width a component owns. */
+  --v2-color-border: rgb(62 44 34 / 24%);
+  --v2-color-border-strong: rgb(62 44 34 / 38%);
+
+  /* Terracotta burnt orange (the carpet/ceiling-band rust), dark enough
+     to clear AA as button fill AND as link text (5.1:1 on bg); hover
+     mixes back toward the spec's literal #D35400 brightness. */
+  --v2-color-accent: #a24406;
+  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 82%, #d35400);
+  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, black);
+  --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 12%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, var(--v2-color-accent) 28%, transparent);
+
+  /* Status hues from the reference rooms: terracotta-brick for bug,
+     ochre/harvest gold for at-risk, sage for the greens, 70s teal for
+     in-progress. The -soft variants recompute automatically (bare :root
+     defines them as color-mix over these bases, resolved at use time). */
+  --v2-color-status-bug: #9e3720;
+  --v2-color-status-at-risk: #755700;
+  --v2-color-status-on-track: #4a6541;
+  --v2-color-status-in-progress: #315f58;
+  --v2-color-status-done: #4a6541;
+
+  /* Positive action: the sage itself as fill, cream label (6.0:1) —
+     approve wears the reference rooms' vinyl-seat green, and the
+     terracotta accent stays for neutral CTAs. */
+  --v2-color-positive-action: #4a6541;
+  --v2-color-positive-action-fg: #fff4df;
+
+  /* Molded-plastic corners: one notch up from the light scale. */
+  --v2-radius-xs: 5px;
+  --v2-radius-sm: 8px;
+  --v2-radius-md: 10px;
+  --v2-radius-lg: 14px;
+
+  /* Hard offset shadow, zero blur — the spec's tactile 70s depth. */
+  --v2-shadow-overlay: 3px 3px 0 rgb(62 39 35 / 28%);
+
+  /* Type: grotesque body stack, chunky display serif stack. Graceful:
+     none of these are vendored (Cooper Black is not freely licensable;
+     Space Grotesk could be vendored later as woff2 if the boss wants it
+     guaranteed), so machines without them fall back to the system's own
+     Inter/Georgia without breaking metrics badly. */
+  --v2-font-sans: "Space Grotesk", "IBM Plex Sans", "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --v2-font-serif: "Cooper Black", "Cooper Std", "Recoleta", "Chalkboard SE", Georgia, serif;
+
+  /* Paper grain: a tiny inline SVG fractal-noise tile, walnut-tinted at
+     ~5% alpha, consumed by the html rule below (and body.v2-app in
+     v2.html) via this token — other themes leave it unset so the
+     fallback `none` applies. */
+  --v2-texture-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.243 0 0 0 0 0.173 0 0 0 0 0.133 0 0 0 0.05 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+}
+
 /* ---- base + tabular numerals (mechanical floor #6) -------------------- */
 html {
   background: var(--v2-color-bg);
+  /* t-266: themes may set --v2-texture-grain (retro's paper grain);
+     everywhere else the fallback none is a no-op. */
+  background-image: var(--v2-texture-grain, none);
   color: var(--v2-color-text-primary);
   font-family: var(--v2-font-sans);
   font-size: var(--v2-font-size-base);

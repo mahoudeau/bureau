@@ -230,7 +230,7 @@ import { icon, idBadge } from './components.js';
         '</div>' +
         '<p class="v2-panel__err" id="v2-pp-err" hidden></p>' +
         '<div class="v2-panel__actions">' +
-        '<button type="button" class="v2-panel__btn v2-hit44" id="v2-pp-approve">✅ Approve</button>' +
+        '<button type="button" class="v2-panel__btn v2-is-positive v2-hit44" id="v2-pp-approve">✅ Approve</button>' +
         '<button type="button" class="v2-panel__btn v2-panel__btn--ghost v2-hit44" id="v2-pp-sendback">↩️ Send back</button>' +
         '</div>'
       ) : '';
