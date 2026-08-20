@@ -469,6 +469,23 @@
 .v2-btn--primary:hover { filter: brightness(1.06); }
 .v2-btn--primary:active { background: var(--v2-color-accent-active); }
 
+/* Positive verdict fill (t-266 boss ruling: Approve must not wear the
+   accent — positive actions read green in every theme; tokens.css defines
+   the per-theme AA-checked pair). Same hover technique as --primary.
+   Doubled class: palette.js re-declares the whole .v2-btn family in its
+   own injected <style> (loads after this file; its bare .v2-btn carries a
+   surface background at equal specificity, which silently blanked this
+   variant — found live, not in review). Same defense molecules.css uses
+   (.v2-palette.v2-palette) until that legacy block is retired. */
+.v2-btn--positive.v2-btn--positive { background: var(--v2-color-positive-action); color: var(--v2-color-positive-action-fg); }
+.v2-btn--positive.v2-btn--positive:hover { filter: brightness(1.06); }
+.v2-btn--positive.v2-btn--positive:active { background: color-mix(in srgb, var(--v2-color-positive-action) 80%, black); }
+/* Utility twin for the bespoke button classes (batch bar, peek panel)
+   whose own accent fills live in module-injected <style> blocks that load
+   AFTER this file — the doubled class outranks them on specificity, the
+   same technique molecules.css already uses (.v2-palette.v2-palette). */
+.v2-is-positive.v2-is-positive { background: var(--v2-color-positive-action); color: var(--v2-color-positive-action-fg); }
+
 .v2-btn--ghost { color: var(--v2-color-text-secondary); }
 .v2-btn--ghost:hover { background: var(--v2-color-surface-raised); color: var(--v2-color-text-primary); }
 .v2-btn--ghost:active { background: var(--v2-color-row-selected-bg); }
