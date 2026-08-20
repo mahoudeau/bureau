@@ -496,7 +496,11 @@
   }
   .v2-navitem svg { width: 15px; height: 15px; flex: none; }
   .v2-navitem:hover { background: var(--v2-surface); }
-  .v2-navitem.v2-on { background: var(--v2-surface); color: var(--v2-ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--v2-accent); }
+  /* t-265 (boss report): the active state is the filled rounded row ONLY —
+     crop-ux-sidebar-item.png's selected item carries a raised fill and
+     brighter text, no accent edge; the old inset 2px left bar was an
+     invention outside the register. */
+  .v2-navitem.v2-on { background: var(--v2-surface); color: var(--v2-ink); font-weight: 600; }
 
   .v2-region-title {
     font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--v2-muted);
@@ -692,10 +696,14 @@
   </aside>
 
   <main class="v2-main" id="v2-main">
-    <section class="v2-card" id="v2-insights-strip" aria-label="Activity insights">
-      <h2 class="v2-region-title">Insights</h2>
-      <div class="v2-empty">Loading…</div>
-    </section>
+    <!-- t-265: the i8 activity-insights strip is BACKLOG, unbuilt by design
+         (needs-me-now.js's own header) — its mount used to sit here with a
+         permanent "Loading…" placeholder no module ever replaced (the boss's
+         report). The section returns WITH the feature; until then a dead
+         region promising content is worse than no region. The boot script's
+         mounts.insightsStrip lookup and the Goals-view toggle both already
+         null-check. -->
+
     <section id="v2-goals" aria-label="Goals">
       <h2 class="v2-region-title">Goals</h2>
       <div class="v2-empty">No goals yet.</div>
