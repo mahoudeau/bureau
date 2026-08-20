@@ -274,7 +274,7 @@ import { icon, idBadge, statusGlyph } from './components.js';
       // crop-ux-button-row's register) and .v2-input — with v2-desk__* left
       // as pure behavior hooks, zero visual styling of their own.
       var actions = kind === 'review'
-        ? '<button type="button" class="v2-btn v2-btn--primary v2-desk__act" data-act="done" data-task="' + esc(t.id) + '">Approve</button>' +
+        ? '<button type="button" class="v2-btn v2-btn--positive v2-desk__act" data-act="done" data-task="' + esc(t.id) + '">Approve</button>' +
           '<button type="button" class="v2-btn v2-btn--secondary v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Send back</button>'
         : '<button type="button" class="v2-btn v2-btn--secondary v2-desk__act" data-act="queued" data-task="' + esc(t.id) + '">Answer</button>';
       return '<div class="v2-desk__decision" data-decision="' + esc(t.id) + '">' +

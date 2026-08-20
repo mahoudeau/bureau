@@ -142,7 +142,7 @@ import { icon } from './components.js';
         '<input class="v2-batch-confirm__note" id="v2-batch-note" placeholder="Note (optional on approve, required to send back)">' +
         '<p class="v2-batch-confirm__err" id="v2-batch-err" hidden></p>' +
         '<div class="v2-batch-confirm__actions">' +
-        '<button type="button" class="v2-batch-bar__btn" id="v2-batch-approve" disabled>' + icon('check') + ' Approve all</button>' +
+        '<button type="button" class="v2-batch-bar__btn v2-is-positive" id="v2-batch-approve" disabled>' + icon('check') + ' Approve all</button>' +
         '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-sendback" disabled>↩️ Send back all</button>' +
         '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-cancel">Cancel</button>' +
         '</div></div>';
@@ -288,7 +288,7 @@ import { icon } from './components.js';
         el.innerHTML =
           '<span class="v2-batch-bar__count">' + itemSelection.size + ' items selected</span>' +
           '<label class="v2-batch-confirm__ack"><input type="checkbox" id="v2-batch-item-ack"> I’ve reviewed these ' + itemSelection.size + ' items</label>' +
-          '<button type="button" class="v2-batch-bar__btn" id="v2-batch-item-approve" disabled>' + icon('check') + ' Accept all</button>' +
+          '<button type="button" class="v2-batch-bar__btn v2-is-positive" id="v2-batch-item-approve" disabled>' + icon('check') + ' Accept all</button>' +
           '<button type="button" class="v2-batch-bar__btn v2-batch-bar__btn--ghost" id="v2-batch-item-reject" disabled>✖ Reject all</button>';
         // Anchor at the end of the item list, inline in the panel — never a
         // modal/overlay, matches the mission's own phone-usable requirement.
