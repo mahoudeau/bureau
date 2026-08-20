@@ -97,22 +97,40 @@ import { icon, avatar, chip, idBadge } from './components.js';
 
     injectStyle();
 
-    var projectFilter = null;
+    // t-264 (boss report): the single click-to-filter project id becomes a
+    // SET — the toolbar filter control adds/removes projects and resets;
+    // the rail rows toggle membership. Empty set = no filter (everything).
+    var projectFilters = new Set();
+    // t-264: per-project settings mode (the row cog). Rows in this set
+    // render data-settings="true": their fields become project-edit.js
+    // inline edits and the row click no longer toggles the filter. Kept
+    // here (not as DOM state) so renderProjects' full rebuilds preserve it.
+    var settingsOpen = new Set();
+    var filterMenuOpen = false;
     var selectedReviewIds = new Set();
     var archiveOpen = false; // t-110: off by default — discarded stays out of the six live columns until toggled
 
-    // ---- board toolbar: quick-add trigger + active-filter chip (built once) ----
+    // ---- board toolbar: quick-add trigger + archive toggle + filter (built once) ----
+    // t-264: the toolbar speaks the design system now — .v2-btn atoms
+    // (components.css) instead of the bespoke one-off button rules this
+    // file used to carry, same register t-240 gave the side-rail chrome.
     mounts.board.innerHTML =
       '<div class="v2-board__toolbar">' +
-      '<button type="button" class="v2-board__quickadd-btn" id="v2-qa-trigger">+ Quick add</button>' +
+      '<button type="button" class="v2-btn v2-btn--secondary" id="v2-qa-trigger">' + icon('plus') + '<span>Quick add</span></button>' +
       // t-110: discarded (fixtures/duplicates/re-scope tombstones, per
       // protocol.md's terminal-status doctrine) never renders in the six
       // live columns — but the count stays visible here even while the
       // toggle is off, so the number itself is never hidden, only the
-      // list. Phone-usable: same tap-target treatment as the quick-add
-      // button next to it, no hover-only affordance.
-      '<button type="button" class="v2-board__archive-toggle" id="v2-archive-toggle" aria-pressed="false">🗄 <span id="v2-archive-count">0</span> archived</button>' +
-      '<span class="v2-board__filter-chip" id="v2-board-filter-chip" hidden></span>' +
+      // list. Phone-usable: real buttons, no hover-only affordance.
+      '<button type="button" class="v2-btn v2-btn--ghost" id="v2-archive-toggle" aria-pressed="false">' + icon('folder') + '<span><span id="v2-archive-count" class="v2-tabular-nums">0</span> archived</span></button>' +
+      // t-264: the filter control — a ghost button opening a checkbox menu
+      // of the registry, active projects rendered as removable chips
+      // beside it, plus a reset. Non-modal, closes on outside click.
+      '<span class="v2-board__filterwrap" id="v2-filter-wrap">' +
+      '<button type="button" class="v2-btn v2-btn--ghost" id="v2-filter-btn" aria-haspopup="true" aria-expanded="false">' + icon('filter') + '<span>Filter</span></button>' +
+      '<div class="v2-filter-menu" id="v2-filter-menu" hidden></div>' +
+      '</span>' +
+      '<span class="v2-board__filter-chips" id="v2-filter-chips"></span>' +
       '</div>' +
       '<form class="v2-quickadd" id="v2-quickadd-form" hidden>' +
       '<input class="v2-quickadd__title" id="v2-qa-title" placeholder="New mission for the team…" required>' +
@@ -130,13 +148,27 @@ import { icon, avatar, chip, idBadge } from './components.js';
     var qaProject = document.getElementById('v2-qa-project');
     var qaPrio = document.getElementById('v2-qa-prio');
     var qaErr = document.getElementById('v2-qa-err');
-    var filterChip = document.getElementById('v2-board-filter-chip');
+    var filterBtn = document.getElementById('v2-filter-btn');
+    var filterMenu = document.getElementById('v2-filter-menu');
+    var filterChips = document.getElementById('v2-filter-chips');
     var archiveToggle = document.getElementById('v2-archive-toggle');
     var archiveCountEl = document.getElementById('v2-archive-count');
 
     qaTrigger.addEventListener('click', function () {
       qaForm.hidden = !qaForm.hidden;
       if (!qaForm.hidden) qaTitle.focus();
+    });
+    filterBtn.addEventListener('click', function () {
+      filterMenuOpen = !filterMenuOpen;
+      renderFilterUI(V2.state);
+    });
+    // Outside click closes the menu — non-modal, same light-dismiss
+    // convention as the app's other floating surfaces.
+    document.addEventListener('click', function (e) {
+      if (filterMenuOpen && !e.target.closest('#v2-filter-wrap')) {
+        filterMenuOpen = false;
+        renderFilterUI(V2.state);
+      }
     });
     archiveToggle.addEventListener('click', function () {
       archiveOpen = !archiveOpen;
@@ -406,22 +438,18 @@ import { icon, avatar, chip, idBadge } from './components.js';
         else if (t.status === 'done' || t.status === 'failed') b.closed++;
         else b.active++;
       });
-      if (projectFilter && !byProj[projectFilter]) projectFilter = null;
+      // Prune filters and settings state for projects gone from the registry.
+      Array.from(projectFilters).forEach(function (id) { if (!byProj[id]) projectFilters.delete(id); });
+      Array.from(settingsOpen).forEach(function (id) { if (!byProj[id]) settingsOpen.delete(id); });
       var ids = Object.keys(byProj).sort();
 
       // quick-add project select, kept in sync with the registry
-      var keep = projectFilter || qaProject.value || 'general';
+      var keep = qaProject.value || (projectFilters.size ? Array.from(projectFilters)[0] : 'general');
       qaProject.innerHTML = ids.map(function (id) {
         return '<option value="' + esc(id) + '"' + (id === keep ? ' selected' : '') + '>' + esc(projLabel(state, id)) + '</option>';
       }).join('');
 
-      if (projectFilter) {
-        filterChip.hidden = false;
-        filterChip.innerHTML = esc(projLabel(state, projectFilter)) + ' <button type="button" class="v2-board__filter-clear" id="v2-board-filter-clear" aria-label="Clear filter">✕</button>';
-        document.getElementById('v2-board-filter-clear').addEventListener('click', function () { projectFilter = null; render(); });
-      } else {
-        filterChip.hidden = true; filterChip.innerHTML = '';
-      }
+      renderFilterUI(state);
 
       // t-86: per-field data-field hooks for project-edit.js (i10) to bind
       // inline edit UI to, replacing prompt(). label/entity/capacity render
@@ -473,7 +501,8 @@ import { icon, avatar, chip, idBadge } from './components.js';
         var pj = b.meta || {};
         var openCount = b.queued + b.active + b.review;
         var repoHost = pj.repo ? repoIconName(pj.repo) : null;
-        return '<div class="v2-project-row' + (projectFilter === id ? ' v2-project-row--active' : '') + '" data-project="' + esc(id) + '">' +
+        var inSettings = settingsOpen.has(id);
+        return '<div class="v2-project-row' + (projectFilters.has(id) ? ' v2-project-row--active' : '') + '"' + (inSettings ? ' data-settings="true"' : '') + ' data-project="' + esc(id) + '">' +
           '<span class="v2-project-row__name" data-field="label" title="' + esc(projLabel(state, id)) + '">' + esc(projLabel(state, id)) + '</span>' +
           '<span class="v2-project-row__meta">' +
             '<span class="v2-project-row__chips">' +
@@ -489,15 +518,76 @@ import { icon, avatar, chip, idBadge } from './components.js';
               '<button type="button" class="v2-repo-editbtn v2-hit44" aria-label="Edit repository URL" title="Edit repository URL">' + icon('square-pen', 'v2-icon--xs') + '</button>'
               : '') + '</span>' +
           '</span>' +
+          // t-264 (boss report: "clicking on name renames it instead of
+          // selecting it"): every edit affordance now lives behind this
+          // cog. It toggles the row's settings mode; project-edit.js only
+          // begins a field edit while the row carries data-settings="true".
+          '<button type="button" class="v2-icon-btn v2-project-row__cog v2-hit44" aria-label="Project settings (' + esc(projLabel(state, id)) + ')" aria-expanded="' + inSettings + '" title="Project settings: rename, entity, repo, capacity">' + icon('settings') + '</button>' +
           '</div>';
       }).join('') : '<div class="v2-empty">No projects yet.</div>';
       setRegionBody(mounts.projectsRail, body);
       mounts.projectsRail.querySelectorAll('.v2-project-row').forEach(function (row) {
-        row.addEventListener('click', function () {
+        row.addEventListener('click', function (e) {
           var id = row.getAttribute('data-project');
-          projectFilter = (projectFilter !== id) ? id : null;
+          // The cog toggles settings mode and never touches the filter.
+          if (e.target.closest('.v2-project-row__cog')) {
+            if (settingsOpen.has(id)) settingsOpen.delete(id); else settingsOpen.add(id);
+            render();
+            return;
+          }
+          // In settings mode the row's fields are edit targets
+          // (project-edit.js); a click that reaches here (row padding,
+          // non-field gaps) does nothing rather than surprise-toggling
+          // the filter mid-edit.
+          if (row.getAttribute('data-settings') === 'true') return;
+          if (projectFilters.has(id)) projectFilters.delete(id); else projectFilters.add(id);
           render();
         });
+      });
+    }
+
+    // t-264: the toolbar filter control — button state, removable chips,
+    // and the checkbox menu. Rebuilt on every render (cheap, and the menu's
+    // checkboxes must track the registry and the live set).
+    function renderFilterUI(state) {
+      if (!state) return;
+      var ids = (state.projects || []).map(function (p) { return typeof p === 'string' ? p : p && p.id; }).filter(Boolean).sort();
+      filterBtn.setAttribute('aria-expanded', String(filterMenuOpen));
+      filterBtn.classList.toggle('v2-is-filter-active', projectFilters.size > 0);
+      filterBtn.querySelector('span').textContent = projectFilters.size ? 'Filter · ' + projectFilters.size : 'Filter';
+
+      filterChips.innerHTML = Array.from(projectFilters).sort().map(function (id) {
+        return '<span class="v2-chip v2-fchip"><span class="v2-mchip__dot" style="background:' + projColor(state, id) + '"></span>' + esc(projLabel(state, id)) +
+          '<button type="button" class="v2-fchip__x" data-funset="' + esc(id) + '" aria-label="Stop filtering on ' + esc(projLabel(state, id)) + '">' + icon('x') + '</button></span>';
+      }).join('');
+      filterChips.querySelectorAll('[data-funset]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          projectFilters.delete(btn.getAttribute('data-funset'));
+          render();
+        });
+      });
+
+      filterMenu.hidden = !filterMenuOpen;
+      if (!filterMenuOpen) { filterMenu.innerHTML = ''; return; }
+      filterMenu.innerHTML = ids.map(function (id) {
+        return '<label class="v2-filter-menu__item">' +
+          '<input type="checkbox" data-fproj="' + esc(id) + '"' + (projectFilters.has(id) ? ' checked' : '') + '>' +
+          '<span class="v2-mchip__dot" style="background:' + projColor(state, id) + '"></span>' +
+          '<span class="v2-filter-menu__label">' + esc(projLabel(state, id)) + '</span>' +
+          '</label>';
+      }).join('') +
+        '<div class="v2-filter-menu__foot"><button type="button" class="v2-btn v2-btn--ghost" id="v2-filter-reset"' + (projectFilters.size ? '' : ' disabled') + '>Reset</button></div>';
+      filterMenu.querySelectorAll('[data-fproj]').forEach(function (cb) {
+        cb.addEventListener('change', function () {
+          var id = cb.getAttribute('data-fproj');
+          if (cb.checked) projectFilters.add(id); else projectFilters.delete(id);
+          render();
+        });
+      });
+      var reset = document.getElementById('v2-filter-reset');
+      if (reset) reset.addEventListener('click', function () {
+        projectFilters.clear();
+        render();
       });
     }
 
@@ -596,7 +686,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
 
     function renderBoard(state) {
       var all = state.tasks || [];
-      var visible = projectFilter ? all.filter(function (t) { return t.project === projectFilter; }) : all;
+      var visible = projectFilters.size ? all.filter(function (t) { return projectFilters.has(t.project); }) : all;
       var goalKids = {};
       all.forEach(function (t) {
         var m = /goal:\s*(t-\d+)/.exec(t.body || '');
@@ -621,7 +711,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       archiveCountEl.textContent = String(discarded.length);
       if (archiveOpen) html += swimGroup(state, DISCARDED_GROUP, discarded, goalKids);
 
-      columnsEl.innerHTML = html || '<div class="v2-empty">Nothing on the board' + (projectFilter ? ' for this project' : '') + '.</div>';
+      columnsEl.innerHTML = html || '<div class="v2-empty">Nothing on the board' + (projectFilters.size ? ' for this filter' : '') + '.</div>';
 
       // Row → open mission (click or keyboard). The checkbox is a child of the
       // row, so its own click is stopped from bubbling into an open.
@@ -906,6 +996,24 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // horizontal-overflow risk t-114 fixed for the row as a whole
       // without giving up the tidy one-line rest-state above.
       '.v2-project-row[data-editing="true"] .v2-project-row__meta, .v2-project-row[data-editing="true"] .v2-project-row__chips { flex-wrap: wrap; }',
+      // t-264: the row cog — always visible (no hover-only affordance,
+      // t-53's own mechanical floor) but quiet until hovered or open.
+      '.v2-project-row__cog { flex: none; width: 22px; height: 22px; color: var(--v2-color-text-muted, #999); opacity: .55; }',
+      '.v2-project-row:hover .v2-project-row__cog, .v2-project-row__cog:focus-visible { opacity: 1; }',
+      '.v2-project-row__cog[aria-expanded="true"] { opacity: 1; color: var(--v2-color-accent); }',
+      '.v2-project-row__cog .v2-icon { width: 13px; height: 13px; }',
+      // Settings mode: the row reads as an open editing surface — raised
+      // background, wrap allowed so every field stays reachable, and the
+      // empty-value placeholders ("—") only exist HERE, where clicking
+      // them is how a first entity/repo gets added. Outside settings mode
+      // an empty entity chip or repo slot renders nothing at all (the
+      // boss's "big — before and after icons" report).
+      '.v2-project-row[data-settings="true"] { background: var(--v2-color-surface-raised, rgba(128,128,128,.06)); flex-wrap: wrap; }',
+      '.v2-project-row[data-settings="true"] .v2-project-row__meta, .v2-project-row[data-settings="true"] .v2-project-row__chips { flex-wrap: wrap; }',
+      '.v2-project-row:not([data-settings="true"]) [data-field][data-empty="true"] { display: none; }',
+      // The pencil next to the repo link is an edit affordance — settings
+      // mode only; the link itself stays a plain link in both modes.
+      '.v2-project-row:not([data-settings="true"]) .v2-repo-editbtn { display: none; }',
       // Repo: icon-only view (host-derived glyph + hover/focus tooltip +
       // real link) plus a quiet, row-hover-revealed edit affordance —
       // replaces the old raw-clone-URL text entirely (the boss's own
@@ -1005,18 +1113,46 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // leave an odd, purely cosmetic gap between name and meta that the
       // desktop rail's tightness never has room for.
       '@media (max-width: 720px) { .v2-project-row__meta { margin-left: 0; } }',
-      '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); }',
-      '.v2-board__quickadd-btn { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink); cursor: pointer; }',
-      // t-110: archive toggle — same tap-target treatment as the quick-add
-      // button beside it (phone-usable, no hover-only affordance). The
-      // count text lives INSIDE the button itself so it is visible whether
-      // the toggle is on or off — only the list below is gated by state.
-      // Shared board chrome: main's t-136/t-206 fallback-stripped versions
-      // (the t-87 alias block defines these tokens unconditionally).
-      '.v2-board__archive-toggle { font: inherit; font-weight: 600; padding: var(--v2-space-1, 4px) var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-surface); color: var(--v2-ink-2); cursor: pointer; font-variant-numeric: tabular-nums; }',
-      '.v2-board__archive-toggle[aria-pressed="true"] { color: var(--v2-ink); border-color: var(--v2-accent); }',
-      '.v2-board__filter-chip { font-size: 12px; color: var(--v2-ink-2); display: flex; align-items: center; gap: 4px; }',
-      '.v2-board__filter-clear { border: none; background: transparent; color: var(--v2-accent); cursor: pointer; font: inherit; }',
+      '.v2-board__toolbar { display: flex; align-items: center; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-2, 8px); flex-wrap: wrap; }',
+      // t-264: toolbar buttons are .v2-btn atoms (components.css owns their
+      // look); this file only styles the states the atoms don't know about.
+      // The archive count stays INSIDE the button (t-110: the number is
+      // never hidden, only the list is gated by state).
+      '#v2-archive-toggle[aria-pressed="true"] { color: var(--v2-color-accent); }',
+      '#v2-filter-btn.v2-is-filter-active { color: var(--v2-color-accent); }',
+      // Filter control: wrapper anchors the dropdown; chips are removable
+      // pills in the same hairline-pill grammar as the project-row chips.
+      '.v2-board__filterwrap { position: relative; display: inline-flex; }',
+      // The menu is a floating surface — it reads the SAME overlay tokens
+      // the palette molecule reads (shadow-overlay, radius-md, z-toast),
+      // never its own hardcoded shadow, so light/dark elevation stays one
+      // system-wide voice.
+      '.v2-filter-menu { position: absolute; top: 100%; left: 0; margin-top: 4px; min-width: 220px; max-height: 320px; overflow-y: auto; background: var(--v2-color-bg, #fff); border: 1px solid var(--v2-color-border, var(--v2-hairline)); border-radius: var(--v2-radius-md, 8px); box-shadow: var(--v2-shadow-overlay, 0 8px 24px rgba(0,0,0,.14)); padding: var(--v2-space-2, 8px); z-index: var(--v2-z-toast, 70); }',
+      '.v2-filter-menu__item { display: flex; align-items: center; gap: var(--v2-space-3, 8px); padding: var(--v2-space-2, 6px) var(--v2-space-2, 8px); border-radius: var(--v2-radius-xs, 4px); font-size: 13px; cursor: pointer; min-height: 32px; }',
+      '.v2-filter-menu__item:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.08)); }',
+      '.v2-filter-menu__item input { margin: 0; flex: none; }',
+      '.v2-filter-menu__label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
+      '.v2-filter-menu__foot { border-top: 1px solid var(--v2-color-border, var(--v2-hairline)); margin-top: var(--v2-space-2, 6px); padding-top: var(--v2-space-2, 6px); display: flex; justify-content: flex-end; }',
+      '.v2-board__filter-chips { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }',
+      // Filter chips are the .v2-chip ATOM (components.css owns box,
+      // border, radius, height); this modifier only resets the tag
+      // typography to sentence case — the same axes .v2-chip--role resets,
+      // for the same reason (a project name next to controls reads as
+      // plain text, not an uppercase mono tag) — and tightens the trailing
+      // padding so the × sits inside the pill.
+      '.v2-fchip { gap: 5px; font-family: inherit; font-weight: var(--v2-weight-regular, 400); text-transform: none; letter-spacing: normal; font-size: var(--v2-font-size-xs, 11px); padding-right: var(--v2-space-2, 4px); }',
+      '.v2-fchip__x { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: none; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; padding: 0; }',
+      '.v2-fchip__x:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); color: var(--v2-color-text-primary, inherit); }',
+      '.v2-fchip__x .v2-icon { width: 12px; height: 12px; }',
+      // Tap-target floor at phone width (t-53 mechanical floors) — same
+      // override organisms.css gives the desk tray's .v2-btn atoms. The
+      // row cog needs no rule: it carries .v2-hit44's 44px halo.
+      '@media (max-width: 720px) { .v2-board__toolbar .v2-btn { min-height: 44px; } .v2-filter-menu__item { min-height: 44px; } .v2-fchip { min-height: 32px; } .v2-fchip__x { width: 28px; height: 28px; } }',
+      // Phone: the filter button sits toward the right of a narrow
+      // viewport, so a left-anchored 220px menu clips off-screen — anchor
+      // right and clamp instead (same viewport-clamp move as the repo
+      // tooltip's own phone override above).
+      '@media (max-width: 720px) { .v2-filter-menu { left: auto; right: 0; max-width: calc(100vw - 32px); } }',
       '.v2-quickadd { display: flex; gap: var(--v2-space-2, 8px); margin-bottom: var(--v2-space-3, 12px); flex-wrap: wrap; }',
       '.v2-quickadd__title { flex: 1; min-width: 160px; font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',
       '.v2-quickadd__project, .v2-quickadd__prio { font: inherit; padding: var(--v2-space-2, 8px); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius); background: var(--v2-bg); color: var(--v2-ink); }',

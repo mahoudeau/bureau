@@ -139,6 +139,17 @@
       // live browser and finding no PATCH request was ever sent, not by
       // reading the code.
       if (row.getAttribute('data-editing') === 'true') return;
+      // t-264 (boss report: "clicking on name renames it instead of
+      // selecting it"): edits live behind the row's cog now. Outside
+      // settings mode (board.js renders data-settings="true" only while
+      // the cog is open) NOTHING here is an edit target — let the click
+      // bubble through to board.js's row filter toggle. The one exception
+      // stays from t-158: a repo-link click must still open the link
+      // without also toggling the filter, so it alone stops propagation.
+      if (row.getAttribute('data-settings') !== 'true') {
+        if (field.getAttribute('data-field') === 'repo' && e.target.closest('.v2-repo-link')) e.stopPropagation();
+        return;
+      }
       // t-133 (goal: t-53): the repo field's non-empty VIEW state is now a
       // real navigable link + hover/focus tooltip (board.js's own
       // .v2-repo-link — icon + tooltip + click-opens-new-tab, replacing
@@ -279,9 +290,13 @@
       // [data-field] elements become tap targets — sized generously
       // (not just the text's own line-height) so this reads cleanly at
       // phone width, the mission's own specifically named motivation.
-      '[data-field] { cursor: pointer; border-radius: var(--v2-radius-xs, 4px); padding: 2px 4px; margin: -2px -4px; display: inline-block; min-height: 20px; }',
-      '[data-field]:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); }',
-      '[data-field][data-empty="true"]::before { content: "—"; color: var(--v2-color-text-muted, #999); }',
+      // t-264: every rule here is scoped to settings mode
+      // ([data-settings="true"], set by board.js's row cog) — outside it
+      // the fields are plain display text, carry no edit affordance, and
+      // empty values render nothing instead of the "—" placeholder.
+      '[data-settings="true"] [data-field] { cursor: pointer; border-radius: var(--v2-radius-xs, 4px); padding: 2px 4px; margin: -2px -4px; display: inline-block; min-height: 20px; }',
+      '[data-settings="true"] [data-field]:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.12)); }',
+      '[data-settings="true"] [data-field][data-empty="true"]::before { content: "—"; color: var(--v2-color-text-muted, #999); }',
       '.v2-pedit { display: inline-flex; align-items: center; gap: 4px; position: relative; }',
       '.v2-pedit__input { font: inherit; font-size: inherit; padding: 3px 6px; border: 1px solid var(--v2-color-accent, #3f6fe0); border-radius: var(--v2-radius-xs, 4px); background: var(--v2-color-bg, #fff); color: var(--v2-color-text-primary, inherit); min-width: 8ch; }',
       '.v2-pedit__input[type=number] { width: 5ch; min-width: 0; }',
@@ -294,7 +309,7 @@
       '.v2-pedit__err { position: absolute; top: 100%; left: 0; margin-top: 2px; font-size: 11px; color: var(--v2-color-status-bug, #e5484d); background: var(--v2-color-bg, #fff); border: 1px solid var(--v2-color-status-bug, #e5484d); border-radius: var(--v2-radius-xs, 4px); padding: 2px 6px; white-space: nowrap; z-index: 5; }',
       // Phone width: widen the tap targets further and let the edit
       // control wrap onto its own line rather than overflow the row.
-      '@media (max-width: 720px) { .v2-pedit { flex-wrap: wrap; } .v2-pedit__input { min-width: 12ch; font-size: 16px; } [data-field] { min-height: 28px; padding: 6px 6px; } }'
+      '@media (max-width: 720px) { .v2-pedit { flex-wrap: wrap; } .v2-pedit__input { min-width: 12ch; font-size: 16px; } [data-settings="true"] [data-field] { min-height: 28px; padding: 6px 6px; } }'
     ].join('\n');
     document.head.appendChild(style);
   }
