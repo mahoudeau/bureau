@@ -75,15 +75,20 @@ Who writes where, and who may rewrite. "The librarian" is the curation agent (in
 
 **Write cheap, curate later** still rules: working agents are never asked to file perfectly. The journal accepts anything; the librarian's job is making it authoritative or letting it fade.
 
+**Journal tags for promotability** (2026-08-17, bureau-internal/23). A journal line carries two bracket prefixes before the observation: `[scope:global|entity:<slug>|project:<slug>]`, the writer's own best guess at where the fact will land once promoted (the librarian may correct it — a guess, not a commitment), and `[subject:short-topic]`, a short free-text word or two, not a controlled vocabulary, so the librarian's digest can group and triage same-subject lines without reading every one. Minimal structure still rules: an untagged line is still accepted, just slower to triage. Example: `[scope:global] [subject:git-proxy] pushes to mahoudeau/bureau were 403ing this session; a probe push confirmed it's session-specific, not repo-wide (source: [[projects/bureau/STATE.md]])`.
+
 ## The debrief grammar
 
-Every completed mission appends a debrief to its project's `STATE.md`. Three parts, minimum, in this order:
+Every completed mission appends a debrief to its project's `STATE.md`. Trajectory-shaped, six parts, minimum, in this order (2026-08-17, bureau-internal/23 — capture as a by-product of doing the work, not a separate report; a later step compiles these into `trajectories/<t-id>.md`, but the shape is required now regardless of whether that compiler exists yet):
 
-- **What changed**: the work, stated concretely.
-- **What was learned**: anything reusable; name the scope if it is not the project's own.
-- **Next step**: what a cold-started successor should do first.
+- **Question**: what was actually being decided or solved, stated concretely — the real fork in the road, not the mission title restated.
+- **Evidence**: what was checked to inform the decision — files read, commands run, references compared, prior debriefs consulted. Name sources, not conclusions.
+- **Alternatives**: the approaches that lost, and why. Mandatory, not a formality — alternatives-*that-lost* is the field, not "alternatives" in the abstract. If genuinely only one approach existed, say so and say why nothing else was worth considering; "none" with no reasoning is not an acceptable answer.
+- **Decision**: what was actually done, stated concretely.
+- **Outcome**: what happened as a result — verified, not hoped: a test that passed, a critic verdict, a number measured.
+- **Revision**: what this changes going forward for a cold-started successor — a corrected belief, a question now open, or the literal next step when nothing needs revising.
 
-Optionally `earned_by:` the mission id. This shape is what the librarian digests and what lint will eventually check; free-form prose around it is welcome, the three parts are not optional.
+This replaces the prior three-part form (what changed / what was learned / next step) everywhere it was used. Optionally `earned_by:` the mission id. This shape is what the librarian digests and what lint will eventually check; free-form prose around it is welcome, the six parts are not optional.
 
 ## Note grammar (the commons layer)
 
