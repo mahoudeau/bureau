@@ -371,6 +371,10 @@ function agentHasCapability(s, agentName, cap) {
 }
 function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
 function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+// t-243: same role-not-name pattern, for the brain's protected compartments
+// (knowledge.js reads this to decide who may write knowledge/recipes/PROFILE/
+// attic - see hub/lib/knowledge.js and the /api/knowledge route).
+function isLibrarian(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'librarian'); }
 
 function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
@@ -500,4 +504,5 @@ module.exports = {
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
+  agentHasCapability, isLead, isCriticOrLead, isLibrarian,
 };

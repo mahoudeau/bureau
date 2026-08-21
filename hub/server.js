@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
+const work = require('./lib/work');
 const discord = require('./lib/discord');
 const poke = require('./lib/poke');
 
@@ -35,6 +36,15 @@ function summarize(type, d) {
 }
 
 // ---------- helpers ----------
+// t-243: a mission's evidence store is disposable once the mission itself
+// is - "evidence is not knowledge" (boss ruling). Best-effort by design: a
+// GC failure (disk error, race) must never break the status change itself,
+// so this never throws into its caller.
+const TERMINAL_STATUSES = ['done', 'failed', 'discarded'];
+function gcWorkIfTerminal(task) {
+  if (!task || !TERMINAL_STATUSES.includes(task.status)) return;
+  try { work.gcMission(task.id); } catch (e) { console.error('[work] gc failed for', task.id, e.message); }
+}
 function send(res, code, obj) {
   const body = JSON.stringify(obj, null, 1);
   // no-store on everything: agents must always see fresh state, whatever proxy sits between
@@ -197,6 +207,7 @@ const server = http.createServer(async (req, res) => {
         const r = store.updateTask({ id: task.id, agent: 'human', status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
         if (r.error) return sendPage(res, 400, 'Something went wrong', `<p>${escHtml(r.error)}</p>`);
         broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
+        gcWorkIfTerminal(r.task);
         return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
           `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
       }
@@ -378,6 +389,7 @@ const server = http.createServer(async (req, res) => {
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[b.status] || 'task.updated';
       broadcast(evt, { ...r.task, note: b.note }, { by: b.agent || 'unknown', prev_status: r.prev_status });
+      gcWorkIfTerminal(r.task);
       return send(res, 200, r);
     }
 
@@ -404,6 +416,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/knowledge') {
       const b = await readBody(req);
       if (!b.file || b.content === undefined) return send(res, 400, { error: 'file and content required' });
+      // t-243: knowledge/, recipes/ (global and entity), entities/*/PROFILE.md,
+      // and attic/ are hub-enforced now, not just charter prose - the same
+      // role-not-name pattern t-119 uses for gates. journal/ and project
+      // trees are unaffected (isProtectedCompartment says so architecturally).
+      if (knowledge.isProtectedCompartment(b.file) && !store.isLibrarian(store.load(), b.author))
+        return send(res, 403, { error: 'protected compartment: knowledge/, recipes/, entities/*/PROFILE.md, and attic/ are writable only by a librarian-capability agent or the boss - register with capabilities including "librarian" if that authority is genuinely yours, or file this as a proposal for the librarian instead' });
       const r = knowledge.writeKnowledge(b);
       broadcast('knowledge.written', { ...r, author: b.author || 'agent' });
       return send(res, 200, r);
@@ -430,6 +448,36 @@ const server = http.createServer(async (req, res) => {
           : send(res, 200, { file, content: r.buf.toString('utf8') });
       }
       return send(res, 200, { files: knowledge.listKnowledge(url.searchParams.get('dir') || '') });
+    }
+
+    // ----- work (t-243: ungitted per-mission evidence, not the brain) -----
+    // Same attachment shape as /api/knowledge (file/content/mode/encoding),
+    // scoped under a required `task` (t-<id>) instead of a free path, and
+    // NEVER protected-compartment-gated: evidence is not knowledge, so the
+    // librarian wall above does not apply here by design. Wholesale-deleted
+    // when its mission goes terminal - see the PATCH /api/tasks/:id handler.
+    if (req.method === 'POST' && p === '/api/work') {
+      const b = await readBody(req);
+      if (!b.task || !b.file || b.content === undefined) return send(res, 400, { error: 'task, file, and content required' });
+      const r = work.writeWork(b);
+      return send(res, 200, r);
+    }
+    if (req.method === 'GET' && p === '/api/work') {
+      const task = url.searchParams.get('task');
+      if (!task) return send(res, 400, { error: 'task required' });
+      const file = url.searchParams.get('file');
+      if (file) {
+        const r = work.readWorkRaw(task, file);
+        if (r === null) return send(res, 404, { error: 'not found' });
+        if (url.searchParams.get('raw') === '1') {
+          res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
+          return res.end(r.buf);
+        }
+        return r.binary
+          ? send(res, 200, { task, file, content_base64: r.buf.toString('base64') })
+          : send(res, 200, { task, file, content: r.buf.toString('utf8') });
+      }
+      return send(res, 200, { task, files: work.listWork(task) });
     }
 
     return send(res, 404, { error: 'not found' });
@@ -494,9 +542,15 @@ function mcpToolCall(name, a = {}) {
       if (r.error) throw new Error(r.error);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[a.status] || 'task.updated';
       broadcast(evt, { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
+      gcWorkIfTerminal(r.task);
       return { id: r.task.id, status: r.task.status };
     }
     case 'write_knowledge': {
+      // t-243: same protected-compartment wall as the REST route - consul is
+      // not a name-based exemption, it earns library write access the same
+      // way any other agent does, by carrying the capability.
+      if (knowledge.isProtectedCompartment(a.file) && !store.isLibrarian(s, 'consul'))
+        throw new Error('protected compartment: knowledge/, recipes/, entities/*/PROFILE.md, and attic/ are writable only by a librarian-capability agent or the boss');
       const r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message, encoding: a.encoding });
       broadcast('knowledge.written', { ...r, author: 'consul' });
       return r;
