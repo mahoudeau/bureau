@@ -1,0 +1,88 @@
+{
+ "sheet": "cast/sheet-agent-undercut-typing.jpg",
+ "background_key": [
+  255,
+  0,
+  255
+ ],
+ "key_tolerance": 170,
+ "anchor_region": [
+  24,
+  22,
+  150,
+  362
+ ],
+ "anchor_logical_height": 320,
+ "palette_size": 80,
+ "accent_saturation_min": 0.5,
+ "accent_max_area_frac": 0,
+ "regions": [
+  {
+   "name": "idle-0",
+   "x": 24,
+   "y": 22,
+   "w": 150,
+   "h": 362,
+   "group": "agent",
+   "phase": [
+    0,
+    0
+   ],
+   "_note": "The sheet's own left-edge scale-anchor figure (standing, not seated) reused as the idle pose -- honest flag carried from t-59: no sheet in the current set shows the character genuinely idle AT the desk without typing (PROMPTS.md kit item 28, 'seated idle', is still open). Same figure that anchors this manifest's pitch."
+  },
+  {
+   "name": "typing-0",
+   "x": 190,
+   "y": 22,
+   "w": 142,
+   "h": 362,
+   "group": "agent",
+   "phase": [
+    0,
+    0
+   ],
+   "_note": "Agent-alone seated typing pose (t-141 round 5, Lead ruling 'one subject per sprite'). Re-cropped from the full ~290px workstation cell to the seated agent + office chair ONLY: x cut at the desk's front edge / the agent's keyboard-resting fingertips, excluding the desk, CRT monitor, keyboard body, desk lamp and desk supplies (those are separate stage-2 sprites). y=22,h=362 kept identical to idle-0 and all typing frames so the five agent frames share one vertical origin and scale and align as an animation. The hands read as resting on an absent surface \u2014 correct for a seated typing pose with the workstation composed in at stage 2."
+  },
+  {
+   "name": "typing-1",
+   "x": 496,
+   "y": 22,
+   "w": 155,
+   "h": 362,
+   "group": "agent",
+   "phase": [
+    0,
+    0
+   ],
+   "_note": "Agent-alone seated typing pose (t-141 round 5, Lead ruling 'one subject per sprite'). Re-cropped from the full ~290px workstation cell to the seated agent + office chair ONLY: x cut at the desk's front edge / the agent's keyboard-resting fingertips, excluding the desk, CRT monitor, keyboard body, desk lamp and desk supplies (those are separate stage-2 sprites). y=22,h=362 kept identical to idle-0 and all typing frames so the five agent frames share one vertical origin and scale and align as an animation. The hands read as resting on an absent surface \u2014 correct for a seated typing pose with the workstation composed in at stage 2."
+  },
+  {
+   "name": "typing-2",
+   "x": 804,
+   "y": 22,
+   "w": 142,
+   "h": 362,
+   "group": "agent",
+   "phase": [
+    0,
+    0
+   ],
+   "_note": "Agent-alone seated typing pose (t-141 round 5, Lead ruling 'one subject per sprite'). Re-cropped from the full ~290px workstation cell to the seated agent + office chair ONLY: x cut at the desk's front edge / the agent's keyboard-resting fingertips, excluding the desk, CRT monitor, keyboard body, desk lamp and desk supplies (those are separate stage-2 sprites). y=22,h=362 kept identical to idle-0 and all typing frames so the five agent frames share one vertical origin and scale and align as an animation. The hands read as resting on an absent surface \u2014 correct for a seated typing pose with the workstation composed in at stage 2."
+  },
+  {
+   "name": "typing-3",
+   "x": 1105,
+   "y": 22,
+   "w": 149,
+   "h": 362,
+   "group": "agent",
+   "phase": [
+    0,
+    0
+   ],
+   "_note": "Agent-alone seated typing pose (t-141 round 5, Lead ruling 'one subject per sprite'). Re-cropped from the full ~290px workstation cell to the seated agent + office chair ONLY: x cut at the desk's front edge / the agent's keyboard-resting fingertips, excluding the desk, CRT monitor, keyboard body, desk lamp and desk supplies (those are separate stage-2 sprites). y=22,h=362 kept identical to idle-0 and all typing frames so the five agent frames share one vertical origin and scale and align as an animation. The hands read as resting on an absent surface \u2014 correct for a seated typing pose with the workstation composed in at stage 2."
+  }
+ ],
+ "_comment": "NATIVE-RESOLUTION RESCALE (t-141, boss send-back 2026-08-17): the prior anchor_logical_height=48 crushed the whole set to a 48px-tall system -- the character head rectified to ~8-11px vs ~100-145px in the source, so no facial feature, screen glyph, plank seam or crack could survive the ~7-10px cell pitch. That single knob was the shared root cause under every prior per-sprite send-back (smeared face, blob monitor, slab desk, flat tile). Raised uniformly to 320 across ALL FOUR manifests, so the shared scale-anchor character is 320px on every sheet (cross-sheet scale consistency preserved -- the mission's 'scale consistent across the set' bar, now at a 6.67x-larger anchor the boss's resolution ruling supersedes the literal 48). Pitch is now ~1.1-1.5 (near source-native): the head lands ~100px, matching the cited source region, and detail survives on its own. Every region's grid phase is pinned [0,0]: at near-native pitch a sub-pixel phase offset is immaterial, and pinning removes best_phase's O(36 x grid) cost so a critic re-run is seconds and byte-deterministic. The old pitch-7.4 hacks are therefore removed as obsolete: idle-0's manual phase [5,3] (a smear-avoidance offset that only mattered when features were thinner than a cell) and wall-tile's detail_dark_min_frac crack-rescue (the cracks now survive the fine pitch directly). Verified: zero key-adjacent pixels full-atlas, byte-identical double-run, warm skin on every face. Sheet path is relative to projects/bureau/references/office/ in the brain (GET /api/knowledge?file=projects/bureau/references/office/<sheet>&raw=1).",
+ "pitch": 1.0
+}
