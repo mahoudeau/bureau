@@ -56,7 +56,7 @@ brain/
 
 Verbatim meeting transcripts stay out of the repo: they are bulky, mostly noise, and other people's words. Store them elsewhere and keep a pointer; what enters `meetings/` is the digest.
 
-Binary attachments (`.png .jpg .jpeg .gif .svg .pdf`, small) are allowed as episodic-grade material: goal-bar references under `projects/<p>/references/`, review-evidence screenshots under `deliverables/`. No frontmatter, no lint; they exist to be pointed at, and anything durable they teach still gets promoted as a sourced note.
+Binary attachments (`.png .jpg .jpeg .gif .svg .pdf`, small) are allowed as episodic-grade material: goal-bar references under `projects/<p>/references/` stay in the brain (they're bar material, not evidence). Review-evidence screenshots and other work-in-progress deliverables go to `/api/work` instead (2026-08-17, bureau-internal/23 — see `docs/protocol.md`'s `/api/work` section): ungitted, per-mission, garbage-collected when the mission goes terminal, so the brain stops accumulating round-14-of-26 clutter nobody will read again. Binary attachments that DO belong in the brain (goal-bar references, anything meant to outlive its mission) carry no frontmatter, no lint; they exist to be pointed at, and anything durable they teach still gets promoted as a sourced note.
 
 ## The curation law
 
@@ -66,12 +66,14 @@ Who writes where, and who may rewrite. "The librarian" is the curation agent (in
 |---|---|---|---|
 | `journal/` | anyone | append, cheap, minimal structure | librarian consumes (digested days move to `archive/`) |
 | `meetings/`, `import/` | anyone | dump raw | librarian digests, then moves raw to `archive/` |
-| `knowledge/`, `recipes/` (global and entity) | librarian promotion or reviewed missions | structured notes, provenance mandatory | librarian; nothing deleted, retired to `attic/` |
-| `entities/<slug>/PROFILE.md` | owner and librarian | replace, review-gated | owner and librarian |
+| `knowledge/`, `recipes/` (global and entity) ⚙ | librarian promotion or reviewed missions | structured notes, provenance mandatory | librarian; nothing deleted, retired to `attic/` |
+| `entities/<slug>/PROFILE.md` ⚙ | owner and librarian | replace, review-gated | owner and librarian |
 | `projects/<slug>/STATE.md` | working agents | append debriefs | librarian may compact wholesale (original to `archive/`) |
 | `projects/<slug>/decisions.md`, `learnings.md` | working agents | append-only, dated | nobody; corrections are new entries, retirement via `attic/` |
 | `agents/<name>.md` | the agent itself and the librarian | replace | same |
-| `daily/`, `archive/`, `attic/` | librarian only | per compartment rules | librarian only |
+| `daily/`, `archive/`, `attic/` ⚙ (attic only) | librarian only | per compartment rules | librarian only |
+
+⚙ **Hub-enforced, not just convention** (2026-08-17, bureau-internal/23 — see `docs/protocol.md`'s per-compartment write permissions). `POST /api/knowledge` refuses a write into `knowledge/`, `recipes/` (global or entity), `entities/<slug>/PROFILE.md`, or `attic/` from any `author` that isn't a librarian-capability agent or `"human"` — a `403`, not a convention a builder has to remember. Every other row in this table is still convention-only: the hub does not (yet) enforce `daily/`/`archive/` as librarian-only, or `agents/<name>.md` as self-plus-librarian-only.
 
 **Write cheap, curate later** still rules: working agents are never asked to file perfectly. The journal accepts anything; the librarian's job is making it authoritative or letting it fade.
 

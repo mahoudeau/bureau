@@ -125,6 +125,20 @@ check "append state" "$(api POST /api/knowledge '{"file":"projects/demo/STATE.md
 check "read back" "$(api GET '/api/knowledge?file=agents/menace.md')" 'dummy conformance agent'
 check "git log has author" "$(api GET /api/state)" '"author": "menace"'
 
+echo "6c. protected brain compartments (t-243): librarian-only write wall, journal stays open"
+check "plain agent refused on knowledge/" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/knowledge" -H "$AUTH" -H "$JSON" -d '{"file":"knowledge/bogus.md","content":"x","author":"menace"}')" '403'
+check "refusal names the rule" "$(api POST /api/knowledge '{"file":"knowledge/bogus.md","content":"x","author":"menace"}')" 'protected compartment'
+check "refused write never lands" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/api/knowledge?file=knowledge/bogus.md" -H "$AUTH")" '404'
+check "plain agent refused on recipes/" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/knowledge" -H "$AUTH" -H "$JSON" -d '{"file":"recipes/bogus.md","content":"x","author":"menace"}')" '403'
+check "plain agent refused on entity knowledge/" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/knowledge" -H "$AUTH" -H "$JSON" -d '{"file":"entities/acme/knowledge/bogus.md","content":"x","author":"menace"}')" '403'
+check "plain agent refused on entity PROFILE.md" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/knowledge" -H "$AUTH" -H "$JSON" -d '{"file":"entities/acme/PROFILE.md","content":"x","author":"menace"}')" '403'
+check "plain agent refused on attic/" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/knowledge" -H "$AUTH" -H "$JSON" -d '{"file":"attic/bogus.md","content":"x","author":"menace"}')" '403'
+check "register a librarian-capability agent" "$(api POST /api/agents/register '{"name":"sol","kind":"cowork","capabilities":["curation","librarian"]}')" '"name": "sol"'
+check "librarian-tagged agent accepted on knowledge/" "$(api POST /api/knowledge '{"file":"knowledge/bogus.md","content":"promoted fact (source: [[journal/2026-08-17]])","author":"sol"}')" '"file": "knowledge/bogus.md"'
+check "human always accepted on protected compartments" "$(api POST /api/knowledge '{"file":"recipes/bogus.md","content":"x","author":"human"}')" '"file": "recipes/bogus.md"'
+check "journal open to all, no capability needed" "$(api POST /api/knowledge '{"file":"journal/2026-08-17.md","content":"[scope:global] [subject:conformance] plain agents can still write the journal","mode":"append","author":"menace"}')" '"file": "journal/2026-08-17.md"'
+check "project trees stay open" "$(api POST /api/knowledge '{"file":"projects/demo/STATE.md","content":"- plain agent debrief still lands","mode":"append","author":"menace"}')" '"file": "projects/demo/STATE.md"'
+
 echo "6b. projects: default name, rename moves tasks and brain, view link"
 TP=$(api POST /api/tasks '{"title":"Dust the pixel plants"}')
 check "project defaults to general" "$TP" '"project": "general"'
@@ -319,10 +333,35 @@ check "mission created over MCP" "$MC" 'Check the MCP door hinges'
 MID=$(echo "$MC" | grep -o 't-[0-9]*' | head -1)
 check "mission started over MCP" "$(mcp "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"start_mission\",\"arguments\":{\"id\":\"$MID\",\"note\":\"testing hinges\"}}}")" 'in_progress'
 check "knowledge written over MCP" "$(mcp '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"write_knowledge","arguments":{"file":"projects/general/STATE.md","content":"- MCP door checked (fake)","mode":"append","message":"general: mcp check"}}}')" 'STATE.md'
+check "MCP write_knowledge honors the same protected-compartment wall (t-243, consul is not a name exemption)" "$(mcp '{"jsonrpc":"2.0","id":71,"method":"tools/call","params":{"name":"write_knowledge","arguments":{"file":"knowledge/via-mcp.md","content":"x"}}}')" 'protected compartment'
 mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"items\":[{\"title\":\"Oil the hinges\"}]}}}" > /dev/null
 check "items filed over MCP" "$(api GET "/api/tasks/$MID")" 'Oil the hinges'
 mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"status\":\"done\",\"note\":\"hinges fine\"}}}" > /dev/null
 check "bad capability token is 404" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "${MURL%/*}/000000000000000000000000000000000000000000000000" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":9,"method":"ping"}')" '404'
+
+echo "11. work store (t-243): ungitted per-mission evidence, GC on terminal status"
+WT=$(api POST /api/tasks '{"title":"Evidence goes to the work store now","project":"ops","priority":2}')
+WTID=$(echo "$WT" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$WTID\"}" > /dev/null
+check "work write accepted, scoped under the task" "$(api POST /api/work "{\"task\":\"$WTID\",\"file\":\"round-1.md\",\"content\":\"round 1: chasing the palette\"}")" "\"task\": \"$WTID\""
+check "work read back" "$(api GET "/api/work?task=$WTID&file=round-1.md")" 'chasing the palette'
+WORK_PNG_BODY="{\"task\":\"$WTID\",\"file\":\"round-1.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\"}"
+check "work base64 attachment accepted" "$(api POST /api/work "$WORK_PNG_BODY")" '"bytes"'
+check "work raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/work?task=$WTID&file=round-1.png&raw=1" -H "$AUTH" | tr -d '\r')" 'content-type: image/png'
+check "work listing enumerates both files" "$(api GET "/api/work?task=$WTID")" 'round-1.png'
+check "work store not protected-compartment-gated (evidence is not knowledge)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/work" -H "$AUTH" -H "$JSON" -d "{\"task\":\"$WTID\",\"file\":\"round-2.md\",\"content\":\"still open to a plain agent\"}")" '200'
+check "off-whitelist extension refused, same as knowledge" "$(api POST /api/work "{\"task\":\"$WTID\",\"file\":\"tool.exe\",\"content\":\"x\"}")" 'only .md'
+check "task required" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/api/work" -H "$AUTH" -H "$JSON" -d '{"file":"x.md","content":"x"}')" '400'
+check "not-yet-terminal mission keeps its evidence" "$(api GET "/api/work?task=$WTID")" 'round-1.md'
+api PATCH "/api/tasks/$WTID" '{"agent":"menace","status":"done","note":"work store demo done"}' > /dev/null
+check "evidence gone once the mission is terminal" "$(api GET "/api/work?task=$WTID")" '"files": \[\]'
+check "reading an already garbage-collected file is a clean 404, not an error" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/api/work?task=$WTID&file=round-1.md" -H "$AUTH")" '404'
+WT2=$(api POST /api/tasks '{"title":"GC also fires from the MCP door","project":"general","priority":3}')
+WT2ID=$(echo "$WT2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$WT2ID\"}" > /dev/null
+api POST /api/work "{\"task\":\"$WT2ID\",\"file\":\"note.md\",\"content\":\"evidence for the MCP-close path\"}" > /dev/null
+mcp "{\"jsonrpc\":\"2.0\",\"id\":72,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$WT2ID\",\"status\":\"done\",\"note\":\"closed over MCP\"}}}" > /dev/null
+check "MCP update_mission also triggers GC" "$(api GET "/api/work?task=$WT2ID")" '"files": \[\]'
 
 echo
 echo "passed $PASS, failed $FAIL"

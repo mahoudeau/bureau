@@ -32,6 +32,20 @@ function safePath(rel) {
   return path.join(BRAIN_DIR, norm);
 }
 
+// t-243: which paths are the brain's protected compartments - knowledge/,
+// recipes/ (global AND entity, per brain-format.md's curation-law table),
+// entities/<slug>/PROFILE.md, and attic/. Everything else (journal/,
+// meetings/, import/, projects/*, agents/*, daily/, archive/) stays open to
+// any authenticated write, same as before this mission. The route handler
+// (server.js) checks this before calling writeKnowledge, so an unauthorized
+// write never touches disk or git at all - refused, not silently narrowed.
+function isProtectedCompartment(rel) {
+  const norm = String(rel || '').replace(/\\/g, '/').replace(/^\/+/, '');
+  return /^(knowledge|recipes|attic)(\/|$)/.test(norm)
+    || /^entities\/[^/]+\/(knowledge|recipes)(\/|$)/.test(norm)
+    || /^entities\/[^/]+\/PROFILE\.md$/.test(norm);
+}
+
 function writeKnowledge({ file, content, mode, author, message, encoding }) {
   ensureRepo();
   const abs = safePath(file);
@@ -137,4 +151,4 @@ function recentCommits(n = 20) {
   } catch { return []; }
 }
 
-module.exports = { ensureRepo, writeKnowledge, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep, BRAIN_DIR };
+module.exports = { ensureRepo, writeKnowledge, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep, isProtectedCompartment, BRAIN_DIR };
