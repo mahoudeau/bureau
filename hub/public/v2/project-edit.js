@@ -110,18 +110,41 @@
     // refresh (except mid-edit, per the coordination contract above), so
     // per-element listeners would need re-attaching after every rebuild.
     // One delegated listener on the rail survives every rebuild for free.
-    // CAPTURE phase, not bubble: board.js's own row-level click-to-filter
-    // listener is attached directly on each .v2-project-row (bubble
-    // phase), which is CLOSER to the click target than this delegated
-    // listener on the rail — in bubble order the row's own listener fires
-    // first regardless of which listener was attached first or calls
-    // stopPropagation from further out. A capture-phase listener on an
-    // ancestor always runs before ANY bubble-phase listener anywhere in
-    // the subtree, board.js's row listener included, so this reliably
-    // intercepts a field click before filter-toggling ever sees it — the
-    // same technique quick-add.js already established for an equivalent
-    // problem (intercepting board.js's own form submit ahead of its
-    // bubble-phase handler).
+    //
+    // t-133 send-back (goal t-53): editing used to start on a plain single
+    // click, capture-phase-intercepted ahead of board.js's own row-level
+    // click-to-filter listener (bubble phase, attached directly on each
+    // .v2-project-row — capture-phase always wins regardless of attach
+    // order, the same technique quick-add.js established for an
+    // equivalent problem). That worked fine back when a project row still
+    // had real, unstyled background between its fields for a plain click
+    // to land on. t-133 itself is what closed every one of those gaps
+    // (entity/capacity became padded pill chips, repo became a padded
+    // icon+link) chasing this mission's own row-density bar — between
+    // that and this file's own generous [data-field] hit-area padding
+    // (below), a project row with any realistic combination of
+    // entity+repo now has NO pixel left that belongs to no field, so a
+    // single click could never reach the row's own listener again: a
+    // real, reproducible regression (verified against unpatched main,
+    // where a plain click DID still land on bare row background), not a
+    // matter of taste.
+    //
+    // Fixed at the interaction level, per the send-back's own named
+    // options: editing now starts on a DOUBLE-click, not a single one,
+    // freeing the single click to always reach the row's filter listener
+    // untouched. This is NOT the browser's native 'dblclick' event —
+    // tried that first and it silently never fires here, because native
+    // double-click detection requires the SAME target element for both
+    // clicks, and board.js's row listener calls render() (a full
+    // innerHTML replace) on every single click including the first click
+    // of an attempted double-click, so the second click always lands on a
+    // freshly-created element the browser doesn't recognize as a repeat
+    // target. Detected manually instead — timestamp + project id + field
+    // key, immune to the element being swapped out between clicks — the
+    // same reason this file already prefers reading live state over
+    // re-parsing DOM text (currentValue's own comment).
+    var lastClick = { id: null, field: null, time: 0 };
+    var DBLCLICK_MS = 500;
     rail.addEventListener('click', function (e) {
       var field = e.target.closest('[data-field]');
       if (!field) return;
@@ -142,21 +165,37 @@
       // t-133 (goal: t-53): the repo field's non-empty VIEW state is now a
       // real navigable link + hover/focus tooltip (board.js's own
       // .v2-repo-link — icon + tooltip + click-opens-new-tab, replacing
-      // the old raw-URL text this field used to show). A bare field click
-      // must NOT hijack that click into starting an edit, or the link
-      // could never be followed. Editing an existing repo moves to the
-      // small adjacent .v2-repo-editbtn (board.js renders it inside the
-      // same [data-field="repo"] span, outside .v2-repo-link) instead —
-      // that one still matches the generic path below unmodified, since
-      // it is NOT inside .v2-repo-link. An EMPTY repo field renders no
-      // link at all (nothing to hijack), so a bare click there still
-      // starts editing exactly like every other field — this is how you
-      // add a first repo, unchanged from before this mission.
+      // the old raw-URL text this field used to show). A click landing on
+      // the link itself must never be hijacked into starting an edit —
+      // it needs to navigate on the FIRST click, not the second. Editing
+      // an existing repo moves to the small adjacent .v2-repo-editbtn
+      // (board.js renders it inside the same [data-field="repo"] span,
+      // outside .v2-repo-link) instead, which still matches the generic
+      // double-click path below unmodified since it is NOT inside
+      // .v2-repo-link. An EMPTY repo field renders no link at all
+      // (nothing to hijack), so double-clicking there still starts
+      // editing exactly like every other field — this is how you add a
+      // first repo, unchanged from before this mission.
       if (field.getAttribute('data-field') === 'repo' && e.target.closest('.v2-repo-link')) return;
-      // Not yet editing: this click means "start editing" — take it over
-      // from board.js's own row-level click-to-filter listener (bubble
-      // phase, closer to the target, would otherwise fire first and
-      // toggle the project filter instead of opening the edit UI).
+
+      var id = row.getAttribute('data-project');
+      var key = field.getAttribute('data-field');
+      var now = Date.now();
+      var isSecondClick = lastClick.id === id && lastClick.field === key && (now - lastClick.time) < DBLCLICK_MS;
+      if (!isSecondClick) {
+        // First click of a possible pair: record it and let it bubble
+        // untouched — board.js's own row listener sees a completely
+        // ordinary single click and filter-toggles exactly as it always
+        // has, whether or not a second click ever follows.
+        lastClick = { id: id, field: key, time: now };
+        return;
+      }
+      // Second click on the same field within the window: this is the
+      // double-click. Reset the tracker (so three rapid clicks don't
+      // chain into a spurious third edit-start) and take this one over
+      // from the row's filter listener the way the old single-click
+      // version used to.
+      lastClick = { id: null, field: null, time: 0 };
       e.stopPropagation();
       beginEdit(V2, row, field);
     }, true);
