@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · The Office</title>
+<!-- t-278 (goal: t-54): office v1 — mockups/office.html (the layout/charm
+     baseline) wired to the LIVE hub: /api/state for roster + board + log,
+     /api/events (SSE) for choreography. Procedural art only in v1; the
+     rectified sprite pipeline (t-141/t-143, PRs #50/#55) is a later art
+     pass that swaps drawSprite/drawWorld internals without touching the
+     event wiring. No external requests at runtime (t-54 law): the mockup's
+     Google-Fonts link is gone, monospace fallback carries the text. -->
+<style>
+  html, body { margin: 0; height: 100%; background: #14121f; overflow: hidden;
+               font-family: 'Press Start 2P', 'Courier New', monospace; }
+  #stage { position: relative; width: 100vw; height: 100vh; display: flex;
+           align-items: center; justify-content: center; }
+  #wrap { position: relative; }
+  canvas { image-rendering: pixelated; display: block; }
+  .bubble {
+    position: absolute; transform: translate(-50%, -100%);
+    background: #fffef2; color: #2b2440; border: 2px solid #2b2440;
+    border-radius: 3px; padding: 5px 7px; font-size: 9px; line-height: 1.5;
+    max-width: 220px; white-space: normal; box-shadow: 2px 2px 0 rgba(0,0,0,.35);
+    pointer-events: none; transition: opacity .3s; z-index: 3;
+  }
+  .bubble::after {
+    content: ''; position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%);
+    border: 4px solid transparent; border-top-color: #2b2440; border-bottom: 0;
+  }
+  .bubble .who { color: #7a4fd0; font-weight: bold; }
+  #hud {
+    position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 14px;
+    padding: 8px 12px; color: #cfc9ee; font-size: 10px; align-items: center;
+    text-shadow: 1px 1px 0 #000; z-index: 2;
+  }
+  #hud .logo { color: #ffd23e; font-size: 12px; }
+  #hud .st { display: inline-flex; align-items: center; gap: 5px; }
+  #hud .sq { width: 8px; height: 8px; display: inline-block; border: 1px solid #000; }
+  #hud #conn { margin-left: auto; color: #8f88b0; }
+  #hud #conn.live { color: #5ad05a; }
+  #ticker {
+    position: absolute; left: 0; right: 0; bottom: 0; padding: 8px 12px;
+    background: rgba(10, 8, 20, .85); color: #b8e6a3; font-size: 10px;
+    border-top: 2px solid #2b2440; text-shadow: 1px 1px 0 #000;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2;
+  }
+  #ticker b { color: #ffd23e; }
+  /* Token gate: same localStorage key as the dashboards, so a token
+     entered on /v2 opens the office and vice versa. */
+  #gate {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: #14121f; z-index: 10; flex-direction: column; gap: 12px; color: #cfc9ee;
+  }
+  /* The explicit display:flex above outranks the UA's [hidden]{display:none}
+     — restate it, or the gate never leaves (caught live, not in review). */
+  #gate[hidden] { display: none; }
+  #gate input { font: inherit; font-size: 12px; padding: 8px; background: #2b2440;
+    border: 2px solid #4a3f66; color: #fffef2; width: 260px; }
+  #gate button { font: inherit; font-size: 11px; padding: 8px 14px; background: #7a4fd0;
+    color: #fffef2; border: 2px solid #2b2440; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
+<div id="hud">
+  <span class="logo">BUREAU</span>
+  <span class="st"><span class="sq" style="background:#5ad05a"></span><span id="n-active">0</span> ACTIVE</span>
+  <span class="st"><span class="sq" style="background:#ffd23e"></span>Q:<span id="n-queued">0</span></span>
+  <span class="st"><span class="sq" style="background:#f0a05a"></span>REVIEW:<span id="n-review">0</span></span>
+  <span class="st"><span class="sq" style="background:#8ee08e"></span>DONE:<span id="n-done">0</span></span>
+  <span id="conn">connecting…</span>
+</div>
+<div id="ticker">▸ opening the office…</div>
+<div id="gate" hidden>
+  <div>BUREAU · staff entrance</div>
+  <input id="gate-token" type="password" placeholder="access token" autocomplete="off">
+  <button id="gate-go">Clock in</button>
+</div>
+<script>
+'use strict';
+/* ============================================================
+   Office v1 — a renderer of the hub's SSE stream (docs/office.md).
+   The hub does not know this page exists.
+   ============================================================ */
+const W = 320, H = 180, TILE = 16;
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+cv.width = W; cv.height = H;
+let SCALE = 4;
+function fit() {
+  SCALE = Math.max(2, Math.floor(Math.min(innerWidth / W, innerHeight / H)));
+  cv.style.width = W * SCALE + 'px'; cv.style.height = H * SCALE + 'px';
+}
+fit(); addEventListener('resize', fit);
+
+// ---------- palette (mockup verbatim) ----------
+const P = {
+  night: '#14121f', wallTop: '#4a3f66', wall: '#6b5a8e', wallShade: '#584a78',
+  floorA: '#c9a06b', floorB: '#bd9260', floorLine: '#a87f52',
+  glass: '#9fd7e8', frame: '#3a3153',
+  desk: '#8a5a33', deskTop: '#a06c3f', deskHi: '#b98049',
+  screenOn: '#8ef0c0', screenOff: '#3d3854', screenGlow: '#c4ffe2',
+  chair: '#41395c',
+  board: '#f4f2e6', boardFrame: '#8a5a33',
+  ink: '#2b2440', white: '#fffef2',
+  plant: '#4f9e4f', plantDark: '#3c7c3c', pot: '#b06a3b',
+  coffee: '#d8d4e8', coffeeDark: '#8f88b0',
+  shelf: '#7d5230', shelfDark: '#65401f', bookA: '#d05a5a', bookB: '#5a7ad0', bookC: '#5ad05a', bookD: '#ffd23e',
+  cardQ: '#ffd23e', cardP: '#7ec4f0', cardR: '#f0a05a', cardD: '#8ee08e', cardF: '#d05a5a',
+  doorMat: '#d05a5a',
+};
+function px(x, y, w, h, col) { ctx.fillStyle = col; ctx.fillRect(x | 0, y | 0, w, h); }
+
+// ---------- landmarks (choreography destinations) ----------
+const SPOT = {
+  door:   { x: 8,   y: 172 },  // front entrance, bottom-left edge
+  board:  { x: 52,  y: 42 },   // under the mission whiteboard
+  shelf:  { x: 28,  y: 86 },   // the BRAIN bookshelf
+  coffee: { x: 26,  y: 160 },  // coffee corner
+  bossdoor:{ x: 218, y: 142 }, // outside the boss's door mat
+  meet:   { x: 252, y: 60 },   // conference table
+};
+const ROOMS = {
+  confer: { x: 224, y: 32, w: 96, h: 64 },
+  office: { x: 232, y: 112, w: 88, h: 68 },
+};
+
+// ---------- desks: dynamic, up to 6, assigned from the live roster ----------
+const DESK_SLOTS = [
+  { x: 60, y: 76 }, { x: 116, y: 76 }, { x: 172, y: 76 },
+  { x: 60, y: 124 }, { x: 116, y: 124 }, { x: 172, y: 124 },
+];
+
+// ---------- live state ----------
+let token = null;
+let AGENTS = [];            // { name, kind, state, activity, colors, desk, pos, target, walking, carry, queue, busy, awayTimer }
+let boardCounts = { queued: 0, working: 0, review: 0, done: 0 };
+let reviewCount = 0, doneCount = 0;
+const bubbles = new Map();
+
+// Deterministic palette swap per agent name (one shared body, docs/office.md v1 punt).
+const WARDROBE = [
+  { hair: '#3a3153', skin: '#f0c8a0', shirt: '#5a7ad0', shirtHi: '#7e9ae6', pants: '#2b2440' },
+  { hair: '#d05a2a', skin: '#e8b088', shirt: '#f0a05a', shirtHi: '#f6bc82', pants: '#41395c' },
+  { hair: '#2b2440', skin: '#c89264', shirt: '#5ad07a', shirtHi: '#84e0a0', pants: '#2b2440' },
+  { hair: '#6b4a2a', skin: '#f0c8a0', shirt: '#d05a5a', shirtHi: '#e07a7a', pants: '#3a3153' },
+  { hair: '#e8d06a', skin: '#e8b088', shirt: '#7a4fd0', shirtHi: '#9a74e0', pants: '#2b2440' },
+  { hair: '#4a4a4a', skin: '#c89264', shirt: '#ffd23e', shirtHi: '#ffe27e', pants: '#41395c' },
+];
+function hashName(s) { let h = 0; for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0; return h; }
+
+function isVisitor(a) { return a.kind === 'dummy' || a.kind === 'demo' || a.kind === 'other'; }
+function liveness(a) {
+  const mins = (Date.now() - new Date(a.last_seen)) / 60000;
+  return mins < 5 ? 'active' : mins < 60 ? 'idle' : 'offline';
+}
+
+// ---------- roster sync (from /api/state; identity-stable across refreshes) ----------
+function syncRoster(agents) {
+  const team = agents.filter(a => !isVisitor(a));
+  // Desk priority: most recently seen first; stable for existing occupants.
+  team.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+  const seated = team.slice(0, DESK_SLOTS.length);
+  seated.forEach((a, i) => {
+    let ag = AGENTS.find(x => x.name === a.name);
+    const desk = DESK_SLOTS[i];
+    if (!ag) {
+      ag = {
+        name: a.name, kind: a.kind,
+        colors: WARDROBE[hashName(a.name) % WARDROBE.length],
+        desk, pos: { x: SPOT.door.x, y: SPOT.door.y },
+        target: null, walking: false, carry: null,
+        queue: [], busy: false, awayTimer: 0,
+      };
+      AGENTS.push(ag);
+      // walk in through the front door to the desk (register choreography)
+      enqueue(ag, [{ walk: deskSeat(desk) }]);
+    }
+    ag.desk = desk;
+    ag.state = liveness(a);
+    ag.activity = a.activity || '';
+  });
+  // Agents that lost their desk (fell off the roster cap) leave the floor.
+  AGENTS = AGENTS.filter(ag => {
+    const still = seated.find(a => a.name === ag.name);
+    if (!still) { const b = bubbles.get(ag.name); if (b) b.el.remove(); }
+    return !!still;
+  });
+  document.getElementById('n-active').textContent = AGENTS.filter(a => a.state === 'active').length;
+}
+function deskSeat(d) { return { x: d.x + 20, y: d.y + 22 }; }
+
+function syncBoard(tasks) {
+  const c = { queued: 0, working: 0, review: 0, done: 0 };
+  for (const t of tasks) {
+    if (t.status === 'queued') c.queued++;
+    else if (t.status === 'claimed' || t.status === 'in_progress') c.working++;
+    else if (t.status === 'review') c.review++;
+    else if (t.status === 'done') c.done++;
+  }
+  boardCounts = c; reviewCount = c.review;
+  document.getElementById('n-queued').textContent = c.queued;
+  document.getElementById('n-review').textContent = c.review;
+  document.getElementById('n-done').textContent = c.done;
+}
+
+// ---------- per-sprite action queues (bursty events become scenes) ----------
+function enqueue(ag, steps) { ag.queue.push(...steps); }
+function stepQueue(ag, t) {
+  if (ag.walking || ag.busy) return;
+  const step = ag.queue.shift();
+  if (!step) return;
+  if (step.walk) { walkTo(ag, step.walk.x, step.walk.y, step.speed); return; }
+  if (step.say) { say(ag, step.say, step.ms || 4200); return; }
+  if (step.carry !== undefined) { ag.carry = step.carry; return; }
+  if (step.wait) { ag.busy = true; setTimeout(() => { ag.busy = false; }, step.wait); return; }
+  if (step.fn) { step.fn(); return; }
+}
+function walkTo(a, tx, ty, speed) {
+  a.target = { x: tx, y: ty }; a.walking = true; a.speed = speed || 0.045;
+}
+function stepAgents(dt, t) {
+  for (const a of AGENTS) {
+    stepQueue(a, t);
+    if (a.target) {
+      const dx = a.target.x - a.pos.x, dy = a.target.y - a.pos.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 1.5) { a.pos = { ...a.target }; a.target = null; a.walking = false; }
+      else { a.pos.x += (dx / dist) * a.speed * dt; a.pos.y += (dy / dist) * a.speed * dt; }
+      continue;
+    }
+    // Idle wandering: an idle agent occasionally fetches coffee (docs/office.md).
+    if (!a.queue.length && !a.busy) {
+      a.awayTimer -= dt;
+      if (a.state === 'idle' && a.awayTimer <= 0) {
+        a.awayTimer = 45000 + Math.random() * 60000;
+        enqueue(a, [{ walk: SPOT.coffee, speed: 0.03 }, { wait: 6000 }, { walk: deskSeat(a.desk) }]);
+      }
+      if (a.state !== 'idle') a.awayTimer = 20000;
+    }
+  }
+}
+
+// ---------- bubbles & ticker ----------
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function say(agent, text, ms) {
+  let b = bubbles.get(agent.name);
+  if (!b) {
+    const el = document.createElement('div'); el.className = 'bubble';
+    document.getElementById('wrap').appendChild(el);
+    b = { el }; bubbles.set(agent.name, b);
+  }
+  b.el.innerHTML = `<span class="who">${esc(agent.name)}</span> ${text}`;
+  b.el.style.opacity = 1; b.until = performance.now() + (ms || 4200);
+}
+function tick(msg) { document.getElementById('ticker').innerHTML = '▸ ' + msg; }
+function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+// ---------- choreography: hub events → scenes ----------
+function agentByName(name) { return AGENTS.find(a => a.name === name); }
+function onEvent(type, d) {
+  const who = d.assignee || d.by || d.author || d.from || d.name;
+  const ag = who ? agentByName(who) : null;
+  switch (type) {
+    case 'agent.registered':
+      tick(`🚪 <b>${esc(d.name)}</b> clocked in`);
+      refreshState(); // may seat a new agent
+      break;
+    case 'agent.heartbeat':
+      if (ag) { ag.state = 'active'; ag.activity = d.activity || ag.activity; }
+      break;
+    case 'agent.removed':
+      tick(`🚪 <b>${esc(d.name)}</b> left the building`);
+      refreshState();
+      break;
+    case 'task.created':
+      tick(`📌 new mission <b>${esc(d.id)}</b> · ${esc(clip(d.title, 60))}`);
+      refreshState();
+      break;
+    case 'task.claimed':
+      tick(`🏃 <b>${esc(who)}</b> claimed <b>${esc(d.id)}</b> · ${esc(clip(d.title, 50))}`);
+      if (ag) enqueue(ag, [
+        { walk: SPOT.board }, { carry: P.cardP },
+        { say: `claimed <b>${esc(d.id)}</b>`, ms: 3000 },
+        { walk: deskSeat(ag.desk) }, { carry: null },
+      ]);
+      refreshState();
+      break;
+    case 'task.review':
+      tick(`👀 <b>${esc(who)}</b> parked <b>${esc(d.id)}</b> at the boss door`);
+      if (ag) enqueue(ag, [
+        { carry: P.cardR }, { walk: SPOT.bossdoor },
+        { say: `<b>${esc(d.id)}</b> ready for review`, ms: 3500 },
+        { wait: 1200 }, { carry: null }, { walk: deskSeat(ag.desk) },
+      ]);
+      refreshState();
+      break;
+    case 'task.done':
+      doneCount++;
+      tick(`✅ <b>${esc(d.id)}</b> shipped${who ? ` · <b>${esc(who)}</b>` : ''}`);
+      if (ag) enqueue(ag, [
+        { carry: P.cardD }, { walk: SPOT.board },
+        { say: `<b>${esc(d.id)}</b> done ✓`, ms: 3000 },
+        { carry: null }, { walk: deskSeat(ag.desk) },
+      ]);
+      refreshState();
+      break;
+    case 'task.failed':
+      tick(`🔥 <b>${esc(d.id)}</b> failed`);
+      flashAlarm();
+      refreshState();
+      break;
+    case 'task.requeued':
+    case 'task.blocked':
+      tick(`↩️ <b>${esc(d.id)}</b> ${type === 'task.blocked' ? 'blocked' : 'back on the board'}${d.note ? ' · ' + esc(clip(d.note, 50)) : ''}`);
+      refreshState();
+      break;
+    case 'task.updated':
+      if (d.note) {
+        tick(`✏️ <b>${esc(who)}</b> · ${esc(d.id)}: ${esc(clip(d.note, 60))}`);
+        if (ag) enqueue(ag, [{ say: esc(clip(d.note, 60)), ms: 4200 }]);
+      }
+      break;
+    case 'knowledge.written':
+      tick(`🧠 <b>${esc(d.author)}</b> filed ${esc(clip(d.file, 50))}`);
+      if (ag) enqueue(ag, [
+        { walk: SPOT.shelf },
+        { say: `filing ${esc(clip(d.file, 34))}`, ms: 3000 },
+        { walk: deskSeat(ag.desk) },
+      ]);
+      break;
+    case 'message.posted': {
+      tick(`✉️ <b>${esc(d.from)}</b> → <b>${esc(d.to)}</b>${d.body ? ' · ' + esc(clip(d.body, 50)) : ''}`);
+      const rcpt = agentByName(d.to);
+      if (ag && rcpt) enqueue(ag, [
+        { walk: { x: rcpt.desk.x + 44, y: rcpt.desk.y + 22 } },
+        { say: esc(clip(d.body, 60)), ms: 4200 },
+        { walk: deskSeat(ag.desk) },
+      ]);
+      else if (ag) enqueue(ag, [{ say: `→ ${esc(d.to)}: ${esc(clip(d.body, 44))}`, ms: 4200 }]);
+      break;
+    }
+  }
+}
+let alarmUntil = 0;
+function flashAlarm() { alarmUntil = performance.now() + 2400; }
+
+// ---------- world drawing (mockup, board counts made live) ----------
+function drawWorld(t) {
+  for (let ty = 2; ty < 12; ty++)
+    for (let tx = 0; tx < 20; tx++) {
+      px(tx * TILE, ty * TILE, TILE, TILE, (tx + ty) % 2 ? P.floorA : P.floorB);
+      px(tx * TILE, ty * TILE + TILE - 1, TILE, 1, P.floorLine);
+    }
+  px(0, 0, W, 26, P.wall); px(0, 0, W, 8, P.wallTop); px(0, 26, W, 6, P.wallShade);
+
+  for (const wx of [116, 152, 188]) {
+    px(wx, 4, 26, 20, P.frame);
+    px(wx + 2, 6, 22, 16, '#1b2440');
+    px(wx + 4, 8, 1, 1, '#fff'); px(wx + 12, 10, 1, 1, '#fff'); px(wx + 19, 7, 1, 1, '#fff');
+    px(wx + 3, 15, 4, 7, '#2b3a63'); px(wx + 9, 12, 5, 10, '#2b3a63'); px(wx + 16, 14, 4, 8, '#2b3a63');
+    px(wx + 10, 14, 1, 1, '#ffd23e'); px(wx + 12, 16, 1, 1, '#ffd23e'); px(wx + 4, 17, 1, 1, '#ffd23e');
+  }
+
+  // Mission board: card stacks are the LIVE queue counts (capped at 5 shown).
+  px(8, 2, 88, 26, P.boardFrame);
+  px(10, 4, 84, 22, P.board);
+  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText('MISSIONS', 13, 10);
+  const cols = [[P.cardQ, boardCounts.queued], [P.cardP, boardCounts.working], [P.cardR, boardCounts.review], [P.cardD, Math.min(boardCounts.done, 99)]];
+  cols.forEach(([col, n], i) => {
+    for (let k = 0; k < Math.min(n, 5); k++) px(14 + i * 20, 12 + k * 4, 14, 3, col);
+    if (n > 5) { ctx.fillStyle = P.ink; ctx.fillText('+' + (n - 5), 14 + i * 20, 26); }
+  });
+
+  // BRAIN shelf
+  px(8, 40, 40, 34, P.shelfDark); px(10, 42, 36, 30, P.shelf);
+  for (let row = 0; row < 3; row++) {
+    px(10, 50 + row * 10, 36, 2, P.shelfDark);
+    [P.bookA, P.bookB, P.bookD, P.bookC, P.bookB, P.bookA].forEach((b, i) => px(12 + i * 5, 44 + row * 10, 3, 6, b));
+  }
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('BRAIN', 15, 80);
+
+  // coffee corner + plant
+  px(6, 148, 22, 26, P.coffeeDark); px(8, 150, 18, 12, P.coffee);
+  px(14, 154, 6, 5, '#5a3a22'); px(15, 160, 4, 8, '#3a3153');
+  px(34, 156, 10, 8, P.pot);
+  px(36, 144, 6, 12, P.plant); px(33, 148, 5, 7, P.plantDark); px(41, 147, 5, 8, P.plantDark);
+
+  for (const a of AGENTS) drawDesk(a, t);
+  // Empty desk slots render furniture too (an office has desks even when nobody sits there).
+  DESK_SLOTS.forEach(d => { if (!AGENTS.find(a => a.desk === d)) drawDeskFurniture(d, false, t, ''); });
+
+  // conference room
+  const c = ROOMS.confer;
+  px(c.x, c.y, 4, c.h, P.wallShade); px(c.x, c.y + c.h - 4, c.w, 4, P.wallShade);
+  px(c.x, c.y + c.h - 4, 24, 4, P.floorA);
+  px(c.x + 26, c.y + 20, 44, 20, P.deskTop); px(c.x + 26, c.y + 36, 44, 4, P.desk);
+  for (const cx of [c.x + 30, c.x + 46, c.x + 62]) { px(cx, c.y + 10, 8, 6, P.chair); px(cx, c.y + 44, 8, 6, P.chair); }
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('MEET', c.x + 38, c.y + 32);
+
+  // the boss's office; review cards stack at the door (live count, capped 4)
+  const o = ROOMS.office;
+  px(o.x, o.y, 4, o.h, P.wallShade); px(o.x, o.y, o.w, 4, P.wallShade);
+  px(o.x, o.y + 34, 4, 22, P.floorA);
+  px(o.x - 10, o.y + 36, 10, 18, P.doorMat); px(o.x - 8, o.y + 38, 6, 14, '#e07a7a');
+  px(o.x + 26, o.y + 22, 46, 16, P.deskTop); px(o.x + 26, o.y + 34, 46, 4, P.desk);
+  px(o.x + 40, o.y + 12, 12, 8, P.chair);
+  ctx.fillStyle = P.white; ctx.font = '5px monospace'; ctx.fillText('BOSS', o.x + 26, o.y + 48);
+  px(o.x + 66, o.y + 16, 4, 5, P.cardQ);
+  const bounce = Math.floor(Math.sin(t / 250) * 2);
+  for (let k = 0; k < Math.min(reviewCount, 4); k++) {
+    px(o.x - 8 - k * 3, o.y + 24 + bounce + k, 12, 9, P.cardR);
+    px(o.x - 6 - k * 3, o.y + 26 + bounce + k, 8, 1, P.ink);
+  }
+  if (reviewCount > 4) { ctx.fillStyle = P.white; ctx.fillText('+' + (reviewCount - 4), o.x - 20, o.y + 22); }
+
+  // failure alarm wash
+  if (t < alarmUntil && Math.floor(t / 200) % 2) {
+    ctx.fillStyle = 'rgba(208,90,90,.12)'; ctx.fillRect(0, 0, W, H);
+  }
+}
+function drawDesk(a, t) {
+  drawDeskFurniture(a.desk, a.state !== 'offline', t, a.name);
+}
+function drawDeskFurniture(d, on, t, name) {
+  px(d.x, d.y, 40, 14, P.deskTop); px(d.x, d.y + 10, 40, 4, P.desk); px(d.x, d.y, 40, 2, P.deskHi);
+  px(d.x + 14, d.y - 10, 14, 10, P.frame);
+  px(d.x + 15, d.y - 9, 12, 8, on ? P.screenOn : P.screenOff);
+  if (on && Math.floor(t / 400) % 2) px(d.x + 16, d.y - 8 + (Math.floor(t / 200) % 3) * 2, 8, 1, P.screenGlow);
+  px(d.x + 19, d.y - 1, 4, 1, P.frame);
+  ctx.fillStyle = P.ink; ctx.font = '5px monospace'; ctx.fillText(String(name).slice(0, 7).toUpperCase(), d.x + 2, d.y + 8);
+}
+function drawSprite(a, t) {
+  if (a.state === 'offline') return; // empty desk, chair pushed in
+  const { x, y } = a.pos;
+  const f = a.walking ? Math.floor(t / 140) % 2 : 0;
+  const bob = a.walking ? 0 : (Math.floor(t / 500) % 2 ? 0 : -1);
+  const c = a.colors;
+  px(x - 5, y + 13, 10, 2, 'rgba(0,0,0,.25)');
+  px(x - 4, y + 8, 3, 5 + (f ? 1 : 0), c.pants); px(x + 1, y + 8, 3, 6 - (f ? 1 : 0), c.pants);
+  px(x - 5, y + bob, 10, 9, c.shirt); px(x - 5, y + bob, 10, 2, c.shirtHi);
+  px(x - 7, y + 1 + bob, 2, 6, c.shirt); px(x + 5, y + 1 + bob, 2, 6, c.shirt);
+  px(x - 4, y - 8 + bob, 8, 8, c.skin);
+  px(x - 4, y - 9 + bob, 8, 3, c.hair); px(x - 5, y - 8 + bob, 2, 4, c.hair); px(x + 3, y - 8 + bob, 2, 4, c.hair);
+  if (Math.floor(t / 1700) % 5 !== 4) { px(x - 2, y - 4 + bob, 1, 1, P.ink); px(x + 1, y - 4 + bob, 1, 1, P.ink); }
+  const sc = a.state === 'active' ? '#5ad05a' : a.state === 'idle' ? '#ffd23e' : '#6b6580';
+  px(x - 1, y - 13 + bob + Math.floor(Math.sin(t / 300 + x) * 1), 3, 3, sc);
+  if (a.carry) px(x + 6, y + 2 + bob, 8, 6, a.carry);
+}
+
+// ---------- live wiring ----------
+function api(path) {
+  return fetch(path, { headers: { Authorization: 'Bearer ' + token } }).then(r => {
+    if (r.status === 401) { localStorage.removeItem('bureau_token'); location.reload(); throw new Error('401'); }
+    return r.json();
+  });
+}
+let refreshTimer = null;
+function refreshState() {
+  // Coalesce bursts: one refresh per 2s window.
+  if (refreshTimer) return;
+  refreshTimer = setTimeout(() => { refreshTimer = null; }, 2000);
+  api('/api/state').then(s => {
+    syncRoster(s.agents || []);
+    syncBoard(s.tasks || []);
+  }).catch(() => {});
+}
+function connectSSE() {
+  const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+  const conn = document.getElementById('conn');
+  es.onopen = () => { conn.textContent = '● live'; conn.classList.add('live'); };
+  es.onerror = () => { conn.textContent = 'stream lost · retrying'; conn.classList.remove('live'); };
+  ['agent.registered', 'agent.heartbeat', 'agent.removed',
+   'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
+   'task.review', 'task.blocked', 'task.requeued',
+   'message.posted', 'knowledge.written'].forEach(type => {
+    es.addEventListener(type, ev => {
+      let d = {}; try { d = JSON.parse(ev.data); } catch (_) {}
+      try { onEvent(type, d); } catch (_) {}
+    });
+  });
+}
+
+// ---------- boot & token gate ----------
+function boot() {
+  document.getElementById('gate').hidden = true;
+  api('/api/state').then(s => {
+    syncRoster(s.agents || []);
+    syncBoard(s.tasks || []);
+    // Seat everyone instantly on first load (no walk-in replay for existing staff).
+    for (const a of AGENTS) { a.queue = []; a.pos = deskSeat(a.desk); }
+    const lastLog = (s.log || [])[s.log.length - 1];
+    tick(lastLog ? `${esc(lastLog.type)} · ${esc(clip(lastLog.data && (lastLog.data.title || lastLog.data.note || lastLog.data.file || lastLog.data.name) || '', 60))}` : 'the office is open');
+    connectSSE();
+    setInterval(refreshState, 60000); // drift guard: reconcile with truth every minute
+  }).catch(() => tick('could not reach the hub'));
+}
+(function gate() {
+  token = localStorage.getItem('bureau_token');
+  if (token) return boot();
+  const g = document.getElementById('gate');
+  g.hidden = false;
+  document.getElementById('gate-go').addEventListener('click', () => {
+    const v = document.getElementById('gate-token').value.trim();
+    if (!v) return;
+    localStorage.setItem('bureau_token', v);
+    token = v; boot();
+  });
+  document.getElementById('gate-token').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('gate-go').click();
+  });
+})();
+
+// ---------- main loop ----------
+let last = performance.now();
+function frame(t) {
+  const dt = Math.min(50, t - last); last = t;
+  stepAgents(dt, t);
+  ctx.clearRect(0, 0, W, H);
+  px(0, 0, W, H, P.night);
+  drawWorld(t);
+  [...AGENTS].sort((a, b) => a.pos.y - b.pos.y).forEach(a => drawSprite(a, t));
+  const rect = cv.getBoundingClientRect(), wrap = document.getElementById('wrap');
+  wrap.style.width = rect.width + 'px'; wrap.style.height = rect.height + 'px';
+  for (const a of AGENTS) {
+    const b = bubbles.get(a.name);
+    if (!b) continue;
+    if (b.until && t > b.until) { b.el.style.opacity = 0; continue; }
+    b.el.style.left = (a.pos.x * SCALE) + 'px';
+    b.el.style.top = ((a.pos.y - 16) * SCALE) + 'px';
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

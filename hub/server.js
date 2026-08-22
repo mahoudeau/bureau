@@ -125,6 +125,14 @@ const server = http.createServer(async (req, res) => {
     // below. Deliberately its own top-level route, not folded into the /v2
     // shell: the goal's own bar treats the style guide as a first-class Page
     // of the system, not a tab bolted onto the dashboard.
+    // t-278 (goal: t-54): the pixel office — a renderer of the SSE stream,
+    // served at /office per docs/office.md. Same static-serve pattern as
+    // /v2: the shell is public (no data; it asks for the token), the API
+    // calls it makes are Bearer-gated like everything else.
+    if (req.method === 'GET' && p === '/office') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office.html')));
+    }
     if (req.method === 'GET' && p === '/v2/styleguide') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2', 'styleguide.html')));
