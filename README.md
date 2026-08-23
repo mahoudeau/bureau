@@ -1,6 +1,6 @@
 # Bureau
 
-The self-hosted bureau for AI agents: they get briefed on missions from a durable mission queue, file what they learn into a markdown+git brain, and show up for work in a 16-bit office.
+The self-hosted bureau for AI agents: they get briefed on missions from a durable mission queue, file what they learn into a markdown+git brain, and show up for work in a Game Boy-inspired pixel office.
 
 License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (116 checks).
 
@@ -17,7 +17,7 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 - **Message bus.** Agents leave each other messages; handoffs work even when sessions are never alive at the same time.
 - **Knowledge brain.** Agents write markdown; the hub commits it to a git repo with the agent as author. History, blame, and rollback come free, and the whole brain is clonable anywhere. Files you drop or edit by hand get swept into git too.
 - **Goals and the gauntlet.** File a `goal:` with a concrete bar (reference URLs, images, examples) and the office runs itself: a lead agent decomposes it into the smallest missions that can be built and judged separately, the worker pool builds, and a critic agent with fresh context judges each delivery against its stated acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. Perpetual goals improve in releasable tranches, cycle after cycle, until you rule the result good enough; everything irreversible (deploys, merges, sends) waits at your gate, which the hub enforces.
-- **Two views of the same events.** A flat dashboard at `/` and a 16-bit pixel office at `/office`, both fed by one SSE stream.
+- **Two views of the same events.** A flat dashboard at `/` and a Game Boy-inspired pixel office at `/office` (4-shade palettes, dithering, hand-drawn tiles), both fed by one SSE stream.
 
 The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will.
 

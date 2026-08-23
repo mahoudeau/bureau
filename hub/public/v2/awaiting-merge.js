@@ -194,57 +194,53 @@
       }).join('') + '</div>';
     }
 
-    function fetchPrState(pr, allowNetwork) {
-      var key = pr.owner + '/' + pr.repo + '#' + pr.number;
-      var known = prState[key];
-      // Confirmed closed is forever; confirmed open is fresh enough within
-      // its TTL. Either way: answer from memory, no network.
-      if (known && (known.state === 'closed' || (known.state === 'open' && Date.now() - known.ts < OPEN_TTL))) {
-        return Promise.resolve(known.state);
-      }
-      // Over this render's fetch budget: answer from memory now, resolve on
-      // a later render (t-200 — never spend the whole hourly API allowance
-      // in one pass over the mission history).
-      if (allowNetwork === false) {
-        return Promise.resolve((known && known.state) || 'unconfirmed');
-      }
-      if (inflight[key]) return inflight[key]; // a burst of renders shares one request
-      // Inside a rate-limit cooldown: don't spend a request that will 403;
-      // answer with last known (or unconfirmed) and let a later render retry.
-      if (Date.now() < rateLimitedUntil) {
-        return Promise.resolve((prState[key] && prState[key].state) || 'unconfirmed');
-      }
-      var url = 'https://api.github.com/repos/' + pr.owner + '/' + pr.repo + '/pulls/' + pr.number;
+    // t-200 round 2 (pair mode, 2026-08-21): the per-PR ticker was correct
+    // but arithmetically too slow to warm up — ~30 merged-history PRs at
+    // one request/minute is half an hour of "unconfirmed" ghost rows,
+    // which is the original complaint intact. One LIST call per repo
+    // (`pulls?state=open&per_page=100`) returns every open PR at once, so
+    // a single request resolves the entire history: candidates present in
+    // the list are confirmed open, candidates absent are confirmed closed
+    // (permanent, cached). Absence implies closed ONLY when the list is
+    // complete — a paginated response (Link: rel="next", >100 open PRs)
+    // marks opens but never infers a close from absence. The boss law is
+    // unchanged: a failed or rate-limited fetch changes nothing at all.
+    function fetchRepoStates(owner, repo, candidateKeys) {
+      var repoKey = owner + '/' + repo;
+      if (inflight[repoKey]) return inflight[repoKey];
+      if (Date.now() < rateLimitedUntil) return Promise.resolve(false);
+      var url = 'https://api.github.com/repos/' + owner + '/' + repo + '/pulls?state=open&per_page=100';
       var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
       var timeout = controller ? setTimeout(function () { controller.abort(); }, 8000) : null;
-      var lastKnownOr = function (fallback) {
-        // The boss law in one line: a failed check NEVER downgrades or
-        // removes what we already knew; it only fills a void.
-        return (prState[key] && prState[key].state) || fallback;
-      };
-      inflight[key] = fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal: controller ? controller.signal : undefined })
+      inflight[repoKey] = fetch(url, { headers: { Accept: 'application/vnd.github+json' }, signal: controller ? controller.signal : undefined })
         .then(function (r) {
           if (timeout) clearTimeout(timeout);
           if (!r.ok) {
             if (r.status === 403 || r.status === 429) rateLimitedUntil = Date.now() + 600000; // 10 min global pause
-            return lastKnownOr('unconfirmed'); // rate limit or any non-200: keep last known
+            return false; // keep every last-known state untouched
           }
-          return r.json().then(function (data) {
-            var state = data && typeof data === 'object' && data.state ? data.state : null;
-            if (state === 'open' || state === 'closed') {
-              prState[key] = { state: state, ts: Date.now() }; // only genuine answers are ever recorded
-              if (state === 'closed') rememberClosed(key);     // permanent fact, survives reloads
-              return state;
-            }
-            return lastKnownOr('unconfirmed');
+          var complete = !/rel="next"/.test(r.headers.get('Link') || '');
+          return r.json().then(function (list) {
+            if (!Array.isArray(list)) return false;
+            var openSet = {};
+            list.forEach(function (pr) { if (pr && pr.number) openSet[repoKey + '#' + pr.number] = true; });
+            candidateKeys.forEach(function (key) {
+              if (openSet[key]) {
+                prState[key] = { state: 'open', ts: Date.now() };
+              } else if (complete) {
+                prState[key] = { state: 'closed', ts: Date.now() };
+                rememberClosed(key); // permanent fact, survives reloads
+              }
+            });
+            return true;
           });
         })
         .catch(function () {
           if (timeout) clearTimeout(timeout);
-          return lastKnownOr('unconfirmed'); // network/CORS/abort: keep last known
+          return false; // network/CORS/abort: keep last known
         })
-        .then(function (state) { delete inflight[key]; return state; });
-      return inflight[key];
+        .then(function (ok) { delete inflight[repoKey]; return ok; });
+      return inflight[repoKey];
     }
 
     // t-240: a Desk-grammar row — one dense line (PR link + ellipsized
@@ -343,34 +339,36 @@
         : '<div class="v2-empty">Nothing ready to merge.</div>'));
     }
 
-    // The metered ticker: once a minute, refresh exactly ONE PR's state —
-    // unknowns first (oldest mission first), then the stalest confirmed-open
-    // beyond its TTL. Steady state (a handful of open PRs, everything else
-    // in the permanent closed-cache) means each open PR refreshes every few
-    // minutes while total spend stays at most 60/h by construction.
+    // The metered ticker, round 2: once a minute, refresh ONE REPO's whole
+    // open-PR set (in practice there is exactly one repo, so every candidate
+    // resolves on the first tick — merged history included). Spend is at
+    // most one request per minute per construction, same ceiling as before,
+    // but warm-up went from ~30 minutes to ~2 seconds.
     function tickFetch() {
       if (Date.now() < rateLimitedUntil) return;
       var tasks = (V2.state && V2.state.tasks) || [];
-      var pick = null, pickTs = Infinity, pickUnknown = false;
+      // Group non-closed candidates per repo; a repo needs a tick when any
+      // of its candidates is unknown or its confirmed-opens have gone stale.
+      var byRepo = {};
       tasks.forEach(function (t) {
         if (isAbandoned(t)) return;
         var pr = prLinkFor(t);
         if (!pr) return;
         var key = pr.owner + '/' + pr.repo + '#' + pr.number;
-        if (inflight[key]) return;
         var known = prState[key];
         if (known && known.state === 'closed') return;
-        var unknown = !known || known.state === 'unconfirmed';
-        var stale = known && known.state === 'open' && Date.now() - known.ts >= OPEN_TTL;
-        if (!unknown && !stale) return;
-        // unknowns beat stale-opens; within a class, oldest check first
-        var ts = known ? known.ts : 0;
-        if ((unknown && !pickUnknown) || ((unknown === pickUnknown) && ts < pickTs)) {
-          pick = pr; pickTs = ts; pickUnknown = unknown;
-        }
+        var repoKey = pr.owner + '/' + pr.repo;
+        var g = byRepo[repoKey] = byRepo[repoKey] || { owner: pr.owner, repo: pr.repo, keys: [], due: false };
+        g.keys.push(key);
+        if (!known || known.state === 'unconfirmed' || Date.now() - known.ts >= OPEN_TTL) g.due = true;
+      });
+      var pick = null;
+      Object.keys(byRepo).forEach(function (rk) {
+        var g = byRepo[rk];
+        if (g.due && !inflight[rk] && (!pick || g.keys.length > pick.keys.length)) pick = g;
       });
       if (!pick) return;
-      fetchPrState(pick, true).then(function () { requestRender(); });
+      fetchRepoStates(pick.owner, pick.repo, pick.keys).then(function () { requestRender(); });
     }
     setInterval(tickFetch, 60000);
     setTimeout(tickFetch, 1500); // first tick shortly after load

@@ -334,12 +334,12 @@
      shadow tokens.css's real dark values with this file's old hardcoded
      ones, defeating the alias. */
   @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]):not([data-theme="retro"]) { color-scheme: dark; }
+    :root:not([data-theme="light"]):not([data-theme^="gb-"]) { color-scheme: dark; }
   }
   :root[data-theme="light"] { color-scheme: light; }
   :root[data-theme="dark"] { color-scheme: dark; }
-  /* t-266: retro is a light-family theme (cream canvas). */
-  :root[data-theme="retro"] { color-scheme: light; }
+  /* t-278: the Game Boy family is light-family (bright 4-shade canvases). */
+  :root[data-theme^="gb-"] { color-scheme: light; }
 
   * { box-sizing: border-box; }
   html, body { height: 100%; }
@@ -404,6 +404,22 @@
   }
   .v2-modeswitch__btn svg { width: 13px; height: 13px; }
   .v2-modeswitch__btn.v2-on { background: var(--v2-surface); color: var(--v2-ink); box-shadow: 0 0 0 1px var(--v2-hairline); }
+  .v2-modeswitch__gbwrap { position: relative; display: inline-flex; }
+  .v2-modeswitch__gbmenu {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    background: var(--v2-color-bg, #fff); border: 1px solid var(--v2-color-border, var(--v2-hairline));
+    border-radius: var(--v2-radius-md, 8px); box-shadow: var(--v2-shadow-overlay, 0 8px 24px rgba(0,0,0,.14));
+    padding: 4px; min-width: 120px; display: flex; flex-direction: column; gap: 2px;
+  }
+  .v2-modeswitch__gbmenu[hidden] { display: none; }
+  .v2-modeswitch__gbmenu button {
+    display: flex; align-items: center; gap: 8px; font: inherit; font-size: 12px;
+    padding: 6px 8px; border: none; background: transparent; color: var(--v2-ink);
+    border-radius: var(--v2-radius-sm, 5px); cursor: pointer; text-align: left; min-height: 32px;
+  }
+  .v2-modeswitch__gbmenu button:hover { background: var(--v2-color-surface-raised, rgba(128,128,128,.08)); }
+  .v2-modeswitch__gbmenu button.v2-on { background: var(--v2-color-accent-soft, rgba(94,106,210,.1)); }
+  .v2-modeswitch__swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid var(--v2-color-border-strong, rgba(0,0,0,.2)); flex: none; }
   .v2-search-entry {
     flex: 1; min-width: 0; max-width: 420px; display: flex; align-items: center; gap: var(--v2-space-2);
     background: var(--v2-surface); border: 1px solid var(--v2-hairline); border-radius: var(--v2-radius);
@@ -778,7 +794,18 @@
   <div class="v2-modeswitch" id="v2-modeswitch" role="group" aria-label="Color theme">
     <button type="button" class="v2-modeswitch__btn" data-mode="light" title="Light" aria-label="Light theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></button>
     <button type="button" class="v2-modeswitch__btn" data-mode="dark" title="Dark" aria-label="Dark theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg></button>
-    <button type="button" class="v2-modeswitch__btn" data-mode="retro" title="Retro" aria-label="Retro theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 5-3 3 2 7 8-8-7-2Z"/><path d="m14 5-3 3-3-3 3-3 3 3Z"/><path d="M9.5 6.5 4 12l3 6"/><path d="M3 22v-2c0-1.1.9-2 2-2h4a2 2 0 0 1 2 2v2H3Z"/></svg></button>
+    <!-- t-278: the Game Boy family replaces retro. The gamepad opens a
+         dropdown of the four office palettes (gb-olive/gb-dmg/gb-pocket/
+         gb-amber); the button reads active while any of them is on. -->
+    <span class="v2-modeswitch__gbwrap">
+    <button type="button" class="v2-modeswitch__btn" id="v2-mode-gb" title="Game Boy palettes" aria-label="Game Boy themes" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"/><line x1="8" x2="8" y1="9" y2="13"/><line x1="15" x2="15.01" y1="12" y2="12"/><line x1="18" x2="18.01" y1="10" y2="10"/><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"/></svg></button>
+    <div class="v2-modeswitch__gbmenu" id="v2-gb-menu" hidden>
+      <button type="button" data-mode="gb-olive"><span class="v2-modeswitch__swatch" style="background:#e8e4c9"></span>Olive</button>
+      <button type="button" data-mode="gb-dmg"><span class="v2-modeswitch__swatch" style="background:#9bbc0f"></span>DMG</button>
+      <button type="button" data-mode="gb-pocket"><span class="v2-modeswitch__swatch" style="background:#e0e0e0"></span>Pocket</button>
+      <button type="button" data-mode="gb-amber"><span class="v2-modeswitch__swatch" style="background:#f0e0c0"></span>Amber</button>
+    </div>
+    </span>
     <button type="button" class="v2-modeswitch__btn" data-mode="system" title="System" aria-label="System theme"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></svg></button>
   </div>
   <div class="v2-conn" id="v2-conn"><span class="v2-conn__dot" id="v2-conn-dot"></span><span id="v2-conn-text">connecting…</span></div>
@@ -967,21 +994,48 @@
   // 'bureau_token', unrelated concern) so a choice survives reload.
   (function initModeSwitch() {
     var KEY = 'bureau_v2_theme';
-    var saved = localStorage.getItem(KEY); // 'light' | 'dark' | 'retro' | null (system)
+    var saved = localStorage.getItem(KEY); // 'light' | 'dark' | 'gb-<palette>' | null (system)
+    if (saved === 'retro') { saved = 'gb-olive'; try { localStorage.setItem(KEY, saved); } catch (e) {} } // t-278: retro is retired; migrate old choices persistently
+    var gbBtn = document.getElementById('v2-mode-gb');
+    var gbMenu = document.getElementById('v2-gb-menu');
     function apply(mode) {
-      if (mode === 'light' || mode === 'dark' || mode === 'retro') document.documentElement.setAttribute('data-theme', mode);
+      var isGb = mode && mode.indexOf('gb-') === 0;
+      if (mode === 'light' || mode === 'dark' || isGb) document.documentElement.setAttribute('data-theme', mode);
       else document.documentElement.removeAttribute('data-theme');
-      document.querySelectorAll('.v2-modeswitch__btn').forEach(function (b) {
+      document.querySelectorAll('.v2-modeswitch__btn[data-mode]').forEach(function (b) {
         b.classList.toggle('v2-on', b.getAttribute('data-mode') === (mode || 'system'));
       });
+      gbBtn.classList.toggle('v2-on', !!isGb);
+      gbMenu.querySelectorAll('button[data-mode]').forEach(function (b) {
+        b.classList.toggle('v2-on', b.getAttribute('data-mode') === mode);
+      });
+    }
+    function setMode(mode) {
+      if (mode === null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, mode);
+      apply(mode);
     }
     apply(saved);
-    document.querySelectorAll('.v2-modeswitch__btn').forEach(function (b) {
+    document.querySelectorAll('.v2-modeswitch__btn[data-mode]').forEach(function (b) {
       b.addEventListener('click', function () {
+        gbMenu.hidden = true; gbBtn.setAttribute('aria-expanded', 'false');
         var mode = b.getAttribute('data-mode');
-        if (mode === 'system') { localStorage.removeItem(KEY); apply(null); }
-        else { localStorage.setItem(KEY, mode); apply(mode); }
+        setMode(mode === 'system' ? null : mode);
       });
+    });
+    gbBtn.addEventListener('click', function () {
+      gbMenu.hidden = !gbMenu.hidden;
+      gbBtn.setAttribute('aria-expanded', String(!gbMenu.hidden));
+    });
+    gbMenu.querySelectorAll('button[data-mode]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        setMode(b.getAttribute('data-mode'));
+        gbMenu.hidden = true; gbBtn.setAttribute('aria-expanded', 'false');
+      });
+    });
+    document.addEventListener('click', function (e) {
+      if (!gbMenu.hidden && !e.target.closest('.v2-modeswitch__gbwrap')) {
+        gbMenu.hidden = true; gbBtn.setAttribute('aria-expanded', 'false');
+      }
     });
   })();
 

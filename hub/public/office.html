@@ -1,0 +1,581 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · The Office</title>
+<!-- t-278 GB era (boss direction 2026-08-22, doctrine in the brain at
+     projects/bureau/references/office/GB-DIRECTION.md): the office renders
+     as original-Game-Boy-style 4-shade pixel art on a 384x216 internal
+     canvas (a 48x27 grid of 8px tiles, ~2.4x the OG 160x144), upscaled by
+     device-pixel-INTEGER "super-pixels" with nearest-neighbor, letterboxed.
+     Art lives in office-assets.js as indexed pixel-string maps (shared with
+     the /office/assets gallery). Palette (4 presets) and pixel scale
+     (auto/x2..x6) are user settings, persisted. The hub wiring and
+     choreography from round 1 are unchanged: /api/state seats the roster,
+     SSE events queue into per-sprite scenes. -->
+<style>
+  html, body { margin: 0; height: 100%; background: var(--sh0, #14121f); overflow: hidden;
+               font-family: 'Courier New', monospace; }
+  #stage { position: relative; width: 100vw; height: 100vh; display: flex;
+           align-items: center; justify-content: center; }
+  #wrap { position: relative; }
+  canvas { image-rendering: pixelated; display: block; }
+  /* GB dialog register for every HTML overlay: lightest fill, double dark
+     border (outer border + inset ring), hard corners, no shadow blur. */
+  .bubble {
+    position: absolute; transform: translate(-50%, -100%);
+    background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
+    border: 2px solid var(--sh0, #33382b);
+    box-shadow: inset 0 0 0 1px var(--sh3), inset 0 0 0 3px var(--sh0);
+    padding: 6px 9px; font-size: 10px; line-height: 1.5; font-weight: bold;
+    max-width: 240px; white-space: normal; pointer-events: none;
+    transition: opacity .3s; z-index: 3;
+  }
+  .bubble .who { text-decoration: underline; }
+  #hud {
+    position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 12px;
+    padding: 8px 12px; color: var(--sh3, #e8e4c9); font-size: 11px; font-weight: bold;
+    align-items: center; z-index: 2; letter-spacing: 1px;
+  }
+  #hud .logo { font-size: 13px; }
+  #hud button {
+    font: inherit; font-size: 10px; padding: 3px 7px; cursor: pointer;
+    background: var(--sh1, #6b7353); color: var(--sh3, #e8e4c9);
+    border: 2px solid var(--sh0, #33382b);
+  }
+  #hud #conn { margin-left: auto; opacity: .7; }
+  #hud #conn.live { opacity: 1; }
+  #ticker {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: 10px; width: min(92vw, 900px); box-sizing: border-box;
+    background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
+    border: 3px solid var(--sh0, #33382b);
+    box-shadow: inset 0 0 0 2px var(--sh3), inset 0 0 0 4px var(--sh0);
+    padding: 10px 14px; font-size: 12px; font-weight: bold; line-height: 1.4;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2;
+  }
+  #gate {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: var(--sh0, #14121f); z-index: 10; flex-direction: column; gap: 12px;
+    color: var(--sh3, #e8e4c9); font-weight: bold;
+  }
+  #gate[hidden] { display: none; }
+  #gate input { font: inherit; font-size: 12px; padding: 8px; background: var(--sh1, #2b2440);
+    border: 2px solid var(--sh0, #000); color: var(--sh3, #fffef2); width: 260px; }
+  #gate button { font: inherit; font-size: 11px; padding: 8px 14px; background: var(--sh2, #b5b98a);
+    color: var(--sh0, #33382b); border: 2px solid var(--sh0, #33382b); cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
+<div id="hud">
+  <span class="logo">BUREAU</span>
+  <span>ACT:<span id="n-active">0</span></span>
+  <span>Q:<span id="n-queued">0</span></span>
+  <span>REV:<span id="n-review">0</span></span>
+  <span>DONE:<span id="n-done">0</span></span>
+  <button id="btn-pal" title="Palette">OLIVE</button>
+  <button id="btn-scale" title="Pixel scale">AUTO</button>
+  <a id="lnk-assets" href="/office/assets" style="color:inherit;font-size:10px">SPRITES</a>
+  <span id="conn">connecting</span>
+</div>
+<div id="ticker">OPENING THE OFFICE...</div>
+<div id="gate" hidden>
+  <div>BUREAU · STAFF ENTRANCE</div>
+  <input id="gate-token" type="password" placeholder="access token" autocomplete="off">
+  <button id="gate-go">CLOCK IN</button>
+</div>
+<script src="/office/assets.js"></script>
+<script>
+'use strict';
+(function () {
+  var A = window.OfficeAssets;
+  var W = 384, H = 216, TILE = 8;
+  var cv = document.getElementById('c'), ctx = cv.getContext('2d');
+  cv.width = W; cv.height = H;
+  ctx.imageSmoothingEnabled = false;
+
+  // ---- settings: palette + super-pixel scale (both persisted) ------------
+  var PAL_KEY = 'bureau_office_palette', SCALE_KEY = 'bureau_office_scale';
+  var palKey = localStorage.getItem(PAL_KEY);
+  if (!A.PALETTES[palKey]) palKey = 'olive';
+  var SCALES = ['auto', 2, 3, 4, 6];
+  var scaleSetting = localStorage.getItem(SCALE_KEY) || 'auto';
+  if (SCALES.indexOf(scaleSetting === 'auto' ? 'auto' : +scaleSetting) === -1) scaleSetting = 'auto';
+  else if (scaleSetting !== 'auto') scaleSetting = +scaleSetting;
+
+  // Inverted twins for the alarm flash (a true GB trick: flip the palette).
+  Object.keys(A.PALETTES).forEach(function (k) {
+    if (k.slice(-4) === '-inv') return;
+    A.PALETTES[k + '-inv'] = { label: A.PALETTES[k].label + '!', shades: A.PALETTES[k].shades.slice().reverse() };
+  });
+
+  var alarmUntil = 0;
+  function pal() {
+    return (performance.now() < alarmUntil && Math.floor(performance.now() / 200) % 2)
+      ? palKey + '-inv' : palKey;
+  }
+  function shades() { return A.PALETTES[palKey].shades; }
+  function applyCssPalette() {
+    var sh = shades();
+    var root = document.documentElement;
+    root.style.setProperty('--sh0', sh[0]);
+    root.style.setProperty('--sh1', sh[1]);
+    root.style.setProperty('--sh2', sh[2]);
+    root.style.setProperty('--sh3', sh[3]);
+    document.getElementById('btn-pal').textContent = A.PALETTES[palKey].label;
+  }
+
+  // ---- super-pixel integer scaling (device pixels, letterboxed) ----------
+  var SCALE = 3;
+  function fit() {
+    var dpr = window.devicePixelRatio || 1;
+    var n = scaleSetting === 'auto'
+      ? Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)))
+      : scaleSetting * Math.round(dpr); // fixed setting: N super-pixels per art pixel in CSS terms
+    SCALE = n;
+    cv.style.width = (n * W / dpr) + 'px';
+    cv.style.height = (n * H / dpr) + 'px';
+    document.getElementById('btn-scale').textContent =
+      scaleSetting === 'auto' ? 'AUTO(' + n + ')' : 'X' + scaleSetting;
+  }
+  fit(); addEventListener('resize', fit);
+
+  document.getElementById('btn-pal').addEventListener('click', function () {
+    var keys = Object.keys(A.PALETTES).filter(function (k) { return k.slice(-4) !== '-inv'; });
+    palKey = keys[(keys.indexOf(palKey) + 1) % keys.length];
+    try { localStorage.setItem(PAL_KEY, palKey); } catch (e) {}
+    applyCssPalette();
+  });
+  document.getElementById('btn-scale').addEventListener('click', function () {
+    var i = SCALES.indexOf(scaleSetting);
+    scaleSetting = SCALES[(i + 1) % SCALES.length];
+    try { localStorage.setItem(SCALE_KEY, String(scaleSetting)); } catch (e) {}
+    fit();
+  });
+  applyCssPalette();
+
+  // ---- landmarks (re-gridded to the 8px tile grid) -----------------------
+  var SPOT = {
+    door:    { x: 16,  y: 204 },
+    board:   { x: 72,  y: 56 },
+    shelf:   { x: 36,  y: 108 },
+    coffee:  { x: 28,  y: 196 },
+    bossdoor:{ x: 288, y: 184 },
+    meet:    { x: 336, y: 84 },
+  };
+  var DESK_SLOTS = [
+    { x: 64, y: 88 }, { x: 152, y: 88 }, { x: 240, y: 88 },
+    { x: 64, y: 152 }, { x: 152, y: 152 }, { x: 240, y: 152 },
+  ];
+  function deskSeat(d) { return { x: d.x + 8, y: d.y - 10 }; } // seated-behind position (sprite topleft)
+
+  // ---- live state (unchanged wiring from round 1) ------------------------
+  var token = null;
+  var AGENTS = [];
+  var boardCounts = { queued: 0, working: 0, review: 0, done: 0 };
+  var reviewCount = 0;
+  var bubbles = new Map();
+
+  function isVisitor(a) { return a.kind === 'dummy' || a.kind === 'demo' || a.kind === 'other'; }
+  function liveness(a) {
+    var mins = (Date.now() - new Date(a.last_seen)) / 60000;
+    return mins < 5 ? 'active' : mins < 60 ? 'idle' : 'offline';
+  }
+
+  function syncRoster(agents) {
+    var team = agents.filter(function (a) { return !isVisitor(a); });
+    team.sort(function (a, b) { return new Date(b.last_seen) - new Date(a.last_seen); });
+    var seated = team.slice(0, DESK_SLOTS.length);
+    seated.forEach(function (a, i) {
+      var ag = AGENTS.find(function (x) { return x.name === a.name; });
+      var desk = DESK_SLOTS[i];
+      if (!ag) {
+        ag = {
+          name: a.name, kind: a.kind,
+          desk: desk, pos: { x: SPOT.door.x, y: SPOT.door.y },
+          target: null, walking: false, dir: 'down', carry: null,
+          queue: [], busy: false, awayTimer: 0, emote: null, emoteUntil: 0,
+        };
+        AGENTS.push(ag);
+        enqueue(ag, [{ walk: deskSeat(desk) }]);
+      }
+      ag.desk = desk;
+      ag.state = liveness(a);
+      ag.activity = a.activity || '';
+    });
+    AGENTS = AGENTS.filter(function (ag) {
+      var still = seated.find(function (a) { return a.name === ag.name; });
+      if (!still) { var b = bubbles.get(ag.name); if (b) b.el.remove(); }
+      return !!still;
+    });
+    document.getElementById('n-active').textContent =
+      AGENTS.filter(function (a) { return a.state === 'active'; }).length;
+  }
+
+  function syncBoard(tasks) {
+    var c = { queued: 0, working: 0, review: 0, done: 0 };
+    for (var i = 0; i < tasks.length; i++) {
+      var t = tasks[i];
+      if (t.status === 'queued') c.queued++;
+      else if (t.status === 'claimed' || t.status === 'in_progress') c.working++;
+      else if (t.status === 'review') c.review++;
+      else if (t.status === 'done') c.done++;
+    }
+    boardCounts = c; reviewCount = c.review;
+    document.getElementById('n-queued').textContent = c.queued;
+    document.getElementById('n-review').textContent = c.review;
+    document.getElementById('n-done').textContent = c.done;
+  }
+
+  // ---- per-sprite action queues ------------------------------------------
+  function enqueue(ag, steps) { ag.queue.push.apply(ag.queue, steps); }
+  function stepQueue(ag) {
+    if (ag.walking || ag.busy) return;
+    var step = ag.queue.shift();
+    if (!step) return;
+    if (step.walk) { walkTo(ag, step.walk.x, step.walk.y, step.speed); return; }
+    if (step.say) { say(ag, step.say, step.ms || 4200); return; }
+    if (step.carry !== undefined) { ag.carry = step.carry; return; }
+    if (step.emote) { ag.emote = step.emote; ag.emoteUntil = performance.now() + (step.ms || 2500); return; }
+    if (step.wait) { ag.busy = true; setTimeout(function () { ag.busy = false; }, step.wait); return; }
+  }
+  function walkTo(a, tx, ty, speed) {
+    a.target = { x: tx, y: ty }; a.walking = true; a.speed = speed || 0.05;
+  }
+  function stepAgents(dt) {
+    for (var i = 0; i < AGENTS.length; i++) {
+      var a = AGENTS[i];
+      stepQueue(a);
+      if (a.target) {
+        var dx = a.target.x - a.pos.x, dy = a.target.y - a.pos.y;
+        var dist = Math.hypot(dx, dy);
+        a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+        if (dist < 1.5) { a.pos = { x: a.target.x, y: a.target.y }; a.target = null; a.walking = false; a.dir = 'down'; }
+        else { a.pos.x += (dx / dist) * a.speed * dt; a.pos.y += (dy / dist) * a.speed * dt; }
+        continue;
+      }
+      if (!a.queue.length && !a.busy) {
+        a.awayTimer -= dt;
+        if (a.state === 'idle' && a.awayTimer <= 0) {
+          a.awayTimer = 45000 + Math.random() * 60000;
+          enqueue(a, [{ emote: 'emote-coffee' }, { walk: SPOT.coffee, speed: 0.035 }, { wait: 6000 }, { walk: deskSeat(a.desk) }]);
+        }
+        if (a.state !== 'idle') a.awayTimer = 20000;
+      }
+    }
+  }
+
+  // ---- bubbles & ticker ---------------------------------------------------
+  function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function say(agent, text, ms) {
+    var b = bubbles.get(agent.name);
+    if (!b) {
+      var el = document.createElement('div'); el.className = 'bubble';
+      document.getElementById('wrap').appendChild(el);
+      b = { el: el }; bubbles.set(agent.name, b);
+    }
+    b.el.innerHTML = '<span class="who">' + esc(agent.name) + '</span> ' + text;
+    b.el.style.opacity = 1; b.until = performance.now() + (ms || 4200);
+  }
+  function tick(msg) { document.getElementById('ticker').innerHTML = '&gt; ' + msg; }
+  function clip(s, n) { s = String(s || ''); return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+  // ---- choreography (unchanged event mapping; GB props) -------------------
+  function agentByName(name) { return AGENTS.find(function (a) { return a.name === name; }); }
+  function onEvent(type, d) {
+    var who = d.assignee || d.by || d.author || d.from || d.name;
+    var ag = who ? agentByName(who) : null;
+    switch (type) {
+      case 'agent.registered':
+        tick('<b>' + esc(d.name) + '</b> CLOCKED IN');
+        refreshState();
+        break;
+      case 'agent.heartbeat':
+        if (ag) { ag.state = 'active'; ag.activity = d.activity || ag.activity; }
+        break;
+      case 'agent.removed':
+        tick('<b>' + esc(d.name) + '</b> LEFT THE BUILDING');
+        refreshState();
+        break;
+      case 'task.created':
+        tick('NEW MISSION <b>' + esc(d.id) + '</b> · ' + esc(clip(d.title, 58)));
+        refreshState();
+        break;
+      case 'task.claimed':
+        tick('<b>' + esc(who) + '</b> CLAIMED <b>' + esc(d.id) + '</b> · ' + esc(clip(d.title, 46)));
+        if (ag) enqueue(ag, [
+          { walk: SPOT.board }, { carry: 'folder-working' },
+          { say: 'claimed <b>' + esc(d.id) + '</b>', ms: 3000 },
+          { walk: deskSeat(ag.desk) }, { carry: null },
+        ]);
+        refreshState();
+        break;
+      case 'task.review':
+        tick('<b>' + esc(who) + '</b> PARKED <b>' + esc(d.id) + '</b> AT THE BOSS DOOR');
+        if (ag) enqueue(ag, [
+          { carry: 'folder-review' }, { walk: SPOT.bossdoor },
+          { say: '<b>' + esc(d.id) + '</b> ready for review', ms: 3500 },
+          { wait: 1200 }, { carry: null }, { walk: deskSeat(ag.desk) },
+        ]);
+        refreshState();
+        break;
+      case 'task.done':
+        tick('<b>' + esc(d.id) + '</b> SHIPPED' + (who ? ' · <b>' + esc(who) + '</b>' : ''));
+        if (ag) enqueue(ag, [
+          { carry: 'folder-done' }, { walk: SPOT.board },
+          { say: '<b>' + esc(d.id) + '</b> done', ms: 3000 },
+          { carry: null }, { walk: deskSeat(ag.desk) },
+        ]);
+        refreshState();
+        break;
+      case 'task.failed':
+        tick('<b>' + esc(d.id) + '</b> FAILED');
+        alarmUntil = performance.now() + 2000;
+        refreshState();
+        break;
+      case 'task.requeued':
+      case 'task.blocked':
+        tick('<b>' + esc(d.id) + '</b> ' + (type === 'task.blocked' ? 'BLOCKED' : 'BACK ON THE BOARD') + (d.note ? ' · ' + esc(clip(d.note, 44)) : ''));
+        refreshState();
+        break;
+      case 'task.updated':
+        if (d.note) {
+          tick('<b>' + esc(who) + '</b> · ' + esc(d.id) + ': ' + esc(clip(d.note, 56)));
+          if (ag) enqueue(ag, [{ say: esc(clip(d.note, 60)), ms: 4200 }]);
+        }
+        break;
+      case 'knowledge.written':
+        tick('<b>' + esc(d.author) + '</b> FILED ' + esc(clip(d.file, 46)));
+        if (ag) enqueue(ag, [
+          { walk: SPOT.shelf },
+          { say: 'filing ' + esc(clip(d.file, 34)), ms: 3000 },
+          { walk: deskSeat(ag.desk) },
+        ]);
+        break;
+      case 'message.posted': {
+        tick('<b>' + esc(d.from) + '</b> &gt; <b>' + esc(d.to) + '</b>' + (d.body ? ' · ' + esc(clip(d.body, 44)) : ''));
+        var rcpt = agentByName(d.to);
+        if (ag) enqueue(ag, [{ emote: 'emote-mail' }]);
+        if (ag && rcpt) enqueue(ag, [
+          { walk: { x: rcpt.desk.x + 36, y: rcpt.desk.y + 14 } },
+          { say: esc(clip(d.body, 60)), ms: 4200 },
+          { walk: deskSeat(ag.desk) },
+        ]);
+        else if (ag) enqueue(ag, [{ say: '&gt; ' + esc(d.to) + ': ' + esc(clip(d.body, 40)), ms: 4200 }]);
+        break;
+      }
+    }
+  }
+
+  // ---- world drawing (GB tiles + sprites; procedural 4-shade fallbacks
+  //      for queue items 6-9 until their sprites land) ---------------------
+  function shadeRect(p, x, y, w, h, idx) {
+    ctx.fillStyle = A.PALETTES[p].shades[idx];
+    ctx.fillRect(x | 0, y | 0, w, h);
+  }
+  function drawWorld(t) {
+    var p = pal();
+    // canvas ground
+    shadeRect(p, 0, 0, W, H, 0);
+    // floor
+    A.tileRect(ctx, 'floor-grid', p, 0, 40, W, H - 40);
+    // center rug (line-dither texture tile)
+    A.tileRect(ctx, 'floor-rug', p, 120, 176, 144, 24);
+    shadeRect(p, 120, 175, 144, 1, 0); shadeRect(p, 120, 200, 144, 1, 0);
+    // back wall band + baseboard
+    A.tileRect(ctx, 'wall-paper', p, 0, 0, W, 32);
+    A.tileRect(ctx, 'wall-base', p, 0, 32, W, 8);
+    // windows (night)
+    A.drawSprite(ctx, 'window-night', p, 152, 8);
+    A.drawSprite(ctx, 'window-night', p, 192, 8);
+    A.drawSprite(ctx, 'window-night', p, 232, 8);
+    // mission board + live folder stacks (state told by dither, not hue)
+    A.drawSprite(ctx, 'board', p, 24, 6);
+    A.drawText(ctx, 'MISSIONS', p, 28, 9, 0);
+    var stacks = [
+      ['folder-queued', boardCounts.queued], ['folder-working', boardCounts.working],
+      ['folder-review', boardCounts.review], ['folder-done', boardCounts.done],
+    ];
+    stacks.forEach(function (s, i) {
+      var n = Math.min(s[1], 3);
+      for (var k = 0; k < n; k++) A.drawSprite(ctx, s[0], p, 29 + i * 10, 15 + k * 4);
+      if (s[1] > 3) A.drawText(ctx, '+' + (s[1] - 3), p, 29 + i * 10, 27, 1);
+    });
+
+    // BRAIN shelf (fallback, queue #6)
+    shadeRect(p, 8, 60, 40, 44, 0);
+    shadeRect(p, 10, 62, 36, 40, 1);
+    for (var row = 0; row < 3; row++) {
+      shadeRect(p, 10, 72 + row * 12, 36, 2, 0);
+      for (var b = 0; b < 6; b++) shadeRect(p, 12 + b * 6, 64 + row * 12, 4, 8, (b % 2) ? 2 : 3);
+    }
+    A.drawText(ctx, 'BRAIN', p, 14, 106, 0);
+
+    // coffee corner + plant (fallback, queue #7)
+    shadeRect(p, 8, 184, 24, 26, 1);
+    shadeRect(p, 10, 186, 20, 12, 3);
+    shadeRect(p, 16, 190, 8, 6, 0);
+    A.dither50(ctx, p, 10, 199, 20, 9, 1, 0);
+    shadeRect(p, 38, 196, 10, 8, 1);
+    shadeRect(p, 40, 184, 6, 12, 2);
+    shadeRect(p, 37, 188, 4, 6, 1);
+
+    // desks
+    DESK_SLOTS.forEach(function (d) { drawDeskAt(d, t, p); });
+
+    // conference room (fallback walls, queue #8)
+    A.tileRect(ctx, 'wall-cap', p, 312, 40, 8, 64);
+    A.tileRect(ctx, 'wall-cap', p, 312, 96, 72, 8);
+    shadeRect(p, 312, 96, 24, 8, 2); // door gap
+    shadeRect(p, 336, 56, 40, 24, 1);
+    shadeRect(p, 338, 58, 36, 18, 2);
+    A.drawText(ctx, 'MEET', p, 348, 64, 0);
+
+    // boss office (fallback, queue #9)
+    A.tileRect(ctx, 'wall-cap', p, 304, 152, 80, 8);
+    A.tileRect(ctx, 'wall-cap', p, 304, 152, 8, 64);
+    shadeRect(p, 304, 176, 8, 24, 2); // door gap
+    A.dither50(ctx, p, 292, 178, 10, 20, 1, 2); // mat
+    shadeRect(p, 328, 176, 48, 16, 1);
+    shadeRect(p, 330, 178, 44, 10, 2);
+    A.drawText(ctx, 'BOSS', p, 336, 196, 3);
+    // review folders bounce at the door
+    var bounce = Math.floor(Math.sin(t / 250) * 2);
+    for (var k2 = 0; k2 < Math.min(reviewCount, 4); k2++)
+      A.drawSprite(ctx, 'folder-review', p, 282 - k2 * 4, 166 + bounce + k2);
+    if (reviewCount > 4) A.drawText(ctx, '+' + (reviewCount - 4), p, 264, 160, 3);
+
+    // front door mark
+    shadeRect(p, 8, 210, 20, 4, 1);
+  }
+
+  function drawDeskAt(d, t, p) {
+    var ag = AGENTS.find(function (a) { return a.desk === d; });
+    var on = ag && ag.state !== 'offline';
+    A.drawSprite(ctx, 'desk', p, d.x, d.y);
+    var mon = !on ? 'monitor-off' : (Math.floor(t / 700) % 3 === 0 ? 'monitor-glow' : 'monitor-on');
+    A.drawSprite(ctx, mon, p, d.x + 15, d.y - 12);
+    A.drawText(ctx, (ag ? ag.name : '').slice(0, 6), p, d.x + 3, d.y + 9, 3);
+    if (!ag || ag.state === 'offline') A.drawSprite(ctx, 'chair', p, d.x + 4, d.y - 8);
+  }
+
+  function atSeat(a) {
+    var s = deskSeat(a.desk);
+    return !a.walking && Math.abs(a.pos.x - s.x) < 2 && Math.abs(a.pos.y - s.y) < 2;
+  }
+
+  function drawAgent(a, t) {
+    if (a.state === 'offline') return;
+    var p = pal();
+    var x = a.pos.x | 0, y = a.pos.y | 0;
+    var f = Math.floor(t / 140) % 2 ? 'b' : 'a';
+    var name, mirror = false;
+    if (a.walking) {
+      if (a.dir === 'left') { name = 'agent-walk-side-' + f; }
+      else if (a.dir === 'right') { name = 'agent-walk-side-' + f; mirror = true; }
+      else if (a.dir === 'up') { name = 'agent-walk-up-' + f; }
+      else { name = 'agent-walk-down-' + f; }
+    } else if (atSeat(a) && a.state === 'active') {
+      name = 'agent-typing-' + (Math.floor(t / 260) % 2 ? 'b' : 'a');
+    } else {
+      name = 'agent-idle-' + (Math.floor(t / 600) % 2 ? 'b' : 'a');
+    }
+    A.drawSprite(ctx, name, p, x, y, mirror);
+    if (a.carry) A.drawSprite(ctx, a.carry, p, x + 4, y - 9);
+    if (a.emote && performance.now() < a.emoteUntil) {
+      A.drawSprite(ctx, a.emote, p, x + 12, y - 10);
+    } else if (!a.walking && atSeat(a) && a.state === 'idle' && Math.floor(t / 900) % 2) {
+      A.drawSprite(ctx, 'emote-zzz', p, x + 12, y - 10);
+    }
+  }
+
+  // ---- live wiring (unchanged) -------------------------------------------
+  function api(path) {
+    return fetch(path, { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
+      if (r.status === 401) { localStorage.removeItem('bureau_token'); location.reload(); throw new Error('401'); }
+      return r.json();
+    });
+  }
+  var refreshTimer = null;
+  function refreshState() {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(function () { refreshTimer = null; }, 2000);
+    api('/api/state').then(function (s) {
+      syncRoster(s.agents || []);
+      syncBoard(s.tasks || []);
+    }).catch(function () {});
+  }
+  function connectSSE() {
+    var es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+    var conn = document.getElementById('conn');
+    es.onopen = function () { conn.textContent = 'LIVE'; conn.classList.add('live'); };
+    es.onerror = function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); };
+    ['agent.registered', 'agent.heartbeat', 'agent.removed',
+     'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
+     'task.review', 'task.blocked', 'task.requeued',
+     'message.posted', 'knowledge.written'].forEach(function (type) {
+      es.addEventListener(type, function (ev) {
+        var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
+        try { onEvent(type, d); } catch (e) {}
+      });
+    });
+  }
+
+  function boot() {
+    document.getElementById('gate').hidden = true;
+    api('/api/state').then(function (s) {
+      syncRoster(s.agents || []);
+      syncBoard(s.tasks || []);
+      for (var i = 0; i < AGENTS.length; i++) {
+        AGENTS[i].queue = []; AGENTS[i].pos = deskSeat(AGENTS[i].desk);
+      }
+      var lastLog = (s.log || [])[(s.log || []).length - 1];
+      tick(lastLog ? esc(lastLog.type).toUpperCase() : 'THE OFFICE IS OPEN');
+      connectSSE();
+      setInterval(refreshState, 60000);
+    }).catch(function () { tick('COULD NOT REACH THE HUB'); });
+  }
+  (function gate() {
+    token = localStorage.getItem('bureau_token');
+    if (token) return boot();
+    var g = document.getElementById('gate');
+    g.hidden = false;
+    document.getElementById('gate-go').addEventListener('click', function () {
+      var v = document.getElementById('gate-token').value.trim();
+      if (!v) return;
+      localStorage.setItem('bureau_token', v);
+      token = v; boot();
+    });
+    document.getElementById('gate-token').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') document.getElementById('gate-go').click();
+    });
+  })();
+
+  // ---- main loop ----------------------------------------------------------
+  var last = performance.now();
+  function frame(t) {
+    var dt = Math.min(50, t - last); last = t;
+    stepAgents(dt);
+    drawWorld(t);
+    AGENTS.slice().sort(function (a, b) { return a.pos.y - b.pos.y; })
+      .forEach(function (a) { drawAgent(a, t); });
+    // bubble positions in CSS pixels (canvas CSS size / internal size)
+    var rect = cv.getBoundingClientRect(), wrap = document.getElementById('wrap');
+    wrap.style.width = rect.width + 'px'; wrap.style.height = rect.height + 'px';
+    var cssScale = rect.width / W;
+    bubbles.forEach(function (b, name) {
+      var a = agentByName(name);
+      if (!a) return;
+      if (b.until && t > b.until) { b.el.style.opacity = 0; return; }
+      b.el.style.left = ((a.pos.x + 8) * cssScale) + 'px';
+      b.el.style.top = ((a.pos.y - 4) * cssScale) + 'px';
+    });
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
