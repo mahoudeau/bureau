@@ -353,16 +353,18 @@ function renderAtoms() {
 function initModeSwitch() {
   const KEY = 'bureau_v2_theme';
   const buttons = Array.from(document.querySelectorAll('.sg-modeswitch__btn'));
-  const glyphs = { light: 'sun', dark: 'moon', retro: 'lamp-desk', system: 'monitor' };
+  const glyphs = { light: 'sun', dark: 'moon', 'gb-olive': 'gamepad-2', 'gb-dmg': 'gamepad-2', 'gb-pocket': 'gamepad-2', 'gb-amber': 'gamepad-2', system: 'monitor' };
   buttons.forEach(b => { b.innerHTML = icon(glyphs[b.dataset.mode]); }); // filled via components.js, not hand-written SVG
 
   function apply(mode) {
-    if (mode === 'light' || mode === 'dark' || mode === 'retro') document.documentElement.setAttribute('data-theme', mode);
+    if (mode === 'light' || mode === 'dark' || (mode && mode.indexOf('gb-') === 0)) document.documentElement.setAttribute('data-theme', mode);
     else document.documentElement.removeAttribute('data-theme');
     buttons.forEach(b => b.classList.toggle('v2-on', b.dataset.mode === (mode || 'system')));
     refreshTokenValues();
   }
-  apply(localStorage.getItem(KEY));
+  var sgSaved = localStorage.getItem(KEY);
+  if (sgSaved === 'retro') { sgSaved = 'gb-olive'; try { localStorage.setItem(KEY, sgSaved); } catch (e) {} } // t-278 migration, same as v2.html
+  apply(sgSaved);
   buttons.forEach(b => b.addEventListener('click', () => {
     const mode = b.dataset.mode;
     if (mode === 'system') { localStorage.removeItem(KEY); apply(null); }
