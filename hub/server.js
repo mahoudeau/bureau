@@ -143,6 +143,12 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.js')));
     }
+    // Vendored pixel font (Press Start by codeman38, freeware) — the t-54
+    // no-external-requests law: the font ships from the hub itself.
+    if (req.method === 'GET' && p === '/office/font.ttf') {
+      res.writeHead(200, { 'content-type': 'font/ttf', 'cache-control': 'public, max-age=86400' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-font.ttf')));
+    }
     if (req.method === 'GET' && p === '/v2/styleguide') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2', 'styleguide.html')));

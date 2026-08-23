@@ -117,7 +117,7 @@
   //    Card slots stay empty here; the floor draws folder sprites into them.
   S['board'] = (function () {
     var rows = [];
-    var W = 48, H = 24;
+    var W = 80, H = 32;
     for (var y = 0; y < H; y++) {
       var r = '';
       for (var x = 0; x < W; x++) {
@@ -125,7 +125,6 @@
         var inner = (x === 1 || y === 1 || x === W - 2 || y === H - 2);
         if (edge) r += '0';
         else if (inner) r += '1';
-        else if (y === 6 && x > 2 && x < W - 3) r += '1'; // header rule
         else r += '3';
       }
       rows.push(r);
@@ -133,24 +132,46 @@
     return rows;
   })();
 
-  // 5. Desk set. desk 32x16: top surface, front panel with drawer.
+  // 5. Desk set. desk 56x16 (widened ~2x for the 2x cast, boss order):
+  //    top surface, front panel with drawer on the right.
   S['desk'] = (function () {
     var rows = [];
     for (var y = 0; y < 16; y++) {
       var r = '';
-      for (var x = 0; x < 32; x++) {
-        if (y === 0 || y === 15 || x === 0 || x === 31) r += '0';
+      for (var x = 0; x < 56; x++) {
+        if (y === 0 || y === 15 || x === 0 || x === 55) r += '0';
         else if (y === 1) r += '3';               // top highlight
         else if (y < 6) r += '2';                 // desktop
         else if (y === 6) r += '0';               // edge line
-        else if (y > 6 && y < 15 && x > 18 && x < 29 && y > 8 && y < 13)
-          r += (y === 10 && x > 21 && x < 26) ? '0' : '2'; // drawer + handle
+        else if (y > 8 && y < 13 && x > 40 && x < 53)
+          r += (y === 10 && x > 44 && x < 49) ? '0' : '2'; // drawer + handle
         else r += '1';                            // front panel shadow
       }
       rows.push(r);
     }
     return rows;
   })();
+  // Office chair, 16x16 NATIVE (boss: size right, shape needed a real
+  // drawing, not an upscaled 8px stool). Back view: tall backrest, seat
+  // lip, center post, splayed feet.
+S['chair-office'] = [
+    '...00000000000000...',
+    '..0111111111111110..',
+    '..0111111111111110..',
+    '..0111111111111110..',
+    '..0111111111111110..',
+    '..0111111111111110..',
+    '..0111111111111110..',
+    '..0000000000000000..',
+    '...02222222222220...',
+    '...00000000000000...',
+    '........0000........',
+    '........0000........',
+    '.....0000000000.....',
+    '....000......000....',
+    '...00..........00...',
+    '....................',
+  ];
   S['chair'] = [
     '.000000.',
     '01111110',
@@ -419,6 +440,353 @@
     '................',
   ];
 
+  // 12b. Per-agent identity, round 2 (boss send-back: the additive hair
+  //      overlays all read as near-identical afros — the base's own dark
+  //      head swallowed them). Hair is now a FULL HEAD REPLACEMENT merged
+  //      into variant sprites at build time: each style carries head rows
+  //      per facing where a digit paints, '.' keeps the base pixel and
+  //      'x' force-erases (that's what lets a bun SHORTEN the silhouette
+  //      and a cap change tone — impossible additively). Torso accents
+  //      below stay additive; they worked.
+  //      Styles: afro (bigger mass, shade-1 interior), bun (short slick
+  //      cap + top knob), long (side curtains to the shoulders), cap
+  //      (mid-tone crown + light brim).
+  var HEADS = {
+    // Afro: a bigger rounded DARK mass with sparse shade-1 texture dots,
+    // a scalloped fringe over the forehead, and sideburns hugging the
+    // face — the mass is hair, not a lining (round-2 send-back).
+    afro: {
+      down: [
+        '...00000000.....',
+        '..0010000100....',
+        '.0000010010000..',
+        '.000333333000...',
+        '.000303303000...',
+        '.000333333000...',
+        '..00033330000...',
+      ],
+      up: [
+        '...00000000.....',
+        '..0010000100....',
+        '.0000010010000..',
+        '.0000000000000..',
+        '.0001000001000..',
+        '.0000010000000..',
+        '..0000000000....',
+      ],
+      side: [
+        '...000000000....',
+        '..00000000000...',
+        '.0000000100000..',
+        '..0003333001000.',
+        '..0000303001000.',
+        '..0003333000000.',
+        '...00033000000..',
+      ],
+    },
+    // Bun: pulled back — HIGH hairline (extra forehead at the crown row),
+    // slick dark cap, a knotted bun with a lit core.
+    bun: {
+      down: [
+        'xxxxx00110xxxxxx',
+        '...00000000.....',
+        '..0003333000....',
+      ],
+      up: [
+        'xxxxx00110xxxxxx',
+        '...00000000.....',
+        '..0000000000....',
+        '..0000110000....',
+      ],
+      side: [
+        'xxxxxxxx00110xxx',
+        '...00000000.....',
+        '..0033300000....',
+      ],
+    },
+    // Long: hair FRAMES the face — one connected mass from the crown,
+    // widening past the cheeks and falling in strands over the
+    // shoulders. The old detached pillars are gone.
+    long: {
+      down: [
+        '...00000000.....',
+        '..0000000000....',
+        '.000000000000...',
+        '.000333333000...',
+        '.000303303000...',
+        '.000333333000...',
+        '.000033330000...',
+        '.00.000000.00...',
+        '.00.........00..',
+        '..0..........0..',
+      ],
+      up: [
+        '...00000000.....',
+        '..0000000000....',
+        '.000000000000...',
+        '.000010010000...',
+        '.000000000000...',
+        '.000100100100...',
+        '.000000000000...',
+        '.00000000000 ...'.replace(' ', '0'),
+        '..0000000000....',
+        '...00000000.....',
+      ],
+      side: [
+        '...00000000.....',
+        '..0000000000....',
+        '.000000000000...',
+        '..03330000000...',
+        '..03030001000...',
+        '..03330000000...',
+        '..00330000000...',
+        '..0000000.000...',
+        '.........000....',
+        '..........0.....',
+      ],
+    },
+    // Mohawk (boss sketch 2026-08-23): center strip standing 2px proud,
+    // SHAVED sides (skin where the base cap was), strip into the forehead.
+    mohawk: {
+      down: [
+        'xxxxxx0110xxxxxx',
+        'xxxxxx0110xxxxxx',
+        '..033301103330..',
+        '..003301103300..',
+      ],
+      up: [
+        'xxxxxx0110xxxxxx',
+        'xxxxxx0110xxxxxx',
+        '..000001100000..',
+        '..000001100000..',
+      ],
+      side: [
+        'xxxx0110xxxxxxxx',
+        'xxxx0110xxxxxxxx',
+        '..030110333300..',
+        '..000110330000..',
+      ],
+    },
+    // Cap: unchanged — the boss called it good.
+    cap: {
+      down: [
+        'xxx02222220xxxxx',
+        'xx0222222220xxxx',
+        '.033333333330...',
+      ],
+      up: [
+        'xxx02222220xxxxx',
+        'xx0222222220xxxx',
+        '..0222222220....',
+      ],
+      side: [
+        'xxx02222220xxxxx',
+        'xx0222222220xxxx',
+        '..033333333330..',
+      ],
+    },
+  };
+
+  // Merge a head map onto a base frame. rowShift handles idle frame b's
+  // 1px breathing bob (its head sits one row lower in the grid).
+  function mergeHead(baseRows, headRows, rowShift) {
+    var out = baseRows.slice();
+    for (var i = 0; i < headRows.length; i++) {
+      var y = i + rowShift;
+      if (y >= out.length) break;
+      var b = out[y], h = headRows[i], r = '';
+      for (var x = 0; x < b.length; x++) {
+        var ch = h[x];
+        if (ch === undefined || ch === '.') r += b[x];
+        else if (ch === 'x') r += '.';
+        else r += ch;
+      }
+      out[y] = r;
+    }
+    return out;
+  }
+  S['torso-tie-down'] = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.......00.......',
+    '.......30.......',
+    '.......03.......',
+    '................',
+    '................',
+    '................',
+    '................',
+  ];
+  S['torso-buttons-down'] = [
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '................',
+    '.......3........',
+    '................',
+    '.......3........',
+    '................',
+    '................',
+    '................',
+    '................',
+  ];
+
+  // Boss-drawn example (2026-08-23, emoji-grid pipeline: he sketches in
+  //  emoji, consul transcribes; black=0, green=1, white=3). 10x12 helmet
+  //  character, kept verbatim as the calibration reference.
+  S['cast-example'] = [
+    '0000000000',
+    '0011111100',
+    '0113113110',
+    '0111111110',
+    '0011111100',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011111100',
+    '0111331110',
+    '0001111000',
+    '0001001000',
+  ];
+
+  // Boss example 2 (2026-08-23): brown-mohawk punk, jacket with belt.
+  // (Convention extension: brown/yellow emoji both map to shade 2.)
+  S['cast-example-2'] = [
+    '0002200000',
+    '0002200000',
+    '0032233000',
+    '0333333300',
+    '0303303300',
+    '0333333300',
+    '0011111100',
+    '0111111110',
+    '0110000110',
+    '0001111000',
+    '0001001000',
+  ];
+
+  // Boss cast sketches 3-11 (2026-08-23), transcribed 1:1 from the emoji
+  // grids (black=0, green=1, brown/yellow=2, white=3).
+  S['cast-example-3'] = [   // bowl cut, hair framing to the shoulders
+    '0022222200',
+    '0222222220',
+    '0233333320',
+    '0230330320',
+    '0233333320',
+    '0221111220',
+    '0001111000',
+    '0001111000',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-4'] = [   // spiky crown + brown tie
+    '0202002020',
+    '0222222220',
+    '0223333220',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011221100',
+    '0111221110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-5'] = [   // side-swept
+    '0002222000',
+    '0222222200',
+    '0223333200',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011111100',
+    '0111331110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-6'] = [   // short flat cut
+    '0000000000',
+    '0022222200',
+    '0022222200',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011111100',
+    '0111111110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-7'] = [   // bald, open collar
+    '0000000000',
+    '0003333000',
+    '0033333300',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011331100',
+    '0111331110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-8'] = [   // hooded, hood framing the whole face
+    '0011111100',
+    '0111111110',
+    '0113333110',
+    '0133333310',
+    '0130330310',
+    '0133333310',
+    '0011111100',
+    '0111111110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-9'] = [   // side part, open jacket over dark shirt
+    '0022222000',
+    '0222222200',
+    '0223333300',
+    '0033333300',
+    '0030330300',
+    '0033333300',
+    '0011001100',
+    '0111001110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-10'] = [  // twin buns
+    '0220000220',
+    '0222222220',
+    '0223333220',
+    '0233333320',
+    '0030330300',
+    '0033333300',
+    '0011111100',
+    '0111111110',
+    '0001111000',
+    '0001001000',
+  ];
+  S['cast-example-11'] = [  // long hair to the collar, broad coat
+    '0002222000',
+    '0022222200',
+    '0223333220',
+    '0233333320',
+    '0230330320',
+    '0233333320',
+    '0221111220',
+    '0111111110',
+    '0111111110',
+    '0001001000',
+  ];
+
   // 13. Emote glyphs (8x8), drawn above heads in a tiny balloon.
   S['emote-bang'] = [
     '..033...',
@@ -471,9 +839,647 @@
     '........',
   ];
 
-  // 6-9 land in later rounds (shelf, coffee machine, conference, boss door)
-  // per the GB-DIRECTION.md queue; the floor keeps 4-shade procedural
-  // fallbacks for them until then.
+  // 6. BRAIN bookshelf (40x44 composition): frame, three rows of spines
+  //    with alternating shades and a couple of leaning books, plinth.
+  S['shelf-brain'] = (function () {
+    var Wd = 40, Ht = 44, rows = [];
+    for (var y = 0; y < Ht; y++) {
+      var r = '';
+      for (var x = 0; x < Wd; x++) {
+        var edge = (x === 0 || x === Wd - 1 || y === 0 || y === Ht - 1);
+        if (edge) { r += '0'; continue; }
+        if (y >= Ht - 4) { r += '1'; continue; }              // plinth
+        if (x === 1 || x === Wd - 2) { r += '1'; continue; }  // side panels
+        var band = (y - 2) % 13;
+        if (band === 11 || band === 12) { r += '0'; continue; } // shelf plank
+        if (y < 2) { r += '1'; continue; }
+        // book spines: 3px wide, alternating shades, some gaps
+        var slot = Math.floor((x - 2) / 3), inSlot = (x - 2) % 3;
+        var rowIdx = Math.floor((y - 2) / 13);
+        var tone = ['2', '3', '1', '2', '1', '3', '2', '3', '1', '2', '3', '1'][(slot + rowIdx * 5) % 12];
+        if ((slot + rowIdx) % 7 === 6) { r += '1'; continue; }  // gap = shadow
+        r += (inSlot === 2) ? '0' : tone;                        // spine + separator
+      }
+      rows.push(r);
+    }
+    return rows;
+  })();
+
+  // 7. Coffee machine (16x20, 2 frames: drip + steam) and plant (8x16).
+  S['coffee-a'] = [
+    '.00000000000000.',
+    '0333333333333330',
+    '0311111111111130',
+    '0333333333333330',
+    '0022222222222200',
+    '0021111111112200',
+    '0021000000012200',
+    '0021033330012200',
+    '0021033330012200',
+    '0021000000012200',
+    '0021111111112200',
+    '0022222222222200',
+    '0022222222222200',
+    '0021111111112200',
+    '0020000000002200',
+    '0022222222222200',
+    '0022222222222200',
+    '0011111111111100',
+    '0000000000000000',
+    '.00............0',
+  ];
+  S['coffee-b'] = [
+    '.00000000000000.',
+    '0333333333333330',
+    '0311111111111130',
+    '0333333333333330',
+    '0022222222222200',
+    '0021111111112200',
+    '0021000000012200',
+    '0021033330012200',
+    '0021033330012200',
+    '0021003000012200',
+    '0021111111112200',
+    '0022222222222200',
+    '0022222222222200',
+    '0021111111112200',
+    '0020003000002200',
+    '0022222222222200',
+    '0022222222222200',
+    '0011111111111100',
+    '0000000000000000',
+    '.00............0',
+  ];
+  S['plant'] = [
+    '...22...',
+    '..2112..',
+    '.211212.',
+    '.212112.',
+    '..2121..',
+    '.211212.',
+    '..1221..',
+    '...11...',
+    '..0000..',
+    '.011110.',
+    '.011110.',
+    '.001100.',
+    '..0110..',
+    '..0000..',
+    '........',
+    '........',
+  ];
+
+  // 8. Conference table (40x24): rounded top with rim highlight, dark base.
+  S['table-meet'] = (function () {
+    var Wd = 40, Ht = 24, rows = [];
+    for (var y = 0; y < Ht; y++) {
+      var r = '';
+      for (var x = 0; x < Wd; x++) {
+        var corner = ((x < 2 || x >= Wd - 2) && (y < 2 || y >= Ht - 6));
+        if (y >= Ht - 4) { r += (x > 3 && x < Wd - 4 && y < Ht - 1) ? '1' : '.'; continue; } // base shadow
+        if (corner) { r += '.'; continue; }
+        var edge = (x === 0 || x === Wd - 1 || y === 0 || y === Ht - 5);
+        if (edge) { r += '0'; continue; }
+        r += (y === 1) ? '3' : '2';
+      }
+      rows.push(r);
+    }
+    return rows;
+  })();
+
+  // 9. Boss door (16x24, frosted checker panel + handle), mat, bench.
+  S['door-boss'] = [
+    '0000000000000000',
+    '0111111111111110',
+    '0122222222222210',
+    '0123131313132210',
+    '0121313131312210',
+    '0123131313132210',
+    '0121313131312210',
+    '0123131313132210',
+    '0121313131312210',
+    '0122222222222210',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111103110',
+    '0111111111103110',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111111110',
+    '0111111111111110',
+    '0122222222222210',
+    '0111111111111110',
+    '0000000000000000',
+  ];
+  S['mat'] = (function () {
+    var rows = [];
+    for (var y = 0; y < 10; y++) {
+      var r = '';
+      for (var x = 0; x < 14; x++) {
+        if (x === 0 || x === 13 || y === 0 || y === 9) r += '0';
+        else r += ((x + y) % 2) ? '1' : '2';
+      }
+      rows.push(r);
+    }
+    return rows;
+  })();
+  S['bench'] = [
+    '000000000000000000000000',
+    '033333333333333333333330',
+    '022222222222222222222220',
+    '000000000000000000000000',
+    '.01.................01..',
+    '.01.................01..',
+    '.00.................00..',
+    '........................',
+  ];
+
+  // 12. Wave (2 frames): the waiting-at-the-camera verb.
+  S['agent-wave-a'] = [
+    '....000000..33..',
+    '...00000000.33..',
+    '..0000000000.3..',
+    '..0033333300.3..',
+    '..0030330300.3..',
+    '..00333333003...',
+    '...0033330033...',
+    '....000000.3....',
+    '...011111103....',
+    '..011311311.....',
+    '..0111331110....',
+    '.03011111110....',
+    '.000111111100...',
+    '....011110......',
+    '....00..00......',
+    '...000..000.....',
+  ];
+  S['agent-wave-b'] = [
+    '....000000......',
+    '...00000000.33..',
+    '..000000000033..',
+    '..003333330033..',
+    '..0030330300.3..',
+    '..003333330033..',
+    '...00333300.3...',
+    '....000000.3....',
+    '...011111103....',
+    '..011311311.....',
+    '..0111331110....',
+    '.03011111110....',
+    '.000111111100...',
+    '....011110......',
+    '....00..00......',
+    '...000..000.....',
+  ];
+
+  // Build variant frames: '<frame>@<style>' for every base agent frame.
+  // Runs AFTER every sprite definition above (the wave frames are defined
+  // late in the file — building earlier crashed on undefined, caught live).
+  var AGENT_FRAMES = {
+    'agent-idle-a': ['down', 0], 'agent-idle-b': ['down', 1],
+    'agent-walk-down-a': ['down', 0], 'agent-walk-down-b': ['down', 0],
+    'agent-walk-up-a': ['up', 0], 'agent-walk-up-b': ['up', 0],
+    'agent-walk-side-a': ['side', 0], 'agent-walk-side-b': ['side', 0],
+    'agent-typing-a': ['down', 0], 'agent-typing-b': ['down', 0],
+    'agent-wave-a': ['down', 0], 'agent-wave-b': ['down', 0],
+  };
+  Object.keys(HEADS).forEach(function (style) {
+    Object.keys(AGENT_FRAMES).forEach(function (frame) {
+      var f = AGENT_FRAMES[frame];
+      S[frame + '@' + style] = mergeHead(S[frame], HEADS[style][f[0]], f[1]);
+    });
+  });
+
+  // ---- delivered parts (the boss draws, consul assembles) ----------------
+  // Convention v2 (2026-08-23): the gear emoji is EXPLICIT transparency,
+  // so delivered grids carry '.' directly — no background peel needed.
+  // Head 1: brown crop + sunglasses (front/back/left/right, all his).
+  var DELIVERED_HEADS = {
+    h1: {
+      front: [
+        '..222222..',
+        '..222222..',
+        '..333333..',
+        '.00033000.',
+        '..333333..',
+      ],
+      back: [
+        '..222222..',
+        '..222222..',
+        '..222222..',
+        '..222222..',
+        '..000000..',
+      ],
+      left: [
+        '..2222..',
+        '.222222.',
+        '.333333.',
+        '.000333.',
+        '..33333.',
+      ],
+      right: [
+        '..2222..',
+        '.222222.',
+        '.333333.',
+        '.333000.',
+        '..33333.',
+      ],
+    },
+  };
+  // Head 2: mohawk (front/back/left/right; ragged widths right-padded).
+  DELIVERED_HEADS.h2 = {
+    front: [
+      '...222....',
+      '...222....',
+      '..32223...',
+      '.3333333..',
+      '.3033033..',
+      '.3333333..',
+      '..333333..',
+    ],
+    back: [
+      '...222....',
+      '...222....',
+      '..02220...',
+      '.0022200..',
+      '.0022200..',
+      '.0022200..',
+      '..000000..',
+    ],
+    left: [
+      '..222...',
+      '..2222..',
+      '.32220..',
+      '.33330..',
+      '.30330..',
+      '.33330..',
+      '..3330..',
+    ],
+    right: [
+      '...222..',
+      '..2222..',
+      '..02223.',
+      '..03333.',
+      '..03303.',
+      '..03333.',
+      '..0333..',
+    ],
+  };
+  // Head 3: bob — hair wrapping the face, full cover from behind.
+  DELIVERED_HEADS.h3 = {
+    front: [
+      '..222222..',
+      '.22222222.',
+      '.23333332.',
+      '.23033032.',
+      '.23333332.',
+    ],
+    back: [
+      '..222222..',
+      '.22222222.',
+      '.22222222.',
+      '.22222222.',
+      '..222222..',
+    ],
+    left: [
+      '..2222..',
+      '.222222.',
+      '.333322.',
+      '.303322.',
+      '.333322.',
+    ],
+    right: [
+      '..2222..',
+      '.222222.',
+      '.223333.',
+      '.223303.',
+      '.223333.',
+    ],
+  };
+  // Head 5: the afro, his own hand this time (full-width volume, curls
+  // framing the forehead, deep back hair in the profiles).
+  DELIVERED_HEADS.h5 = {
+    front: ['..222222..', '.22222222.', '2222222222', '2233333322', '2230330322', '.23333332.', '..333333..'],
+    back:  ['..222222..', '.22222222.', '2222222222', '2222222222', '2222222222', '.22222222.', '..000000..'],
+    left:  ['..2222..', '.222222.', '32222222', '03332222', '33332222', '.333322.', '..3333..'],
+    right: ['..2222..', '.222222.', '22222223', '22223330', '22223333', '.223333.', '..3333..'],
+  };
+  // Head 6: ponytail with elastic (nuque clear, wick separated by a gap
+  // in the profiles — the gear-transparency doing real work).
+  DELIVERED_HEADS.h6 = {
+    front: ['...2222...', '..222222..', '..222222..', '..333333..', '..303303..', '..333333..', '..333333..'],
+    back:  ['..222222..', '..220022..', '..222222..', '...2222...', '...2222...', '...2222...', '..000000..'],
+    left:  ['..2222..', '.222220.', '3333322.', '03333.2.', '33333.2.', '.3333.2.', '..3333..'],
+    right: ['..2222..', '.022222.', '.2233333', '.2.33330', '.2.33333', '.2.3333.', '..3333..'],
+  };
+  // Head 7: cyborg — military flat top, laser scanning eyepiece (shade 1)
+  // over the left eye, scanner track on the left profile.
+  DELIVERED_HEADS.h7 = {
+    front: ['..000000..', '..222222..', '..333333..', '..303311..', '..333333..', '..333333..', '..333333..'],
+    back:  ['..000000..', '..222222..', '..222222..', '..000000..', '..000000..', '..000000..', '..000000..'],
+    left:  ['..0000..', '.222222.', '32222222', '1333000.', '3333333.', '.333333.', '..3333..'],
+    right: ['..0000..', '.222222.', '22222223', '22223330', '22223333', '.222333.', '..3333..'],
+  };
+  // Head 8: fedora — pinched crown, ribbon band, full-width snapped brim.
+  // The detective the Bureau deserved.
+  DELIVERED_HEADS.h8 = {
+    front: ['...0000...', '..000000..', '..022220..', '0000000000', '..303303..', '..333333..', '..333333..'],
+    back:  ['...0000...', '..000000..', '..022220..', '0000000000', '..222222..', '..222222..', '..000000..'],
+    left:  ['...000..', '..00000.', '..02220.', '00000000', '0333322.', '3333322.', '.33332..'],
+    right: ['...000..', '..00000.', '..02220.', '00000000', '.2233330', '.2233333', '..23333.'],
+  };
+  // Head 9: space buns — twin chignons, straight fringe, lash-flick eyes.
+  DELIVERED_HEADS.h9 = {
+    front: ['.22....22.', '.22222222.', '..222222..', '..333333..', '.00333300.', '..333333..', '..333333..'],
+    back:  ['.22....22.', '.22222222.', '..222222..', '..222222..', '..222222..', '..000000..', '..000000..'],
+    left:  ['...22...', '..2222..', '.222222.', '0033322.', '3333322.', '.33332..', '..3333..'],
+    right: ['...22...', '..2222..', '.222222.', '.2233300', '.2233333', '..23333.', '..3333..'],
+  };
+  // Head 4: headset operator (ear cups front, strap back, mic boom left).
+  DELIVERED_HEADS.h4 = {
+    front: [
+      '..222222..',
+      '.22222222.',
+      '.22233222.',
+      '.03033030.',
+      '..333333..',
+    ],
+    back: [
+      '..222222..',
+      '.22222222.',
+      '.22222222.',
+      '.02222220.',
+      '..000000..',
+    ],
+    left: [
+      '..2222..',
+      '.222222.',
+      '.223333.',
+      '.030333.',
+      '..33333.',
+    ],
+    right: [
+      '..2222..',
+      '.222222.',
+      '.333322.',
+      '.333030.',
+      '..33333.',
+    ],
+  };
+  // Bodies (boss-drawn torsos, no hands or feet - consul adds those).
+  // b1: suit (shirt line, open jacket, tie; sleeve profiles).
+  // b2: trench coat (popped collar, buttoned, all coat-dark).
+  var DELIVERED_BODIES = {
+    b1: {
+      front: ['..333333..', '..01210...', '..01210...', '..11211...', '..111111..', '..111111..', '..111111..'],
+      back:  ['..000000..', '..000000..', '..000000..', '..000000..', '..111111..'],
+      left:  ['..0000..', '.00110..', '.00110..', '.01110..', '..111...'],
+      right: ['..0000..', '.01100..', '.01100..', '.01110..', '..111...'],
+    },
+    b3: {
+      front: ['..333333..', '.01100110.', '.01100110.', '..010010..', '..222222..', '..222222..', '..222222..'],
+      back:  ['..000000..', '.01111110.', '.01111110.', '..011110..', '..222222..', '..222222..', '..222222..'],
+      left:  ['..3333..', '.01110..', '.01110..', '.01110..', '..2222..', '..2222..', '..2222..'],
+      right: ['..3333..', '..01110.', '..01110.', '..01110.', '..2222..', '..2222..', '..2222..'],
+    },
+    b4: {
+      front: ['..000000..', '.01111110.', '.01111110.', '.002200220', '.002200220', '..000000..', '..111111..'],
+      back:  ['..000000..', '.00111100.', '.00122100.', '.00122100.', '.00122100.', '..000000..', '..111111..'],
+      left:  ['..0000..', '.00000..', '.00110..', '.00220..', '.00000..', '..0000..', '..1111..'],
+      right: ['..0000..', '..00000.', '..01100.', '..02200.', '..00000.', '..0000..', '..1111..'],
+    },
+    b5: {
+      front: ['..333333..', '.01100000.', '.01102200.', '.01102200.', '.01100000.', '..111000..', '..111000..'],
+      back:  ['..000000..', '.01110000.', '.01110000.', '.01110220.', '.01110000.', '..111000..', '..111000..'],
+      left:  ['..3333..', '.01110..', '.01110..', '.01110..', '..1111..', '..1111..', '..1111..'],
+      right: ['..0000..', '.000000.', '.002200.', '.000000.', '.002200.', '..0000..', '..0000..'],
+    },
+    b6: {
+      front: ['..000000..', '.01122110.', '.01122110.', '.00122100.', '.00111100.', '..111111..', '..111111..'],
+      back:  ['..000000..', '.01100110.', '.01100110.', '.01100110.', '.00111100.', '..111111..', '..111111..'],
+      left:  ['..0000..', '.01110..', '.01110..', '.01110..', '..1111..', '..1111..', '..1111..'],
+      right: ['..0000..', '..01110.', '..01110.', '..01110.', '..1111..', '..1111..', '..1111..'],
+    },
+    b7: {
+      front: ['..333333..', '.01100110.', '.01102210.', '.01102210.', '.01100110.', '..111111..', '..111111..'],
+      back:  ['..111111..', '.01111110.', '.01111110.', '.01111110.', '.01111110.', '..111111..', '..111111..'],
+      left:  ['..3333..', '.01110..', '.01110..', '.01110..', '..1111..', '..1111..', '..1111..'],
+      right: ['..3333..', '..01110.', '..02110.', '..02110.', '..01110.', '..1111..', '..1111..'],
+    },
+    b8: {
+      front: ['..333333..', '..322223..', '..022220..', '...2222...', '..222222..', '.22222222.', '2222222222'],
+      back:  ['..000000..', '..322223..', '..022220..', '...2222...', '..222222..', '.22222222.', '2222222222'],
+      left:  ['..3333..', '..3222..', '..0220..', '...22...', '..2222..', '..22222.', '.222222.'],
+      right: ['..3333..', '..2223..', '..0220..', '...22...', '..2222..', '.02222..', '.222222.'],
+    },
+    b9: {
+      front: ['..333333..', '.01100110.', '.01100110.', '..010010..', '..222222..', '..222222..', '..330033..'],
+      back:  ['..000000..', '.01111110.', '.01111110.', '..011110..', '..222222..', '..222222..', '..330033..'],
+      left:  ['..3333..', '.01110..', '.01110..', '.01110..', '..2222..', '..2222..', '..3333..'],
+      right: ['..3333..', '..01110.', '..01110.', '..01110.', '..2222..', '..2222..', '..3333..'],
+    },
+    b2: {
+      front: ['..333333..', '..001100..', '..001100..', '..000000..', '..000000..', '..000000..', '..000000..'],
+      back:  ['..000000..', '..000000..', '..000000..', '..000000..', '..000000..'],
+      left:  ['..0000..', '.00000..', '.00000..', '.00000..', '..000...'],
+      right: ['..0000..', '.00000..', '.00000..', '.00000..', '..000...'],
+    },
+  };
+  // Per-body assembler meta: armsIncluded (sketch has its own shoulders/
+  // hands, e.g. the cyborg's riveted side), noFeet (the garment covers
+  // them, e.g. the floor-length gown), armShade (sleeveless outfits get
+  // skin arms instead of the torso's edge shade).
+  var BODY_META = {
+    b5: { armsIncluded: true },
+    b8: { noFeet: true, armShade: '3' },
+  };
+  Object.keys(DELIVERED_BODIES).forEach(function (id) {
+    Object.keys(DELIVERED_BODIES[id]).forEach(function (facing) {
+      S['body/' + id + '/' + facing] = DELIVERED_BODIES[id][facing];
+    });
+  });
+
+  // ---- consul's half of the contract: hands, feet, assembly --------------
+  function torsoBounds(rows) {
+    var min = 99, max = -1;
+    rows.forEach(function (r) {
+      for (var x = 0; x < r.length; x++) if (r[x] !== '.') { if (x < min) min = x; if (x > max) max = x; }
+    });
+    return { min: min, max: max };
+  }
+  // Arms take the torso's own edge shade (a coat gets coat-colored arms),
+  // hands are always skin at the wrist row.
+  function addArms(rows, shadeOverride) {
+    var mid = rows[Math.floor(rows.length / 2)];
+    var armShade = shadeOverride || '1';
+    if (!shadeOverride) for (var x = 0; x < mid.length; x++) if (mid[x] !== '.') { armShade = mid[x]; break; }
+    var out = rows.map(function (r) { return r.split(''); });
+    for (var y = 1; y < out.length; y++) {
+      // hug THIS row's silhouette (rows vary in width: shirt vs jacket)
+      var rmin = 99, rmax = -1;
+      for (var x2 = 0; x2 < out[y].length; x2++) if (out[y][x2] !== '.') { if (x2 < rmin) rmin = x2; if (x2 > rmax) rmax = x2; }
+      if (rmax < 0) continue;
+      var ch = (y === out.length - 1) ? '3' : armShade;
+      if (rmin - 1 >= 0) out[y][rmin - 1] = ch;
+      if (rmax + 1 < out[y].length) out[y][rmax + 1] = ch;
+    }
+    return out.map(function (r) { return r.join(''); });
+  }
+  // Standard feet, 2-frame walk (together / apart).
+  function legsFor(facing, width, frame) {
+    var rows = (facing === 'left' || facing === 'right')
+      ? (frame ? ['..0110..', '..0010..'] : ['..0110..', '..0100..'])
+      : (frame ? ['..011110..', '..01..10..'] : ['..011110..', '...0110...']);
+    return rows.map(function (r) { while (r.length < width) r += '.'; return r.slice(0, width); });
+  }
+  // assemble('h2','b1','front',0) -> registered sprite key (lazy).
+  function assemble(headId, bodyId, facing, frame) {
+    var key = 'agent/' + headId + '/' + bodyId + '/' + facing + (frame ? '/b' : '');
+    if (S[key]) return key;
+    var head = DELIVERED_HEADS[headId] && DELIVERED_HEADS[headId][facing];
+    var body = DELIVERED_BODIES[bodyId] && DELIVERED_BODIES[bodyId][facing];
+    if (!head || !body) return null;
+    var w = Math.max(head[0].length, body[0].length, 10);
+    function centerRows(rows) {
+      var pad = Math.floor((w - rows[0].length) / 2);
+      return rows.map(function (r) {
+        var line = new Array(pad + 1).join('.') + r;
+        while (line.length < w) line += '.';
+        return line;
+      });
+    }
+    var meta = BODY_META[bodyId] || {};
+    var wantArms = (facing === 'front' || facing === 'back') && !meta.armsIncluded;
+    var torso = centerRows(wantArms ? addArms(body, meta.armShade) : body);
+    var rows = centerRows(head).concat(torso);
+    if (!meta.noFeet) rows = rows.concat(legsFor(facing, w, frame));
+    var H = 16, W = 16;
+    if (rows.length > H) rows = rows.slice(rows.length - H);
+    var padSide = Math.floor((W - w) / 2);
+    var blank = new Array(W + 1).join('.');
+    var out = [];
+    for (var i = 0; i < H - rows.length; i++) out.push(blank);
+    rows.forEach(function (r) {
+      var line = new Array(padSide + 1).join('.') + r;
+      while (line.length < W) line += '.';
+      out.push(line);
+    });
+    S[key] = out;
+    return key;
+  }
+
+  Object.keys(DELIVERED_HEADS).forEach(function (id) {
+    Object.keys(DELIVERED_HEADS[id]).forEach(function (facing) {
+      S['head/' + id + '/' + facing] = DELIVERED_HEADS[id][facing];
+    });
+  });
+
+  // ---- head + body assembly system (boss order 2026-08-23) ---------------
+  // The boss sketches PARTS in emoji grids; consul assembles characters.
+  // Heads carry hair + face + outline; bodies carry torso + arms + legs.
+  // assembleCast(head, body) stacks them, centers into the 16x16 agent
+  // frame (bottom-aligned) and PEELS the background: outer 0-padding
+  // becomes transparent via corner flood-fill that stops at outline 0s
+  // (any 0 touching a non-0 stays opaque) — his grids have no transparent
+  // marker, so the peel is what keeps outlines while killing the slab.
+  var CAST_HEADS = {
+    helmet: ['0000000000', '0011111100', '0113113110', '0111111110', '0011111100', '0033333300', '0030330300', '0033333300'],
+    punk:   ['0002200000', '0002200000', '0032233000', '0333333300', '0303303300', '0333333300'],
+    bowl:   ['0022222200', '0222222220', '0233333320', '0230330320', '0233333320'],
+    spiky:  ['0202002020', '0222222220', '0223333220', '0033333300', '0030330300', '0033333300'],
+    swept:  ['0002222000', '0222222200', '0223333200', '0033333300', '0030330300', '0033333300'],
+    flat:   ['0022222200', '0022222200', '0033333300', '0030330300', '0033333300'],
+    bald:   ['0003333000', '0033333300', '0033333300', '0030330300', '0033333300'],
+    hood:   ['0011111100', '0111111110', '0113333110', '0133333310', '0130330310', '0133333310'],
+    sidepart: ['0022222000', '0222222200', '0223333300', '0033333300', '0030330300', '0033333300'],
+    buns:   ['0220000220', '0222222220', '0223333220', '0233333320', '0030330300', '0033333300'],
+  };
+  var CAST_BODIES = {
+    suit:   ['0011111100', '0111111110', '0001111000', '0001001000'],
+    suitv:  ['0011111100', '0111331110', '0001111000', '0001001000'],
+    shirt:  ['0011331100', '0111331110', '0001111000', '0001001000'],
+    tie:    ['0011221100', '0111221110', '0001111000', '0001001000'],
+    jacket: ['0011001100', '0111001110', '0001111000', '0001001000'],
+    belt:   ['0011111100', '0111111110', '0110000110', '0001111000', '0001001000'],
+    coat:   ['0221111220', '0111111110', '0111111110', '0001001000'],
+    slim:   ['0221111220', '0001111000', '0001111000', '0001001000'],
+  };
+
+  // Peel: flood from every border cell through 0s, skipping 0s that touch
+  // a non-0 (those are outline). Reached 0s become transparent.
+  function peel(rows) {
+    var h = rows.length, w = rows[0].length;
+    var grid = rows.map(function (r) { return r.split(''); });
+    function isOutline(x, y) {
+      if (grid[y][x] !== '0') return false;
+      for (var dy = -1; dy <= 1; dy++) for (var dx = -1; dx <= 1; dx++) {
+        var ny = y + dy, nx = x + dx;
+        if (ny < 0 || nx < 0 || ny >= h || nx >= w) continue;
+        var c = grid[ny][nx];
+        if (c !== '0' && c !== '.') return true;
+      }
+      return false;
+    }
+    var stack = [];
+    for (var x = 0; x < w; x++) { stack.push([x, 0]); stack.push([x, h - 1]); }
+    for (var y = 0; y < h; y++) { stack.push([0, y]); stack.push([w - 1, y]); }
+    var seen = {};
+    while (stack.length) {
+      var c2 = stack.pop(), cx = c2[0], cy = c2[1];
+      var key = cx + ',' + cy;
+      if (seen[key]) continue; seen[key] = 1;
+      if (cx < 0 || cy < 0 || cx >= w || cy >= h) continue;
+      if (grid[cy][cx] !== '0' || isOutline(cx, cy)) continue;
+      grid[cy][cx] = '.';
+      stack.push([cx + 1, cy]); stack.push([cx - 1, cy]);
+      stack.push([cx, cy + 1]); stack.push([cx, cy - 1]);
+    }
+    return grid.map(function (r) { return r.join(''); });
+  }
+
+  // Stack head over body, center into a 16-wide frame, bottom-align to
+  // row 15, peel the background. Returns rows.
+  function assembleRows(headKey, bodyKey, legsFrame) {
+    var head = CAST_HEADS[headKey], body = CAST_BODIES[bodyKey].slice();
+    if (legsFrame === 1) {
+      // walk frame: alternate the feet row (shift the two feet outward)
+      var feet = body[body.length - 1];
+      body[body.length - 1] = feet.replace('0001001000', '0010000100')
+        .replace('0110000110', '0110000110');
+    }
+    var rows = head.concat(body);
+    var w = 16, h = 16;
+    var padTop = h - rows.length;
+    var out = [];
+    var padSide = Math.floor((w - rows[0].length) / 2);
+    var blank = new Array(w + 1).join('.');
+    for (var i = 0; i < padTop; i++) out.push(blank);
+    rows.forEach(function (r) {
+      var line = new Array(padSide + 1).join('.') + r;
+      while (line.length < w) line += '.';
+      out.push(line);
+    });
+    return peel(out);
+  }
+  // Lazy assembled-sprite access: 'cast/<head>/<body>' (+ '/b' walk frame).
+  function castSprite(headKey, bodyKey, frame) {
+    var key = 'cast/' + headKey + '/' + bodyKey + (frame ? '/b' : '');
+    if (!S[key]) {
+      if (!CAST_HEADS[headKey] || !CAST_BODIES[bodyKey]) return null;
+      S[key] = assembleRows(headKey, bodyKey, frame ? 1 : 0);
+    }
+    return key;
+  }
+  // Deterministic assignment: name -> {head, body}.
+  function castFor(name) {
+    var h = 0; name = String(name);
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    var heads = Object.keys(CAST_HEADS), bodies = Object.keys(CAST_BODIES);
+    return { head: heads[h % heads.length], body: bodies[(h >> 4) % bodies.length] };
+  }
 
   // ---- 3x5 bitmap font ----------------------------------------------------
   // Each glyph: 5 strings of 3 chars, '1' = ink. Rendered with 1px advance
@@ -597,6 +1603,52 @@
   }
   function textWidth(str) { return String(str).length * 4; }
 
+  // ---- TTF pixel text (Press Start, vendored at /office/font.ttf) ---------
+  // fillText anti-aliases, which would break the 4-shade law on readback —
+  // so the glyph run is drawn to an offscreen canvas and THRESHOLDED:
+  // alpha >= 128 becomes the requested shade, everything else transparent.
+  // Cached per (text, size); palette/shade resolve at blit time via a
+  // second tiny recolor pass kept in the same cache entry per palette.
+  var ttfCache = {};
+  function ttfText(ctx, str, pal, x, y, shade, size) {
+    size = size || 8;
+    str = String(str);
+    var key = pal + '/' + (shade === undefined ? 0 : shade) + '/' + size + '/' + str;
+    var cnv = ttfCache[key];
+    if (!cnv) {
+      var w = Math.max(1, Math.ceil(str.length * size * 1.05) + 2), h = size + 4;
+      var off = document.createElement('canvas');
+      off.width = w; off.height = h;
+      var c = off.getContext('2d');
+      c.font = size + 'px OfficePixel, monospace';
+      c.textBaseline = 'top';
+      c.fillStyle = '#000';
+      c.fillText(str, 0, 0);
+      var img = c.getImageData(0, 0, w, h), d = img.data;
+      var sh = PALETTES[pal].shades[shade === undefined ? 0 : shade];
+      var r = parseInt(sh.slice(1, 3), 16), g = parseInt(sh.slice(3, 5), 16), b = parseInt(sh.slice(5, 7), 16);
+      for (var i = 0; i < d.length; i += 4) {
+        if (d[i + 3] >= 128) { d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = 255; }
+        else d[i + 3] = 0;
+      }
+      c.putImageData(img, 0, 0);
+      cnv = ttfCache[key] = off;
+    }
+    ctx.drawImage(cnv, x | 0, y | 0);
+    return cnv.width;
+  }
+  function clearTtfCache() { ttfCache = {}; }
+
+  // ---- per-agent identity ------------------------------------------------
+  // hash(name) -> { hair, torso } overlay names (or null for the plain base).
+  var HAIR_STYLES = [null, 'afro', 'bun', 'long', 'cap', 'mohawk'];
+  var TORSO_STYLES = [null, 'torso-tie-down', 'torso-buttons-down'];
+  function identityFor(name) {
+    var h = 0; name = String(name);
+    for (var i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+    return { hair: HAIR_STYLES[h % HAIR_STYLES.length], torso: TORSO_STYLES[(h >> 3) % TORSO_STYLES.length] };
+  }
+
   // ---- GB dialog box ------------------------------------------------------
   // Double border like the reference screenshot: dark outer, light gap,
   // dark inner, lightest fill.
@@ -619,6 +1671,10 @@
       { name: 'window-night' }, { name: 'board' }, { name: 'desk' },
       { name: 'chair' },
       { name: 'monitor', frames: ['monitor-off', 'monitor-on', 'monitor-glow'], fps: 2 },
+      { name: 'shelf-brain' },
+      { name: 'coffee', frames: ['coffee-a', 'coffee-b'], fps: 3 },
+      { name: 'plant' }, { name: 'table-meet' },
+      { name: 'door-boss' }, { name: 'mat' }, { name: 'bench' },
     ]},
     { section: 'Missions', items: [
       { name: 'folder-queued' }, { name: 'folder-working' },
@@ -630,7 +1686,63 @@
       { name: 'walk-up', frames: ['agent-walk-up-a', 'agent-walk-up-b'], fps: 6 },
       { name: 'walk-side', frames: ['agent-walk-side-a', 'agent-walk-side-b'], fps: 6 },
       { name: 'typing', frames: ['agent-typing-a', 'agent-typing-b'], fps: 4 },
+      { name: 'wave', frames: ['agent-wave-a', 'agent-wave-b'], fps: 3 },
     ]},
+    { section: 'Cast', items: [
+      { name: 'boss example', layers: ['cast-example'] },
+      { name: 'boss example 2', layers: ['cast-example-2'] },
+      { name: 'boss 3 bowl', layers: ['cast-example-3'] },
+      { name: 'boss 4 spiky', layers: ['cast-example-4'] },
+      { name: 'boss 5 swept', layers: ['cast-example-5'] },
+      { name: 'boss 6 flat', layers: ['cast-example-6'] },
+      { name: 'boss 7 bald', layers: ['cast-example-7'] },
+      { name: 'boss 8 hood', layers: ['cast-example-8'] },
+      { name: 'boss 9 jacket', layers: ['cast-example-9'] },
+      { name: 'boss 10 buns', layers: ['cast-example-10'] },
+      { name: 'boss 11 coat', layers: ['cast-example-11'] },
+      { name: 'base', layers: ['agent-idle-a'] },
+      { name: 'mohawk', frames: ['agent-idle-a@mohawk', 'agent-idle-b@mohawk'], fps: 2 },
+      { name: 'afro', frames: ['agent-idle-a@afro', 'agent-idle-b@afro'], fps: 2 },
+      { name: 'bun', frames: ['agent-idle-a@bun', 'agent-idle-b@bun'], fps: 2 },
+      { name: 'long', frames: ['agent-idle-a@long', 'agent-idle-b@long'], fps: 2 },
+      { name: 'cap', frames: ['agent-idle-a@cap', 'agent-idle-b@cap'], fps: 2 },
+      { name: 'walkside afro', frames: ['agent-walk-side-a@afro', 'agent-walk-side-b@afro'], fps: 6 },
+      { name: 'walkside long', frames: ['agent-walk-side-a@long', 'agent-walk-side-b@long'], fps: 6 },
+      { name: 'tie', layers: ['agent-idle-a', 'torso-tie-down'] },
+      { name: 'buttons', layers: ['agent-idle-a', 'torso-buttons-down'] },
+    ]},
+    { section: 'Deliveries', items: [
+      { name: 'h1 front', layers: ['head/h1/front'] }, { name: 'h1 back', layers: ['head/h1/back'] },
+      { name: 'h1 left', layers: ['head/h1/left'] }, { name: 'h1 right', layers: ['head/h1/right'] },
+      { name: 'h2 front', layers: ['head/h2/front'] }, { name: 'h2 back', layers: ['head/h2/back'] },
+      { name: 'h2 left', layers: ['head/h2/left'] }, { name: 'h2 right', layers: ['head/h2/right'] },
+      { name: 'h3 front', layers: ['head/h3/front'] }, { name: 'h3 back', layers: ['head/h3/back'] },
+      { name: 'h3 left', layers: ['head/h3/left'] }, { name: 'h3 right', layers: ['head/h3/right'] },
+      { name: 'h4 front', layers: ['head/h4/front'] }, { name: 'h4 back', layers: ['head/h4/back'] },
+      { name: 'h4 left', layers: ['head/h4/left'] }, { name: 'h4 right', layers: ['head/h4/right'] },
+      { name: 'h5 front', layers: ['head/h5/front'] }, { name: 'h5 back', layers: ['head/h5/back'] },
+      { name: 'h5 left', layers: ['head/h5/left'] }, { name: 'h5 right', layers: ['head/h5/right'] },
+      { name: 'h6 front', layers: ['head/h6/front'] }, { name: 'h6 back', layers: ['head/h6/back'] },
+      { name: 'h6 left', layers: ['head/h6/left'] }, { name: 'h6 right', layers: ['head/h6/right'] },
+      { name: 'h7 front', layers: ['head/h7/front'] }, { name: 'h7 back', layers: ['head/h7/back'] },
+      { name: 'h7 left', layers: ['head/h7/left'] }, { name: 'h7 right', layers: ['head/h7/right'] },
+      { name: 'h8 front', layers: ['head/h8/front'] }, { name: 'h8 back', layers: ['head/h8/back'] },
+      { name: 'h8 left', layers: ['head/h8/left'] }, { name: 'h8 right', layers: ['head/h8/right'] },
+      { name: 'h9 front', layers: ['head/h9/front'] }, { name: 'h9 back', layers: ['head/h9/back'] },
+      { name: 'h9 left', layers: ['head/h9/left'] }, { name: 'h9 right', layers: ['head/h9/right'] },
+    ]},
+    { section: 'Assembled (boss parts + consul hands and feet)', items: (function () {
+      var items = [];
+      ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'h7', 'h8', 'h9'].forEach(function (h) {
+        ['b1', 'b2', 'b3', 'b4', 'b5', 'b6', 'b7', 'b8', 'b9'].forEach(function (bd) {
+          items.push({ name: h + '+' + bd, frames: [assemble(h, bd, 'front', 0), assemble(h, bd, 'front', 1)], fps: 4 });
+        });
+      });
+      ['front', 'back', 'left', 'right'].forEach(function (f) {
+        items.push({ name: 'h2+b1 ' + f, frames: [assemble('h2', 'b1', f, 0), assemble('h2', 'b1', f, 1)], fps: 4 });
+      });
+      return items;
+    })() },
     { section: 'Emotes', items: [
       { name: 'emote-bang' }, { name: 'emote-quest' }, { name: 'emote-zzz' },
       { name: 'emote-coffee' }, { name: 'emote-mail' },
@@ -639,6 +1751,16 @@
 
   window.OfficeAssets = {
     PALETTES: PALETTES,
+    ttfText: ttfText,
+    clearTtfCache: clearTtfCache,
+    identityFor: identityFor,
+    CAST_HEADS: CAST_HEADS,
+    CAST_BODIES: CAST_BODIES,
+    castSprite: castSprite,
+    castFor: castFor,
+    assemble: assemble,
+    DELIVERED_HEADS: DELIVERED_HEADS,
+    DELIVERED_BODIES: DELIVERED_BODIES,
     SPRITES: S,
     GALLERY: GALLERY,
     sprite: sprite,
