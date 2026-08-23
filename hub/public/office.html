@@ -15,8 +15,9 @@
      choreography from round 1 are unchanged: /api/state seats the roster,
      SSE events queue into per-sprite scenes. -->
 <style>
+  @font-face { font-family: 'OfficePixel'; src: url('/office/font.ttf') format('truetype'); }
   html, body { margin: 0; height: 100%; background: var(--sh0, #14121f); overflow: hidden;
-               font-family: 'Courier New', monospace; }
+               font-family: 'OfficePixel', 'Courier New', monospace; }
   #stage { position: relative; width: 100vw; height: 100vh; display: flex;
            align-items: center; justify-content: center; }
   #wrap { position: relative; }
@@ -28,21 +29,23 @@
     background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
     border: 2px solid var(--sh0, #33382b);
     box-shadow: inset 0 0 0 1px var(--sh3), inset 0 0 0 3px var(--sh0);
-    padding: 6px 9px; font-size: 10px; line-height: 1.5; font-weight: bold;
+    padding: 7px 9px; font-size: 8px; line-height: 1.7;
     max-width: 240px; white-space: normal; pointer-events: none;
     transition: opacity .3s; z-index: 3;
   }
   .bubble .who { text-decoration: underline; }
   #hud {
-    position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 12px;
-    padding: 8px 12px; color: var(--sh3, #e8e4c9); font-size: 11px; font-weight: bold;
-    align-items: center; z-index: 2; letter-spacing: 1px;
+    position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 14px;
+    padding: 10px 46px 10px 14px; color: var(--sh3, #e8e4c9); font-size: 8px;
+    align-items: center; z-index: 2; /* right padding clears the fixed minimize icon */
   }
-  #hud .logo { font-size: 13px; }
+  #hud .logo { font-size: 16px; }
+  #hud a { text-decoration: none; }
   #hud button {
-    font: inherit; font-size: 10px; padding: 3px 7px; cursor: pointer;
+    font: inherit; font-size: 8px; padding: 5px 8px; cursor: pointer;
     background: var(--sh1, #6b7353); color: var(--sh3, #e8e4c9);
     border: 2px solid var(--sh0, #33382b);
+    box-shadow: inset 0 0 0 1px var(--sh3);
   }
   #hud #conn { margin-left: auto; opacity: .7; }
   #hud #conn.live { opacity: 1; }
@@ -52,8 +55,17 @@
     background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
     border: 3px solid var(--sh0, #33382b);
     box-shadow: inset 0 0 0 2px var(--sh3), inset 0 0 0 4px var(--sh0);
-    padding: 10px 14px; font-size: 12px; font-weight: bold; line-height: 1.4;
+    padding: 12px 14px; font-size: 8px; line-height: 1.6;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 2;
+  }
+  #btn-min {
+    position: absolute; top: 8px; right: 10px; z-index: 4;
+    display: flex; align-items: center; justify-content: center;
+    width: 26px; height: 24px; text-decoration: none;
+    font-size: 14px; line-height: 1;
+    background: var(--sh1, #6b7353); color: var(--sh3, #e8e4c9);
+    border: 2px solid var(--sh0, #33382b);
+    box-shadow: inset 0 0 0 1px var(--sh3);
   }
   #gate {
     position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
@@ -68,6 +80,13 @@
 </style>
 </head>
 <body>
+<style>
+  [data-mini] #hud, [data-mini] #ticker, [data-mini] #btn-min { display: none !important; }
+  /* mini fills its iframe edge to edge: the parent fixes a 16:9 box, so
+     stretching to the viewport keeps the aspect and kills the bars. */
+  [data-mini] #stage { align-items: stretch; justify-content: stretch; }
+  [data-mini] #wrap, [data-mini] canvas { width: 100vw !important; height: 100vh !important; }
+</style>
 <div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
 <div id="hud">
   <span class="logo">BUREAU</span>
@@ -75,11 +94,15 @@
   <span>Q:<span id="n-queued">0</span></span>
   <span>REV:<span id="n-review">0</span></span>
   <span>DONE:<span id="n-done">0</span></span>
-  <button id="btn-pal" title="Palette">OLIVE</button>
-  <button id="btn-scale" title="Pixel scale">AUTO</button>
-  <a id="lnk-assets" href="/office/assets" style="color:inherit;font-size:10px">SPRITES</a>
+  <!-- boss order 2026-08-23: no menu nav on the office — the palette and
+       scale settings live on the P and S keys (and on /office/assets);
+       the only chrome is the minimize icon, fixed top right. The buttons
+       stay in the DOM hidden because the settings logic drives them. -->
+  <button id="btn-pal" title="Palette" hidden>OLIVE</button>
+  <button id="btn-scale" title="Pixel scale" hidden>AUTO</button>
   <span id="conn">connecting</span>
 </div>
+<a id="btn-min" href="/v2" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
 <div id="ticker">OPENING THE OFFICE...</div>
 <div id="gate" hidden>
   <div>BUREAU · STAFF ENTRANCE</div>
@@ -92,6 +115,19 @@
 (function () {
   var A = window.OfficeAssets;
   var W = 384, H = 216, TILE = 8;
+  // t-278: mini mode — embedded in the dashboard's agents rail as a
+  // same-origin iframe (shares bureau_token localStorage). Chrome hides,
+  // the canvas letterboxes into whatever box the parent gives us; the
+  // integer-scaling law holds (a 208px rail at dpr 2 yields a clean 1x
+  // device-pixel render).
+  var MINI = new URLSearchParams(location.search).has('mini');
+  if (MINI) document.documentElement.setAttribute('data-mini', '');
+  // ttfText caches glyph runs; anything drawn before the vendored font
+  // finished loading is a fallback-font render frozen forever — flush the
+  // cache the moment the real font lands (the rAF loop repaints after).
+  if (document.fonts && document.fonts.load) {
+    document.fonts.load('8px OfficePixel').then(function () { A.clearTtfCache(); }).catch(function () {});
+  }
   var cv = document.getElementById('c'), ctx = cv.getContext('2d');
   cv.width = W; cv.height = H;
   ctx.imageSmoothingEnabled = false;
@@ -130,6 +166,7 @@
   // ---- super-pixel integer scaling (device pixels, letterboxed) ----------
   var SCALE = 3;
   function fit() {
+    if (MINI) return; // mini stretches via CSS to fill the iframe, no bars
     var dpr = window.devicePixelRatio || 1;
     var n = scaleSetting === 'auto'
       ? Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)))
@@ -155,6 +192,12 @@
     fit();
   });
   applyCssPalette();
+  // P cycles the palette, S cycles the pixel scale (the buttons are
+  // hidden chrome now; the keys are the switchboard).
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'p' || e.key === 'P') document.getElementById('btn-pal').click();
+    if (e.key === 's' || e.key === 'S') document.getElementById('btn-scale').click();
+  });
 
   // ---- landmarks (re-gridded to the 8px tile grid) -----------------------
   var SPOT = {
@@ -166,10 +209,10 @@
     meet:    { x: 336, y: 84 },
   };
   var DESK_SLOTS = [
-    { x: 64, y: 88 }, { x: 152, y: 88 }, { x: 240, y: 88 },
-    { x: 64, y: 152 }, { x: 152, y: 152 }, { x: 240, y: 152 },
+    { x: 60, y: 88 }, { x: 152, y: 88 }, { x: 244, y: 88 },
+    { x: 60, y: 152 }, { x: 152, y: 152 }, { x: 244, y: 152 },
   ];
-  function deskSeat(d) { return { x: d.x + 8, y: d.y - 10 }; } // seated-behind position (sprite topleft)
+  function deskSeat(d) { return { x: d.x + 10, y: d.y + 12 }; } // seated south of the wide desk, left half, back to us
 
   // ---- live state (unchanged wiring from round 1) ------------------------
   var token = null;
@@ -393,54 +436,47 @@
     A.drawSprite(ctx, 'window-night', p, 232, 8);
     // mission board + live folder stacks (state told by dither, not hue)
     A.drawSprite(ctx, 'board', p, 24, 6);
-    A.drawText(ctx, 'MISSIONS', p, 28, 9, 0);
+    A.ttfText(ctx, 'MISSIONS', p, 28, 8, 0, 8);
     var stacks = [
       ['folder-queued', boardCounts.queued], ['folder-working', boardCounts.working],
       ['folder-review', boardCounts.review], ['folder-done', boardCounts.done],
     ];
     stacks.forEach(function (s, i) {
       var n = Math.min(s[1], 3);
-      for (var k = 0; k < n; k++) A.drawSprite(ctx, s[0], p, 29 + i * 10, 15 + k * 4);
-      if (s[1] > 3) A.drawText(ctx, '+' + (s[1] - 3), p, 29 + i * 10, 27, 1);
+      for (var k = 0; k < n; k++) A.drawSprite(ctx, s[0], p, 31 + i * 17, 19 + k * 4);
+      if (s[1] > 3) A.drawText(ctx, '+' + (s[1] - 3), p, 41 + i * 17, 21, 1);
     });
 
-    // BRAIN shelf (fallback, queue #6)
-    shadeRect(p, 8, 60, 40, 44, 0);
-    shadeRect(p, 10, 62, 36, 40, 1);
-    for (var row = 0; row < 3; row++) {
-      shadeRect(p, 10, 72 + row * 12, 36, 2, 0);
-      for (var b = 0; b < 6; b++) shadeRect(p, 12 + b * 6, 64 + row * 12, 4, 8, (b % 2) ? 2 : 3);
-    }
-    A.drawText(ctx, 'BRAIN', p, 14, 106, 0);
+    // BRAIN shelf (queue #6, hand-drawn)
+    A.drawSprite(ctx, 'shelf-brain', p, 8, 60);
+    A.ttfText(ctx, 'BRAIN', p, 9, 106, 3, 8);
 
-    // coffee corner + plant (fallback, queue #7)
-    shadeRect(p, 8, 184, 24, 26, 1);
-    shadeRect(p, 10, 186, 20, 12, 3);
-    shadeRect(p, 16, 190, 8, 6, 0);
-    A.dither50(ctx, p, 10, 199, 20, 9, 1, 0);
-    shadeRect(p, 38, 196, 10, 8, 1);
-    shadeRect(p, 40, 184, 6, 12, 2);
-    shadeRect(p, 37, 188, 4, 6, 1);
+    // coffee corner + plant (queue #7, hand-drawn; the machine drips)
+    A.drawSprite(ctx, Math.floor(t / 400) % 2 ? 'coffee-b' : 'coffee-a', p, 8, 188);
+    A.drawSprite(ctx, 'plant', p, 34, 192);
 
-    // desks
-    DESK_SLOTS.forEach(function (d) { drawDeskAt(d, t, p); });
+    // desks are NOT drawn here any more: they join the y-sorted painter
+    // list with the agents, so a seated agent renders BEHIND the desk
+    // (head and shoulders above it) and a walker below renders in front.
 
     // conference room (fallback walls, queue #8)
     A.tileRect(ctx, 'wall-cap', p, 312, 40, 8, 64);
     A.tileRect(ctx, 'wall-cap', p, 312, 96, 72, 8);
     shadeRect(p, 312, 96, 24, 8, 2); // door gap
-    shadeRect(p, 336, 56, 40, 24, 1);
-    shadeRect(p, 338, 58, 36, 18, 2);
-    A.drawText(ctx, 'MEET', p, 348, 64, 0);
+    A.drawSprite(ctx, 'chair', p, 336, 46); A.drawSprite(ctx, 'chair', p, 352, 46); A.drawSprite(ctx, 'chair', p, 368, 46);
+    A.drawSprite(ctx, 'table-meet', p, 334, 56);
+    A.drawSprite(ctx, 'chair', p, 336, 82); A.drawSprite(ctx, 'chair', p, 352, 82); A.drawSprite(ctx, 'chair', p, 368, 82);
+    A.ttfText(ctx, 'MEET', p, 338, 62, 0, 8);
 
     // boss office (fallback, queue #9)
     A.tileRect(ctx, 'wall-cap', p, 304, 152, 80, 8);
     A.tileRect(ctx, 'wall-cap', p, 304, 152, 8, 64);
-    shadeRect(p, 304, 176, 8, 24, 2); // door gap
-    A.dither50(ctx, p, 292, 178, 10, 20, 1, 2); // mat
+    A.drawSprite(ctx, 'door-boss', p, 300, 176);   // the boss door fills the gap
+    A.drawSprite(ctx, 'mat', p, 285, 183);
+    A.drawSprite(ctx, 'bench', p, 252, 202);       // the waiting bench
     shadeRect(p, 328, 176, 48, 16, 1);
     shadeRect(p, 330, 178, 44, 10, 2);
-    A.drawText(ctx, 'BOSS', p, 336, 196, 3);
+    A.ttfText(ctx, 'BOSS', p, 330, 196, 3, 8);
     // review folders bounce at the door
     var bounce = Math.floor(Math.sin(t / 250) * 2);
     for (var k2 = 0; k2 < Math.min(reviewCount, 4); k2++)
@@ -456,9 +492,18 @@
     var on = ag && ag.state !== 'offline';
     A.drawSprite(ctx, 'desk', p, d.x, d.y);
     var mon = !on ? 'monitor-off' : (Math.floor(t / 700) % 3 === 0 ? 'monitor-glow' : 'monitor-on');
-    A.drawSprite(ctx, mon, p, d.x + 15, d.y - 12);
-    A.drawText(ctx, (ag ? ag.name : '').slice(0, 6), p, d.x + 3, d.y + 9, 3);
-    if (!ag || ag.state === 'offline') A.drawSprite(ctx, 'chair', p, d.x + 4, d.y - 8);
+    A.drawSprite(ctx, mon, p, d.x + 34, d.y - 12);
+    // Nameplate: PRESENT agents (active or idle) floating above the
+    // screen; only the offline/absent lose their plate (boss refinement:
+    // sol idled and her name vanished — presence, not activity, owns it).
+    if (ag && ag.state !== 'offline') {
+      var nm = ag.name.slice(0, 7).toUpperCase();
+      var tw = A.textWidth(nm);
+      var px0 = d.x + 42 - Math.floor((tw + 5) / 2);
+      shadeRect(p, px0, d.y - 23, tw + 5, 9, 0);
+      shadeRect(p, px0 + 1, d.y - 22, tw + 3, 7, 3);
+      A.drawText(ctx, nm, p, px0 + 3, d.y - 21, 0);
+    }
   }
 
   function atSeat(a) {
@@ -470,24 +515,41 @@
     if (a.state === 'offline') return;
     var p = pal();
     var x = a.pos.x | 0, y = a.pos.y | 0;
-    var f = Math.floor(t / 140) % 2 ? 'b' : 'a';
-    var name, mirror = false;
-    if (a.walking) {
-      if (a.dir === 'left') { name = 'agent-walk-side-' + f; }
-      else if (a.dir === 'right') { name = 'agent-walk-side-' + f; mirror = true; }
-      else if (a.dir === 'up') { name = 'agent-walk-up-' + f; }
-      else { name = 'agent-walk-down-' + f; }
-    } else if (atSeat(a) && a.state === 'active') {
-      name = 'agent-typing-' + (Math.floor(t / 260) % 2 ? 'b' : 'a');
-    } else {
-      name = 'agent-idle-' + (Math.floor(t / 600) % 2 ? 'b' : 'a');
+    // Boss-drawn parts, randomized per load (boss order 2026-08-23): each
+    // agent picks a random head and torso at seat time; consul's hands,
+    // feet and walk frames come from the assembler. Facings are real now:
+    // the boss drew front/back/left/right for every part.
+    if (!a.cast) {
+      var heads = Object.keys(A.DELIVERED_HEADS), bodies = Object.keys(A.DELIVERED_BODIES);
+      a.cast = {
+        head: heads[Math.floor(Math.random() * heads.length)],
+        body: bodies[Math.floor(Math.random() * bodies.length)],
+      };
     }
-    A.drawSprite(ctx, name, p, x, y, mirror);
-    if (a.carry) A.drawSprite(ctx, a.carry, p, x + 4, y - 9);
+    var facing = 'front';
+    if (a.walking) {
+      facing = a.dir === 'up' ? 'back' : a.dir === 'left' ? 'left' : a.dir === 'right' ? 'right' : 'front';
+    } else if (atSeat(a)) {
+      facing = 'back'; // seated at the desk, working: we see their back
+    }
+    var frame = a.walking ? (Math.floor(t / 140) % 2) : 0;
+    var key = A.assemble(a.cast.head, a.cast.body, facing, frame);
+    var bob = (!a.walking && Math.floor(t / 600) % 2) ? 1 : 0;
+    // 2x super-size (boss: the 10-wide parts were dwarfed by the
+    // furniture): integer scale, feet stay on the same line — the
+    // sprite grows upward and outward from the old 16-box.
+    if (key) {
+      var cnv = A.sprite(key, p);
+      if (cnv) {
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(cnv, (x - 8) | 0, (y - 16 + bob) | 0, 32, 32);
+      }
+    }
+    if (a.carry) A.drawSprite(ctx, a.carry, p, x + 4, y - 24);
     if (a.emote && performance.now() < a.emoteUntil) {
-      A.drawSprite(ctx, a.emote, p, x + 12, y - 10);
+      A.drawSprite(ctx, a.emote, p, x + 14, y - 24);
     } else if (!a.walking && atSeat(a) && a.state === 'idle' && Math.floor(t / 900) % 2) {
-      A.drawSprite(ctx, 'emote-zzz', p, x + 12, y - 10);
+      A.drawSprite(ctx, 'emote-zzz', p, x + 14, y - 24);
     }
   }
 
@@ -559,8 +621,20 @@
     var dt = Math.min(50, t - last); last = t;
     stepAgents(dt);
     drawWorld(t);
-    AGENTS.slice().sort(function (a, b) { return a.pos.y - b.pos.y; })
-      .forEach(function (a) { drawAgent(a, t); });
+    // painter's algorithm over desks + agents: sort by baseline (bottom
+    // edge). Agent baseline = feet (pos.y + 16); desk baseline = its
+    // front bottom edge.
+    var paint = [];
+    DESK_SLOTS.forEach(function (d) {
+      paint.push({ y: d.y + 16, draw: function () { drawDeskAt(d, t, pal()); } });
+      // chair south of the desk, left half; baseline below the seated
+      // agent's feet so the chair back overlaps their legs (sit illusion)
+      // the office chair, native 20x16 (between the too-small 16 and the
+      // too-big 32), back view wrapping the seated agent's lower body
+      paint.push({ y: d.y + 31, draw: function () { A.drawSprite(ctx, 'chair-office', pal(), d.x + 8, d.y + 12); } });
+    });
+    AGENTS.forEach(function (a) { paint.push({ y: a.pos.y + 16, draw: function () { drawAgent(a, t); } }); });
+    paint.sort(function (a, b) { return a.y - b.y; }).forEach(function (e) { e.draw(); });
     // bubble positions in CSS pixels (canvas CSS size / internal size)
     var rect = cv.getBoundingClientRect(), wrap = document.getElementById('wrap');
     wrap.style.width = rect.width + 'px'; wrap.style.height = rect.height + 'px';
@@ -570,11 +644,18 @@
       if (!a) return;
       if (b.until && t > b.until) { b.el.style.opacity = 0; return; }
       b.el.style.left = ((a.pos.x + 8) * cssScale) + 'px';
-      b.el.style.top = ((a.pos.y - 4) * cssScale) + 'px';
+      b.el.style.top = ((a.pos.y - 18) * cssScale) + 'px';
     });
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+  // rAF watchdog: some browsers throttle or pause rAF in embedded/
+  // battery-saver contexts (the dashboard mini iframe is exactly that
+  // shape). If no frame has run for 500ms, tick one manually — the mini
+  // keeps breathing at a reduced rate instead of freezing.
+  setInterval(function () {
+    if (performance.now() - last > 500) frame(performance.now());
+  }, 500);
 })();
 </script>
 </body>
