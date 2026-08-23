@@ -360,10 +360,10 @@
 /* ---- dark mode: system-following default ------------------------------
    Values from the sample's own :root[data-theme="dark"] block (line 57). */
 @media (prefers-color-scheme: dark) {
-  /* t-266: retro is a light-family theme — it must not inherit the dark
-     media values under a dark system preference, so it is excluded here
-     exactly like an explicit light choice. */
-  :root:not([data-theme="light"]):not([data-theme="retro"]) {
+  /* t-266/t-278: retro (now the gb-* family) is light-family — it must not
+     inherit the dark media values under a dark system preference, so it is
+     excluded here exactly like an explicit light choice. */
+  :root:not([data-theme="light"]):not([data-theme^="gb-"]) {
     --v2-color-bg: #0a0a0c;
     --v2-color-surface: #111114;
     --v2-color-surface-raised: #17171b;
@@ -446,97 +446,200 @@
    values, and not matching :not([data-theme="light"]) is what keeps the
    dark media query from repainting it — see the switcher note above. */
 
-/* ---- explicit override: [data-theme="retro"] — "Retro Corporate" ------
-   t-266 (boss spec 2026-08-20): a third theme inspired by the 60s/70s
-   office. Warm organic palette (burnt orange, avocado, cream, walnut,
-   mustard), chunkier molded-plastic radii, hard offset shadows with no
-   blur (tactile desk-accessory depth), and a subtle paper-grain texture.
-   Light-family: builds on the bare :root light values and is excluded
-   from the dark media query above, same as an explicit light choice.
-   Every hue was contrast-checked against the mechanical 4.5:1 AA floor
-   this file already holds elsewhere (the t-151 rule): the spec's literal
-   #D35400 primary measures 3.9:1 under cream text so the ACCENT token
-   carries #AD4600 (5.35:1 on-accent, 5.20:1 as text on bg) — the spec's
-   orange survives as the hover brightness range instead. Same treatment
-   for mustard (#F1C40F is decorative-only bright; the at-risk STATUS
-   token carries #7D6300, 5.19:1) and brick (#A93226, 5.98:1). */
-:root[data-theme="retro"] {
-  /* Round 2 (boss reference images 2026-08-20: a 60s executive office
-     render, striped-wallpaper walnut lounge, the Zwentendorf control
-     room, an archive room): the palette warmed and rebalanced from the
-     spec's literal hexes toward what the photos actually share — an
-     amber-cream cast on every surface (not the first round's green-beige
-     #f5f5dc), dark WALNUT rather than cool blue-charcoal for ink, sage/
-     celadon greens (curtains, vinyl seating) over dark avocado, a
-     desaturated 70s teal (wallpaper stripes, baseboards) replacing the
-     plum that appears nowhere in the era's rooms, terracotta-brick from
-     the herringbone carpet, and ochre/harvest gold from the drawer
-     units. Every value re-passed the 4.5:1 floor against BOTH bg and
-     surface-raised (raised is darker this round, so several hues sit a
-     notch deeper than round 1). */
-  --v2-color-bg: #f2e8d2;             /* amber-cream canvas (control-room bone) */
-  --v2-color-surface: #fbf4e2;        /* warm paper white, whiter than bg (system direction) */
-  --v2-color-surface-raised: #e9dfc5; /* warm tan: hover states, tag fills */
-  --v2-color-overlay-scrim: rgb(62 44 34 / 42%); /* walnut-tinted */
+/* ---- [data-theme="gb-olive"] — Game Boy family: olive/cream ----------------
+   t-278 GB era (boss 2026-08-22, replacing Retro Corporate): the dashboard
+   offers the office's four 4-shade palettes as themes. Derived tokens
+   (surface/raised/secondary/muted/accent) are computed mixes of the four
+   shades, every consumed pair re-checked against the 4.5:1 AA floor
+   (DMG's bright mid-green canvas compresses the muted-vs-secondary
+   hierarchy to stay legal — inherent to that palette, accepted).
+   Light-family: excluded from the dark media query via the shared
+   :not([data-theme^="gb-"]) guard. Hard offset shadows and tighter radii
+   carry the handheld register. */
+:root[data-theme="gb-olive"] {
+  --v2-color-bg: #e8e4c9;
+  --v2-color-surface: #f2f0e1;
+  --v2-color-surface-raised: #d8d6b5;
+  --v2-color-overlay-scrim: color-mix(in srgb, #33382b 44%, transparent);
 
-  --v2-color-text-primary: #362e24;   /* dark walnut ink, never pure black (11.0:1) */
-  --v2-color-text-secondary: #5c5240; /* 6.3:1 bg / 5.6:1 raised */
-  --v2-color-text-muted: #675b45;     /* 5.5:1 bg / 5.0:1 raised */
-  --v2-color-text-on-accent: #fff4df; /* cream-white on terracotta, 5.7:1 */
+  --v2-color-text-primary: #33382b;
+  --v2-color-text-secondary: #494d3e;
+  --v2-color-text-muted: #575a4b;
+  --v2-color-text-on-accent: #f2f0e1;
 
-  /* Walnut hairlines at a deliberately heavier alpha than light's 8/14%:
-     the "chunky" structural read the spec asks for, without touching any
-     border-width a component owns. */
-  --v2-color-border: rgb(62 44 34 / 24%);
-  --v2-color-border-strong: rgb(62 44 34 / 38%);
+  --v2-color-border: color-mix(in srgb, #33382b 30%, transparent);
+  --v2-color-border-strong: color-mix(in srgb, #33382b 46%, transparent);
 
-  /* Terracotta burnt orange (the carpet/ceiling-band rust), dark enough
-     to clear AA as button fill AND as link text (5.1:1 on bg); hover
-     mixes back toward the spec's literal #D35400 brightness. */
-  --v2-color-accent: #a24406;
-  --v2-color-accent-hover: color-mix(in srgb, var(--v2-color-accent) 82%, #d35400);
-  --v2-color-accent-active: color-mix(in srgb, var(--v2-color-accent) 76%, black);
-  --v2-color-accent-soft: color-mix(in srgb, var(--v2-color-accent) 12%, transparent);
-  --v2-color-focus-ring: color-mix(in srgb, var(--v2-color-accent) 28%, transparent);
+  --v2-color-accent: #4f563f;
+  --v2-color-accent-hover: color-mix(in srgb, #4f563f 84%, #e8e4c9);
+  --v2-color-accent-active: color-mix(in srgb, #4f563f 78%, black);
+  --v2-color-accent-soft: color-mix(in srgb, #4f563f 14%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, #4f563f 30%, transparent);
 
-  /* Status hues from the reference rooms: terracotta-brick for bug,
-     ochre/harvest gold for at-risk, sage for the greens, 70s teal for
-     in-progress. The -soft variants recompute automatically (bare :root
-     defines them as color-mix over these bases, resolved at use time). */
-  --v2-color-status-bug: #9e3720;
-  --v2-color-status-at-risk: #755700;
-  --v2-color-status-on-track: #4a6541;
-  --v2-color-status-in-progress: #315f58;
-  --v2-color-status-done: #4a6541;
+  /* Monochrome by design: status stays in the ink family, the glyph
+     SHAPES carry the semantics (the t-110 rule made total). */
+  --v2-color-status-bug: #33382b;
+  --v2-color-status-at-risk: #575a4b;
+  --v2-color-status-on-track: #4f563f;
+  --v2-color-status-in-progress: #494d3e;
+  --v2-color-status-done: #4f563f;
 
-  /* Positive action: the sage itself as fill, cream label (6.0:1) —
-     approve wears the reference rooms' vinyl-seat green, and the
-     terracotta accent stays for neutral CTAs. */
-  --v2-color-positive-action: #4a6541;
-  --v2-color-positive-action-fg: #fff4df;
+  --v2-color-positive-action: #4f563f;
+  --v2-color-positive-action-fg: #f2f0e1;
 
-  /* Molded-plastic corners: one notch up from the light scale. */
-  --v2-radius-xs: 5px;
-  --v2-radius-sm: 8px;
-  --v2-radius-md: 10px;
-  --v2-radius-lg: 14px;
+  --v2-radius-xs: 2px;
+  --v2-radius-sm: 3px;
+  --v2-radius-md: 4px;
+  --v2-radius-lg: 6px;
 
-  /* Hard offset shadow, zero blur — the spec's tactile 70s depth. */
-  --v2-shadow-overlay: 3px 3px 0 rgb(62 39 35 / 28%);
+  --v2-shadow-overlay: 2px 2px 0 color-mix(in srgb, #33382b 50%, transparent);
+}
 
-  /* Type: grotesque body stack, chunky display serif stack. Graceful:
-     none of these are vendored (Cooper Black is not freely licensable;
-     Space Grotesk could be vendored later as woff2 if the boss wants it
-     guaranteed), so machines without them fall back to the system's own
-     Inter/Georgia without breaking metrics badly. */
-  --v2-font-sans: "Space Grotesk", "IBM Plex Sans", "Inter Variable", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --v2-font-serif: "Cooper Black", "Cooper Std", "Recoleta", "Chalkboard SE", Georgia, serif;
+/* ---- [data-theme="gb-dmg"] — Game Boy family: DMG pea-green ----------------
+   t-278 GB era (boss 2026-08-22, replacing Retro Corporate): the dashboard
+   offers the office's four 4-shade palettes as themes. Derived tokens
+   (surface/raised/secondary/muted/accent) are computed mixes of the four
+   shades, every consumed pair re-checked against the 4.5:1 AA floor
+   (DMG's bright mid-green canvas compresses the muted-vs-secondary
+   hierarchy to stay legal — inherent to that palette, accepted).
+   Light-family: excluded from the dark media query via the shared
+   :not([data-theme^="gb-"]) guard. Hard offset shadows and tighter radii
+   carry the handheld register. */
+:root[data-theme="gb-dmg"] {
+  --v2-color-bg: #9bbc0f;
+  --v2-color-surface: #c8da7b;
+  --v2-color-surface-raised: #b1cb44;
+  --v2-color-overlay-scrim: color-mix(in srgb, #0f380f 44%, transparent);
 
-  /* Paper grain: a tiny inline SVG fractal-noise tile, walnut-tinted at
-     ~5% alpha, consumed by the html rule below (and body.v2-app in
-     v2.html) via this token — other themes leave it unset so the
-     fallback `none` applies. */
-  --v2-texture-grain: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='matrix' values='0 0 0 0 0.243 0 0 0 0 0.173 0 0 0 0 0.133 0 0 0 0.05 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  --v2-color-text-primary: #0f380f;
+  --v2-color-text-secondary: #164110;
+  --v2-color-text-muted: #1d470f;
+  --v2-color-text-on-accent: #c8da7b;
+
+  --v2-color-border: color-mix(in srgb, #0f380f 30%, transparent);
+  --v2-color-border-strong: color-mix(in srgb, #0f380f 46%, transparent);
+
+  --v2-color-accent: #204d20;
+  --v2-color-accent-hover: color-mix(in srgb, #204d20 84%, #9bbc0f);
+  --v2-color-accent-active: color-mix(in srgb, #204d20 78%, black);
+  --v2-color-accent-soft: color-mix(in srgb, #204d20 14%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, #204d20 30%, transparent);
+
+  /* Monochrome by design: status stays in the ink family, the glyph
+     SHAPES carry the semantics (the t-110 rule made total). */
+  --v2-color-status-bug: #0f380f;
+  --v2-color-status-at-risk: #1d470f;
+  --v2-color-status-on-track: #204d20;
+  --v2-color-status-in-progress: #164110;
+  --v2-color-status-done: #204d20;
+
+  --v2-color-positive-action: #204d20;
+  --v2-color-positive-action-fg: #c8da7b;
+
+  --v2-radius-xs: 2px;
+  --v2-radius-sm: 3px;
+  --v2-radius-md: 4px;
+  --v2-radius-lg: 6px;
+
+  --v2-shadow-overlay: 2px 2px 0 color-mix(in srgb, #0f380f 50%, transparent);
+}
+
+/* ---- [data-theme="gb-pocket"] — Game Boy family: Pocket grayscale ----------------
+   t-278 GB era (boss 2026-08-22, replacing Retro Corporate): the dashboard
+   offers the office's four 4-shade palettes as themes. Derived tokens
+   (surface/raised/secondary/muted/accent) are computed mixes of the four
+   shades, every consumed pair re-checked against the 4.5:1 AA floor
+   (DMG's bright mid-green canvas compresses the muted-vs-secondary
+   hierarchy to stay legal — inherent to that palette, accepted).
+   Light-family: excluded from the dark media query via the shared
+   :not([data-theme^="gb-"]) guard. Hard offset shadows and tighter radii
+   carry the handheld register. */
+:root[data-theme="gb-pocket"] {
+  --v2-color-bg: #e0e0e0;
+  --v2-color-surface: #eeeeee;
+  --v2-color-surface-raised: #cecece;
+  --v2-color-overlay-scrim: color-mix(in srgb, #202020 44%, transparent);
+
+  --v2-color-text-primary: #202020;
+  --v2-color-text-secondary: #373737;
+  --v2-color-text-muted: #464646;
+  --v2-color-text-on-accent: #eeeeee;
+
+  --v2-color-border: color-mix(in srgb, #202020 30%, transparent);
+  --v2-color-border-strong: color-mix(in srgb, #202020 46%, transparent);
+
+  --v2-color-accent: #404040;
+  --v2-color-accent-hover: color-mix(in srgb, #404040 84%, #e0e0e0);
+  --v2-color-accent-active: color-mix(in srgb, #404040 78%, black);
+  --v2-color-accent-soft: color-mix(in srgb, #404040 14%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, #404040 30%, transparent);
+
+  /* Monochrome by design: status stays in the ink family, the glyph
+     SHAPES carry the semantics (the t-110 rule made total). */
+  --v2-color-status-bug: #202020;
+  --v2-color-status-at-risk: #464646;
+  --v2-color-status-on-track: #404040;
+  --v2-color-status-in-progress: #373737;
+  --v2-color-status-done: #404040;
+
+  --v2-color-positive-action: #404040;
+  --v2-color-positive-action-fg: #eeeeee;
+
+  --v2-radius-xs: 2px;
+  --v2-radius-sm: 3px;
+  --v2-radius-md: 4px;
+  --v2-radius-lg: 6px;
+
+  --v2-shadow-overlay: 2px 2px 0 color-mix(in srgb, #202020 50%, transparent);
+}
+
+/* ---- [data-theme="gb-amber"] — Game Boy family: Bureau amber ----------------
+   t-278 GB era (boss 2026-08-22, replacing Retro Corporate): the dashboard
+   offers the office's four 4-shade palettes as themes. Derived tokens
+   (surface/raised/secondary/muted/accent) are computed mixes of the four
+   shades, every consumed pair re-checked against the 4.5:1 AA floor
+   (DMG's bright mid-green canvas compresses the muted-vs-secondary
+   hierarchy to stay legal — inherent to that palette, accepted).
+   Light-family: excluded from the dark media query via the shared
+   :not([data-theme^="gb-"]) guard. Hard offset shadows and tighter radii
+   carry the handheld register. */
+:root[data-theme="gb-amber"] {
+  --v2-color-bg: #f0e0c0;
+  --v2-color-surface: #f7eedc;
+  --v2-color-surface-raised: #e4cca1;
+  --v2-color-overlay-scrim: color-mix(in srgb, #3a2a1a 44%, transparent);
+
+  --v2-color-text-primary: #3a2a1a;
+  --v2-color-text-secondary: #50402e;
+  --v2-color-text-muted: #5e4e3b;
+  --v2-color-text-on-accent: #f7eedc;
+
+  --v2-color-border: color-mix(in srgb, #3a2a1a 30%, transparent);
+  --v2-color-border-strong: color-mix(in srgb, #3a2a1a 46%, transparent);
+
+  --v2-color-accent: #5a4225;
+  --v2-color-accent-hover: color-mix(in srgb, #5a4225 84%, #f0e0c0);
+  --v2-color-accent-active: color-mix(in srgb, #5a4225 78%, black);
+  --v2-color-accent-soft: color-mix(in srgb, #5a4225 14%, transparent);
+  --v2-color-focus-ring: color-mix(in srgb, #5a4225 30%, transparent);
+
+  /* Monochrome by design: status stays in the ink family, the glyph
+     SHAPES carry the semantics (the t-110 rule made total). */
+  --v2-color-status-bug: #3a2a1a;
+  --v2-color-status-at-risk: #5e4e3b;
+  --v2-color-status-on-track: #5a4225;
+  --v2-color-status-in-progress: #50402e;
+  --v2-color-status-done: #5a4225;
+
+  --v2-color-positive-action: #5a4225;
+  --v2-color-positive-action-fg: #f7eedc;
+
+  --v2-radius-xs: 2px;
+  --v2-radius-sm: 3px;
+  --v2-radius-md: 4px;
+  --v2-radius-lg: 6px;
+
+  --v2-shadow-overlay: 2px 2px 0 color-mix(in srgb, #3a2a1a 50%, transparent);
 }
 
 /* ---- base + tabular numerals (mechanical floor #6) -------------------- */

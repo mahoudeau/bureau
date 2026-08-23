@@ -133,6 +133,16 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office.html')));
     }
+    // t-278 GB era: the sprite gallery/approval page and the shared asset
+    // module both pages load. Fixed paths, no user segments.
+    if (req.method === 'GET' && p === '/office/assets') {
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.html')));
+    }
+    if (req.method === 'GET' && p === '/office/assets.js') {
+      res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.js')));
+    }
     if (req.method === 'GET' && p === '/v2/styleguide') {
       res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2', 'styleguide.html')));
