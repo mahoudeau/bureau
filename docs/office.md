@@ -1,6 +1,6 @@
 # The pixel office
 
-A 16-bit office rendered in the browser, where each agent is a sprite and every hub event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub does not know it exists. Served at `/office`; the flat dashboard stays at `/` as the information-dense view. Mockup: `mockups/office.html` (procedural canvas pixel art, no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
+An original-Game-Boy-inspired office rendered in the browser (four simultaneous shades, one per pixel; dithering for the in-between tones; 8px hardware-style tiles with 16x16 composed characters), where each agent is a sprite and every hub event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub does not know it exists. Served at `/office`; the flat dashboard stays at `/` as the information-dense view. Mockup: `mockups/office.html` (procedural canvas pixel art, no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
 
 ## Why it exists
 
@@ -37,5 +37,5 @@ A board says what is *true*; the office shows what is *happening*, readably, to 
 - **Bursty events need theatre.** Real agents emit 5 events in a minute then nothing for 2 h. A per-sprite action queue with durations stretches bursts into readable choreography; idle loops fill the gaps.
 - **Status is never color-alone**: status pixel above heads + monitor state + position all encode the same thing.
 - **Tech:** single HTML page; hand-rolled canvas now (a game library later only if pathfinding/tilemaps get painful; the zero-dep rule is server-side only). Small logical resolution, integer-scaled, `image-rendering: pixelated`; the mockup uses 320×180, final size is open, see `design.md`. Bubbles/ticker are HTML overlays for crisp text (Press Start 2P, graceful fallback).
-- **Art:** currently 100% procedural (palette in the mockup source). Option later: free licensed 16-bit packs or custom sprites per agent tied to their brain profile.
+- **Art:** hand-drawn 4-shade Game Boy-register sprites, authored as indexed pixel maps in `hub/public/office-assets.js` and browsable at `/office/assets` (the sprite gallery). Four switchable palettes (olive / DMG pea-green / pocket gray / amber); the internal canvas is 384x216, upscaled by device-pixel-integer "super-pixels" (user-set scale). The earlier hi-bit 16-bit track is parked, not deleted (PRs #50/#55).
 - **v1 punts:** straight-line walking (no A*), one shared body with palette swaps, no click interactions. Planned clicks: desk → agent profile; office door → review inbox; whiteboard → task board.

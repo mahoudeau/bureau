@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau · Office assets</title>
+<!-- t-278 GB era: the sprite gallery/approval page — the styleguide pattern
+     applied to the office art. Every sprite from office-assets.js, static
+     and animated, at 1x/4x/8x super-pixels, with the same switchable
+     4-shade palettes as the floor. An asset is judged HERE, outside any
+     scene, before or while it lands on /office. -->
+<style>
+  html, body { margin: 0; background: #14121f; color: #e8e4c9;
+    font-family: 'Courier New', monospace; }
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
+    border-bottom: 2px solid #33382b; position: sticky; top: 0; background: #14121f; z-index: 2; }
+  h1 { font-size: 15px; margin: 0; letter-spacing: 1px; }
+  .controls { margin-left: auto; display: flex; gap: 8px; }
+  .controls button { font: inherit; font-size: 11px; padding: 6px 10px; cursor: pointer;
+    background: #33382b; color: #e8e4c9; border: 2px solid #6b7353; }
+  .controls button.on { background: #b5b98a; color: #33382b; border-color: #e8e4c9; }
+  main { padding: 18px; max-width: 1200px; margin: 0 auto; }
+  h2 { font-size: 13px; letter-spacing: 2px; border-bottom: 1px solid #33382b;
+    padding-bottom: 6px; margin: 28px 0 14px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 18px; }
+  .cell { background: #1c1a2b; border: 1px solid #33382b; padding: 10px 12px; }
+  .cell .zooms { display: flex; align-items: flex-end; gap: 14px; }
+  .cell canvas { image-rendering: pixelated; display: block; background: transparent; }
+  .cell .label { font-size: 10px; color: #8f88b0; margin-top: 8px; }
+  .cell .z { font-size: 9px; color: #6b7353; text-align: center; margin-top: 3px; }
+  .checker { background-image: linear-gradient(45deg, #201d33 25%, transparent 25%, transparent 75%, #201d33 75%),
+    linear-gradient(45deg, #201d33 25%, transparent 25%, transparent 75%, #201d33 75%);
+    background-size: 8px 8px; background-position: 0 0, 4px 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>BUREAU · OFFICE ASSETS</h1>
+  <span id="count" style="font-size:10px;color:#8f88b0"></span>
+  <div class="controls" id="palettes"></div>
+</header>
+<main id="main"></main>
+<script src="/office/assets.js"></script>
+<script>
+'use strict';
+(function () {
+  var A = window.OfficeAssets;
+  var PAL_KEY = 'bureau_office_palette';
+  var pal = localStorage.getItem(PAL_KEY);
+  if (!A.PALETTES[pal]) pal = 'olive';
+
+  var animated = []; // { frames, fps, canvases: [{cnv, zoom}] }
+
+  function paletteBar() {
+    var bar = document.getElementById('palettes');
+    bar.innerHTML = '';
+    Object.keys(A.PALETTES).forEach(function (key) {
+      var b = document.createElement('button');
+      b.textContent = A.PALETTES[key].label;
+      b.className = key === pal ? 'on' : '';
+      b.addEventListener('click', function () {
+        pal = key;
+        try { localStorage.setItem(PAL_KEY, key); } catch (e) {}
+        A.clearCache();
+        render();
+      });
+      bar.appendChild(b);
+    });
+  }
+
+  function blit(cnv, name, zoom) {
+    var src = A.sprite(name, pal);
+    if (!src) return;
+    cnv.width = src.width * zoom; cnv.height = src.height * zoom;
+    var c = cnv.getContext('2d');
+    c.imageSmoothingEnabled = false;
+    c.drawImage(src, 0, 0, cnv.width, cnv.height);
+  }
+
+  function cellFor(item) {
+    var cell = document.createElement('div');
+    cell.className = 'cell';
+    var zooms = document.createElement('div');
+    zooms.className = 'zooms';
+    var canvases = [];
+    [1, 4, 8].forEach(function (zoom) {
+      var holder = document.createElement('div');
+      var cnv = document.createElement('canvas');
+      cnv.className = 'checker';
+      holder.appendChild(cnv);
+      var z = document.createElement('div');
+      z.className = 'z'; z.textContent = zoom + 'x';
+      holder.appendChild(z);
+      zooms.appendChild(holder);
+      canvases.push({ cnv: cnv, zoom: zoom });
+    });
+    cell.appendChild(zooms);
+    var label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = item.name + (item.frames ? ' · ' + item.frames.length + 'f @' + item.fps + 'fps' : '');
+    cell.appendChild(label);
+
+    if (item.frames) {
+      animated.push({ frames: item.frames, fps: item.fps || 2, canvases: canvases });
+      canvases.forEach(function (h) { blit(h.cnv, item.frames[0], h.zoom); });
+    } else {
+      canvases.forEach(function (h) { blit(h.cnv, item.name, h.zoom); });
+    }
+    return cell;
+  }
+
+  function render() {
+    paletteBar();
+    animated = [];
+    var main = document.getElementById('main');
+    main.innerHTML = '';
+    var total = 0;
+    A.GALLERY.forEach(function (sec) {
+      var h2 = document.createElement('h2');
+      h2.textContent = sec.section.toUpperCase();
+      main.appendChild(h2);
+      var grid = document.createElement('div');
+      grid.className = 'grid';
+      sec.items.forEach(function (item) { grid.appendChild(cellFor(item)); total++; });
+      main.appendChild(grid);
+    });
+    document.getElementById('count').textContent = total + ' assets · palette: ' + A.PALETTES[pal].label;
+  }
+
+  render();
+
+  // one shared animation clock
+  setInterval(function () {
+    var t = Date.now();
+    animated.forEach(function (a) {
+      var idx = Math.floor(t / (1000 / a.fps)) % a.frames.length;
+      a.canvases.forEach(function (h) { blit(h.cnv, a.frames[idx], h.zoom); });
+    });
+  }, 120);
+})();
+</script>
+</body>
+</html>

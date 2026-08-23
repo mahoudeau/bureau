@@ -887,9 +887,9 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // local to this file rather than added to tokens.css since it is a
       // one-component-specific value, not a reusable design token.
       ':root { --v2-row-active-tint: 2%; }',
-      // t-266: retro is light-family, excluded from the dark media value
+      // t-266/t-278: the light-family third themes (retro, now gb-*) are excluded from the dark media value
       // the same way tokens.css's own dark block now excludes it.
-      '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme="retro"]) { --v2-row-active-tint: 6%; } }',
+      '@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]):not([data-theme^="gb-"]) { --v2-row-active-tint: 6%; } }',
       ':root[data-theme="dark"] { --v2-row-active-tint: 6%; }',
       // Verified-live bug (reproduced, not read off the diff): `.v2-project-
       // row--active` is one class selector (specificity 0,1,0,0); the
