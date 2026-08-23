@@ -10,8 +10,9 @@
      4-shade palettes as the floor. An asset is judged HERE, outside any
      scene, before or while it lands on /office. -->
 <style>
+  @font-face { font-family: 'OfficePixel'; src: url('/office/font.ttf') format('truetype'); }
   html, body { margin: 0; background: #14121f; color: #e8e4c9;
-    font-family: 'Courier New', monospace; }
+    font-family: 'OfficePixel', 'Courier New', monospace; }
   header { display: flex; align-items: center; gap: 16px; padding: 14px 18px;
     border-bottom: 2px solid #33382b; position: sticky; top: 0; background: #14121f; z-index: 2; }
   h1 { font-size: 15px; margin: 0; letter-spacing: 1px; }
@@ -68,13 +69,17 @@
     });
   }
 
-  function blit(cnv, name, zoom) {
-    var src = A.sprite(name, pal);
-    if (!src) return;
-    cnv.width = src.width * zoom; cnv.height = src.height * zoom;
+  function blit(cnv, nameOrLayers, zoom) {
+    var layers = Array.isArray(nameOrLayers) ? nameOrLayers : [nameOrLayers];
+    var first = A.sprite(layers[0], pal);
+    if (!first) return;
+    cnv.width = first.width * zoom; cnv.height = first.height * zoom;
     var c = cnv.getContext('2d');
     c.imageSmoothingEnabled = false;
-    c.drawImage(src, 0, 0, cnv.width, cnv.height);
+    layers.forEach(function (n) {
+      var src = A.sprite(n, pal);
+      if (src) c.drawImage(src, 0, 0, src.width * zoom, src.height * zoom);
+    });
   }
 
   function cellFor(item) {
@@ -104,7 +109,7 @@
       animated.push({ frames: item.frames, fps: item.fps || 2, canvases: canvases });
       canvases.forEach(function (h) { blit(h.cnv, item.frames[0], h.zoom); });
     } else {
-      canvases.forEach(function (h) { blit(h.cnv, item.name, h.zoom); });
+      canvases.forEach(function (h) { blit(h.cnv, item.layers || item.name, h.zoom); });
     }
     return cell;
   }
