@@ -94,7 +94,20 @@ function upsertAgent({ name, kind, capabilities }) {
     s.agents.push(a);
   } else {
     if (kind) a.kind = kind;
-    if (capabilities) a.capabilities = capabilities;
+    // A re-registration replaces the capabilities array, and that is how
+    // consul lost its lead tag in September 2026: two sessions registered it
+    // with an improvised list and nobody could park the librarian's digests
+    // for a week (t-356). Replace stays the rule (a role has to be droppable
+    // on purpose), but an empty array is ignored and every change is logged
+    // with before and after, so the roster's history can be read back.
+    if (Array.isArray(capabilities) && capabilities.length) {
+      const before = Array.isArray(a.capabilities) ? a.capabilities : [];
+      const same = before.length === capabilities.length && before.every(c => capabilities.includes(c));
+      if (!same) {
+        a.capabilities = capabilities;
+        logEvent('agent.capabilities_changed', { name, before, after: capabilities });
+      }
+    }
   }
   a.last_seen = nowISO();
   save();
@@ -371,6 +384,17 @@ function agentHasCapability(s, agentName, cap) {
 }
 function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
 function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+// The librarian's own digest (t-356): a mission titled "<name>: ..." by an
+// agent registered with the "librarian" tag is a proposal set the boss rules
+// item by item. No builder is promoting its own build past a critic, so the
+// conflict of interest t-119 guards against does not exist, and the
+// librarian may park it into review itself. Both halves are required: the
+// title prefix alone would let any worker name a mission after itself.
+function isOwnLibrarianDigest(s, t, agentName) {
+  return !!agentName && agentName !== 'human'
+    && agentHasCapability(s, agentName, 'librarian')
+    && typeof t.title === 'string' && t.title.toLowerCase().startsWith(agentName.toLowerCase() + ':');
+}
 
 function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
@@ -391,8 +415,8 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // not by convention a builder has to remember. Critic-gate missions are
   // unaffected: any agent parks those exactly as before (see the plain
   // `status === 'review'` handling below, unguarded).
-  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent))
-    return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
+  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
+    return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review (the librarian may park its own digest) - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
