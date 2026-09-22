@@ -214,7 +214,12 @@ import { icon, idBadge } from './components.js';
           if (m && m[1] === t.id) { goalKids.total++; if (o.status === 'done') goalKids.done++; }
         });
       }
-      var items = (t.items || []).map(function (it, i) { return itemRow(it, i, t.status === 'review'); }).join('');
+      // t-356: verdict controls render on any live mission with items, not
+      // only in review. A proposal set can sit in queued for weeks when its
+      // lease expired before anyone parked it (t-289 did, 23 days), and the
+      // boss could see the items but not rule on them.
+      var terminal = t.status === 'done' || t.status === 'failed' || t.status === 'discarded';
+      var items = (t.items || []).map(function (it, i) { return itemRow(it, i, !terminal); }).join('');
       var replacementId = t.status === 'discarded' ? findReplacement(t) : null;
 
       // t-115: .v2-hit44 on every .v2-panel__btn — closes finding #2's
@@ -241,6 +246,14 @@ import { icon, idBadge } from './components.js';
       ) : '';
       var failedActions = t.status === 'failed' ? (
         '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-panel__btn--ghost v2-hit44" id="v2-pp-requeue">↩️ Re-queue</button></div>'
+      ) : '';
+      // Outside review the verdicts need their own submit: Approve and Send
+      // back are review-only and change the status, this one files the
+      // verdicts and leaves the status alone. The blocked panel already
+      // carries the error element, so it is not rendered twice there.
+      var verdictActions = (!terminal && t.status !== 'review' && (t.items || []).length) ? (
+        (t.status === 'blocked' ? '' : '<p class="v2-panel__err" id="v2-pp-err" hidden></p>') +
+        '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-is-positive v2-hit44" id="v2-pp-verdicts">✅ Save verdicts</button></div>'
       ) : '';
 
       // t-93 round 4: stacked attribute rows (sample: renderT58()'s six
@@ -300,7 +313,7 @@ import { icon, idBadge } from './components.js';
         '<div class="v2-panel__callout"><div class="v2-panel__callout-head">' + icon('clock', 'v2-icon--xs') + ' Log</div><div class="v2-panel__log">' + renderLog(t) + '</div></div>' +
         (items ? '<div class="v2-panel__callout"><div class="v2-panel__callout-head">' + icon('circle-check', 'v2-icon--xs') + ' Itemized review</div>' + items + '</div>' : '') +
         ((t.artifacts || []).length ? '<div class="v2-panel__sechead">' + icon('paperclip', 'v2-icon--xs') + ' Artifacts <span class="v2-tabular-nums">' + t.artifacts.length + '</span></div>' + renderArtifacts(t) : '') +
-        reviewActions + blockedActions + failedActions;
+        reviewActions + blockedActions + failedActions + verdictActions;
 
       var closeBtn = document.getElementById('v2-pp-close');
       closeBtn.addEventListener('click', closePanel);
@@ -347,6 +360,20 @@ import { icon, idBadge } from './components.js';
       if (answerBtn) answerBtn.addEventListener('click', function () { submitStatus('queued', true); });
       var requeueBtn = document.getElementById('v2-pp-requeue');
       if (requeueBtn) requeueBtn.addEventListener('click', function () { submitStatus('queued', false); });
+      function submitVerdicts() {
+        var verdicts = collectVerdicts();
+        if (!verdicts.length) { showErr('Pick a verdict on at least one item first.'); return; }
+        V2.api('/api/tasks/' + t.id, {
+          method: 'PATCH',
+          body: JSON.stringify({ agent: 'human', verdicts: verdicts })
+        }).then(function (r) {
+          if (r && r.error) { showErr(r.error); return; }
+          closePanel();
+          V2.refresh();
+        });
+      }
+      var verdictsBtn = document.getElementById('v2-pp-verdicts');
+      if (verdictsBtn) verdictsBtn.addEventListener('click', submitVerdicts);
     }
   }
 
