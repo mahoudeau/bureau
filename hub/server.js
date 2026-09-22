@@ -29,7 +29,7 @@ function summarize(type, d) {
   return {
     id: d.id, name: d.name, title: d.title, assignee: d.assignee, status: d.status,
     from: d.from, to: d.to, file: d.file, author: d.author, note: d.note, kind: d.kind,
-    activity: d.activity,
+    activity: d.activity, capabilities: d.capabilities,
     body: typeof d.body === 'string' ? d.body.slice(0, 300) : undefined,
   };
 }
