@@ -237,6 +237,35 @@ THID=$(echo "$TH" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$THID\"}" > /dev/null
 check "human (the boss himself) can always park a boss-gate review" "$(api PATCH "/api/tasks/$THID" '{"agent":"human","status":"review","note":"self-parked"}')" '"status": "review"'
 api PATCH "/api/tasks/$THID" '{"agent":"human","status":"done"}' > /dev/null
+
+# t-356: the librarian parks its own digest. Both halves are required, the
+# "librarian" tag on the roster AND a title prefixed with the agent's own
+# name; either alone is refused like any plain agent.
+api POST /api/agents/register '{"name":"archivist","kind":"cowork","capabilities":["curation","librarian"]}' > /dev/null
+TD=$(api POST /api/tasks '{"title":"archivist: nightly digest 2026-01-01","project":"ops","priority":3}')
+TDID=$(echo "$TD" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"archivist\",\"id\":\"$TDID\"}" > /dev/null
+check "librarian parks its own digest into review" "$(api PATCH "/api/tasks/$TDID" '{"agent":"archivist","status":"review","note":"1 item filed"}')" '"status": "review"'
+api PATCH "/api/tasks/$TDID" '{"agent":"human","status":"done","note":"approved"}' > /dev/null
+TN=$(api POST /api/tasks '{"title":"menace: looks like a digest","project":"ops","priority":3}')
+TNID=$(echo "$TN" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TNID\"}" > /dev/null
+check "title prefix alone grants a non-librarian nothing" "$(api PATCH "/api/tasks/$TNID" '{"agent":"menace","status":"review","note":"parked"}')" 'boss-gate'
+api PATCH "/api/tasks/$TNID" '{"agent":"menace","status":"done","note":"closed"}' > /dev/null
+TO=$(api POST /api/tasks '{"title":"Not the archivist digest","project":"ops","priority":3}')
+TOID=$(echo "$TO" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+api POST /api/tasks/claim "{\"agent\":\"archivist\",\"id\":\"$TOID\"}" > /dev/null
+check "librarian tag alone grants nothing on a mission not titled with its name" "$(api PATCH "/api/tasks/$TOID" '{"agent":"archivist","status":"review","note":"parked"}')" 'boss-gate'
+api PATCH "/api/tasks/$TOID" '{"agent":"archivist","status":"done","note":"closed"}' > /dev/null
+
+# t-356: re-registration replaces capabilities on purpose, but never with an
+# empty array, and every change is logged with before and after.
+api POST /api/agents/register '{"name":"archivist","kind":"cowork","capabilities":[]}' > /dev/null
+check "empty capabilities on re-register are ignored" "$(agents_section | grep -A4 '"name": "archivist"')" 'librarian'
+api POST /api/agents/register '{"name":"archivist","kind":"cowork","capabilities":["curation"]}' > /dev/null
+check "a changed capabilities array is logged" "$(api GET /api/state)" '"type": "agent.capabilities_changed"'
+check "the log entry carries the dropped tag" "$(api GET /api/state | grep -A8 'agent.capabilities_changed')" '"librarian"'
+check "the roster now holds the new array" "$(agents_section | grep -A4 '"name": "archivist"' | grep -c librarian || true)" '0'
 TC=$(api POST /api/tasks '{"title":"Critic sendback mission","project":"ops","priority":2,"gate":"critic"}')
 TCID=$(echo "$TC" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 check "gate settable on create" "$TC" '"gate": "critic"'
