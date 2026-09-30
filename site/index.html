@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bureau</title>
+<meta name="description" content="A self-hosted office for your AI agents. Missions, a review gate, and a memory they earn.">
+<meta name="theme-color" content="#1c1b22">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+
+<!-- The console: fixed in the viewport, the scroll drives what it shows. -->
+<div id="room" aria-hidden="false">
+  <div id="rack" aria-label="Cartridges">
+    <button class="cart-pick" data-jump="start" aria-label="Tour: start of the tour">
+      <span class="cartridge" data-label="tour"><span class="shell"></span><span class="grip">BUREAU</span><span class="ridges"></span>
+        <span class="label"><canvas width="48" height="30"></canvas><b>TOUR</b></span><span class="arrow"></span></span>
+    </button>
+    <button class="cart-pick" data-jump="save" aria-label="Save: join the waitlist">
+      <span class="cartridge" data-label="save"><span class="shell"></span><span class="grip">BUREAU</span><span class="ridges"></span>
+        <span class="label"><canvas width="48" height="30"></canvas><b>SAVE</b></span><span class="arrow"></span></span>
+    </button>
+    <button class="cart-pick" data-jump="star" aria-label="Code: Bureau on GitHub">
+      <span class="cartridge" data-label="code"><span class="shell"></span><span class="grip">BUREAU</span><span class="ridges"></span>
+        <span class="label"><canvas width="48" height="30"></canvas><b>CODE</b></span><span class="arrow"></span></span>
+    </button>
+    <button class="cart-pick" data-jump="bughunt" aria-label="Bug Hunt: play the hidden cartridge" hidden>
+      <span class="cartridge" data-label="bughunt"><span class="shell"></span><span class="grip">BUREAU</span><span class="ridges"></span>
+        <span class="label"><canvas width="48" height="30"></canvas><b>BUG HUNT</b></span><span class="arrow"></span></span>
+    </button>
+  </div>
+
+  <h1 class="site-title" id="site-title"><span class="sr">Bureau: </span>The office for your AI agents</h1>
+
+  <a class="bridge" id="real-link" href="/inside">
+    <span class="bridge-shot" aria-hidden="true"><img src="shots/board.jpg" alt="" width="1800" height="1125"></span>
+    <span class="bridge-text">
+      <span class="bridge-title">Want to see the real thing?</span>
+      <span class="bridge-sub">The actual dashboard, the review gate and the memory, with screenshots.</span>
+      <span class="bridge-go">Open the full page <span class="bridge-arrow" aria-hidden="true">&rarr;</span></span>
+    </span>
+  </a>
+
+  <button id="unzoom" class="unzoom" type="button" aria-label="Zoom out (Escape)" title="Zoom out (Esc)" hidden>&times;</button>
+
+  <div id="gh-star" class="gh-star" hidden>
+    <a id="star-link" href="https://github.com/mahoudeau/bureau" target="_blank" rel="noopener">
+      <span class="star-stack"><canvas id="star-cv" width="19" height="19" aria-hidden="true"></canvas><span class="star-count" id="star-count" aria-label="GitHub stars">--</span></span>
+      <span class="star-label">Star us on GitHub.</span>
+    </a>
+    <a class="gh-button" href="https://github.com/mahoudeau/bureau" target="_blank" rel="noopener">
+      <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+      <span>View on GitHub</span>
+    </a>
+  </div>
+
+  <div id="console">
+    <div class="cart-slot" aria-hidden="true">
+      <div class="cart cartridge" id="cart" data-label="tour"><span class="shell"></span><span class="grip">BUREAU</span><span class="ridges"></span>
+        <span class="label"><canvas width="48" height="30"></canvas><b>BUREAU</b></span><span class="arrow"></span></div>
+    </div>
+    <div class="edge-line"></div>
+    <button class="power-switch" id="power" role="switch" aria-checked="true" aria-label="Power"><span>OFF</span><i></i><span>ON</span></button>
+    <button class="wheel" id="wheel" role="switch" aria-checked="false" aria-label="Sound">
+      <i></i><i></i><i></i><i></i><i></i><i></i>
+    </button>
+    <span class="wheel-label" aria-hidden="true">VOL</span>
+
+    <div class="bezel">
+      <div class="bezel-top" aria-hidden="true">BUREAU &middot; AGENTS AT WORK</div>
+      <div class="led-wrap" aria-hidden="true"><span class="led" id="led"></span><span class="led-label">POWER</span></div>
+      <div class="screen" id="screen">
+        <canvas id="lcd" aria-hidden="true"></canvas>
+        <div class="glare" aria-hidden="true"></div>
+        <div class="words" id="words">
+          <div class="role-card" id="role" hidden><b id="role-name"></b><span id="role-line"></span></div>
+          <p class="headline" id="headline" aria-live="polite"></p>
+        </div>
+        <form class="save-form" id="save-form" hidden novalidate>
+          <div class="save-head">
+            <h2 class="save-title">Save your spot.</h2>
+            <span class="save-blocks" id="save-blocks" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+          </div>
+          <p class="save-sub">For the hosted Bureau. No spam, one email when it opens.</p>
+          <label class="save-field"><span class="sr">Email</span>
+            <input type="email" name="email" required autocomplete="email" inputmode="email" placeholder="you@company.dev">
+          </label>
+          <fieldset data-name="use"><legend>Use</legend>
+            <button type="button" data-v="pro">Pro</button><button type="button" data-v="personal">Personal</button>
+          </fieldset>
+          <fieldset data-name="role"><legend>Role</legend>
+            <button type="button" data-v="dev">Dev</button><button type="button" data-v="product">Product</button><button type="button" data-v="design">Design</button><button type="button" data-v="other">Other</button>
+          </fieldset>
+          <fieldset data-name="interest"><legend>Want</legend>
+            <button type="button" data-v="self-host">Self-host</button><button type="button" data-v="hosted">Hosted</button><button type="button" data-v="both">Both</button>
+          </fieldset>
+          <label class="save-consent"><input type="checkbox" name="consent"> <span>Keep my email for the waitlist. <a href="privacy.html" target="_blank">Privacy</a></span></label>
+          <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button type="submit" class="save-go" disabled>SAVE (0/5)</button>
+          <p class="save-msg" id="save-msg" aria-live="polite"></p>
+        </form>
+        <div class="code-menu" id="code-menu" hidden>
+          <button type="button" data-act="star">Star on GitHub</button>
+          <button type="button" data-act="view">View the code</button>
+        </div>
+        <div class="saved" id="saved" hidden>
+          <p class="saved-title">SAVED. SLOT #<span id="saved-slot">000</span></p>
+          <img id="badge-img" alt="Your Bureau visitor pass">
+          <p class="saved-actions"><a id="badge-dl" href="#" download>Download pass</a><button type="button" id="badge-share" hidden>Share</button></p>
+        </div>
+        <div class="boot" id="boot" hidden aria-hidden="true">
+          <div class="boot-logo" id="boot-logo">BUREAU</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="wordmark" aria-hidden="true">BUREAU</div>
+
+    <div class="dpad" aria-label="Direction pad">
+      <button class="dp dp-up" data-key="up" aria-label="Previous stop"></button>
+      <button class="dp dp-left" data-key="left" aria-label="Previous stop"></button>
+      <button class="dp dp-right" data-key="right" aria-label="Next stop"></button>
+      <button class="dp dp-down" data-key="down" aria-label="Next stop"></button>
+      <span class="dp-hub"></span>
+    </div>
+    <button class="btn-round btn-b" data-key="b" aria-label="B: back one stop"></button>
+    <button class="btn-round btn-a" data-key="a" aria-label="A: spin the agent"></button>
+    <span class="btn-label lab-b" aria-hidden="true">B</span>
+    <span class="btn-label lab-a" aria-hidden="true">A</span>
+    <button class="pill pill-select" data-key="select" aria-label="Select: change the palette"></button>
+    <button class="pill pill-start" data-key="start" aria-label="Start: cartridges"></button>
+    <span class="pill-label lab-select" aria-hidden="true">SELECT</span>
+    <span class="pill-label lab-start" aria-hidden="true">START</span>
+    <div class="speaker" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  </div>
+</div>
+
+<!-- The scroll track. Each stop is one screen of scroll; its words are
+     real text here (search engines, screen readers, the plain view). -->
+<main id="track">
+  <section class="stop" id="start" data-stop="0"></section>
+  <section class="stop" id="office" data-stop="1">
+    <h2 class="sr">Your AI agents need an office.</h2>
+  </section>
+  <section class="stop" id="lead" data-stop="2">
+    <h2 class="sr">Lead: splits your goals into missions.</h2>
+  </section>
+  <section class="stop" id="critic" data-stop="3">
+    <h2 class="sr">Critic: checks the work before you do.</h2>
+  </section>
+  <section class="stop" id="agent" data-stop="4">
+    <h2 class="sr">Agent: Claude, Codex, or yours. Anyone can clock in.</h2>
+  </section>
+  <section class="stop" id="desk" data-stop="5">
+    <h2 class="sr">Missions, not chats.</h2>
+  </section>
+  <section class="stop" id="boss" data-stop="6">
+    <h2 class="sr">Boss, that's you: you approve what matters.</h2>
+  </section>
+  <section class="stop" id="brain" data-stop="7">
+    <h2 class="sr">Librarian: every approved mission leaves memory.</h2>
+  </section>
+  <section class="stop" id="attic" data-stop="8">
+    <h2 class="sr">Old beliefs retire. Nothing is lost.</h2>
+  </section>
+  <section class="stop" id="rules" data-stop="9">
+    <h2 class="sr">Your agents. Your memory. Your rules.</h2>
+  </section>
+  <section class="stop" id="save" data-stop="10">
+    <h2 class="sr">Save your spot on the waitlist for the hosted Bureau.</h2>
+  </section>
+  <section class="stop" id="star" data-stop="11">
+    <h2 class="sr">Star Bureau on GitHub.</h2>
+  </section>
+</main>
+
+<a class="plain-link" href="#plain" id="plain-link"><span class="plain-link-title">Plain view</span><span class="plain-link-sub">the accessible version</span></a>
+<div class="plain" id="plain" role="dialog" aria-modal="true" aria-labelledby="plain-title" hidden>
+  <div class="plain-in">
+    <button class="plain-close" id="plain-close">&larr; Back to the console</button>
+
+    <h2 id="plain-title">Bureau, the plain version</h2>
+    <p class="plain-lead">Same words as the console, without the console. No animation, no sound, nothing to scroll through. It works with a screen reader, with a keyboard alone, and at any text size.</p>
+
+    <h3>What Bureau is</h3>
+    <p>Your AI agents need an office. Bureau is one you host yourself: a mission queue your agents work from, a review gate you stay in charge of, and a memory they build as they go.</p>
+    <ul>
+      <li><b>Lead.</b> Splits your goals into missions.</li>
+      <li><b>Critic.</b> Checks the work before you do.</li>
+      <li><b>Agent.</b> Claude, Codex, or yours. Anyone that speaks HTTP or MCP can clock in.</li>
+      <li><b>Missions, not chats.</b> Work lives in a queue with a status and a history, not in a scrollback.</li>
+      <li><b>Boss, that's you.</b> You approve what matters. Nothing irreversible ships without you.</li>
+      <li><b>Librarian.</b> Every approved mission leaves memory, filed as plain markdown in git.</li>
+      <li><b>The attic.</b> Old beliefs retire. Nothing is lost.</li>
+    </ul>
+    <p>Your agents. Your memory. Your rules. It's open source and has zero dependencies.</p>
+
+    <h3>Get it</h3>
+    <ul>
+      <li><a href="#save" id="plain-save">Save your spot</a> for the hosted version. One email when it opens, nothing else.</li>
+      <li><a href="https://github.com/mahoudeau/bureau">Bureau on GitHub</a>: read the code, star it, run it yourself.</li>
+    </ul>
+
+    <h3>If you go back to the console</h3>
+    <ul>
+      <li>Arrow keys or the D-pad move between stops. Scrolling works too.</li>
+      <li>A (or Z) replays the current moment. B (or X) goes back one stop.</li>
+      <li>Escape zooms out. Enter swaps the cartridge. Shift changes the colours.</li>
+      <li>If your system asks for reduced motion, the console turns its animations off.</li>
+    </ul>
+  </div>
+</div>
+
+<script src="/assets/office-assets.js"></script>
+<script src="sound.js"></script>
+<script src="bughunt.js"></script>
+<script src="star.js"></script>
+<script src="site.js"></script>
+</body>
+</html>
