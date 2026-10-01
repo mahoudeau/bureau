@@ -1,4 +1,4 @@
-// lib/store.js: JSON state with atomic writes. Zero dependencies.
+// lib/store.js: JSON state with atomic writes, backups and schema migrations. Zero dependencies.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -9,15 +9,72 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
+// ---- Schema migrations ----
+// state.json carries schema_version. A file without one is version 0.
+// MIGRATIONS[i] takes the state from version i to i+1; they run in order on
+// boot, after a copy of the file is kept as state.json.pre-migrate-<ts>.
+// Append new migrations at the end, never edit a released one.
+const MIGRATIONS = [
+  // 0 -> 1: the field itself, plus the top-level keys older files may lack.
+  s => { for (const k of Object.keys(EMPTY)) if (s[k] === undefined) s[k] = structuredClone(EMPTY[k]); },
+];
+const SCHEMA_VERSION = MIGRATIONS.length;
+
+function stamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
+
+// Refusing to boot is the point: a hub that starts on empty state after a bad
+// read looks healthy and quietly loses every mission on its next save.
+class StorageError extends Error {}
+
 let state = null;
+
+function readState() {
+  let raw;
+  try {
+    raw = fs.readFileSync(STATE_FILE, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw new StorageError(`cannot read ${STATE_FILE}: ${e.message}. Refusing to boot.`);
+    // No state file. Fine on a fresh install, suspicious when backups exist.
+    const baks = listBackups();
+    if (baks.length) throw new StorageError(`${STATE_FILE} is missing but backups exist (${baks.join(', ')}). Refusing to boot on empty state. Copy a backup to state.json, or move the backups away to start fresh.`);
+    return { ...structuredClone(EMPTY), schema_version: SCHEMA_VERSION };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // One copy per distinct bad file, so a supervisor restarting the hub in a loop does not fill the disk.
+    let kept = null;
+    try {
+      const same = fs.readdirSync(DATA_DIR).filter(n => n.startsWith(BASE + '.corrupt-'))
+        .find(n => fs.readFileSync(path.join(DATA_DIR, n), 'utf8') === raw);
+      kept = same ? path.join(DATA_DIR, same) : `${STATE_FILE}.corrupt-${stamp()}`;
+      if (!same) fs.copyFileSync(STATE_FILE, kept);
+    } catch { kept = null; }
+    throw new StorageError(`${STATE_FILE} does not parse (${e.message}). ${kept ? `A copy is kept at ${kept}.` : 'Could not copy it aside.'} Refusing to boot. Restore the newest good backup (state.json.bak.1, then .bak.2, ..., or a state.json.daily-*) over state.json, see UPGRADING.md.`);
+  }
+}
+
+function migrate(s) {
+  const from = Number.isInteger(s.schema_version) ? s.schema_version : 0;
+  if (from > SCHEMA_VERSION) throw new StorageError(`${STATE_FILE} has schema_version ${from}, this hub knows up to ${SCHEMA_VERSION}. It was written by a newer Bureau. Upgrade the hub, or restore a state.json.pre-migrate-* backup.`);
+  if (from === SCHEMA_VERSION) return s;
+  if (fs.existsSync(STATE_FILE)) {
+    const pre = `${STATE_FILE}.pre-migrate-${stamp()}`;
+    fs.copyFileSync(STATE_FILE, pre);
+    console.log(`[store] migrating state from schema ${from} to ${SCHEMA_VERSION}; previous file kept at ${pre}`);
+  }
+  for (let v = from; v < SCHEMA_VERSION; v++) {
+    MIGRATIONS[v](s);
+    s.schema_version = v + 1;
+  }
+  writeNow(s);
+  return s;
+}
 
 function load() {
   if (state) return state;
-  try {
-    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    state = structuredClone(EMPTY);
-  }
+  const s = migrate(readState());
+  state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
   state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
@@ -31,17 +88,80 @@ function load() {
   return state;
 }
 
+// Atomic write: tmp file, fsync, rename. A crash leaves the old file or the new one.
+function writeFileAtomic(file, text) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = file + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, file);
+}
+function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); }
+
 let saveTimer = null;
 function save() {
-  // Debounced atomic write: write tmp file then rename.
+  // Debounced: many mutations in one tick make one write.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = STATE_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-    fs.renameSync(tmp, STATE_FILE);
+    writeNow(state);
   }, 100);
+}
+// Called on exit, so a SIGTERM inside the debounce window loses nothing.
+function flush() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (state) writeNow(state);
+}
+
+// ---- Backups ----
+// Rolling: state.json.bak.1 (newest) .. bak.N, one per interval (hourly, keep 24).
+// Daily: state.json.daily-YYYY-MM-DD, first tick of each UTC day, keep 7.
+// Both are written from the in-memory state, so they are always a whole file.
+const BACKUP_INTERVAL_MS = +process.env.BUREAU_BACKUP_INTERVAL_MS || 3600_000;
+const BACKUP_KEEP = +process.env.BUREAU_BACKUP_KEEP || 24;
+const DAILY_KEEP = +process.env.BUREAU_DAILY_KEEP || 7;
+const BASE = path.basename(STATE_FILE);
+
+function listBackups() {
+  let names = [];
+  try { names = fs.readdirSync(DATA_DIR); } catch { return []; }
+  return names.filter(n => n.startsWith(BASE + '.bak.') || n.startsWith(BASE + '.daily-')).sort();
+}
+
+function rotateBackups() {
+  if (!state) return;
+  const bak = i => `${STATE_FILE}.bak.${i}`;
+  try { fs.unlinkSync(bak(BACKUP_KEEP)); } catch { }
+  for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
+    try { fs.renameSync(bak(i), bak(i + 1)); } catch { }
+  }
+  writeFileAtomic(bak(1), JSON.stringify(state, null, 2));
+}
+
+function dailySnapshot() {
+  if (!state) return;
+  const day = new Date().toISOString().slice(0, 10);
+  const file = `${STATE_FILE}.daily-${day}`;
+  if (!fs.existsSync(file)) writeFileAtomic(file, JSON.stringify(state, null, 2));
+  const dailies = listBackups().filter(n => n.startsWith(BASE + '.daily-'));
+  for (const n of dailies.slice(0, Math.max(0, dailies.length - DAILY_KEEP))) {
+    try { fs.unlinkSync(path.join(DATA_DIR, n)); } catch { }
+  }
+}
+
+function backupTick() {
+  try { rotateBackups(); dailySnapshot(); } catch (e) { console.error('[store] backup failed:', e.message); }
+}
+
+// Boot: load and migrate (throws StorageError on bad state), take today's
+// snapshot if missing, then start the rolling backups.
+function init() {
+  load();
+  try { dailySnapshot(); } catch (e) { console.error('[store] daily snapshot failed:', e.message); }
+  setInterval(backupTick, BACKUP_INTERVAL_MS).unref();
+  return { schema_version: state.schema_version };
 }
 
 function nextId(prefix) {
@@ -62,15 +182,15 @@ function acquireLock() {
   try {
     const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
     if (pid && pid !== process.pid) {
-      try {
-        process.kill(pid, 0); // throws if the process is gone
-        return { error: `data dir is owned by a live hub process (pid ${pid}); refusing to boot` };
-      } catch { /* stale lock from a dead process: take over */ }
+      let alive = true;
+      try { process.kill(pid, 0); } catch (e) { alive = e.code === 'EPERM'; } // EPERM: alive, another user's
+      if (alive) return { error: `data dir ${DATA_DIR} is owned by a live hub process (pid ${pid}, see ${LOCK_FILE}); refusing to boot` };
+      console.log(`[store] taking over stale lock from dead pid ${pid}`);
     }
   } catch { /* no lock file yet */ }
   fs.writeFileSync(LOCK_FILE, String(process.pid));
   const release = () => { try { if (parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(LOCK_FILE); } catch { } };
-  process.on('exit', release);
+  process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } release(); });
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
   return {};
 }
@@ -89,9 +209,13 @@ function logEvent(type, data) {
 function upsertAgent({ name, kind, capabilities }) {
   const s = load();
   let a = s.agents.find(x => x.name === name);
+  // S2-c: lead/critic tags are still stored, but grant nothing while settings
+  // hold roles. Say so in the log, so nobody mistakes the tag for authority.
+  const ignored = rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => c === 'lead' || c === 'critic');
   if (!a) {
     a = { name, kind: kind || 'other', capabilities: capabilities || [], registered_at: nowISO() };
     s.agents.push(a);
+    if (ignored) logEvent('agent.capabilities_changed', { name, before: [], after: a.capabilities, note: SETTINGS_ROLES_NOTE });
   } else {
     if (kind) a.kind = kind;
     // A re-registration replaces the capabilities array, and that is how
@@ -105,7 +229,7 @@ function upsertAgent({ name, kind, capabilities }) {
       const same = before.length === capabilities.length && before.every(c => capabilities.includes(c));
       if (!same) {
         a.capabilities = capabilities;
-        logEvent('agent.capabilities_changed', { name, before, after: capabilities });
+        logEvent('agent.capabilities_changed', { name, before, after: capabilities, ...(ignored ? { note: SETTINGS_ROLES_NOTE } : {}) });
       }
     }
   }
@@ -260,6 +384,8 @@ function updateProject(id, { label, capacity, entity, repo }) {
 }
 
 function createTask({ title, body, priority, project, created_by, gate }) {
+  // No gate given: the project's default_gate from settings, boss when unset.
+  if (gate === undefined || gate === null || gate === '') gate = effectiveSettings(load(), project || 'general').default_gate;
   const t = {
     id: nextId('t'),
     title: String(title || 'untitled'),
@@ -309,7 +435,7 @@ function expireLeases() {
       // Unified reservations: the expired holder gets first claim on its own
       // mission. claimTask lets cowork reservations lapse after the TTL, so a
       // dead shift's mission returns to the pool; the envoy's waits for him.
-      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}` });
+      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}`, from: t.status, to: 'queued' });
       if (t.assignee) { t.reserved_for = t.assignee; t.reserved_at = nowISO(); }
       t.status = 'queued';
       t.assignee = null;
@@ -359,11 +485,12 @@ function claimTask({ id, agent, lease_minutes }) {
   }
   delete t.reserved_for; // any claim (owner, or explicit by id) clears the reservation
   delete t.reserved_at;
+  const fromStatus = t.status;
   t.status = 'claimed';
   t.assignee = agent;
   const mins = Number.isFinite(+lease_minutes) ? +lease_minutes : 120;
   t.lease_until = new Date(Date.now() + mins * 60000).toISOString();
-  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)` });
+  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)`, from: fromStatus, to: 'claimed' });
   save();
   return { task: t };
 }
@@ -382,8 +509,127 @@ function agentHasCapability(s, agentName, cap) {
   const a = s.agents.find(x => x.name === agentName);
   return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
 }
-function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
-function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+// S2-c (boss ruling 2026-10-01): once any agent has roles in settings, lead
+// and critic come from settings only, for every agent; an agent missing from
+// settings.agents holds neither, whatever it registered with. No roles set
+// anywhere: the capability check above, as before. librarian stays a capability.
+function rolesConfigured(s) {
+  const agents = s.settings && s.settings.agents;
+  return !!agents && Object.values(agents).some(a => a && Array.isArray(a.roles));
+}
+function agentHasRole(s, agentName, role) {
+  if (!rolesConfigured(s)) return agentHasCapability(s, agentName, role);
+  const cfg = s.settings.agents[agentName];
+  return !!(cfg && Array.isArray(cfg.roles) && cfg.roles.includes(role));
+}
+const SETTINGS_ROLES_NOTE = 'settings govern lead and critic; self-registered lead/critic tags grant nothing';
+function isLead(s, agentName) { return agentName === 'human' || agentHasRole(s, agentName, 'lead'); }
+function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasRole(s, agentName, 'critic'); }
+
+// ---- Settings (S2) ----
+// Absent settings mean today's behavior, exactly. Every stricter rule is
+// opt-in: approval only bites when the boss set it, globally or per project.
+const APPROVALS = ['dashboard', 'in-session', 'critic'];
+const GATES = ['boss', 'critic'];
+const NOTIFY = ['all', 'review', 'blocked', 'none'];
+const ROLES = ['lead', 'critic'];
+
+function settingsOf(s) {
+  const st = s.settings || {};
+  return { global: st.global || {}, projects: st.projects || {}, agents: st.agents || {} };
+}
+// Project override wins over global. approval stays undefined when nobody set
+// it, which is how the hub tells "dashboard by default" from "dashboard by choice".
+function effectiveSettings(s, project) {
+  const { global: g, projects } = settingsOf(s);
+  const p = projects[project] || {};
+  return {
+    approval: p.approval ?? g.approval,
+    default_gate: p.default_gate ?? g.default_gate ?? 'boss',
+    notify: p.notify ?? g.notify ?? 'all',
+  };
+}
+
+function checkPolicyKeys(obj, where, allowLibrarian) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return `${where} must be an object`;
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null) continue; // null clears the key
+    if (k === 'approval') { if (!APPROVALS.includes(v)) return `${where}.approval: use one of ${APPROVALS.join(', ')}`; }
+    else if (k === 'default_gate') { if (!GATES.includes(v)) return `${where}.default_gate: use one of ${GATES.join(', ')}`; }
+    else if (k === 'notify') { if (!NOTIFY.includes(v)) return `${where}.notify: use one of ${NOTIFY.join(', ')}`; }
+    else if (k === 'librarian' && allowLibrarian) {
+      if (typeof v !== 'object' || Array.isArray(v)) return `${where}.librarian must be an object`;
+      for (const [lk, lv] of Object.entries(v)) {
+        if (lk === 'schedule') { if (lv !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(lv))) return `${where}.librarian.schedule: use HH:MM`; }
+        else if (lk === 'gap_missions_per_week') { if (lv !== null && (!Number.isInteger(lv) || lv < 0 || lv > 100)) return `${where}.librarian.gap_missions_per_week: an integer from 0 to 100`; }
+        else return `${where}.librarian: unknown key ${lk}`;
+      }
+    }
+    else return `${where}: unknown key ${k}`;
+  }
+  return null;
+}
+
+// Merge a {key: value} patch into target; null deletes the key.
+function mergeInto(target, patch) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete target[k];
+    else if (k === 'librarian') { target[k] = { ...(target[k] || {}) }; mergeInto(target[k], v); }
+    else target[k] = v;
+  }
+  return target;
+}
+
+// PATCH /api/settings. Merges one level deep: global keys, and each project
+// or agent entry key by key. null clears a key or a whole entry. Everything is
+// validated before anything is applied.
+function patchSettings(patch) {
+  const s = load();
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { error: 'settings patch must be an object' };
+  for (const k of Object.keys(patch)) if (!['global', 'projects', 'agents'].includes(k)) return { error: `unknown section ${k}; use global, projects, agents` };
+  if (patch.global !== undefined) { const e = checkPolicyKeys(patch.global, 'global', true); if (e) return { error: e }; }
+  if (patch.projects !== undefined) {
+    if (!patch.projects || typeof patch.projects !== 'object' || Array.isArray(patch.projects)) return { error: 'projects must be an object keyed by project id' };
+    for (const [pid, v] of Object.entries(patch.projects)) {
+      if (!s.projects.some(pj => pj.id === pid)) return { error: `unknown project: ${pid}` };
+      if (v === null) continue;
+      const e = checkPolicyKeys(v, `projects.${pid}`, false); if (e) return { error: e };
+    }
+  }
+  if (patch.agents !== undefined) {
+    if (!patch.agents || typeof patch.agents !== 'object' || Array.isArray(patch.agents)) return { error: 'agents must be an object keyed by agent name' };
+    for (const [name, v] of Object.entries(patch.agents)) {
+      if (v === null) continue;
+      if (typeof v !== 'object' || Array.isArray(v)) return { error: `agents.${name} must be an object` };
+      for (const [k, r] of Object.entries(v)) {
+        if (k !== 'roles') return { error: `agents.${name}: unknown key ${k}` };
+        if (r === null) continue;
+        if (!Array.isArray(r) || r.some(x => !ROLES.includes(x))) return { error: `agents.${name}.roles: an array of ${ROLES.join(', ')}` };
+      }
+    }
+  }
+  const before = structuredClone(settingsOf(s));
+  const next = structuredClone(before);
+  if (patch.global) mergeInto(next.global, patch.global);
+  for (const sec of ['projects', 'agents']) {
+    for (const [id, v] of Object.entries(patch[sec] || {})) {
+      if (v === null) { delete next[sec][id]; continue; }
+      next[sec][id] = mergeInto(next[sec][id] || {}, v);
+      if (!Object.keys(next[sec][id]).length) delete next[sec][id];
+    }
+  }
+  if (next.global.librarian && !Object.keys(next.global.librarian).length) delete next.global.librarian;
+  s.settings = next;
+  logEvent('settings.changed', { before, after: next });
+  // Role changes get their own event, like capability changes (t-356)
+  const names = new Set([...Object.keys(before.agents), ...Object.keys(next.agents)]);
+  for (const name of names) {
+    const b = before.agents[name] && before.agents[name].roles, a = next.agents[name] && next.agents[name].roles;
+    if (JSON.stringify(b ?? null) !== JSON.stringify(a ?? null)) logEvent('agent.roles_changed', { name, before: b ?? null, after: a ?? null });
+  }
+  save();
+  return { settings: next, before };
+}
 // The librarian's own digest (t-356): a mission titled "<name>: ..." by an
 // agent registered with the "librarian" tag is a proposal set the boss rules
 // item by item. No builder is promoting its own build past a critic, so the
@@ -396,14 +642,45 @@ function isOwnLibrarianDigest(s, t, agentName) {
     && typeof t.title === 'string' && t.title.toLowerCase().startsWith(agentName.toLowerCase() + ':');
 }
 
-function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
+// The boss's log entries say what his hand did, so approve, send-back, answer
+// and verdict can be told apart when the history is read back.
+const HUMAN_KINDS = ['approve', 'send_back', 'answer', 'verdict', 'edit'];
+function humanKind(kind, prevStatus, status, verdicts) {
+  if (HUMAN_KINDS.includes(kind)) return kind;
+  const moved = status && status !== prevStatus;
+  if (moved && prevStatus === 'review' && status === 'done') return 'approve';
+  if (moved && prevStatus === 'review' && status === 'queued') return 'send_back';
+  if (moved && prevStatus === 'blocked' && status === 'queued') return 'answer';
+  if (!moved && Array.isArray(verdicts) && verdicts.length) return 'verdict';
+  return 'edit';
+}
+
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
+  // History is written by someone: an update that names no agent is the lease
+  // holder's (it is the only one who should be touching the mission), and with
+  // no holder there is nobody to credit, so it is refused. A third of the live
+  // log had been filed as "unknown" before this.
+  if (!agent) {
+    if (!t.assignee) return { error: 'agent required: say which agent is acting' };
+    agent = t.assignee;
+  }
   const prevStatus = t.status, prevAssignee = t.assignee;
   // Every check runs before anything changes, so a refused update leaves the
   // mission exactly as it was (the gate used to be raised before a refusal).
   if (status && !TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
+  // S2 approval policy. Settings decide it; with none set, nothing below
+  // refuses anything that was allowed before.
+  const policy = effectiveSettings(s, t.project).approval;
+  let quote = null;
+  if (approved_in_session !== undefined && approved_in_session !== null) {
+    quote = String(approved_in_session).trim();
+    if (!quote) return { error: 'approved_in_session: quote the boss\'s words, it cannot be empty' };
+    if (policy !== 'in-session') return { error: `approved_in_session: the ${t.project} project's policy does not accept chat approvals (approval: ${policy || 'not set'}); the boss approves in the dashboard` };
+    if (status !== 'done') return { error: 'approved_in_session: only rides a close to done' };
+  }
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
   if (gate !== undefined && gate !== 'boss' && !(gate === 'critic' && isLead(s, agent)))
     return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
@@ -422,8 +699,21 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
-  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human')
+  // S2 in-session: the boss's quoted words count as his hand, for done only.
+  const chatApproved = quote && policy === 'in-session' && status === 'done';
+  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human' && !chatApproved)
     return { error: 'boss-gate: only the boss moves this mission out of review' };
+  // S2 close policy, only when the boss set approval explicitly. dashboard:
+  // agents never close boss-gate work done. in-session: they may, quoting
+  // the boss. critic: a critic or lead pass closes it. Unset: as before.
+  if (status === 'done' && t.status !== 'done' && effGate === 'boss' && agent !== 'human' && policy) {
+    if (policy === 'dashboard')
+      return { error: `approval policy (dashboard) for ${t.project}: only the boss closes a gate:boss mission done; park it in review for him instead` };
+    if (policy === 'in-session' && !chatApproved)
+      return { error: `approval policy (in-session) for ${t.project}: closing a gate:boss mission done needs approved_in_session with the boss's words, or the boss's own hand in the dashboard` };
+    if (policy === 'critic' && !isCriticOrLead(s, agent))
+      return { error: `approval policy (critic) for ${t.project}: only the critic, the lead, or the boss closes a gate:boss mission done` };
+  }
   if (gate !== undefined) t.gate = gate;
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
@@ -448,7 +738,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
       lines.push(`${it.id} ${it.verdict}${it.comment ? ` (${it.comment})` : ''}`);
     }
     // Verdicts get their own log entry: the worker's apply pass reads them here too
-    if (lines.length) t.log.push({ ts: nowISO(), by: agent || 'human', note: `verdicts: ${lines.join(' · ')}` });
+    if (lines.length) t.log.push({ ts: nowISO(), by: agent, note: `verdicts: ${lines.join(' · ')}`, ...(agent === 'human' ? { kind: 'verdict' } : {}) });
   }
   if (status) {
     t.status = status;
@@ -474,10 +764,19 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (priority !== undefined) t.priority = +priority;
   if (title) t.title = title;
   if (body !== undefined) t.body = body;
-  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent || 'unknown', ...artifact });
-  t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
+  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent, ...artifact });
+  // A status change is recorded as from/to beside the note, so a PATCH that
+  // carries both keeps both (the note used to replace the status line).
+  const entry = { ts: nowISO(), by: agent, note: note || (status ? `status → ${status}` : 'updated') };
+  if (status && status !== prevStatus) { entry.from = prevStatus; entry.to = status; }
+  if (agent === 'human') entry.kind = humanKind(kind, prevStatus, status, verdicts);
+  t.log.push(entry);
+  if (chatApproved) {
+    t.log.push({ ts: nowISO(), by: agent, note: `approved by boss in session: "${quote}" (recorded by ${agent})` });
+    logEvent('task.approved_in_session', { id: t.id, project: t.project, approval: 'in-session', channel: 'chat', by: `${agent} for human`, quote });
+  }
   save();
-  return { task: t, prev_status: prevStatus };
+  return { task: t, prev_status: prevStatus, by: agent };
 }
 
 // ---- Review capability links ----
@@ -522,8 +821,10 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  StorageError, SCHEMA_VERSION, STATE_FILE,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
+  patchSettings, settingsOf, effectiveSettings, rolesConfigured, SETTINGS_ROLES_NOTE,
 };

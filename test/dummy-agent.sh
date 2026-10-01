@@ -79,7 +79,9 @@ api POST /api/agents/heartbeat '{"name":"menace","sub_agents":[{"label":"phantom
 check "still absent from the roster after being reported as a sub-agent label" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
 GHOST=$(api POST /api/tasks '{"title":"Ghost errand","priority":5}')
 GHOSTID=$(echo "$GHOST" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
-check "claiming under that same string only works via the normal claim path" "$(api POST /api/tasks/claim "{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}")" '"claimed"'
+# Body in a variable: macOS bash 3.2 mangles escaped quotes inside "$(...)"
+GHOSTCLAIM="{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}"
+check "claiming under that same string only works via the normal claim path" "$(api POST /api/tasks/claim "$GHOSTCLAIM")" '"status": "claimed"'
 check "it is now an independent roster agent, unrelated to menace's fleet" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^1$'
 api PATCH "/api/tasks/$GHOSTID" '{"agent":"phantom-crew-1","status":"done","note":"closed - was only a claim-path identity-blur proof"}' > /dev/null
 
@@ -183,6 +185,43 @@ check "approval persisted on the item" "$IT_DETAIL" '"verdict": "approved"'
 check "rejection comment persisted" "$IT_DETAIL" 'not yet convinced'
 check "verdicts reached the log" "$IT_DETAIL" 'verdicts: i1 approved'
 
+echo "7c. history at write time: from/to on status changes, agent fallback, the boss's kind"
+# The boss's hand, read back from the log entries sections 4, 7 and 7b wrote
+TID_LOG=$(api GET "/api/tasks/$TID")
+check "a review-link approve carries kind approve" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"kind": "approve"'
+check "the approve records from review" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"from": "review"'
+check "the approve records to done" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"to": "done"'
+check "a review-link send-back carries kind send_back" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"kind": "send_back"'
+check "the send-back records to queued" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"to": "queued"'
+check "an answer carries kind answer, from blocked" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"from": "blocked"'
+check "an answer carries kind answer" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"kind": "answer"'
+check "a claim records from queued" "$(echo "$TID_LOG" | grep -A2 '"note": "claimed')" '"from": "queued"'
+check "the boss's verdicts carry kind verdict" "$(api GET "/api/tasks/$TIID" | grep -A1 '"note": "verdicts: i1')" '"kind": "verdict"'
+# A worker's PATCH that carries both a status and a note keeps both
+TW=$(api POST /api/tasks '{"title":"History probe","project":"ops","priority":4,"gate":"critic"}')
+TWID=$(echo "$TW" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+TW_CLAIM="{\"agent\":\"menace\",\"id\":\"$TWID\"}"
+api POST /api/tasks/claim "$TW_CLAIM" > /dev/null
+TW_START='{"agent":"menace","status":"in_progress","note":"history probe started"}'
+api PATCH "/api/tasks/$TWID" "$TW_START" > /dev/null
+check "a status change with a note keeps the note" "$(api GET "/api/tasks/$TWID")" 'history probe started'
+check "and records from" "$(api GET "/api/tasks/$TWID" | grep -A2 '"note": "history probe started"')" '"from": "claimed"'
+check "and records to" "$(api GET "/api/tasks/$TWID" | grep -A2 '"note": "history probe started"')" '"to": "in_progress"'
+check "a worker's entry carries no kind" "$(api GET "/api/tasks/$TWID" | grep -A3 '"note": "history probe started"' | grep -c '"kind"' || true)" '^0$'
+TW_NOAGENT='{"note":"nobody named here"}'
+check "an update without agent is accepted while a lease is held" "$(api PATCH "/api/tasks/$TWID" "$TW_NOAGENT")" '"status": "in_progress"'
+check "and is credited to the lease holder" "$(api GET "/api/tasks/$TWID" | grep -B1 '"note": "nobody named here"')" '"by": "menace"'
+TW_DONE='{"agent":"menace","status":"done","note":"probe closed"}'
+api PATCH "/api/tasks/$TWID" "$TW_DONE" > /dev/null
+TU=$(api POST /api/tasks '{"title":"Unheld probe","project":"ops","priority":5}')
+TUID=$(echo "$TU" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+TU_NOAGENT='{"note":"who am I"}'
+check "an update without agent and no holder is refused" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/tasks/$TUID" -H "$AUTH" -H "$JSON" -d "$TU_NOAGENT")" '400'
+check "the refusal says an agent is required" "$(api PATCH "/api/tasks/$TUID" "$TU_NOAGENT")" 'agent required'
+check "the refused update wrote nothing" "$(api GET "/api/tasks/$TUID" | grep -c 'who am I' || true)" '^0$'
+TU_HUMAN='{"agent":"human","status":"discarded","note":"probe not needed"}'
+check "a human edit outside review carries kind edit" "$(api PATCH "/api/tasks/$TUID" "$TU_HUMAN" | grep -A3 '"note": "probe not needed"')" '"kind": "edit"'
+
 echo "8. lease expiry re-queues abandoned work"
 T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3}')
 T2ID=$(echo "$T2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
@@ -190,6 +229,7 @@ api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minute
 sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
 check "non-cowork expiry keeps the reservation" "$(api GET "/api/tasks/$T2ID")" '"reserved_for": "menace"'
+check "a lease expiry records from and to" "$(api GET "/api/tasks/$T2ID" | grep -A3 '"note": "lease expired')" '"to": "queued"'
 # Unified reservations: cowork holders keep their mission only for the TTL.
 # The lapse check needs a hub started with a tiny BUREAU_RESERVATION_TTL_MIN (the
 # local runner sets 0.02 = 1.2s); against a default hub it would wait 30 minutes.
@@ -333,7 +373,8 @@ BBID=$(echo "$BB" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 check "first worker takes the busy corner" "$(api POST /api/tasks/claim '{"agent":"worker-a"}')" "\"id\": \"$BAID\""
 check "second worker spills to the next project" "$(api POST /api/tasks/claim '{"agent":"worker-b"}')" 'Dust the pixel plants'
 check "third worker finds every desk taken" "$(api POST /api/tasks/claim '{"agent":"worker-c"}')" 'all_busy'
-check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "{\"agent\":\"worker-c\",\"id\":\"$BBID\"}")" '"claimed"'
+BBCLAIM="{\"agent\":\"worker-c\",\"id\":\"$BBID\"}"
+check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "$BBCLAIM")" '"status": "claimed"'
 GOAL=$(api POST /api/tasks '{"title":"goal: tidy the corner","project":"busy-corner","priority":1}')
 GOALID=$(echo "$GOAL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 GKID=$(api POST /api/tasks '{"title":"Sweep under the goal","project":"busy-corner","priority":1}')
@@ -365,6 +406,107 @@ mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\
 check "items filed over MCP" "$(api GET "/api/tasks/$MID")" 'Oil the hinges'
 mcp "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MID\",\"status\":\"done\",\"note\":\"hinges fine\"}}}" > /dev/null
 check "bad capability token is 404" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "${MURL%/*}/000000000000000000000000000000000000000000000000" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","id":9,"method":"ping"}')" '404'
+check "update_mission advertises approved_in_session" "$(mcp '{"jsonrpc":"2.0","id":10,"method":"tools/list"}')" 'approved_in_session'
+
+echo "11. settings (S2): absent means today's behavior, every stricter rule opt-in"
+# JSON bodies that carry a variable are built in a variable first (bash 3.2).
+tid () { echo "$1" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*'; }
+new_claimed () { # new_claimed <title> <agent>: a boss-gate mission in ops, claimed
+  local body="{\"title\":\"$1\",\"project\":\"ops\",\"priority\":4}"
+  local id; id=$(tid "$(api POST /api/tasks "$body")")
+  local claim="{\"agent\":\"$2\",\"id\":\"$id\"}"
+  api POST /api/tasks/claim "$claim" > /dev/null
+  echo "$id"
+}
+check "no settings by default" "$(api GET /api/settings)" '"global": {}'
+S1=$(new_claimed "Settings: no policy" menace)
+check "no settings: an agent still closes its own boss-gate mission done" "$(api PATCH "/api/tasks/$S1" '{"agent":"menace","status":"done","note":"closed as always"}')" '"status": "done"'
+
+check "bad approval enum refused" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/settings" -H "$AUTH" -H "$JSON" -d '{"global":{"approval":"maybe"}}')" '400'
+check "refusal names the allowed values" "$(api PATCH /api/settings '{"global":{"approval":"maybe"}}')" 'dashboard, in-session, critic'
+check "unknown key refused" "$(api PATCH /api/settings '{"global":{"vibes":"on"}}')" 'unknown key vibes'
+check "unknown project refused" "$(api PATCH /api/settings '{"projects":{"nowhere":{"approval":"dashboard"}}}')" 'unknown project'
+check "bad role refused" "$(api PATCH /api/settings '{"agents":{"menace":{"roles":["boss"]}}}')" 'roles'
+check "bad librarian schedule refused" "$(api PATCH /api/settings '{"global":{"librarian":{"schedule":"3am"}}}')" 'HH:MM'
+check "a refused patch applies nothing" "$(api GET /api/settings)" '"global": {}'
+
+check "PATCH sets global dashboard" "$(api PATCH /api/settings '{"global":{"approval":"dashboard","notify":"review","librarian":{"schedule":"03:00","gap_missions_per_week":5}}}')" '"approval": "dashboard"'
+check "GET round-trips it" "$(api GET /api/settings)" '"gap_missions_per_week": 5'
+check "merge is key by key" "$(api PATCH /api/settings '{"global":{"notify":"none"}}')" '"approval": "dashboard"'
+check "settings.changed logged" "$(api GET /api/state)" '"type": "settings.changed"'
+check "the event carries before and after" "$(api GET /api/state | grep -A30 'settings.changed' | tr -d ' \n')" '"before":{'
+
+S2=$(new_claimed "Settings: dashboard" menace)
+check "explicit dashboard refuses an agent closing boss-gate work done" "$(api PATCH "/api/tasks/$S2" '{"agent":"menace","status":"done"}')" 'approval policy (dashboard)'
+check "the refused close leaves the mission claimed" "$(api GET "/api/tasks/$S2")" '"status": "claimed"'
+check "a chat quote is refused under dashboard" "$(api PATCH "/api/tasks/$S2" '{"agent":"menace","status":"done","approved_in_session":"ship it"}')" 'does not accept chat approvals'
+check "the boss still closes it" "$(api PATCH "/api/tasks/$S2" '{"agent":"human","status":"done"}')" '"status": "done"'
+S2C=$(api POST /api/tasks '{"title":"Settings: critic gate under dashboard","project":"ops","priority":4,"gate":"critic"}')
+S2CID=$(tid "$S2C")
+S2CCLAIM="{\"agent\":\"menace\",\"id\":\"$S2CID\"}"
+api POST /api/tasks/claim "$S2CCLAIM" > /dev/null
+check "dashboard leaves critic-gate missions alone" "$(api PATCH "/api/tasks/$S2CID" '{"agent":"menace","status":"done"}')" '"status": "done"'
+
+check "project override to in-session" "$(api PATCH /api/settings '{"projects":{"ops":{"approval":"in-session"}}}')" '"approval": "in-session"'
+S3=$(new_claimed "Settings: in-session" menace)
+check "in-session without a quote is refused" "$(api PATCH "/api/tasks/$S3" '{"agent":"menace","status":"done"}')" 'needs approved_in_session'
+check "an empty quote is refused" "$(api PATCH "/api/tasks/$S3" '{"agent":"menace","status":"done","approved_in_session":"  "}')" 'cannot be empty'
+check "a quote rides only a close to done" "$(api PATCH "/api/tasks/$S3" '{"agent":"menace","status":"in_progress","approved_in_session":"ship it"}')" 'only rides a close'
+check "in-session with the quote closes it" "$(api PATCH "/api/tasks/$S3" '{"agent":"menace","status":"done","approved_in_session":"ship it, looks right"}')" '"status": "done"'
+check "the quote is in the mission log" "$(api GET "/api/tasks/$S3")" 'approved by boss in session: \\"ship it, looks right\\" (recorded by menace)'
+check "task.approved_in_session logged" "$(api GET /api/state)" '"type": "task.approved_in_session"'
+SG=$(tid "$(api POST /api/tasks '{"title":"Settings: general stays dashboard","project":"general","priority":4}')")
+SGCLAIM="{\"agent\":\"menace\",\"id\":\"$SG\"}"
+api POST /api/tasks/claim "$SGCLAIM" > /dev/null
+check "global stays dashboard for other projects" "$(api PATCH "/api/tasks/$SG" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
+api PATCH "/api/tasks/$SG" '{"agent":"human","status":"done"}' > /dev/null
+S3R=$(new_claimed "Settings: in-session from review" menace)
+S3RPARK="{\"agent\":\"consul\",\"status\":\"review\",\"note\":\"parked by lead\"}"
+api PATCH "/api/tasks/$S3R" "$S3RPARK" > /dev/null
+check "in-session: no quote, review exit stays the boss's" "$(api PATCH "/api/tasks/$S3R" '{"agent":"menace","status":"done"}')" 'only the boss moves'
+check "in-session: the quote closes it out of review" "$(api PATCH "/api/tasks/$S3R" '{"agent":"menace","status":"done","approved_in_session":"approved, merge it"}')" '"status": "done"'
+MS=$(mcp '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"Settings: MCP quote","project":"ops"}}}')
+MSID=$(echo "$MS" | grep -o 't-[0-9]*' | head -1)
+MSSTART="{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"start_mission\",\"arguments\":{\"id\":\"$MSID\"}}}"
+mcp "$MSSTART" > /dev/null
+MSDONE="{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"update_mission\",\"arguments\":{\"id\":\"$MSID\",\"status\":\"done\",\"approved_in_session\":\"yes, close it\"}}}"
+mcp "$MSDONE" > /dev/null
+check "MCP update_mission records the quote" "$(api GET "/api/tasks/$MSID")" 'recorded by consul'
+
+api PATCH /api/settings '{"projects":{"ops":{"approval":"critic"}}}' > /dev/null
+S4=$(new_claimed "Settings: critic policy" menace)
+check "critic policy: a plain agent cannot close boss-gate work" "$(api PATCH "/api/tasks/$S4" '{"agent":"menace","status":"done"}')" 'approval policy (critic)'
+check "critic policy: the critic closes it" "$(api PATCH "/api/tasks/$S4" '{"agent":"moneta","status":"done","note":"critic pass"}')" '"status": "done"'
+
+api PATCH /api/settings '{"global":{"default_gate":"critic"}}' > /dev/null
+check "default_gate applies when no gate is given" "$(api POST /api/tasks '{"title":"Settings: default gate","project":"general","priority":5}')" '"gate": "critic"'
+check "an explicit gate still wins" "$(api POST /api/tasks '{"title":"Settings: explicit gate","project":"general","priority":5,"gate":"boss"}')" '"gate": "boss"'
+api PATCH /api/settings '{"global":{"default_gate":null}}' > /dev/null
+
+S5=$(new_claimed "Settings: roles" menace)
+check "before roles: menace cannot set critic gate" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","gate":"critic"}')" 'only the boss or the lead'
+api PATCH /api/settings '{"agents":{"menace":{"roles":["lead"]},"moneta":{"roles":[]}}}' > /dev/null
+check "settings roles grant lead without the capability" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","gate":"critic"}')" '"gate": "critic"'
+S6=$(new_claimed "Settings: roles drop critic" menace)
+check "settings roles override a self-registered critic tag" "$(api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review"}')" 'only the critic, the lead, or the boss'
+check "re-registering with critic changes nothing" "$(api POST /api/agents/register '{"name":"moneta","kind":"cowork","capabilities":["review","critic"]}' > /dev/null; api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review"}')" 'only the critic'
+check "role changes logged" "$(api GET /api/state)" '"type": "agent.roles_changed"'
+# S2-c: once any roles exist, settings are the only source of lead and critic.
+check "an agent absent from settings.agents has no lead (consul's capability ignored)" "$(api PATCH "/api/tasks/$S6" '{"agent":"consul","gate":"critic"}')" 'only the boss or the lead'
+UPSTART=$(api POST /api/agents/register '{"name":"upstart","kind":"dummy","capabilities":["code","lead"]}')
+check "registering with lead still succeeds" "$UPSTART" '"name": "upstart"'
+check "the reply says settings govern lead and critic" "$UPSTART" 'settings govern lead and critic'
+check "the capabilities are stored anyway" "$(agents_section | grep -A6 '"name": "upstart"')" '"lead"'
+check "the capability log says the tag grants nothing" "$(api GET /api/state | grep -A12 '"name": "upstart"')" 'grant nothing'
+check "a self-registered lead is ignored once roles exist" "$(api PATCH "/api/tasks/$S6" '{"agent":"upstart","gate":"critic"}')" 'only the boss or the lead'
+
+check "null clears back to no settings" "$(api PATCH /api/settings '{"global":{"approval":null,"default_gate":null,"notify":null,"librarian":null},"projects":{"ops":null},"agents":{"menace":null,"moneta":null}}' | tr -d ' \n')" '"settings":{"global":{},"projects":{},"agents":{}}'
+check "cleared: moneta's capability counts again" "$(api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review","note":"parked by critic"}')" '"status": "review"'
+S7=$(new_claimed "Settings: cleared" menace)
+check "cleared: a self-registered lead counts again" "$(api PATCH "/api/tasks/$S7" '{"agent":"upstart","gate":"critic"}')" '"gate": "critic"'
+api PATCH "/api/tasks/$S7" '{"agent":"menace","gate":"boss"}' > /dev/null
+check "cleared: an agent closes boss-gate work done again" "$(api PATCH "/api/tasks/$S7" '{"agent":"menace","status":"done"}')" '"status": "done"'
+check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
 
 echo
 echo "passed $PASS, failed $FAIL"
