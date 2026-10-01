@@ -1,5 +1,5 @@
 #!/bin/sh
-# alwaysdata Node.js site command:  sh ~/www/getbureau.mathieu.dev/site/start.sh
+# alwaysdata Node.js site command:  sh ~/www/www.getbureau.dev/site/start.sh
 #
 # Secrets (WAITLIST_TOKEN, GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET,
 # GITHUB_TOKEN) go in the alwaysdata site Environment, never in these files.
