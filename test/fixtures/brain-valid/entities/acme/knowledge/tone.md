@@ -1,5 +1,6 @@
 ---
 title: Acme tone of voice
+summary: Acme writes in British English and never names competitors.
 compartment: knowledge
 scope: entity:acme
 permalink: acme-tone

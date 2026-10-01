@@ -52,6 +52,11 @@ Goals are a convention, not an API object: a mission titled `goal: ...` filed by
 
 Session guidance for connectors: a session is a shift, not the queue. Make every task self-contained (claim, work, write knowledge, update status, claim next) and keep state in the hub, never in session context. Leases turn dead sessions into requeued work; fresh sessions resume from the hub, not from memory.
 
+**Two modes: understand from the brain, implement from the code.** An agent that digs through code to learn what the product does burns its budget and still guesses. Every piece of work is in one of two modes:
+
+- **Understanding** (how does X work, where does Y stand, what was decided): read the brain first. Use the brain's map or search where the hub has them; until then, list the files (`GET /api/knowledge`) and read the project's `STATE.md` (its "Now" section where it has one, otherwise the latest debriefs), then its `specs/`. Answer from the brain and cite the files you used. Do not crawl the code unless asked. When the brain cannot answer, say so and name the gap; that gap is a spec or a note to file.
+- **Implementing** (change X): search first (the brain for specs and decisions, the code for the place), then read the code you will touch. Before editing, state what will change and why, citing the spec rule when one exists.
+
 **Sub-agent fleets.** A parent agent's sub-agent fleet (variant builders, inner critics, sub-critic panels) rides its own `POST /api/agents/heartbeat` as an optional `sub_agents` array, full-snapshot semantics (each heartbeat replaces the parent's last-reported fleet, the same replace-not-diff style the field already uses for `note`/`activity`):
 
 ```
