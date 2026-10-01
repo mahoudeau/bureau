@@ -349,7 +349,8 @@
   var token = null;
   var AGENTS = [];
   var boardCounts = { queued: 0, working: 0, review: 0, done: 0 };
-  var reviewCount = 0; // reviews waiting on the boss
+  var reviewCount = 0; // boss-gate reviews: the folder pile on the mat
+  var blockedCount = 0; // blocked on the boss's answer: "?" on the waiting bench
   var TASKS = [];
   var bubbles = new Map();
 
@@ -391,22 +392,36 @@
       function (n) { return 'At work: ' + n + (n === 1 ? ' agent' : ' agents'); });
   }
 
-  // The boss door counts only what waits on the boss: reviews behind the
-  // boss gate. Critic-gate reviews wait on the critic, not on you.
+  // "Waiting for you" is the dashboard's "waiting on you" number: reviews
+  // behind the boss gate plus blocked missions waiting on the boss's
+  // answer. Critic-gate reviews wait on the critic; a block whose last
+  // note says "waiting on: t-N" for a still-open mission waits on that
+  // mission (same rule as v2/needs-me-now.js).
+  function blockedOnMission(t, byId) {
+    var log = t.log || [], last = log[log.length - 1];
+    var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
+    var ref = m && byId[m[1]];
+    return !!ref && ref.status !== 'done' && ref.status !== 'failed' && ref.status !== 'discarded';
+  }
   function syncBoard(tasks) {
     TASKS = tasks;
-    var c = { queued: 0, working: 0, review: 0, done: 0 }, boss = 0;
+    var byId = {};
+    tasks.forEach(function (t) { byId[t.id] = t; });
+    var c = { queued: 0, working: 0, review: 0, done: 0 }, boss = 0, blocked = 0;
     for (var i = 0; i < tasks.length; i++) {
       var t = tasks[i];
       if (t.status === 'queued') c.queued++;
       else if (t.status === 'claimed' || t.status === 'in_progress') c.working++;
       else if (t.status === 'review') { c.review++; if (t.gate !== 'critic') boss++; }
+      else if (t.status === 'blocked') { if (!blockedOnMission(t, byId)) blocked++; }
       else if (t.status === 'done') c.done++;
     }
-    boardCounts = c; reviewCount = boss;
+    boardCounts = c; reviewCount = boss; blockedCount = blocked;
     setLegend('leg-queued', c.queued, function (n) { return 'On the board: ' + n; });
     setLegend('leg-working', c.working, function (n) { return 'In progress: ' + n; });
-    setLegend('leg-review', boss, function (n) { return 'Waiting for you: ' + n; });
+    setLegend('leg-review', boss + blocked, function (n) {
+      return 'Waiting for you: ' + n + ' (' + boss + ' to review, ' + blocked + ' to answer)';
+    });
     setLegend('leg-done', c.done, function (n) { return 'Shipped: ' + n; });
   }
 
@@ -673,6 +688,10 @@
     for (var k2 = 0; k2 < Math.min(reviewCount, 4); k2++)
       A.drawSprite(ctx, 'folder-review', p, 288 + (k2 % 2), 184 - k2 * 3);
     if (reviewCount > 4) plaque(p, '+' + (reviewCount - 4), 292, 168);
+    // missions blocked on the boss's answer wait on the bench, one "?" each
+    for (var k3 = 0; k3 < Math.min(blockedCount, 3); k3++)
+      A.drawSprite(ctx, 'emote-quest', p, 252 + k3 * 8, 194);
+    if (blockedCount > 3) plaque(p, '+' + (blockedCount - 3), 242, 194);
 
     // front door mark, under the spawn spot
     shadeRect(p, 46, 212, 24, 4, 1);
@@ -734,13 +753,14 @@
     var key = A.assemble(a.cast.head, a.cast.body, facing, frame);
     a.lastKey = key; // the bubble anchors to the head too
     var bob = (!a.walking && Math.floor(t / 600) % 2) ? 1 : 0;
-    // Props hang off the drawn sprite, not a fixed offset: the carried
-    // folder sits in the hands at chest height (behind the body when we
-    // see their back), the emote sits just above the top of the head.
+    // Props hang off the drawn sprite, not a fixed offset. The carried
+    // folder is held overhead, Game Boy "item get" style: centered, 1px
+    // above the top of the head, riding the same bob (the assembled parts
+    // have no raised-arms pose, so the folder floats alone). The emote
+    // sits above the head, or above the folder while one is carried.
     var headY = y - 16 + bob + 2 * spriteTopRow(key);
-    var carryX = facing === 'left' ? x - 2 : facing === 'right' ? x + 10 : x + 4;
-    var carryY = y + 2 + bob;
-    if (a.carry && facing === 'back') A.drawSprite(ctx, a.carry, p, carryX, carryY - 4);
+    var carryY = headY - 9;
+    var emoteY = a.carry ? carryY - 9 : headY - 9;
     // 2x super-size (boss: the 10-wide parts were dwarfed by the
     // furniture): integer scale, feet stay on the same line — the
     // sprite grows upward and outward from the old 16-box.
@@ -751,11 +771,11 @@
         ctx.drawImage(cnv, (x - 8) | 0, (y - 16 + bob) | 0, 32, 32);
       }
     }
-    if (a.carry && facing !== 'back') A.drawSprite(ctx, a.carry, p, carryX, carryY);
+    if (a.carry) A.drawSprite(ctx, a.carry, p, x + 4, carryY);
     if (a.emote && performance.now() < a.emoteUntil) {
-      A.drawSprite(ctx, a.emote, p, x + 12, headY - 9);
+      A.drawSprite(ctx, a.emote, p, x + 12, emoteY);
     } else if (!a.walking && atSeat(a) && a.state === 'idle' && Math.floor(t / 900) % 2) {
-      A.drawSprite(ctx, 'emote-zzz', p, x + 12, headY - 9);
+      A.drawSprite(ctx, 'emote-zzz', p, x + 12, emoteY);
     }
   }
 
@@ -790,8 +810,9 @@
       list.push({ label: 'Desk of ' + ag.name, rect: { x: d.x, y: d.y - 23, w: 56, h: 39 }, agent: ag,
         act: function () { openCard(ag); } });
     });
-    list.push({ label: 'Boss door: ' + reviewCount + ' waiting for you. Open the review inbox',
-      rect: { x: 284, y: 174, w: 32, h: 26 }, act: function () { go('/v2#review'); } });
+    list.push({ label: 'Boss door: ' + (reviewCount + blockedCount) + ' waiting for you (' + reviewCount +
+      ' to review, ' + blockedCount + ' to answer). Open the review inbox',
+      rect: { x: 250, y: 174, w: 66, h: 36 }, act: function () { go('/v2#review'); } }); // door, mat and bench
     return list;
   }
   function inRect(r, x, y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
@@ -916,10 +937,16 @@
       return r.json();
     });
   }
-  var refreshTimer = null;
+  // At most one refresh per 2s, but a call during the quiet window is not
+  // dropped: it runs once when the window ends (two events in a row, like
+  // a review then a block, both reach the board).
+  var refreshTimer = null, refreshPending = false;
   function refreshState() {
-    if (refreshTimer) return;
-    refreshTimer = setTimeout(function () { refreshTimer = null; }, 2000);
+    if (refreshTimer) { refreshPending = true; return; }
+    refreshTimer = setTimeout(function () {
+      refreshTimer = null;
+      if (refreshPending) { refreshPending = false; refreshState(); }
+    }, 2000);
     api('/api/state').then(function (s) {
       syncRoster(s.agents || []);
       syncBoard(s.tasks || []);
@@ -1018,7 +1045,8 @@
       b.el.style.left = '0px'; // measure at full available width
       var bw = b.el.offsetWidth, bh = b.el.offsetHeight;
       var cx = (a.pos.x + 8) * cssScale;
-      var headTop = (a.pos.y - 16 + 2 * spriteTopRow(a.lastKey)) * cssScale;
+      // clear the overhead folder too, when one is carried
+      var headTop = (a.pos.y - 16 + 2 * spriteTopRow(a.lastKey) - (a.carry ? 9 : 0)) * cssScale;
       var left = Math.max(0, Math.min(rect.width - bw, cx - bw / 2));
       var top = headTop - 4 - bh;
       if (top < 0) top = (a.pos.y + 18) * cssScale; // no room above: below the feet
