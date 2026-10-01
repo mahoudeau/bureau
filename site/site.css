@@ -321,6 +321,7 @@ button { font: inherit; color: inherit; }
 .save-msg { margin: 0; min-height: 1.2em; font-size: .8em; }
 .saved { align-items: center; justify-content: center; text-align: center; }
 .saved-title { margin: 0; font-family: 'OfficePixel', monospace; font-size: 1em; }
+.saved-title:focus { outline: none; } /* focused by script after a save, for screen readers only */
 .saved img { width: 92%; image-rendering: pixelated; border: 0; }
 .saved-actions { margin: 0; display: flex; gap: 6%; justify-content: center; }
 .saved-actions a, .saved-actions button {
