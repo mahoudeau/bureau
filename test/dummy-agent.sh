@@ -495,7 +495,7 @@ check "role changes logged" "$(api GET /api/state)" '"type": "agent.roles_change
 check "an agent absent from settings.agents has no lead (consul's capability ignored)" "$(api PATCH "/api/tasks/$S6" '{"agent":"consul","gate":"critic"}')" 'only the boss or the lead'
 UPSTART=$(api POST /api/agents/register '{"name":"upstart","kind":"dummy","capabilities":["code","lead"]}')
 check "registering with lead still succeeds" "$UPSTART" '"name": "upstart"'
-check "the reply says settings govern lead and critic" "$UPSTART" 'settings govern lead and critic'
+check "the reply says settings govern the roles" "$UPSTART" 'settings govern lead, critic'
 check "the capabilities are stored anyway" "$(agents_section | grep -A6 '"name": "upstart"')" '"lead"'
 check "the capability log says the tag grants nothing" "$(api GET /api/state | grep -A12 '"name": "upstart"')" 'grant nothing'
 check "a self-registered lead is ignored once roles exist" "$(api PATCH "/api/tasks/$S6" '{"agent":"upstart","gate":"critic"}')" 'only the boss or the lead'
@@ -507,6 +507,160 @@ check "cleared: a self-registered lead counts again" "$(api PATCH "/api/tasks/$S
 api PATCH "/api/tasks/$S7" '{"agent":"menace","gate":"boss"}' > /dev/null
 check "cleared: an agent closes boss-gate work done again" "$(api PATCH "/api/tasks/$S7" '{"agent":"menace","status":"done"}')" '"status": "done"'
 check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
+
+echo "12. curated compartments: knowledge/, recipes/, PROFILE.md and attic/ take only the boss, the librarian or a curator"
+code () { curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
+kw () { echo "{\"file\":\"$1\",\"content\":\"- [fact] the kettle hums (fake)\",\"author\":\"$2\",\"message\":\"acl probe\"}"; }
+mcpcall () { echo "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}"; }
+for f in knowledge/kettle.md recipes/kettle.md entities/acme/knowledge/kettle.md entities/acme/recipes/kettle.md entities/acme/PROFILE.md attic/knowledge/kettle.md; do
+  B=$(kw "$f" menace)
+  check "a plain agent is refused on $f (403)" "$(code POST /api/knowledge "$B")" '^403$'
+done
+B=$(kw knowledge/kettle.md menace)
+check "the refusal names the compartment and who may write" "$(api POST /api/knowledge "$B")" 'curated compartment knowledge/: only the boss, the librarian or a curator'
+B=$(kw journal/../knowledge/sneak.md menace)
+check "a traversal into knowledge/ is judged by where it lands" "$(code POST /api/knowledge "$B")" '^403$'
+B=$(kw Knowledge/sneak.md menace)
+check "case does not slip past the wall" "$(code POST /api/knowledge "$B")" '^403$'
+B='{"file":"knowledge/anon.md","content":"x"}'
+check "no author is refused too" "$(code POST /api/knowledge "$B")" '^403$'
+check "a refused write left no file" "$(code GET '/api/knowledge?file=knowledge/kettle.md')" '^404$'
+check "and no commit" "$(api GET /api/state | grep -c 'acl probe' || true)" '^0$'
+for f in journal/2026-01-01.md daily/2026-01-01.md projects/ops/learnings.md entities/acme/notes.md archive/journal/old.md; do
+  B=$(kw "$f" menace)
+  check "$f stays open to any agent" "$(api POST /api/knowledge "$B")" '"bytes"'
+done
+B=$(kw knowledge/kettle.md human)
+check "the boss writes knowledge/" "$(api POST /api/knowledge "$B")" '"bytes"'
+api POST /api/agents/register '{"name":"shelver","kind":"cowork","capabilities":["curation","librarian"]}' > /dev/null
+api POST /api/agents/register '{"name":"scribe","kind":"claude-code","capabilities":["curator"]}' > /dev/null
+B=$(kw recipes/kettle.md shelver)
+check "no roles in settings: the librarian tag writes recipes/" "$(api POST /api/knowledge "$B")" '"bytes"'
+B=$(kw entities/acme/PROFILE.md scribe)
+check "no roles in settings: the curator tag writes a PROFILE.md" "$(api POST /api/knowledge "$B")" '"bytes"'
+MK=$(mcpcall write_knowledge '{"file":"knowledge/mcp-kettle.md","content":"- x","message":"acl probe mcp"}')
+check "MCP write_knowledge to knowledge/ is refused while consul holds no curating role" "$(mcp "$MK")" 'curated compartment knowledge/'
+check "the MCP refusal is an error result" "$(mcp "$MK")" '"isError": true'
+check "and left no file" "$(code GET '/api/knowledge?file=knowledge/mcp-kettle.md')" '^404$'
+MJ=$(mcpcall write_knowledge '{"file":"journal/2026-01-02.md","content":"- 09:00 [chat] probe","mode":"append"}')
+check "MCP write_knowledge to journal/ stays open" "$(mcp "$MJ")" '"isError": false'
+
+# Once roles live in settings, librarian and curator come from settings only
+api PATCH /api/settings '{"agents":{"menace":{"roles":["lead"]}}}' > /dev/null
+B=$(kw recipes/kettle-2.md shelver)
+check "roles configured: the librarian tag alone no longer writes" "$(code POST /api/knowledge "$B")" '^403$'
+B=$(kw knowledge/kettle-2.md scribe)
+check "roles configured: the curator tag alone no longer writes" "$(code POST /api/knowledge "$B")" '^403$'
+check "registering with librarian says the tag grants nothing" "$(api POST /api/agents/register '{"name":"shelver","kind":"cowork","capabilities":["curation","librarian"]}')" 'grant nothing'
+check "librarian and curator are settings roles" "$(api PATCH /api/settings '{"agents":{"shelver":{"roles":["librarian"]},"consul":{"roles":["critic","lead","curator"]}}}')" '"curator"'
+B=$(kw recipes/kettle-2.md shelver)
+check "the settings librarian writes recipes/" "$(api POST /api/knowledge "$B")" '"bytes"'
+MK2=$(mcpcall write_knowledge '{"file":"knowledge/mcp-kettle.md","content":"- x","message":"curated by consul"}')
+check "consul as curator writes knowledge/ over MCP" "$(mcp "$MK2")" '"isError": false'
+check "the commit is consul's" "$(api GET /api/state)" '"author": "consul"'
+DG=$(tid "$(api POST /api/tasks '{"title":"shelver: nightly digest 2026-01-02","project":"ops","priority":3}')")
+DGC="{\"agent\":\"shelver\",\"id\":\"$DG\"}"
+api POST /api/tasks/claim "$DGC" > /dev/null
+check "the settings librarian parks its own digest" "$(api PATCH "/api/tasks/$DG" '{"agent":"shelver","status":"review","note":"2 items"}')" '"status": "review"'
+api PATCH "/api/tasks/$DG" '{"agent":"human","status":"done","note":"ruled"}' > /dev/null
+api POST /api/agents/register '{"name":"tagonly","kind":"cowork","capabilities":["librarian"]}' > /dev/null
+DT=$(tid "$(api POST /api/tasks '{"title":"tagonly: nightly digest","project":"ops","priority":3}')")
+DTC="{\"agent\":\"tagonly\",\"id\":\"$DT\"}"
+api POST /api/tasks/claim "$DTC" > /dev/null
+check "roles configured: a librarian tag alone parks no digest" "$(api PATCH "/api/tasks/$DT" '{"agent":"tagonly","status":"review"}')" 'boss-gate'
+api PATCH "/api/tasks/$DT" '{"agent":"tagonly","status":"discarded","note":"probe"}' > /dev/null
+api PATCH /api/settings '{"agents":{"scribe":{"roles":["curator"]}}}' > /dev/null
+DS=$(tid "$(api POST /api/tasks '{"title":"scribe: looks like a digest","project":"ops","priority":3}')")
+DSC="{\"agent\":\"scribe\",\"id\":\"$DS\"}"
+api POST /api/tasks/claim "$DSC" > /dev/null
+check "a curator writes but parks no digest" "$(api PATCH "/api/tasks/$DS" '{"agent":"scribe","status":"review"}')" 'boss-gate'
+api PATCH "/api/tasks/$DS" '{"agent":"scribe","status":"discarded","note":"probe"}' > /dev/null
+check "an unknown role is still refused" "$(api PATCH /api/settings '{"agents":{"scribe":{"roles":["janitor"]}}}')" 'lead, critic, librarian, curator'
+api PATCH /api/settings '{"agents":{"menace":null,"shelver":null,"consul":null,"scribe":null}}' > /dev/null
+
+echo "13. the work store: a mission's evidence, plain files, gone when the mission closes"
+PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+wb () { echo "{\"file\":\"$1\",\"content\":\"$2\"${3:+,\"encoding\":\"base64\"}}"; }
+W1=$(tid "$(api POST /api/tasks '{"title":"Photograph the kettle","project":"ops","priority":4,"gate":"critic"}')")
+W1C="{\"agent\":\"menace\",\"id\":\"$W1\"}"
+api POST /api/tasks/claim "$W1C" > /dev/null
+B=$(wb "work/$W1/notes.md" "first line")
+check "text evidence written" "$(api POST /api/work "$B")" "\"file\": \"work/$W1/notes.md\""
+B="{\"file\":\"work/$W1/notes.md\",\"content\":\"second line\",\"mode\":\"append\"}"
+api POST /api/work "$B" > /dev/null
+check "append and read back" "$(api GET "/api/work?file=work/$W1/notes.md")" 'first line\\nsecond line'
+B=$(wb "work/$W1/shot.png" "$PNG_B64" b64)
+check "a base64 screenshot is accepted" "$(api POST /api/work "$B")" '"bytes"'
+check "binary read returns base64" "$(api GET "/api/work?file=work/$W1/shot.png")" 'content_base64'
+check "raw read serves image/png" "$(curl -si "$BUREAU_URL/api/work?file=work/$W1/shot.png&raw=1" -H "$AUTH" | tr -d '\r')" 'content-type: image/png'
+B="{\"file\":\"work/$W1/shot.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
+check "base64 append refused" "$(api POST /api/work "$B")" 'replace-only'
+B=$(wb "work/$W1/tool.exe" "x")
+check "off-whitelist extension refused (400)" "$(code POST /api/work "$B")" '^400$'
+B=$(wb "work/$W1/../t-1/escape.md" "x")
+check "traversal out of the mission folder refused" "$(code POST /api/work "$B")" '^400$'
+B=$(wb "projects/ops/escape.md" "x")
+check "a path outside work/<t-id>/ refused" "$(api POST /api/work "$B")" 'work/<t-id>/<name>'
+B=$(wb "work/t-999999/x.md" "x")
+check "an unknown mission is 404" "$(code POST /api/work "$B")" '^404$'
+check "listing by mission" "$(api GET "/api/work?task=$W1")" "work/$W1/shot.png"
+check "evidence is not in the brain" "$(api GET /api/knowledge | grep -c 'shot.png' || true)" '^0$'
+check "and not committed" "$(api GET /api/state | grep -c "work/$W1" || true)" '^0$'
+B=$(wb "work/$W1/extra.png" "$PNG_B64" b64)
+api POST /api/work "$B" > /dev/null
+W2=$(tid "$(api POST /api/tasks '{"title":"Another open mission","project":"ops","priority":5,"gate":"critic"}')")
+B=$(wb "work/$W2/theirs.png" "$PNG_B64" b64)
+api POST /api/work "$B" > /dev/null
+ART="{\"agent\":\"menace\",\"artifact\":{\"label\":\"kettle shot\",\"url\":\"work/$W1/shot.png\"}}"
+api PATCH "/api/tasks/$W1" "$ART" > /dev/null
+ART2="{\"agent\":\"menace\",\"artifact\":{\"label\":\"borrowed\",\"url\":\"work/$W2/theirs.png\"},\"status\":\"review\",\"note\":\"evidence attached\"}"
+api PATCH "/api/tasks/$W1" "$ART2" > /dev/null
+WT=$(api GET "/api/tasks/$W1" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+WPAGE=$(curl -s "$BUREAU_URL/r/$WT")
+check "the review page shows the cited work image" "$WPAGE" "work%2F$W1%2Fshot.png"
+check "and the mission's uncited work image" "$WPAGE" "work%2F$W1%2Fextra.png"
+check "but not another mission's, even cited" "$(echo "$WPAGE" | grep -c "theirs.png" || true)" '^0$'
+check "the link serves its own work image" "$(curl -si "$BUREAU_URL/r/$WT/img?file=work/$W1/extra.png" | tr -d '\r')" 'content-type: image/png'
+check "the link refuses another mission's work image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$WT/img?file=work/$W2/theirs.png")" '404'
+check "evidence survives while the mission is in review" "$(code GET "/api/work?file=work/$W1/shot.png")" '^200$'
+check "approve via the link" "$(curl -s -X POST "$BUREAU_URL/r/$WT")" 'Approved'
+check "closed by a review link: the evidence is gone" "$(code GET "/api/work?file=work/$W1/shot.png")" '^404$'
+check "the whole folder is gone" "$(api GET "/api/work?task=$W1" | grep -c "work/$W1" || true)" '^0$'
+check "another mission's evidence is untouched" "$(code GET "/api/work?file=work/$W2/theirs.png")" '^200$'
+B=$(wb "work/$W1/late.md" "x")
+check "a closed mission takes no new evidence (409)" "$(code POST /api/work "$B")" '^409$'
+for st in done failed discarded; do
+  WX=$(tid "$(api POST /api/tasks '{"title":"Close path probe","project":"ops","priority":5,"gate":"critic"}')")
+  WXC="{\"agent\":\"menace\",\"id\":\"$WX\"}"
+  api POST /api/tasks/claim "$WXC" > /dev/null
+  B=$(wb "work/$WX/log.txt" "probe")
+  api POST /api/work "$B" > /dev/null
+  WXS="{\"agent\":\"menace\",\"status\":\"$st\",\"note\":\"probe\"}"
+  api PATCH "/api/tasks/$WX" "$WXS" > /dev/null
+  check "closed $st by PATCH: the evidence is gone" "$(code GET "/api/work?file=work/$WX/log.txt")" '^404$'
+done
+WB=$(tid "$(api POST /api/tasks '{"title":"Blocked keeps evidence","project":"ops","priority":5,"gate":"critic"}')")
+WBC="{\"agent\":\"menace\",\"id\":\"$WB\"}"
+api POST /api/tasks/claim "$WBC" > /dev/null
+B=$(wb "work/$WB/log.txt" "probe")
+api POST /api/work "$B" > /dev/null
+api PATCH "/api/tasks/$WB" '{"agent":"menace","status":"blocked","note":"waiting on: probe"}' > /dev/null
+check "blocked keeps the evidence" "$(code GET "/api/work?file=work/$WB/log.txt")" '^200$'
+api PATCH "/api/tasks/$WB" '{"agent":"human","status":"discarded","note":"probe"}' > /dev/null
+check "the boss's discard removes it" "$(code GET "/api/work?file=work/$WB/log.txt")" '^404$'
+check "tools listed include the work store" "$(mcp '{"jsonrpc":"2.0","id":41,"method":"tools/list"}')" 'write_work'
+WM=$(mcp '{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"MCP evidence probe","project":"ops"}}}')
+WMID=$(echo "$WM" | grep -o 't-[0-9]*' | head -1)
+WMS=$(mcpcall start_mission "{\"id\":\"$WMID\"}")
+mcp "$WMS" > /dev/null
+WMW=$(mcpcall write_work "{\"file\":\"work/$WMID/chat.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\"}")
+check "MCP write_work stores evidence" "$(mcp "$WMW")" '\\"bytes\\"'
+WMR=$(mcpcall read_work "{\"task\":\"$WMID\"}")
+check "MCP read_work lists it" "$(mcp "$WMR")" "work/$WMID/chat.png"
+WMD=$(mcpcall update_mission "{\"id\":\"$WMID\",\"status\":\"done\",\"note\":\"probe\"}")
+mcp "$WMD" > /dev/null
+check "closed over MCP: the evidence is gone" "$(code GET "/api/work?file=work/$WMID/chat.png")" '^404$'
+check "MCP write_work to a closed mission is refused" "$(mcp "$WMW")" '"isError": true'
 
 echo
 echo "passed $PASS, failed $FAIL"

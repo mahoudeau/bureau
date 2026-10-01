@@ -29,6 +29,7 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 - RULE-REVIEW-07: A link acts as `agent: "human"`, so it clears boss-gate missions. Its log entry carries `kind` `approve`, `send_back` or `answer`. (source: hub/server.js:232-233, hub/lib/store.js:772)
 - RULE-REVIEW-08: A send back or an answer returns the mission reserved for its previous assignee. (source: hub/lib/store.js:758-761)
 - RULE-REVIEW-09: The link page shows the brain images its mission's artifacts cite (png, jpg, jpeg, gif), fetched through `/r/<token>/img?file=`, never with the hub token. That route serves only the files the mission's artifacts cite, and only while the token exists and has not expired; anything else is a 404. (source: hub/server.js:60-67, hub/server.js:83-86, hub/server.js:187-201)
+- RULE-REVIEW-19: The work store joins RULE-REVIEW-09: the link page also shows every image in its own mission's `work/<t-id>/` folder, cited or not, and the image route serves them. A `work/` path of any other mission is a 404, even when an artifact cites it. (source: hub/server.js evidenceAllowed(), evidenceFiles(), readEvidence(), the /r/<token>/img route)
 
 ### Itemized review
 
@@ -63,4 +64,6 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 - A mission left in review for more than 7 days: its links show 410 and the boss rules from the dashboard (RULE-REVIEW-05).
 - A mission re-enters review after a send back: fresh links are minted; the old ones are gone (RULE-REVIEW-01, RULE-REVIEW-03).
 - A live link asks for a brain image its mission does not cite: 404 (RULE-REVIEW-09).
+- A live link asks for another mission's work image, or the mission cites one: 404, and the page leaves it out (RULE-REVIEW-19).
+- The boss approves from a link: the mission is `done` and its work images are deleted with it (RULE-KNOWLEDGE-27).
 - Notify set to `blocked` on a project: its reviews reach the dashboard only, no ping (RULE-REVIEW-17).

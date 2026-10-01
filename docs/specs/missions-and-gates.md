@@ -16,7 +16,8 @@ What the hub does with a mission from filing to close. Format: `docs/brain-forma
 - **The envoy**: any non-cowork agent (by default consul), whose context lives outside a shift.
 - **The lead**: the agent holding the `lead` role: from settings once any agent has roles there, from its `capabilities` otherwise.
 - **The critic**: the agent holding the `critic` role, read the same way.
-- **The librarian**: any agent whose `capabilities` include `"librarian"`. Settings never govern this one.
+- **The librarian**: the agent holding the `librarian` role, read the same way as the lead.
+- **A curator**: an agent holding the `curator` role, read the same way. It may write the curated brain compartments (`knowledge-api.md`) and has no other power.
 - **The hub**: stores state, expires leases, enforces the gates and the approval policy.
 
 ## Rules
@@ -47,13 +48,14 @@ What the hub does with a mission from filing to close. Format: `docs/brain-forma
 
 ### Gates and roles
 
-- RULE-MISSIONS-16: Roles are never read from names. Once any agent has `roles` in settings, lead and critic come from `settings.agents` only, for every agent: an agent missing there holds neither, whatever it registered with. With no roles in settings, they come from capability tags. `agent: "human"` passes every role check, and the lead passes the critic's. (source: hub/lib/store.js:508-527)
+- RULE-MISSIONS-16: Roles are never read from names. The roles are `lead`, `critic`, `librarian` and `curator`. Once any agent has `roles` in settings, every role comes from `settings.agents` only, for every agent: an agent missing there holds none, whatever it registered with. With no roles in settings, they come from capability tags. `agent: "human"` passes every role check, and the lead passes the critic's. (source: hub/lib/store.js agentHasCapability(), rolesConfigured(), agentHasRole(), isLead(), isCriticOrLead(), canCurate(), ROLES)
 - RULE-MISSIONS-17: Anyone may raise a mission's gate to `boss`. Only the boss or the lead (per RULE-MISSIONS-16) may set `critic`. (source: hub/lib/store.js:684-686)
 - RULE-MISSIONS-18: A `boss`-gate mission enters `review` only by the critic, the lead or the boss. Anyone else is refused. Missions with no gate field count as `boss`, and an update that also changes the gate is judged against the gate it asks for. (source: hub/lib/store.js:688, hub/lib/store.js:697-698)
-- RULE-MISSIONS-19: The librarian may park its own digest into review: the agent carries the `librarian` capability tag and the mission title starts with the agent's name and a colon. Both are required. (source: hub/lib/store.js:639-643, hub/lib/store.js:697)
+- RULE-MISSIONS-19: The librarian may park its own digest into review: the agent holds the `librarian` role (RULE-MISSIONS-16) and the mission title starts with the agent's name and a colon. Both are required. (source: hub/lib/store.js isOwnLibrarianDigest(), updateTask() review entry)
 - RULE-MISSIONS-20: A `boss`-gate mission in `review` moves to `done` or `queued` only by `agent: "human"`. One exception: under approval policy `in-session`, an agent may close it `done` with `approved_in_session` (RULE-MISSIONS-25). (source: hub/lib/store.js:699-705)
 - RULE-MISSIONS-21: The hub places no limit on who moves a `critic`-gate mission out of review, and the approval policy does not apply to it. That the critic judges and the builder does not is convention, held by the standing prompts. (source: hub/lib/store.js:704, hub/lib/store.js:709, connectors/cowork/MONETA-SHIFT.md "Hard rules")
-- RULE-MISSIONS-22: Registering replaces an agent's capabilities. An empty array is ignored, and every change is logged as `agent.capabilities_changed` with before and after. Once roles are in settings, `lead` and `critic` tags are still stored but grant nothing; the log entry and the register response say so in a `note`. (source: hub/lib/store.js:209-239, hub/server.js:302-304)
+- RULE-MISSIONS-22: Registering replaces an agent's capabilities. An empty array is ignored, and every change is logged as `agent.capabilities_changed` with before and after. Once roles are in settings, role tags (`lead`, `critic`, `librarian`, `curator`) are still stored but grant nothing; the log entry and the register response say so in a `note`. (source: hub/lib/store.js upsertAgent(), ignoredRoleTags(), hub/server.js POST /api/agents/register route)
+- RULE-MISSIONS-29: `librarian` and `curator` both write the curated brain compartments (RULE-KNOWLEDGE-20). Only `librarian` adds the digest carve-out (RULE-MISSIONS-19); `curator` grants nothing on missions. (source: hub/lib/store.js canCurate(), isOwnLibrarianDigest())
 
 ### Updates, approval and the log
 
@@ -63,6 +65,7 @@ What the hub does with a mission from filing to close. Format: `docs/brain-forma
 - RULE-MISSIONS-26: Settings are read with `GET /api/settings` and changed with `PATCH /api/settings`, in three sections: `global`, `projects` (by existing project id) and `agents` (by name, `roles` only). The patch merges key by key, `null` clears a key or an entry, unknown keys and values are refused, and nothing is applied unless everything validates. Every change logs `settings.changed`; a role change also logs `agent.roles_changed`. (source: hub/lib/store.js:553-632, hub/server.js:352-360)
 - RULE-MISSIONS-27: Every update is credited to an agent. With no `agent` given, the hub credits the mission's assignee; with no assignee either, it answers 400 `agent required`. (source: hub/lib/store.js:662-669, hub/server.js:429)
 - RULE-MISSIONS-28: A log entry is `{ts, by, note}`. A status change adds `from` and `to`, also on claims and lease expiry. With no note, it reads `status → <status>` or `updated`. Entries by `human` carry `kind`: `approve`, `send_back`, `answer`, `verdict` or `edit`, as given or inferred from the move. (source: hub/lib/store.js:645-656, hub/lib/store.js:768-773, hub/lib/store.js:438, hub/lib/store.js:493, hub/lib/store.js:741)
+- RULE-MISSIONS-30: An update that leaves a mission `done`, `failed` or `discarded` deletes its work store folder (RULE-KNOWLEDGE-27), whoever made it and through whichever door. (source: hub/lib/store.js updateTask(), TERMINAL_STATUSES)
 
 ## Journeys
 
@@ -80,3 +83,5 @@ What the hub does with a mission from filing to close. Format: `docs/brain-forma
 - A session re-registers with a short capabilities list and drops a role tag: the drop takes effect and the log shows when (RULE-MISSIONS-22). Once roles live in settings, the drop changes no authority (RULE-MISSIONS-16).
 - `approved_in_session` on a project whose policy is `dashboard` or unset: refused, nothing changes (RULE-MISSIONS-25, RULE-MISSIONS-23).
 - A PATCH with no `agent` on a queued mission: 400, nothing logged as `unknown` (RULE-MISSIONS-27).
+- The boss sets roles for consul, ummon and moneta but forgets the librarian: its `librarian` tag stops counting, so it can neither park its digest nor write `knowledge/` until settings give it the role (RULE-MISSIONS-16, RULE-MISSIONS-19, RULE-MISSIONS-29).
+- A curator titles a mission with its own name and parks it: refused like any plain agent (RULE-MISSIONS-29, RULE-MISSIONS-18).

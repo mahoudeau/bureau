@@ -6,6 +6,7 @@ For self-hosters. What changed in each release is in [CHANGELOG.md](CHANGELOG.md
 
 - `hub/data/state.json`: missions, roster, messages, projects (or `BUREAU_DATA_DIR`).
 - `hub/brain/`: the knowledge brain, a git repo (or `BUREAU_BRAIN_DIR`).
+- `hub/work/`: the work store, open missions' evidence (or `BUREAU_WORK_DIR`; `/data/work` in the Docker image). Disposable by design: each folder is deleted when its mission closes.
 
 The brain has its own history in git. The state file is what the steps below protect.
 

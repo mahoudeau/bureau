@@ -188,7 +188,7 @@
       var imgs = (task.artifacts || []).map(artImg).filter(Boolean);
       if (!imgs.length) return '<div class="v2-empty">No evidence attached.</div>';
       return '<div class="v2-media__grid">' + imgs.map(function (img) {
-        var src = '/api/knowledge?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
+        var src = '/api/' + (/^work\//.test(decodeURIComponent(img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
         return '<a class="v2-media__thumb" href="' + src + '" target="_blank" rel="noopener">' +
           '<img src="' + src + '" alt="" loading="lazy"></a>';
       }).join('') + '</div>';

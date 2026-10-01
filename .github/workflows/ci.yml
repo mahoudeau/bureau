@@ -33,6 +33,7 @@ jobs:
           PORT=8100 \
           BUREAU_DATA_DIR="$RUNNER_TEMP/bureau/data" \
           BUREAU_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" \
+          BUREAU_WORK_DIR="$RUNNER_TEMP/bureau/work" \
           BUREAU_RESERVATION_TTL_MIN=0.02 \
             nohup node hub/server.js > "$RUNNER_TEMP/bureau/hub.log" 2>&1 &
           for i in $(seq 1 30); do
