@@ -31,7 +31,7 @@ cp .env.example .env    # set BUREAU_TOKEN to a long random string
 sh start.sh             # loads .env, listens on PORT or 8100
 ```
 
-No npm install. Plain `node:http`, JSON state file with atomic writes.
+No npm install. Plain `node:http`, JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
 
 ## The six calls
 
