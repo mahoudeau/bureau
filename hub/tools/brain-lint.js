@@ -21,12 +21,33 @@ const RULE_SOURCE_RE = /\(source:\s*[^)\s][^)]*\)/;
 
 // Files an agent reads first when it loads a scope: they carry a one-line
 // `summary:` so a map of the brain can be built without opening every file.
+// The knowledge index (global or entity) is a map itself, so it is exempt.
 function needsSummary(f) {
   const segs = f.rel.split(path.sep);
+  if (f.compartment === 'knowledge' && segs[segs.length - 1] === 'INDEX.md' && segs[segs.length - 2] === 'knowledge') return false;
   if (AUTHORITATIVE.includes(f.compartment)) return true;
   if (segs[0] === 'entities' && segs.length === 3 && segs[2] === 'PROFILE.md') return true;
   if (segs[0] === 'projects' && segs.length === 3 && segs[2] === 'STATE.md') return true;
   return false;
+}
+
+// projects/<slug>/STATE.md opens with "## Now": status, open threads, next
+// step, rewritten in place, short enough to read first every time.
+const NOW_MAX = 30;
+function isProjectState(rel) {
+  const segs = rel.split(path.sep);
+  return segs[0] === 'projects' && segs.length === 3 && segs[2] === 'STATE.md';
+}
+function nowSection(body) {
+  const lines = body.split('\n');
+  const start = lines.findIndex(l => /^##\s+Now\s*$/.test(l));
+  if (start === -1) return null;
+  let end = lines.findIndex((l, i) => i > start && /^#{1,2}\s/.test(l));
+  if (end === -1) end = lines.length;
+  const section = lines.slice(start + 1, end);
+  while (section.length && !section[section.length - 1].trim()) section.pop();
+  while (section.length && !section[0].trim()) section.shift();
+  return section;
 }
 
 // projects/<slug>/specs/<domain>.md: what the product does, as numbered rules.
@@ -158,6 +179,13 @@ function lint(brainDir) {
       const raw = f.front && f.front.summary !== undefined ? String(f.front.summary).trim().replace(/^(["'])(.*)\1$/, '$2') : '';
       if (!raw) warnings.push(`${f.rel}: missing "summary" (one line, ${SUMMARY_MAX} chars or fewer)`);
       else if (raw.length > SUMMARY_MAX) errors.push(`${f.rel}: summary is ${raw.length} chars, over the ${SUMMARY_MAX} limit`);
+    }
+
+    // Now: the part of STATE.md every agent reads first
+    if (isProjectState(f.rel)) {
+      const now = nowSection(f.body);
+      if (!now) warnings.push(`${f.rel}: no "## Now" section`);
+      else if (now.length > NOW_MAX) warnings.push(`${f.rel}: "## Now" is ${now.length} lines, over the ${NOW_MAX} limit`);
     }
 
     // Specs: every rule has a unique id within its file and names its source

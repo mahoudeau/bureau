@@ -1,5 +1,6 @@
 ---
 title: Knowledge API
+compartment: spec
 summary: How the hub reads, writes, lists and commits brain files, which paths and types it accepts, and how hand edits get in.
 scope: project:bureau
 ---
