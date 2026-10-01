@@ -217,6 +217,15 @@ api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TGID\"}" > /dev/null
 # agent's own capabilities[] includes that literal tag).
 check "plain agent cannot park a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","status":"review","note":"parked"}')" 'only the critic, the lead, or the boss'
 check "refused park leaves the mission untouched, not half-applied" "$(api GET "/api/tasks/$TGID")" '"status": "claimed"'
+# A refused update changes nothing, gate included: raising the gate to boss in
+# the same PATCH as a park the agent may not make leaves a critic gate alone
+TPG=$(api POST /api/tasks '{"title":"Half-applied probe","project":"ops","priority":4,"gate":"critic"}')
+TPGID=$(echo "$TPG" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+TPG_CLAIM="{\"agent\":\"menace\",\"id\":\"$TPGID\"}"
+api POST /api/tasks/claim "$TPG_CLAIM" > /dev/null
+check "gate raise riding a refused park is refused with it" "$(api PATCH "/api/tasks/$TPGID" '{"agent":"menace","gate":"boss","status":"review","note":"parked"}')" 'only the critic, the lead, or the boss'
+check "the refused update left the critic gate in place" "$(api GET "/api/tasks/$TPGID")" '"gate": "critic"'
+api PATCH "/api/tasks/$TPGID" '{"agent":"menace","status":"done","note":"probe closed"}' > /dev/null
 api POST /api/agents/register '{"name":"moneta","kind":"cowork","capabilities":["review","critic"]}' > /dev/null
 check "critic-capability agent parks a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"review","note":"parked by critic"}')" '"status": "review"'
 
@@ -294,6 +303,10 @@ EV_TOKEN=$(api GET "/api/tasks/$TEID" | grep -A2 '"approve"' | grep -o '"token":
 check "review page renders evidence inline" "$(curl -s "$BUREAU_URL/r/$EV_TOKEN")" '<img src="/r/'
 check "capability image route serves the bytes" "$(curl -si "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/ops/references/pixel.png" | tr -d '\r')" 'content-type: image/png'
 check "bad capability gets no image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000/img?file=projects/ops/references/pixel.png")" '404'
+# A live link reaches only the images its own mission cites, never the rest of the brain
+OTHER_BODY="{\"file\":\"projects/other/references/secret.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"author\":\"menace\"}"
+api POST /api/knowledge "$OTHER_BODY" > /dev/null
+check "a live link cannot reach an image its mission does not cite" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/other/references/secret.png")" '404'
 curl -s -X POST "$BUREAU_URL/r/$EV_TOKEN" > /dev/null
 
 echo "8e. intake sweep: hand-dropped brain files become commits (needs CONF_BRAIN_DIR)"
