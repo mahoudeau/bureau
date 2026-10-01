@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const work = require('./work');
 
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -160,6 +161,13 @@ function backupTick() {
 function init() {
   load();
   try { dailySnapshot(); } catch (e) { console.error('[store] daily snapshot failed:', e.message); }
+  // Work folders of missions that closed while the removal failed, or that
+  // no mission owns: gone at boot, like they would have been at the close.
+  try {
+    const open = id => state.tasks.some(t => t.id === id && !TERMINAL_STATUSES.includes(t.status));
+    const gone = work.sweep(open);
+    if (gone.length) console.log(`[work] removed leftover evidence of ${gone.join(', ')}`);
+  } catch (e) { console.error('[work] boot sweep failed:', e.message); }
   setInterval(backupTick, BACKUP_INTERVAL_MS).unref();
   return { schema_version: state.schema_version };
 }
@@ -209,9 +217,10 @@ function logEvent(type, data) {
 function upsertAgent({ name, kind, capabilities }) {
   const s = load();
   let a = s.agents.find(x => x.name === name);
-  // S2-c: lead/critic tags are still stored, but grant nothing while settings
-  // hold roles. Say so in the log, so nobody mistakes the tag for authority.
-  const ignored = rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => c === 'lead' || c === 'critic');
+  // S2-c: role tags (lead, critic, librarian, curator) are still stored, but
+  // grant nothing while settings hold roles. Say so in the log, so nobody
+  // mistakes the tag for authority.
+  const ignored = ignoredRoleTags(s, capabilities);
   if (!a) {
     a = { name, kind: kind || 'other', capabilities: capabilities || [], registered_at: nowISO() };
     s.agents.push(a);
@@ -317,6 +326,7 @@ function deleteAgent(name) {
 
 // ---- Tasks ----
 const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed', 'discarded'];
+const TERMINAL_STATUSES = ['done', 'failed', 'discarded'];
 
 // Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
 const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_input', 'waiting_permission', 'blocked', 'idle'];
@@ -509,10 +519,10 @@ function agentHasCapability(s, agentName, cap) {
   const a = s.agents.find(x => x.name === agentName);
   return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
 }
-// S2-c (boss ruling 2026-10-01): once any agent has roles in settings, lead
-// and critic come from settings only, for every agent; an agent missing from
-// settings.agents holds neither, whatever it registered with. No roles set
-// anywhere: the capability check above, as before. librarian stays a capability.
+// S2-c (boss ruling 2026-10-01): once any agent has roles in settings, every
+// role (lead, critic, librarian, curator) comes from settings only, for every
+// agent; an agent missing from settings.agents holds none, whatever it
+// registered with. No roles set anywhere: the capability check above, as before.
 function rolesConfigured(s) {
   const agents = s.settings && s.settings.agents;
   return !!agents && Object.values(agents).some(a => a && Array.isArray(a.roles));
@@ -522,9 +532,20 @@ function agentHasRole(s, agentName, role) {
   const cfg = s.settings.agents[agentName];
   return !!(cfg && Array.isArray(cfg.roles) && cfg.roles.includes(role));
 }
-const SETTINGS_ROLES_NOTE = 'settings govern lead and critic; self-registered lead/critic tags grant nothing';
+const SETTINGS_ROLES_NOTE = 'settings govern lead, critic, librarian and curator; self-registered tags for those roles grant nothing';
+function ignoredRoleTags(s, capabilities) {
+  return rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => ROLES.includes(c));
+}
 function isLead(s, agentName) { return agentName === 'human' || agentHasRole(s, agentName, 'lead'); }
 function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasRole(s, agentName, 'critic'); }
+// Who writes the curated compartments (knowledge/, recipes/, entity
+// PROFILE.md, attic/): the boss, the librarian, or a curator. "curator" is
+// the write grant alone, for an agent the boss trusts to file knowledge
+// without being the librarian (consul, in pair mode). The librarian holds it
+// too, plus parking its own digest (isOwnLibrarianDigest).
+function canCurate(s, agentName) {
+  return agentName === 'human' || agentHasRole(s, agentName, 'librarian') || agentHasRole(s, agentName, 'curator');
+}
 
 // ---- Settings (S2) ----
 // Absent settings mean today's behavior, exactly. Every stricter rule is
@@ -532,7 +553,7 @@ function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasR
 const APPROVALS = ['dashboard', 'in-session', 'critic'];
 const GATES = ['boss', 'critic'];
 const NOTIFY = ['all', 'review', 'blocked', 'none'];
-const ROLES = ['lead', 'critic'];
+const ROLES = ['lead', 'critic', 'librarian', 'curator'];
 
 function settingsOf(s) {
   const st = s.settings || {};
@@ -631,14 +652,14 @@ function patchSettings(patch) {
   return { settings: next, before };
 }
 // The librarian's own digest (t-356): a mission titled "<name>: ..." by an
-// agent registered with the "librarian" tag is a proposal set the boss rules
+// agent holding the librarian role (settings, else its tag) is a proposal set the boss rules
 // item by item. No builder is promoting its own build past a critic, so the
 // conflict of interest t-119 guards against does not exist, and the
 // librarian may park it into review itself. Both halves are required: the
 // title prefix alone would let any worker name a mission after itself.
 function isOwnLibrarianDigest(s, t, agentName) {
   return !!agentName && agentName !== 'human'
-    && agentHasCapability(s, agentName, 'librarian')
+    && agentHasRole(s, agentName, 'librarian')
     && typeof t.title === 'string' && t.title.toLowerCase().startsWith(agentName.toLowerCase() + ':');
 }
 
@@ -776,6 +797,13 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     logEvent('task.approved_in_session', { id: t.id, project: t.project, approval: 'in-session', channel: 'chat', by: `${agent} for human`, quote });
   }
   save();
+  // The work store goes with the mission. Here, not in the routes, so every
+  // door that closes a mission (PATCH, MCP, a review link, whatever comes
+  // next) cleans up the same way. Best effort: a disk error never undoes the
+  // close, and the boot sweep catches what is left.
+  if (TERMINAL_STATUSES.includes(t.status)) {
+    try { work.removeMission(t.id); } catch (e) { console.error('[work] cleanup failed for', t.id, e.message); }
+  }
   return { task: t, prev_status: prevStatus, by: agent };
 }
 
@@ -825,6 +853,6 @@ module.exports = {
   StorageError, SCHEMA_VERSION, STATE_FILE,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
-  postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
-  patchSettings, settingsOf, effectiveSettings, rolesConfigured, SETTINGS_ROLES_NOTE,
+  postMessage, getMessages, TASK_STATUSES, TERMINAL_STATUSES, ACTIVITIES,
+  patchSettings, settingsOf, effectiveSettings, rolesConfigured, ignoredRoleTags, canCurate, SETTINGS_ROLES_NOTE,
 };

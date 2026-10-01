@@ -57,7 +57,9 @@ brain/
 
 Verbatim meeting transcripts stay out of the repo: they are bulky, mostly noise, and other people's words. Store them elsewhere and keep a pointer; what enters `meetings/` is the digest.
 
-Binary attachments (`.png .jpg .jpeg .gif .svg .pdf`, small) are allowed as episodic-grade material: goal-bar references under `projects/<p>/references/`, review-evidence screenshots under `deliverables/`. No frontmatter, no lint; they exist to be pointed at, and anything durable they teach still gets promoted as a sourced note.
+Binary attachments (`.png .jpg .jpeg .gif .svg .pdf`, small) are allowed as episodic-grade material: goal-bar references under `projects/<p>/references/`. No frontmatter, no lint; they exist to be pointed at, and anything durable they teach still gets promoted as a sourced note.
+
+Review evidence (the screenshot of round 14, a test log, a draft nobody will reread) is not brain material at all. In Bureau it goes to the hub's work store, `work/<t-id>/`, outside the brain repo: plain files, no git, deleted whole when the mission closes. What a round teaches is filed in the brain as a sourced note; the pictures that proved it leave with the mission.
 
 ## The curation law
 
@@ -67,13 +69,16 @@ Who writes where, and who may rewrite. "The librarian" is the curation agent (in
 |---|---|---|---|
 | `journal/` | anyone | append, cheap, minimal structure | librarian consumes (digested days move to `archive/`) |
 | `meetings/`, `import/` | anyone | dump raw | librarian digests, then moves raw to `archive/` |
-| `knowledge/`, `recipes/` (global and entity) | librarian promotion or reviewed missions | structured notes, provenance mandatory | librarian; nothing deleted, retired to `attic/` |
-| `entities/<slug>/PROFILE.md` | owner and librarian | replace, review-gated | owner and librarian |
+| `knowledge/`, `recipes/` (global and entity) **[hub]** | librarian promotion or reviewed missions | structured notes, provenance mandatory | librarian; nothing deleted, retired to `attic/` |
+| `entities/<slug>/PROFILE.md` **[hub]** | owner and librarian | replace, review-gated | owner and librarian |
 | `projects/<slug>/STATE.md` | working agents | append debriefs | librarian may compact wholesale (original to `archive/`) |
 | `projects/<slug>/decisions.md`, `learnings.md` | working agents | append-only, dated | nobody; corrections are new entries, retirement via `attic/` |
 | `projects/<slug>/specs/` | reviewed missions and the owner | replace, one domain per file | same; a rule keeps its id for life, a dropped rule leaves its id unused |
 | `agents/<name>.md` | the agent itself and the librarian | replace | same |
-| `daily/`, `archive/`, `attic/` | librarian only | per compartment rules | librarian only |
+| `attic/` **[hub]** | librarian only | per compartment rules | librarian only |
+| `daily/`, `archive/` | librarian only | per compartment rules | librarian only |
+
+Rows marked **[hub]** are enforced by the Bureau hub, not only by the standing prompts: its knowledge API refuses a write there (403, nothing written or committed) unless it comes from the owner, an agent holding the `librarian` role, or one holding `curator`, a write-only grant the owner gives an agent he works with live. Who holds a role is the hub's settings (`docs/protocol.md`, Settings). The other rows are law by convention: the API takes any authenticated write and the librarian's review catches the rest. The owner's hand edits are never refused; the intake sweep commits them.
 
 **Write cheap, curate later** still rules: working agents are never asked to file perfectly. The journal accepts anything; the librarian's job is making it authoritative or letting it fade.
 

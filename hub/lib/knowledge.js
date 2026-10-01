@@ -37,14 +37,36 @@ function ensureRepo() {
 // Confine writes to brain/, no traversal, text plus a short attachment whitelist.
 // Attachments (goal-bar references, review-evidence screenshots) are
 // episodic-grade: no lint, no frontmatter, just bytes with provenance.
+// The work store (lib/work.js) reuses these, so evidence takes exactly the
+// same file types and cap as the brain.
 const BINARY_RE = /\.(png|jpe?g|gif|pdf)$/i;
+const FILE_RE = /\.(md|txt|json|csv|png|jpe?g|gif|svg|pdf)$/i;
+const FILE_TYPES_ERROR = 'only .md .txt .json .csv .png .jpg .jpeg .gif .svg .pdf files';
 const MAX_ATTACHMENT = 5 * 1024 * 1024; // 5MB decoded
+function normRel(rel) { return path.normalize(rel).replace(/^([/\\])+/, ''); }
 function safePath(rel) {
   if (typeof rel !== 'string' || !rel.length) throw new Error('path required');
-  const norm = path.normalize(rel).replace(/^([/\\])+/, '');
+  const norm = normRel(rel);
   if (norm.split(/[/\\]/).includes('..') || norm.startsWith('.git')) throw new Error('bad path');
-  if (!/\.(md|txt|json|csv|png|jpe?g|gif|svg|pdf)$/i.test(norm)) throw new Error('only .md .txt .json .csv .png .jpg .jpeg .gif .svg .pdf files');
+  if (!FILE_RE.test(norm)) throw new Error(FILE_TYPES_ERROR);
   return path.join(BRAIN_DIR, norm);
+}
+
+// The curated compartments: global and entity knowledge/ and recipes/, an
+// entity's PROFILE.md, and attic/. Only the boss, the librarian or a curator
+// writes there (server.js asks before writing). Judged on the same normalized
+// path safePath writes to, so "journal/../knowledge/x.md" is knowledge, and
+// case-blind, so a case-insensitive disk cannot be used to slip past it.
+// Returns the compartment's name, or null for an open path.
+function curatedCompartment(rel) {
+  if (typeof rel !== 'string' || !rel.length) return null;
+  const norm = normRel(rel).split(path.sep).join('/').replace(/\\/g, '/');
+  let m = norm.match(/^(knowledge|recipes|attic)(\/|$)/i);
+  if (m) return m[1].toLowerCase() + '/';
+  m = norm.match(/^entities\/[^/]+\/(knowledge|recipes)(\/|$)/i);
+  if (m) return `entities/*/${m[1].toLowerCase()}/`;
+  if (/^entities\/[^/]+\/profile\.md$/i.test(norm)) return 'entities/*/PROFILE.md';
+  return null;
 }
 
 function writeKnowledge({ file, content, mode, author, message, encoding }) {
@@ -152,4 +174,7 @@ function recentCommits(n = 20) {
   } catch { return []; }
 }
 
-module.exports = { ensureRepo, writeKnowledge, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep, BRAIN_DIR };
+module.exports = {
+  ensureRepo, writeKnowledge, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep,
+  curatedCompartment, BRAIN_DIR, BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME,
+};
