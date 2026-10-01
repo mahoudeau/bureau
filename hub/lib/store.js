@@ -429,7 +429,7 @@ function expireLeases() {
       // Unified reservations: the expired holder gets first claim on its own
       // mission. claimTask lets cowork reservations lapse after the TTL, so a
       // dead shift's mission returns to the pool; the envoy's waits for him.
-      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}` });
+      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}`, from: t.status, to: 'queued' });
       if (t.assignee) { t.reserved_for = t.assignee; t.reserved_at = nowISO(); }
       t.status = 'queued';
       t.assignee = null;
@@ -479,11 +479,12 @@ function claimTask({ id, agent, lease_minutes }) {
   }
   delete t.reserved_for; // any claim (owner, or explicit by id) clears the reservation
   delete t.reserved_at;
+  const fromStatus = t.status;
   t.status = 'claimed';
   t.assignee = agent;
   const mins = Number.isFinite(+lease_minutes) ? +lease_minutes : 120;
   t.lease_until = new Date(Date.now() + mins * 60000).toISOString();
-  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)` });
+  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)`, from: fromStatus, to: 'claimed' });
   save();
   return { task: t };
 }
@@ -516,10 +517,31 @@ function isOwnLibrarianDigest(s, t, agentName) {
     && typeof t.title === 'string' && t.title.toLowerCase().startsWith(agentName.toLowerCase() + ':');
 }
 
-function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
+// The boss's log entries say what his hand did, so approve, send-back, answer
+// and verdict can be told apart when the history is read back.
+const HUMAN_KINDS = ['approve', 'send_back', 'answer', 'verdict', 'edit'];
+function humanKind(kind, prevStatus, status, verdicts) {
+  if (HUMAN_KINDS.includes(kind)) return kind;
+  const moved = status && status !== prevStatus;
+  if (moved && prevStatus === 'review' && status === 'done') return 'approve';
+  if (moved && prevStatus === 'review' && status === 'queued') return 'send_back';
+  if (moved && prevStatus === 'blocked' && status === 'queued') return 'answer';
+  if (!moved && Array.isArray(verdicts) && verdicts.length) return 'verdict';
+  return 'edit';
+}
+
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
+  // History is written by someone: an update that names no agent is the lease
+  // holder's (it is the only one who should be touching the mission), and with
+  // no holder there is nobody to credit, so it is refused. A third of the live
+  // log had been filed as "unknown" before this.
+  if (!agent) {
+    if (!t.assignee) return { error: 'agent required: say which agent is acting' };
+    agent = t.assignee;
+  }
   const prevStatus = t.status, prevAssignee = t.assignee;
   // Every check runs before anything changes, so a refused update leaves the
   // mission exactly as it was (the gate used to be raised before a refusal).
@@ -568,7 +590,7 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
       lines.push(`${it.id} ${it.verdict}${it.comment ? ` (${it.comment})` : ''}`);
     }
     // Verdicts get their own log entry: the worker's apply pass reads them here too
-    if (lines.length) t.log.push({ ts: nowISO(), by: agent || 'human', note: `verdicts: ${lines.join(' · ')}` });
+    if (lines.length) t.log.push({ ts: nowISO(), by: agent, note: `verdicts: ${lines.join(' · ')}`, ...(agent === 'human' ? { kind: 'verdict' } : {}) });
   }
   if (status) {
     t.status = status;
@@ -594,10 +616,15 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (priority !== undefined) t.priority = +priority;
   if (title) t.title = title;
   if (body !== undefined) t.body = body;
-  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent || 'unknown', ...artifact });
-  t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
+  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent, ...artifact });
+  // A status change is recorded as from/to beside the note, so a PATCH that
+  // carries both keeps both (the note used to replace the status line).
+  const entry = { ts: nowISO(), by: agent, note: note || (status ? `status → ${status}` : 'updated') };
+  if (status && status !== prevStatus) { entry.from = prevStatus; entry.to = status; }
+  if (agent === 'human') entry.kind = humanKind(kind, prevStatus, status, verdicts);
+  t.log.push(entry);
   save();
-  return { task: t, prev_status: prevStatus };
+  return { task: t, prev_status: prevStatus, by: agent };
 }
 
 // ---- Review capability links ----
