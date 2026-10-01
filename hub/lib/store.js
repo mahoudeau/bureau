@@ -1,4 +1,4 @@
-// lib/store.js: JSON state with atomic writes. Zero dependencies.
+// lib/store.js: JSON state with atomic writes, backups and schema migrations. Zero dependencies.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -9,15 +9,72 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
+// ---- Schema migrations ----
+// state.json carries schema_version. A file without one is version 0.
+// MIGRATIONS[i] takes the state from version i to i+1; they run in order on
+// boot, after a copy of the file is kept as state.json.pre-migrate-<ts>.
+// Append new migrations at the end, never edit a released one.
+const MIGRATIONS = [
+  // 0 -> 1: the field itself, plus the top-level keys older files may lack.
+  s => { for (const k of Object.keys(EMPTY)) if (s[k] === undefined) s[k] = structuredClone(EMPTY[k]); },
+];
+const SCHEMA_VERSION = MIGRATIONS.length;
+
+function stamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
+
+// Refusing to boot is the point: a hub that starts on empty state after a bad
+// read looks healthy and quietly loses every mission on its next save.
+class StorageError extends Error {}
+
 let state = null;
+
+function readState() {
+  let raw;
+  try {
+    raw = fs.readFileSync(STATE_FILE, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw new StorageError(`cannot read ${STATE_FILE}: ${e.message}. Refusing to boot.`);
+    // No state file. Fine on a fresh install, suspicious when backups exist.
+    const baks = listBackups();
+    if (baks.length) throw new StorageError(`${STATE_FILE} is missing but backups exist (${baks.join(', ')}). Refusing to boot on empty state. Copy a backup to state.json, or move the backups away to start fresh.`);
+    return { ...structuredClone(EMPTY), schema_version: SCHEMA_VERSION };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // One copy per distinct bad file, so a supervisor restarting the hub in a loop does not fill the disk.
+    let kept = null;
+    try {
+      const same = fs.readdirSync(DATA_DIR).filter(n => n.startsWith(BASE + '.corrupt-'))
+        .find(n => fs.readFileSync(path.join(DATA_DIR, n), 'utf8') === raw);
+      kept = same ? path.join(DATA_DIR, same) : `${STATE_FILE}.corrupt-${stamp()}`;
+      if (!same) fs.copyFileSync(STATE_FILE, kept);
+    } catch { kept = null; }
+    throw new StorageError(`${STATE_FILE} does not parse (${e.message}). ${kept ? `A copy is kept at ${kept}.` : 'Could not copy it aside.'} Refusing to boot. Restore the newest good backup (state.json.bak.1, then .bak.2, ..., or a state.json.daily-*) over state.json, see UPGRADING.md.`);
+  }
+}
+
+function migrate(s) {
+  const from = Number.isInteger(s.schema_version) ? s.schema_version : 0;
+  if (from > SCHEMA_VERSION) throw new StorageError(`${STATE_FILE} has schema_version ${from}, this hub knows up to ${SCHEMA_VERSION}. It was written by a newer Bureau. Upgrade the hub, or restore a state.json.pre-migrate-* backup.`);
+  if (from === SCHEMA_VERSION) return s;
+  if (fs.existsSync(STATE_FILE)) {
+    const pre = `${STATE_FILE}.pre-migrate-${stamp()}`;
+    fs.copyFileSync(STATE_FILE, pre);
+    console.log(`[store] migrating state from schema ${from} to ${SCHEMA_VERSION}; previous file kept at ${pre}`);
+  }
+  for (let v = from; v < SCHEMA_VERSION; v++) {
+    MIGRATIONS[v](s);
+    s.schema_version = v + 1;
+  }
+  writeNow(s);
+  return s;
+}
 
 function load() {
   if (state) return state;
-  try {
-    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    state = structuredClone(EMPTY);
-  }
+  const s = migrate(readState());
+  state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
   state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
@@ -31,17 +88,80 @@ function load() {
   return state;
 }
 
+// Atomic write: tmp file, fsync, rename. A crash leaves the old file or the new one.
+function writeFileAtomic(file, text) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = file + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, file);
+}
+function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); }
+
 let saveTimer = null;
 function save() {
-  // Debounced atomic write: write tmp file then rename.
+  // Debounced: many mutations in one tick make one write.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = STATE_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-    fs.renameSync(tmp, STATE_FILE);
+    writeNow(state);
   }, 100);
+}
+// Called on exit, so a SIGTERM inside the debounce window loses nothing.
+function flush() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (state) writeNow(state);
+}
+
+// ---- Backups ----
+// Rolling: state.json.bak.1 (newest) .. bak.N, one per interval (hourly, keep 24).
+// Daily: state.json.daily-YYYY-MM-DD, first tick of each UTC day, keep 7.
+// Both are written from the in-memory state, so they are always a whole file.
+const BACKUP_INTERVAL_MS = +process.env.BUREAU_BACKUP_INTERVAL_MS || 3600_000;
+const BACKUP_KEEP = +process.env.BUREAU_BACKUP_KEEP || 24;
+const DAILY_KEEP = +process.env.BUREAU_DAILY_KEEP || 7;
+const BASE = path.basename(STATE_FILE);
+
+function listBackups() {
+  let names = [];
+  try { names = fs.readdirSync(DATA_DIR); } catch { return []; }
+  return names.filter(n => n.startsWith(BASE + '.bak.') || n.startsWith(BASE + '.daily-')).sort();
+}
+
+function rotateBackups() {
+  if (!state) return;
+  const bak = i => `${STATE_FILE}.bak.${i}`;
+  try { fs.unlinkSync(bak(BACKUP_KEEP)); } catch { }
+  for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
+    try { fs.renameSync(bak(i), bak(i + 1)); } catch { }
+  }
+  writeFileAtomic(bak(1), JSON.stringify(state, null, 2));
+}
+
+function dailySnapshot() {
+  if (!state) return;
+  const day = new Date().toISOString().slice(0, 10);
+  const file = `${STATE_FILE}.daily-${day}`;
+  if (!fs.existsSync(file)) writeFileAtomic(file, JSON.stringify(state, null, 2));
+  const dailies = listBackups().filter(n => n.startsWith(BASE + '.daily-'));
+  for (const n of dailies.slice(0, Math.max(0, dailies.length - DAILY_KEEP))) {
+    try { fs.unlinkSync(path.join(DATA_DIR, n)); } catch { }
+  }
+}
+
+function backupTick() {
+  try { rotateBackups(); dailySnapshot(); } catch (e) { console.error('[store] backup failed:', e.message); }
+}
+
+// Boot: load and migrate (throws StorageError on bad state), take today's
+// snapshot if missing, then start the rolling backups.
+function init() {
+  load();
+  try { dailySnapshot(); } catch (e) { console.error('[store] daily snapshot failed:', e.message); }
+  setInterval(backupTick, BACKUP_INTERVAL_MS).unref();
+  return { schema_version: state.schema_version };
 }
 
 function nextId(prefix) {
@@ -62,15 +182,15 @@ function acquireLock() {
   try {
     const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
     if (pid && pid !== process.pid) {
-      try {
-        process.kill(pid, 0); // throws if the process is gone
-        return { error: `data dir is owned by a live hub process (pid ${pid}); refusing to boot` };
-      } catch { /* stale lock from a dead process: take over */ }
+      let alive = true;
+      try { process.kill(pid, 0); } catch (e) { alive = e.code === 'EPERM'; } // EPERM: alive, another user's
+      if (alive) return { error: `data dir ${DATA_DIR} is owned by a live hub process (pid ${pid}, see ${LOCK_FILE}); refusing to boot` };
+      console.log(`[store] taking over stale lock from dead pid ${pid}`);
     }
   } catch { /* no lock file yet */ }
   fs.writeFileSync(LOCK_FILE, String(process.pid));
   const release = () => { try { if (parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(LOCK_FILE); } catch { } };
-  process.on('exit', release);
+  process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } release(); });
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
   return {};
 }
@@ -549,7 +669,8 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  StorageError, SCHEMA_VERSION, STATE_FILE,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
