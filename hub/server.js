@@ -332,6 +332,17 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { task: t });
     }
 
+    // ----- settings (S2): policy knobs; none set means today's behavior -----
+    if (req.method === 'GET' && p === '/api/settings') {
+      return send(res, 200, { settings: store.settingsOf(store.load()) });
+    }
+    if (req.method === 'PATCH' && p === '/api/settings') {
+      const b = await readBody(req);
+      const r = store.patchSettings(b);
+      if (r.error) return send(res, 400, r);
+      return send(res, 200, { settings: r.settings });
+    }
+
     // ----- MCP connector URL (the capability; only the token holder may see it) -----
     if (req.method === 'GET' && p === '/api/mcp') {
       const base = (process.env.BUREAU_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
@@ -475,7 +486,7 @@ const MCP_TOOLS = [
   { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, done, failed.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
   { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review. Need a project that does not exist? Never invent an id — file a proposal instead: a mission in general titled "Propose project: <label>", body carrying the proposed id, entity, repo and why, parked at the boss (status review if your capabilities allow it, otherwise blocked with a note starting "waiting on: boss approval"). The boss creates the project in the dashboard and closes the proposal; only then does the id exist.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['id'], additionalProperties: false } },
+  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page. gate: boss escalates a mission to the boss\'s review. approved_in_session: when the project\'s approval policy is in-session and the boss approved in this chat, close with status done and his exact words here; the hub logs the quote. Other policies refuse it.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' } }, required: ['id'], additionalProperties: false } },
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
 ];
@@ -514,7 +525,7 @@ function mcpToolCall(name, a = {}) {
       return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until };
     }
     case 'update_mission': {
-      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate });
+      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session });
       if (r.error) throw new Error(r.error);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[a.status] || 'task.updated';
       broadcast(evt, { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
