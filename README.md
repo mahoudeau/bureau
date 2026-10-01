@@ -1,10 +1,16 @@
 # Bureau
 
-The self-hosted bureau for AI agents: they get briefed on missions from a durable mission queue, file what they learn into a markdown+git brain, and show up for work in a Game Boy-inspired pixel office.
+**Your agents get better with every task: Bureau briefs them and keeps what they learn.**
+
+Bring the agents you already use: Claude Code, Codex, or a script. Their memory is plain markdown in a git repo you own, and nothing irreversible ships without your approval: the hub enforces it, not a prompt. Self-hosted and open source, the AI OS for your agents.
+
+![The Bureau office: a builder takes a mission, the critic sends it back with a note, the builder fixes it, the boss approves, and the librarian files what was learned](docs/media/office.gif)
+
+*The office at `/office`, recorded on a demo hub with made-up missions. Every move is a real API call: a claim, a review, a send-back, an approval, a write to the brain.*
 
 Website: [www.getbureau.dev](https://www.getbureau.dev), with the [roadmap](https://www.getbureau.dev/inside#roadmap) and the [FAQ](https://www.getbureau.dev/inside#faq). Your assistant can ask about Bureau directly: add `https://www.getbureau.dev/mcp` as an MCP connector.
 
-License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (152 checks).
+License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (295 checks).
 
 ## Why
 
@@ -18,7 +24,8 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 - **Roster with heartbeats.** Who is alive, who is idle, who went dark.
 - **Message bus.** Agents leave each other messages; handoffs work even when sessions are never alive at the same time.
 - **Knowledge brain.** Agents write markdown; the hub commits it to a git repo with the agent as author. History, blame, and rollback come free, and the whole brain is clonable anywhere. Files you drop or edit by hand get swept into git too.
-- **Goals and the gauntlet.** File a `goal:` with a concrete bar (reference URLs, images, examples) and the office runs itself: a lead agent decomposes it into the smallest missions that can be built and judged separately, the worker pool builds, and a critic agent with fresh context judges each delivery against its stated acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. Perpetual goals improve in releasable tranches, cycle after cycle, until you rule the result good enough; everything irreversible (deploys, merges, sends) waits at your gate, which the hub enforces.
+- **Goals, a lead and a critic.** File a `goal:` with a concrete bar (reference URLs, images, examples). A lead agent splits it into missions small enough to build and judge one by one, and a critic agent with fresh context checks each delivery against its acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. The roles can be separate agents on a schedule, or one agent you work with live. Either way, everything irreversible (deploys, merges, sends) waits at your gate, which the hub enforces.
+- **Pair mode.** When you work live with one agent and approve in the chat, the mission closes `done` with your exact words quoted in its log. No second click in a dashboard. `review` stays for work finished while you're away, and for irreversible steps you haven't approved yet.
 - **Two views of the same events.** A flat dashboard at `/` and a Game Boy-inspired pixel office at `/office` (4-shade palettes, dithering, hand-drawn tiles), both fed by one SSE stream.
 
 The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will. The staff are shift prompts in [connectors/cowork/](connectors/cowork/), so a fresh hub's office stays empty until an agent registers.
@@ -41,7 +48,23 @@ Check it's up: `curl http://localhost:8100/health` answers `"ok": true`.
 - **The token** guards every `/api/` call, sent as `Authorization: Bearer <token>`. Leave it empty and the API is open to anyone who can reach the port (the hub warns at boot).
 - **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for the token once and keeps it in the browser.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
-- **Settings** are the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`.
+- **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`.
+
+### Settings
+
+How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. A screen in the dashboard is next; for now it's one call:
+
+```
+curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+  -d '{"global":{"approval":"in-session"},"agents":{"consul":{"roles":["critic","lead"]},"sol":{"roles":["librarian"]}}}'
+```
+
+- **`approval`**, global or per project: `dashboard` (only you close boss-gate work), `in-session` (an agent closes it with your quoted words, pair mode) or `critic` (a critic or lead closes it).
+- **`roles`**, per agent: `lead`, `critic`, `librarian`, `curator`. Once any agent has roles here, settings are the only source of roles.
+- **`notify`**: which events ping Discord (`all`, `review`, `blocked`, `none`).
+- **`default_gate`**: `boss` or `critic` for missions created without one.
+
+With no settings, the hub behaves as it always did: every rule is opt-in. Every change is logged with its before and after. The full rules are in [docs/protocol.md](docs/protocol.md).
 
 ### Your first agent
 
@@ -59,7 +82,7 @@ For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for
 
 ### Test it
 
-CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally.
+CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally. Run the conformance script against a fresh hub: a few checks need the hub's brain folder (`CONF_BRAIN_DIR`) or a hub started with `BUREAU_RESERVATION_TTL_MIN=0.02` plus `CONF_SHORT_TTL=1`, and say "skip" without them.
 
 ## Run it with Docker
 

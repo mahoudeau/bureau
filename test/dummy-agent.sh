@@ -14,8 +14,8 @@ JSON="Content-Type: application/json"
 PASS=0; FAIL=0
 
 check () { # check <label> <haystack> <needle>
-  if echo "$2" | grep -q "$3"; then PASS=$((PASS+1)); echo "  ok: $1"
-  else FAIL=$((FAIL+1)); echo "  FAIL: $1"; echo "    wanted: $3"; echo "    got: $(echo "$2" | head -c 300)"; fi
+  if printf '%s\n' "$2" | grep -q "$3"; then PASS=$((PASS+1)); echo "  ok: $1"
+  else FAIL=$((FAIL+1)); echo "  FAIL: $1"; echo "    wanted: $3"; echo "    got: $(printf '%s\n' "$2" | head -c 300)"; fi
 }
 api () { curl -s -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
 
@@ -231,8 +231,9 @@ check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "
 check "non-cowork expiry keeps the reservation" "$(api GET "/api/tasks/$T2ID")" '"reserved_for": "menace"'
 check "a lease expiry records from and to" "$(api GET "/api/tasks/$T2ID" | grep -A3 '"note": "lease expired')" '"to": "queued"'
 # Unified reservations: cowork holders keep their mission only for the TTL.
-# The lapse check needs a hub started with a tiny BUREAU_RESERVATION_TTL_MIN (the
-# local runner sets 0.02 = 1.2s); against a default hub it would wait 30 minutes.
+# The lapse check needs a hub started with a tiny BUREAU_RESERVATION_TTL_MIN
+# (0.02 = 1.2s) and CONF_SHORT_TTL=1 here, as CI does; against a default hub it
+# would wait 30 minutes, so without the flag it is skipped, not failed.
 api POST /api/agents/register '{"name":"shifty","kind":"cowork"}' > /dev/null
 T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":1}')
 T3ID=$(echo "$T3" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
@@ -240,8 +241,14 @@ api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\",\"lease_minute
 sleep 3
 api GET /api/tasks > /dev/null
 check "cowork expiry reserves for the shift worker too" "$(api GET "/api/tasks/$T3ID")" '"reserved_for": "shifty"'
-sleep 2
-check "lapsed cowork reservation returns to the pool" "$(api POST /api/tasks/claim '{"agent":"worker-x"}')" "\"id\": \"$T3ID\""
+if [ -n "${CONF_SHORT_TTL:-}" ]; then
+  sleep 2
+  check "lapsed cowork reservation returns to the pool" "$(api POST /api/tasks/claim '{"agent":"worker-x"}')" "\"id\": \"$T3ID\""
+else
+  # same end state as the check: worker-x holds it, the pool is clear for 8b
+  api POST /api/tasks/claim "{\"agent\":\"worker-x\",\"id\":\"$T3ID\"}" > /dev/null
+  echo "  skip: lapsed cowork reservation (needs BUREAU_RESERVATION_TTL_MIN=0.02 on the hub and CONF_SHORT_TTL=1)"
+fi
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\"}" > /dev/null
 api PATCH "/api/tasks/$T2ID" '{"agent":"menace","status":"done","note":"plant watered"}' > /dev/null
 api PATCH "/api/tasks/$T3ID" '{"agent":"worker-x","status":"done","note":"plants straightened"}' > /dev/null
@@ -331,7 +338,7 @@ PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQG
 PNG_BODY="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"author\":\"menace\",\"message\":\"ops: bar reference\"}"
 check "base64 attachment accepted" "$(api POST /api/knowledge "$PNG_BODY")" '"bytes"'
 check "binary read returns base64" "$(api GET '/api/knowledge?file=projects/ops/references/pixel.png')" 'content_base64'
-check "raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/knowledge?file=projects/ops/references/pixel.png&raw=1" -H "$AUTH" | tr -d '\r')" 'content-type: image/png'
+check "raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/knowledge?file=projects/ops/references/pixel.png&raw=1" -H "$AUTH" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
 check "off-whitelist extension refused" "$(api POST /api/knowledge '{"file":"projects/ops/references/tool.exe","content":"x","author":"menace"}')" 'only .md'
 PNG_APPEND="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
 check "base64 append refused" "$(api POST /api/knowledge "$PNG_APPEND")" 'replace-only'
@@ -341,7 +348,7 @@ api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TEID\"}" > /dev/null
 api PATCH "/api/tasks/$TEID" '{"agent":"menace","artifact":{"label":"screenshot","url":"projects/ops/references/pixel.png"},"status":"review","note":"evidence attached"}' > /dev/null
 EV_TOKEN=$(api GET "/api/tasks/$TEID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
 check "review page renders evidence inline" "$(curl -s "$BUREAU_URL/r/$EV_TOKEN")" '<img src="/r/'
-check "capability image route serves the bytes" "$(curl -si "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/ops/references/pixel.png" | tr -d '\r')" 'content-type: image/png'
+check "capability image route serves the bytes" "$(curl -si "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/ops/references/pixel.png" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
 check "bad capability gets no image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000/img?file=projects/ops/references/pixel.png")" '404'
 # A live link reaches only the images its own mission cites, never the rest of the brain
 OTHER_BODY="{\"file\":\"projects/other/references/secret.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"author\":\"menace\"}"
@@ -592,7 +599,7 @@ check "append and read back" "$(api GET "/api/work?file=work/$W1/notes.md")" 'fi
 B=$(wb "work/$W1/shot.png" "$PNG_B64" b64)
 check "a base64 screenshot is accepted" "$(api POST /api/work "$B")" '"bytes"'
 check "binary read returns base64" "$(api GET "/api/work?file=work/$W1/shot.png")" 'content_base64'
-check "raw read serves image/png" "$(curl -si "$BUREAU_URL/api/work?file=work/$W1/shot.png&raw=1" -H "$AUTH" | tr -d '\r')" 'content-type: image/png'
+check "raw read serves image/png" "$(curl -si "$BUREAU_URL/api/work?file=work/$W1/shot.png&raw=1" -H "$AUTH" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
 B="{\"file\":\"work/$W1/shot.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
 check "base64 append refused" "$(api POST /api/work "$B")" 'replace-only'
 B=$(wb "work/$W1/tool.exe" "x")
@@ -620,7 +627,7 @@ WPAGE=$(curl -s "$BUREAU_URL/r/$WT")
 check "the review page shows the cited work image" "$WPAGE" "work%2F$W1%2Fshot.png"
 check "and the mission's uncited work image" "$WPAGE" "work%2F$W1%2Fextra.png"
 check "but not another mission's, even cited" "$(echo "$WPAGE" | grep -c "theirs.png" || true)" '^0$'
-check "the link serves its own work image" "$(curl -si "$BUREAU_URL/r/$WT/img?file=work/$W1/extra.png" | tr -d '\r')" 'content-type: image/png'
+check "the link serves its own work image" "$(curl -si "$BUREAU_URL/r/$WT/img?file=work/$W1/extra.png" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
 check "the link refuses another mission's work image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$WT/img?file=work/$W2/theirs.png")" '404'
 check "evidence survives while the mission is in review" "$(code GET "/api/work?file=work/$W1/shot.png")" '^200$'
 check "approve via the link" "$(curl -s -X POST "$BUREAU_URL/r/$WT")" 'Approved'

@@ -45,11 +45,12 @@ jobs:
           exit 1
 
       # Against the scratch hub above, which must be fresh (RUNNER_TEMP is, per
-      # job). BUREAU_RESERVATION_TTL_MIN=0.02 is what its reservation-lapse
-      # check needs (section 8); CONF_BRAIN_DIR turns on the intake sweep
-      # checks (section 8e), which drop files straight into the hub's brain.
+      # job). BUREAU_RESERVATION_TTL_MIN=0.02 on the hub plus CONF_SHORT_TTL
+      # here turn on the reservation-lapse check (section 8); CONF_BRAIN_DIR
+      # turns on the intake sweep checks (section 8e), which drop files
+      # straight into the hub's brain.
       - name: Conformance (test/dummy-agent.sh)
-        run: CONF_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" bash test/dummy-agent.sh
+        run: CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" bash test/dummy-agent.sh
 
       - name: Brain lint (test/brain-lint.sh)
         run: bash test/brain-lint.sh
