@@ -39,7 +39,7 @@ const SHARED = {
   '/assets/office-assets.js': path.join(HUB_PUBLIC, 'office-assets.js'),
   '/assets/office-font.ttf': path.join(HUB_PUBLIC, 'office-font.ttf'),
 };
-const PRIVATE = new Set(['server.js', 'start.sh', 'mcp.js', 'mcp-registry.json']);
+const PRIVATE = new Set(['server.js', 'start.sh', 'mcp.js', 'stats.js', 'mcp-registry.json']);
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml',
@@ -110,6 +110,7 @@ async function postWaitlist(req, res) {
   const prev = signups.get(email);
   const slot = prev ? prev.slot : signups.size + 1;
   signups.set(email, { slot, rec });
+  if (!prev) stats.signup();
   send(res, 200, { slot, again: !!prev });
   toBrevo(rec);
 }
@@ -402,6 +403,17 @@ function getLlmsFull(res) {
 let PRODUCT_VERSION = '0.2.0';
 try { PRODUCT_VERSION = require('../hub/version.js').VERSION; } catch (e) {}
 const mcp = require('./mcp.js')({ SITE, SITE_URL, textOf, FAQ_RE, insideAsText, version: PRODUCT_VERSION });
+// The site's own traffic counts (stats.js): daily totals in .data/stats.db,
+// nothing per person. The dashboard is /stats?token=<WAITLIST_TOKEN>.
+const stats = require('./stats.js')({ DATA_DIR, SITE_URL });
+async function statsPage(req, res, url) {
+  const token = process.env.WAITLIST_TOKEN;
+  if (!token || url.searchParams.get('token') !== token) return send(res, 401, 'unauthorized');
+  if (typeof stars.count !== 'number') await freshStars(0); // nobody has loaded the site since the restart
+  const span = [1, 7, 30, 90].includes(+url.searchParams.get('days')) ? +url.searchParams.get('days') : 30;
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex' });
+  res.end(stats.page(span, { token, stars: typeof stars.count === 'number' ? stars.count : null }));
+}
 const MCP_CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
@@ -427,6 +439,7 @@ async function serveMcp(req, res) {
   if (mcpLimited(clientIp(req))) return reply(429, { jsonrpc: '2.0', id: null, error: { code: -32000, message: 'too many requests, slow down' } });
   let msg;
   try { msg = await readJson(req, 64 * 1024); } catch (e) { return reply(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }); }
+  stats.mcp(req, msg);
   const out = mcp.handle(msg, req.headers);
   if (out.body === null) { res.writeHead(202, MCP_CORS); return res.end(); } // notifications only
   reply(out.status, out.body);
@@ -513,6 +526,9 @@ http.createServer((req, res) => {
   // Proof files for directories and search engines, answered on every host
   // (the registry checks getbureau.dev itself, before any redirect).
   const bare = req.url.split('?')[0], proof = PROOFS[bare];
+  // count it (stats.js decides what is worth counting), but not the old
+  // addresses that only redirect: their visit is counted on arrival
+  if (!REDIRECT_HOSTS.has(String(req.headers.host || '').toLowerCase().replace(/:\d+$/, ''))) stats.request(req, bare);
   if (proof && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
     return res.end(proof);
@@ -530,6 +546,7 @@ http.createServer((req, res) => {
   const p = url.pathname;
   if (req.method === 'POST' && p === '/api/waitlist') return postWaitlist(req, res);
   if (req.method === 'GET' && p === '/api/waitlist/export') return exportWaitlist(req, res, url);
+  if (req.method === 'GET' && p === '/stats') return statsPage(req, res, url);
   if (req.method === 'GET' && p === '/api/stars') return getStars(res);
   if (req.method === 'GET' && p === '/api/github/login') return githubLogin(res);
   if (req.method === 'GET' && p === '/api/github/callback') return githubCallback(res, url);
