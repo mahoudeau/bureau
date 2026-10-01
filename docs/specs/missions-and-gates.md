@@ -1,5 +1,6 @@
 ---
 title: Missions and gates
+compartment: spec
 summary: How a mission is filed, claimed, leased, reserved and closed, and who may move it in and out of review.
 scope: project:bureau
 ---

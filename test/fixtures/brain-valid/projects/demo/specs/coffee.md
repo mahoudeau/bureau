@@ -1,5 +1,7 @@
 ---
 title: Coffee spec
+compartment: spec
+scope: project:demo
 summary: What the office coffee machine does, as numbered rules.
 ---
 

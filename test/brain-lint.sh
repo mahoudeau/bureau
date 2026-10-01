@@ -17,7 +17,8 @@ VALID=$(node hub/tools/brain-lint.js test/fixtures/brain-valid); VX=$?
 check "lint passes" "$VALID" 'LINT PASSED'
 check "exit code 0" "exit:$VX" 'exit:0'
 if echo "$VALID" | grep -q 'missing "summary"'; then FAIL=$((FAIL+1)); echo "  FAIL: valid brain warns about a summary"
-else PASS=$((PASS+1)); echo "  ok: every summary-bearing file has one"; fi
+else PASS=$((PASS+1)); echo "  ok: every summary-bearing file has one, knowledge/INDEX.md exempt"; fi
+check "no warnings at all (summaries, Now)" "$VALID" ' 0 warnings'
 
 echo "2. a malformed brain fails on each planted defect"
 INVALID=$(node hub/tools/brain-lint.js test/fixtures/brain-invalid); IX=$?
@@ -34,6 +35,8 @@ check "missing summary warned" "$INVALID" 'warn: knowledge/no-summary.md: missin
 check "over-long summary caught" "$INVALID" 'ERROR: knowledge/long-summary.md: summary is .* over the 200 limit'
 check "duplicate rule id caught" "$INVALID" 'duplicate rule id RULE-BROKEN-01'
 check "unsourced rule caught" "$INVALID" 'rule RULE-BROKEN-02 has no source'
+check "missing Now warned" "$INVALID" 'warn: projects/no-now/STATE.md: no "## Now" section'
+check "over-long Now warned" "$INVALID" 'warn: projects/long-now/STATE.md: "## Now" is 31 lines, over the 30 limit'
 
 echo "3. the repo's own specs (docs/specs) pass as a project's specs/"
 SPECS_BRAIN=$(mktemp -d)
@@ -44,6 +47,7 @@ rm -rf "$SPECS_BRAIN"
 check "specs lint passes" "$SPECS" 'LINT PASSED'
 check "specs exit code 0" "exit:$SX" 'exit:0'
 check "specs are linted" "$SPECS" '^3 files'
+check "specs carry no warnings" "$SPECS" ' 0 warnings'
 
 echo
 echo "passed $PASS, failed $FAIL"

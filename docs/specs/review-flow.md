@@ -1,5 +1,6 @@
 ---
 title: Review flow
+compartment: spec
 summary: How work reaches the boss, the capability links he rules with, itemized verdicts, answers to blocked missions, and what pings.
 scope: project:bureau
 ---
