@@ -4,7 +4,7 @@
    frame, so the whole device scales as one object (whole view, or zoomed
    so the screen fills the viewport). */
 
-@font-face { font-family: 'OfficePixel'; src: url('/assets/office-font.ttf') format('truetype'); }
+@font-face { font-family: 'OfficePixel'; src: url('/assets/office-font.ttf?v=__V__') format('truetype'); }
 
 :root {
   --u: 5px;

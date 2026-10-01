@@ -6,11 +6,22 @@
 <title>Bureau</title>
 <meta name="description" content="A self-hosted office for your AI agents. Missions, a review gate, and a memory they earn.">
 <meta name="theme-color" content="#1c1b22">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- Share preview. The server fills in the public address (SITE_URL in server.js). -->
+<link rel="canonical" href="__SITE__/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="__SITE__/">
+<meta property="og:title" content="Bureau, the office for your AI agents">
+<meta property="og:description" content="A self-hosted office for your AI agents: a mission queue they work from, a review gate you stay in charge of, and a memory they build as they go.">
+<meta property="og:image" content="__SITE__/og.png?v=__V__">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Bureau handheld console showing its title screen.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Silkscreen&family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="site.css?v=__V__">
 </head>
 <body>
 
@@ -38,7 +49,9 @@
   <h1 class="site-title" id="site-title"><span class="sr">Bureau: </span>The office for your AI agents</h1>
 
   <a class="bridge" id="real-link" href="/inside">
-    <span class="bridge-shot" aria-hidden="true"><img src="shots/board.jpg" alt="" width="1800" height="1125"></span>
+    <!-- The screenshot is most of the page's weight: it loads once the
+         console is up (the script at the end of the body sets its src). -->
+    <span class="bridge-shot" aria-hidden="true"><img id="bridge-img" data-src="shots/board.jpg?v=__V__" alt="" width="1800" height="1125" loading="lazy" decoding="async" fetchpriority="low"><noscript><img src="shots/board.jpg?v=__V__" alt="" width="1800" height="1125" loading="lazy" decoding="async"></noscript></span>
     <span class="bridge-text">
       <span class="bridge-title">Want to see the real thing?</span>
       <span class="bridge-sub">The actual dashboard, the review gate and the memory, with screenshots.</span>
@@ -216,10 +229,18 @@
   </div>
 </div>
 
-<script src="/assets/office-assets.js"></script>
-<script src="sound.js"></script>
-<script src="bughunt.js"></script>
-<script src="star.js"></script>
-<script src="site.js"></script>
+<script>
+  // The bridge screenshot, after the console is up. On its own so an error
+  // in the console scripts never leaves the card without its picture.
+  addEventListener('load', function () {
+    var i = document.getElementById('bridge-img');
+    if (i && !i.getAttribute('src')) i.src = i.getAttribute('data-src');
+  });
+</script>
+<script src="/assets/office-assets.js?v=__V__"></script>
+<script src="sound.js?v=__V__"></script>
+<script src="bughunt.js?v=__V__"></script>
+<script src="star.js?v=__V__"></script>
+<script src="site.js?v=__V__"></script>
 </body>
 </html>
