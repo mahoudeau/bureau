@@ -154,7 +154,7 @@ import { icon } from './components.js';
     }
 
     function thumb(it) {
-      var src = '/api/knowledge?file=' + encodeURIComponent(decodeURIComponent(it.img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
+      var src = '/api/' + (/^work\//.test(decodeURIComponent(it.img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(it.img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
       var when = it.a.ts ? esc(it.a.ts.slice(5, 16).replace('T', ' ')) : '';
       return '<a class="v2-media__thumb" href="' + src + '" target="_blank" rel="noopener" title="' + esc(it.a.label || it.img) + '">' +
         '<img src="' + src + '" alt="' + esc(it.a.label || it.img) + '" loading="lazy">' +

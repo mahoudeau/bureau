@@ -161,7 +161,7 @@ import { icon, idBadge } from './components.js';
       return (t.artifacts || []).map(function (a) {
         var img = artImg(a);
         if (img) {
-          return '<figure class="v2-panel__artifact"><img src="/api/knowledge?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token) + '" alt="' + esc(a.label || img) + '" loading="lazy">' +
+          return '<figure class="v2-panel__artifact"><img src="/api/' + (/^work\//.test(decodeURIComponent(img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token) + '" alt="' + esc(a.label || img) + '" loading="lazy">' +
             '<figcaption>📎 ' + esc(a.label || img) + ' · by ' + esc(a.by) + '</figcaption></figure>';
         }
         var linkable = a.url && /^https?:\/\//i.test(a.url);

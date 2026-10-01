@@ -25,7 +25,8 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8100 \
     BUREAU_DATA_DIR=/data \
-    BUREAU_BRAIN_DIR=/brain
+    BUREAU_BRAIN_DIR=/brain \
+    BUREAU_WORK_DIR=/data/work
 
 USER node
 VOLUME ["/data", "/brain"]
