@@ -53,11 +53,13 @@ api() { # port method path [json]
   else curl -s -X "$2" "http://127.0.0.1:$1$3" -H "Authorization: Bearer $TOKEN"; fi
 }
 
-echo "1. fresh boot: version and schema on the health routes"
+echo "1. fresh boot: liveness public, version and schema behind the token"
 start_hub a "$PORT_A"; HUB_A=$LAST_PID
 wait_up "$PORT_A"
-check "/health carries the version" "$(curl -s "http://127.0.0.1:$PORT_A/health")" '"version": "'
-check "/api/health answers without a token" "$(curl -s "http://127.0.0.1:$PORT_A/api/health")" '"schema_version": 1'
+check "/health answers without a token" "$(curl -s "http://127.0.0.1:$PORT_A/health")" '"ok": true'
+check "/health keeps the version to itself" "$(curl -s "http://127.0.0.1:$PORT_A/health" | grep -c '"version"')" '^0$'
+check "/api/health refuses without a token" "$(curl -s "http://127.0.0.1:$PORT_A/api/health")" 'unauthorized'
+check "/api/health carries version and schema with the token" "$(api "$PORT_A" GET /api/health)" '"schema_version": 1'
 api "$PORT_A" POST /api/tasks '{"title":"Backup canary mission"}' >/dev/null
 sleep 0.3
 check "state.json carries schema_version" "$(cat "$DIR/a/data/state.json")" '"schema_version": 1'

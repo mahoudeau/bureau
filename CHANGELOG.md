@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Bureau are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The hub reports its version on `GET /health` and `GET /api/health`; it lives in `hub/version.js`.
+All notable changes to Bureau are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow [Semantic Versioning](https://semver.org/). The hub reports its version on `GET /api/health` (behind the token); it lives in `hub/version.js`.
 
 Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
@@ -9,7 +9,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Added
 - `state.json` carries `schema_version`. The hub runs ordered migrations on boot and keeps the previous file as `state.json.pre-migrate-<ts>` first. A file without the field is version 0 and migrates to 1.
 - Rolling backups of the state: `state.json.bak.1` (newest) to `.bak.24`, one per hour, plus a daily snapshot `state.json.daily-YYYY-MM-DD`, seven kept. Tunable with `BUREAU_BACKUP_INTERVAL_MS`, `BUREAU_BACKUP_KEEP`, `BUREAU_DAILY_KEEP`.
-- `GET /health` and the new `GET /api/health` report `version` and `schema_version`. Both are public, like `/health` always was.
+- The new `GET /api/health` reports `version` and `schema_version`, behind the token. `GET /health` stays public and shows liveness only.
 - `hub/version.js`, the single place the version lives. The MCP door's `serverInfo` reads it too.
 - `test/storage.sh`, a self-contained check of everything above.
 

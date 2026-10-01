@@ -176,9 +176,9 @@ const server = http.createServer(async (req, res) => {
       return res.end(fs.readFileSync(file));
     }
 
-    // Public on purpose (probes carry no token): liveness, release, state schema.
-    if (p === '/health' || p === '/api/health')
-      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, uptime: process.uptime() });
+    // Public on purpose (probes carry no token): liveness only. The version
+    // and schema sit behind the token on /api/health (boss ruling 2026-10-01).
+    if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
 
     // Capability-scoped image serving: a valid review link may render the brain
     // attachments its mission cites, without ever exposing the hub token.
@@ -260,6 +260,8 @@ const server = http.createServer(async (req, res) => {
 
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     if (!authed(req, url)) return send(res, 401, { error: 'unauthorized' });
+    if (p === '/api/health')
+      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, uptime: process.uptime() });
 
     // ----- SSE stream -----
     if (req.method === 'GET' && p === '/api/events') {

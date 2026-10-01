@@ -11,13 +11,13 @@ The brain has its own history in git. The state file is what the steps below pro
 
 ## Upgrade
 
-1. Check the running version: `curl https://your-hub/health` shows `version` and `schema_version`.
+1. Check the running version: `curl https://your-hub/api/health -H "Authorization: Bearer $TOKEN"` shows `version` and `schema_version`.
 2. Stop the hub. A clean stop (SIGTERM or SIGINT) writes any pending change and releases `data/hub.lock`.
 3. Copy the state aside yourself, whatever the hub does for you: `cp hub/data/state.json hub/data/state.json.manual-<date>`.
 4. Pull the new code: `git pull` (or check out the release tag, e.g. `git checkout v0.2.0`).
 5. Read the release's entry in `CHANGELOG.md`, for new settings in particular.
 6. Start the hub: `sh hub/start.sh`, or restart it the way your host does.
-7. Check the log and `/health`. The version is the new one; `schema_version` is the one this release expects.
+7. Check the log and `/api/health`. The version is the new one; `schema_version` is the one this release expects.
 
 No `npm install`, ever. The hub has no dependencies.
 
