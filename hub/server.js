@@ -225,7 +225,8 @@ const server = http.createServer(async (req, res) => {
           const v = form.get(`v_${it.id}`), c = (form.get(`c_${it.id}`) || '').trim();
           return (v === 'approved' || v === 'rejected' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
         }).filter(Boolean);
-        const r = store.updateTask({ id: task.id, agent: 'human', status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
+        const logKind = kind === 'sendback' ? 'send_back' : kind; // approve, send_back, answer
+        const r = store.updateTask({ id: task.id, agent: 'human', kind: logKind, status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
         if (r.error) return sendPage(res, 400, 'Something went wrong', `<p>${escHtml(r.error)}</p>`);
         broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
         return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
@@ -408,8 +409,8 @@ const server = http.createServer(async (req, res) => {
       const r = store.updateTask({ ...b, id: mTask[1] });
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
       const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[b.status] || 'task.updated';
-      broadcast(evt, { ...r.task, note: b.note }, { by: b.agent || 'unknown', prev_status: r.prev_status });
-      return send(res, 200, r);
+      broadcast(evt, { ...r.task, note: b.note }, { by: r.by, prev_status: r.prev_status });
+      return send(res, 200, { task: r.task, prev_status: r.prev_status });
     }
 
     // ----- messages -----
