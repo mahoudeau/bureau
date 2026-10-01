@@ -109,7 +109,7 @@ Single shared secret (`BUREAU_TOKEN`) as a Bearer token on every API call; the d
 
 ## 6. Deployment
 
-The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
+The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
 
 JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable. If the queue ever gets big, swapping `lib/store.js` for SQLite is a contained change.
 
