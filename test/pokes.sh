@@ -121,10 +121,21 @@ check "ring carries waiting count" "$SINK" '"waiting":1'
 check "guard rings while nobody is awake" "$SINK" '/standing-guarded '
 COOLED=$(grep -c '/standing-cooled ' "$SINK_FILE")
 check "cooldown rings exactly once" "$COOLED" '^1$'
+# A sweep that began before the register call can still deliver a guarded ring
+# after it. Wait (polling, with a timeout) for two more unguarded rings: the
+# second comes from a sweep that started after register, so anything in flight
+# has landed. Only then count, and wait two more sweeps before counting again.
+wait_unguarded() { # target count; polls up to ~8s
+  n=0
+  while [ "$(grep -c '/standing {' "$SINK_FILE")" -lt "$1" ] && [ $n -lt 80 ]; do
+    sleep 0.1; n=$((n+1))
+  done
+}
 api3 POST /api/agents/register '{"name":"sleeper","kind":"cowork"}' >/dev/null
+wait_unguarded $(( $(grep -c '/standing {' "$SINK_FILE") + 2 ))
 GUARDED_BEFORE=$(grep -c '/standing-guarded ' "$SINK_FILE")
 UNGUARDED_BEFORE=$(grep -c '/standing {' "$SINK_FILE")
-sleep 1.4
+wait_unguarded $((UNGUARDED_BEFORE + 2))
 GUARDED_AFTER=$(grep -c '/standing-guarded ' "$SINK_FILE")
 UNGUARDED_AFTER=$(grep -c '/standing {' "$SINK_FILE")
 check "unguarded keeps ringing" "$([ "$UNGUARDED_AFTER" -gt "$UNGUARDED_BEFORE" ] && echo grew)" 'grew'

@@ -43,9 +43,10 @@ brain/
     knowledge/               # semantic, entity scope (same strictness as global)
     recipes/                 # procedural, entity scope
   projects/<slug>/
-    STATE.md                 # working semantic: current status, next steps, debriefs
+    STATE.md                 # working semantic: "## Now" on top, debriefs below
     decisions.md             # append-only decision log, dated
     learnings.md             # append-only "things we found out", dated
+    specs/<domain>.md        # what the product does: actors, numbered rules, journeys, edge cases
     deliverables/            # documents produced by missions
     references/              # goal-bar material: images, PDFs, examples (attachments)
   agents/<name>.md           # roster profiles: role, standing brief, lessons
@@ -70,20 +71,40 @@ Who writes where, and who may rewrite. "The librarian" is the curation agent (in
 | `entities/<slug>/PROFILE.md` | owner and librarian | replace, review-gated | owner and librarian |
 | `projects/<slug>/STATE.md` | working agents | append debriefs | librarian may compact wholesale (original to `archive/`) |
 | `projects/<slug>/decisions.md`, `learnings.md` | working agents | append-only, dated | nobody; corrections are new entries, retirement via `attic/` |
+| `projects/<slug>/specs/` | reviewed missions and the owner | replace, one domain per file | same; a rule keeps its id for life, a dropped rule leaves its id unused |
 | `agents/<name>.md` | the agent itself and the librarian | replace | same |
 | `daily/`, `archive/`, `attic/` | librarian only | per compartment rules | librarian only |
 
 **Write cheap, curate later** still rules: working agents are never asked to file perfectly. The journal accepts anything; the librarian's job is making it authoritative or letting it fade.
 
+## The Now section
+
+Every project `STATE.md` opens with `## Now`, right after its frontmatter: current status, open threads, next step. Thirty lines at most. It is rewritten in place when the picture changes, never appended to; history and debriefs go below it. An agent reads `## Now` first and fetches the history below only when the work needs it. Lint warns when a `STATE.md` has no `## Now` or when it runs over 30 lines.
+
 ## The debrief grammar
 
-Every completed mission appends a debrief to its project's `STATE.md`. Three parts, minimum, in this order:
+Every completed mission appends a debrief to its project's `STATE.md`, below `## Now`. Three parts, minimum, in this order:
 
 - **What changed**: the work, stated concretely.
 - **What was learned**: anything reusable; name the scope if it is not the project's own.
 - **Next step**: what a cold-started successor should do first.
 
 Optionally `earned_by:` the mission id. This shape is what the librarian digests and what lint will eventually check; free-form prose around it is welcome, the three parts are not optional.
+
+## Specs: what the product does
+
+`STATE.md` says where the work stands. A spec says what the product does, so an agent can answer "how does X behave" from the brain instead of reading the code. One file per domain: `projects/<slug>/specs/<domain>.md`, in four parts:
+
+- **Actors**: who acts in this domain (people, agents, the hub itself).
+- **Rules**: one list item per rule, starting with its id: `- RULE-<DOMAIN>-01: statement. (source: ...)`. The domain is uppercase letters and digits; numbers are two digits or more.
+- **Journeys**: the common paths, step by step, citing rule ids.
+- **Edge cases**: what happens at the borders, citing rule ids.
+
+Every rule carries a `(source: ...)`: a `file:line` in the code, a doc and its section, or a `[[wikilink]]` to the decision or mission that set it. A rule nobody can trace is an opinion. Ids are stable: a rewritten rule keeps its id, a dropped rule leaves its number unused, so a mission note citing `RULE-REVIEW-04` still means the same thing a year later. Only rule lines start a list item with an id; journeys and edge cases cite ids in the text.
+
+A spec's frontmatter: `title`, `compartment: spec`, `scope: project:<slug>`, `summary`.
+
+Specs describe behavior, not intent. When the code and the spec disagree, the code is the fact and the spec is the bug, unless a decision says otherwise; either way the mission that finds the gap says so.
 
 ## Note grammar (the commons layer)
 
@@ -92,6 +113,7 @@ A note is markdown with YAML frontmatter. Observations are categorized list item
 ```markdown
 ---
 title: Deploy process for the hub
+summary: Push to main, CI checks, the host restarts on pull; watch the IPv6 bind.
 compartment: recipe
 scope: global
 permalink: deploy-hub
@@ -118,6 +140,8 @@ Extra frontmatter fields and grammar rules. In other tools they are inert custom
 
 **Provenance (enforced in knowledge/ and recipes/, global and entity).** Every observation carries at least one `(source: [[...]])` link to journal material or a mission. An unsourced claim is a lint error, not a style issue. This is what keeps the authoritative layer free of hallucinated facts.
 
+**Summary (required on the files a scope load reads first).** `summary:` is one line, 200 characters or fewer, saying what the file holds. Required on `knowledge/` and `recipes/` notes (global and entity), `entities/<slug>/PROFILE.md`, and `projects/<slug>/STATE.md`. One exemption: `knowledge/INDEX.md` (global or entity), which is a map itself. It is what a map or a search result shows next to the file name, so an agent can decide what to open without opening everything. A `STATE.md` that has no frontmatter gets a minimal block (`title`, `summary`) above its `## Now`; appends land below. Missing is a lint warning, over length is an error.
+
 **Belief status.** `belief: hypothesis | validated | superseded`. Hypothesis: asserted once. Validated: confirmed by independent debriefs or human review; the promotion is an event with a source. Superseded: lives in the attic. Consumers surface it: an agent quoting a hypothesis says so.
 
 **Imports are hypotheses.** Material entering through `import/` or `meetings/` is promoted with `belief: hypothesis` and an observation-level marker `(imported <date> from <source>)`. It stays marked until real reviewed work confirms or contradicts it; earned and imported knowledge remain distinguishable forever.
@@ -132,7 +156,7 @@ Extra frontmatter fields and grammar rules. In other tools they are inert custom
 
 ## The linter
 
-`brain-lint` ships with the hub: `node hub/tools/brain-lint.js <brain-dir>`, zero dependencies, Apache-2.0, exit 1 on errors. It enforces the frontmatter schema, provenance, dangling links, and attic lineage in authoritative compartments (global and entity `knowledge/` and `recipes/`); belief-status and freshness are warnings; episodic and working compartments (`journal/`, `meetings/`, `import/`, `projects/`, `agents/`, `daily/`) are deliberately lenient, because write-cheap is the law there. The full contract it grows into: schema per compartment · provenance coverage · link integrity · lineage completeness · belief-status transitions · debrief-grammar checks on STATE.md · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
+`brain-lint` ships with the hub: `node hub/tools/brain-lint.js <brain-dir>`, zero dependencies, Apache-2.0, exit 1 on errors. It enforces the frontmatter schema, provenance, dangling links, and attic lineage in authoritative compartments (global and entity `knowledge/` and `recipes/`); belief-status and freshness are warnings; a missing `summary` is a warning and one over 200 characters an error, on the summary-bearing files listed above; a project `STATE.md` without `## Now`, or with one over 30 lines, is a warning; in `projects/<slug>/specs/`, a duplicate rule id or a rule without a source is an error; episodic and working compartments (`journal/`, `meetings/`, `import/`, `projects/`, `agents/`, `daily/`) are deliberately lenient, because write-cheap is the law there. The full contract it grows into: schema per compartment · provenance coverage · link integrity · lineage completeness · belief-status transitions · debrief-grammar checks on STATE.md · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
 
 ## Interoperability
 

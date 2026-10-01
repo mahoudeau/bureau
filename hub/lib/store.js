@@ -1,4 +1,4 @@
-// lib/store.js: JSON state with atomic writes. Zero dependencies.
+// lib/store.js: JSON state with atomic writes, backups and schema migrations. Zero dependencies.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -9,15 +9,72 @@ const STATE_FILE = path.join(DATA_DIR, 'state.json');
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
+// ---- Schema migrations ----
+// state.json carries schema_version. A file without one is version 0.
+// MIGRATIONS[i] takes the state from version i to i+1; they run in order on
+// boot, after a copy of the file is kept as state.json.pre-migrate-<ts>.
+// Append new migrations at the end, never edit a released one.
+const MIGRATIONS = [
+  // 0 -> 1: the field itself, plus the top-level keys older files may lack.
+  s => { for (const k of Object.keys(EMPTY)) if (s[k] === undefined) s[k] = structuredClone(EMPTY[k]); },
+];
+const SCHEMA_VERSION = MIGRATIONS.length;
+
+function stamp() { return new Date().toISOString().replace(/[:.]/g, '-'); }
+
+// Refusing to boot is the point: a hub that starts on empty state after a bad
+// read looks healthy and quietly loses every mission on its next save.
+class StorageError extends Error {}
+
 let state = null;
+
+function readState() {
+  let raw;
+  try {
+    raw = fs.readFileSync(STATE_FILE, 'utf8');
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw new StorageError(`cannot read ${STATE_FILE}: ${e.message}. Refusing to boot.`);
+    // No state file. Fine on a fresh install, suspicious when backups exist.
+    const baks = listBackups();
+    if (baks.length) throw new StorageError(`${STATE_FILE} is missing but backups exist (${baks.join(', ')}). Refusing to boot on empty state. Copy a backup to state.json, or move the backups away to start fresh.`);
+    return { ...structuredClone(EMPTY), schema_version: SCHEMA_VERSION };
+  }
+  try {
+    return JSON.parse(raw);
+  } catch (e) {
+    // One copy per distinct bad file, so a supervisor restarting the hub in a loop does not fill the disk.
+    let kept = null;
+    try {
+      const same = fs.readdirSync(DATA_DIR).filter(n => n.startsWith(BASE + '.corrupt-'))
+        .find(n => fs.readFileSync(path.join(DATA_DIR, n), 'utf8') === raw);
+      kept = same ? path.join(DATA_DIR, same) : `${STATE_FILE}.corrupt-${stamp()}`;
+      if (!same) fs.copyFileSync(STATE_FILE, kept);
+    } catch { kept = null; }
+    throw new StorageError(`${STATE_FILE} does not parse (${e.message}). ${kept ? `A copy is kept at ${kept}.` : 'Could not copy it aside.'} Refusing to boot. Restore the newest good backup (state.json.bak.1, then .bak.2, ..., or a state.json.daily-*) over state.json, see UPGRADING.md.`);
+  }
+}
+
+function migrate(s) {
+  const from = Number.isInteger(s.schema_version) ? s.schema_version : 0;
+  if (from > SCHEMA_VERSION) throw new StorageError(`${STATE_FILE} has schema_version ${from}, this hub knows up to ${SCHEMA_VERSION}. It was written by a newer Bureau. Upgrade the hub, or restore a state.json.pre-migrate-* backup.`);
+  if (from === SCHEMA_VERSION) return s;
+  if (fs.existsSync(STATE_FILE)) {
+    const pre = `${STATE_FILE}.pre-migrate-${stamp()}`;
+    fs.copyFileSync(STATE_FILE, pre);
+    console.log(`[store] migrating state from schema ${from} to ${SCHEMA_VERSION}; previous file kept at ${pre}`);
+  }
+  for (let v = from; v < SCHEMA_VERSION; v++) {
+    MIGRATIONS[v](s);
+    s.schema_version = v + 1;
+  }
+  writeNow(s);
+  return s;
+}
 
 function load() {
   if (state) return state;
-  try {
-    state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-  } catch {
-    state = structuredClone(EMPTY);
-  }
+  const s = migrate(readState());
+  state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
   state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
@@ -31,17 +88,80 @@ function load() {
   return state;
 }
 
+// Atomic write: tmp file, fsync, rename. A crash leaves the old file or the new one.
+function writeFileAtomic(file, text) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+  const tmp = file + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  fs.renameSync(tmp, file);
+}
+function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); }
+
 let saveTimer = null;
 function save() {
-  // Debounced atomic write: write tmp file then rename.
+  // Debounced: many mutations in one tick make one write.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    const tmp = STATE_FILE + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(state, null, 2));
-    fs.renameSync(tmp, STATE_FILE);
+    writeNow(state);
   }, 100);
+}
+// Called on exit, so a SIGTERM inside the debounce window loses nothing.
+function flush() {
+  if (!saveTimer) return;
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  if (state) writeNow(state);
+}
+
+// ---- Backups ----
+// Rolling: state.json.bak.1 (newest) .. bak.N, one per interval (hourly, keep 24).
+// Daily: state.json.daily-YYYY-MM-DD, first tick of each UTC day, keep 7.
+// Both are written from the in-memory state, so they are always a whole file.
+const BACKUP_INTERVAL_MS = +process.env.BUREAU_BACKUP_INTERVAL_MS || 3600_000;
+const BACKUP_KEEP = +process.env.BUREAU_BACKUP_KEEP || 24;
+const DAILY_KEEP = +process.env.BUREAU_DAILY_KEEP || 7;
+const BASE = path.basename(STATE_FILE);
+
+function listBackups() {
+  let names = [];
+  try { names = fs.readdirSync(DATA_DIR); } catch { return []; }
+  return names.filter(n => n.startsWith(BASE + '.bak.') || n.startsWith(BASE + '.daily-')).sort();
+}
+
+function rotateBackups() {
+  if (!state) return;
+  const bak = i => `${STATE_FILE}.bak.${i}`;
+  try { fs.unlinkSync(bak(BACKUP_KEEP)); } catch { }
+  for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
+    try { fs.renameSync(bak(i), bak(i + 1)); } catch { }
+  }
+  writeFileAtomic(bak(1), JSON.stringify(state, null, 2));
+}
+
+function dailySnapshot() {
+  if (!state) return;
+  const day = new Date().toISOString().slice(0, 10);
+  const file = `${STATE_FILE}.daily-${day}`;
+  if (!fs.existsSync(file)) writeFileAtomic(file, JSON.stringify(state, null, 2));
+  const dailies = listBackups().filter(n => n.startsWith(BASE + '.daily-'));
+  for (const n of dailies.slice(0, Math.max(0, dailies.length - DAILY_KEEP))) {
+    try { fs.unlinkSync(path.join(DATA_DIR, n)); } catch { }
+  }
+}
+
+function backupTick() {
+  try { rotateBackups(); dailySnapshot(); } catch (e) { console.error('[store] backup failed:', e.message); }
+}
+
+// Boot: load and migrate (throws StorageError on bad state), take today's
+// snapshot if missing, then start the rolling backups.
+function init() {
+  load();
+  try { dailySnapshot(); } catch (e) { console.error('[store] daily snapshot failed:', e.message); }
+  setInterval(backupTick, BACKUP_INTERVAL_MS).unref();
+  return { schema_version: state.schema_version };
 }
 
 function nextId(prefix) {
@@ -62,15 +182,15 @@ function acquireLock() {
   try {
     const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
     if (pid && pid !== process.pid) {
-      try {
-        process.kill(pid, 0); // throws if the process is gone
-        return { error: `data dir is owned by a live hub process (pid ${pid}); refusing to boot` };
-      } catch { /* stale lock from a dead process: take over */ }
+      let alive = true;
+      try { process.kill(pid, 0); } catch (e) { alive = e.code === 'EPERM'; } // EPERM: alive, another user's
+      if (alive) return { error: `data dir ${DATA_DIR} is owned by a live hub process (pid ${pid}, see ${LOCK_FILE}); refusing to boot` };
+      console.log(`[store] taking over stale lock from dead pid ${pid}`);
     }
   } catch { /* no lock file yet */ }
   fs.writeFileSync(LOCK_FILE, String(process.pid));
   const release = () => { try { if (parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(LOCK_FILE); } catch { } };
-  process.on('exit', release);
+  process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } release(); });
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
   return {};
 }
@@ -309,7 +429,7 @@ function expireLeases() {
       // Unified reservations: the expired holder gets first claim on its own
       // mission. claimTask lets cowork reservations lapse after the TTL, so a
       // dead shift's mission returns to the pool; the envoy's waits for him.
-      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}` });
+      t.log.push({ ts: nowISO(), by: 'system', note: `lease expired (was ${t.assignee}); back to queue, reserved for ${t.assignee}`, from: t.status, to: 'queued' });
       if (t.assignee) { t.reserved_for = t.assignee; t.reserved_at = nowISO(); }
       t.status = 'queued';
       t.assignee = null;
@@ -359,11 +479,12 @@ function claimTask({ id, agent, lease_minutes }) {
   }
   delete t.reserved_for; // any claim (owner, or explicit by id) clears the reservation
   delete t.reserved_at;
+  const fromStatus = t.status;
   t.status = 'claimed';
   t.assignee = agent;
   const mins = Number.isFinite(+lease_minutes) ? +lease_minutes : 120;
   t.lease_until = new Date(Date.now() + mins * 60000).toISOString();
-  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)` });
+  t.log.push({ ts: nowISO(), by: agent, note: `claimed (lease ${mins}m)`, from: fromStatus, to: 'claimed' });
   save();
   return { task: t };
 }
@@ -396,17 +517,40 @@ function isOwnLibrarianDigest(s, t, agentName) {
     && typeof t.title === 'string' && t.title.toLowerCase().startsWith(agentName.toLowerCase() + ':');
 }
 
-function updateTask({ id, agent, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
+// The boss's log entries say what his hand did, so approve, send-back, answer
+// and verdict can be told apart when the history is read back.
+const HUMAN_KINDS = ['approve', 'send_back', 'answer', 'verdict', 'edit'];
+function humanKind(kind, prevStatus, status, verdicts) {
+  if (HUMAN_KINDS.includes(kind)) return kind;
+  const moved = status && status !== prevStatus;
+  if (moved && prevStatus === 'review' && status === 'done') return 'approve';
+  if (moved && prevStatus === 'review' && status === 'queued') return 'send_back';
+  if (moved && prevStatus === 'blocked' && status === 'queued') return 'answer';
+  if (!moved && Array.isArray(verdicts) && verdicts.length) return 'verdict';
+  return 'edit';
+}
+
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
-  const prevStatus = t.status, prevAssignee = t.assignee;
-  // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
-  if (gate !== undefined) {
-    if (gate === 'boss') t.gate = 'boss';
-    else if (gate === 'critic' && isLead(s, agent)) t.gate = 'critic';
-    else return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
+  // History is written by someone: an update that names no agent is the lease
+  // holder's (it is the only one who should be touching the mission), and with
+  // no holder there is nobody to credit, so it is refused. A third of the live
+  // log had been filed as "unknown" before this.
+  if (!agent) {
+    if (!t.assignee) return { error: 'agent required: say which agent is acting' };
+    agent = t.assignee;
   }
+  const prevStatus = t.status, prevAssignee = t.assignee;
+  // Every check runs before anything changes, so a refused update leaves the
+  // mission exactly as it was (the gate used to be raised before a refusal).
+  if (status && !TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
+  // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
+  if (gate !== undefined && gate !== 'boss' && !(gate === 'critic' && isLead(s, agent)))
+    return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
+  // The guards below judge the update against the gate it asks for.
+  const effGate = (gate !== undefined ? gate : t.gate) || 'boss';
   // Boss-gate review entry, hub-enforced (t-119, boss ruling 2026-08-16 after
   // t-59 rounds 22-23 reached his door with no critic pass): a mission with
   // gate:boss may be PARKED into review only by an agent authorized to clear
@@ -415,13 +559,14 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // not by convention a builder has to remember. Critic-gate missions are
   // unaffected: any agent parks those exactly as before (see the plain
   // `status === 'review'` handling below, unguarded).
-  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
+  if (status === 'review' && t.status !== 'review' && effGate === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
     return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review (the librarian may park its own digest) - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
-  if ((status === 'done' || status === 'queued') && t.status === 'review' && (t.gate || 'boss') === 'boss' && agent !== 'human')
+  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human')
     return { error: 'boss-gate: only the boss moves this mission out of review' };
+  if (gate !== undefined) t.gate = gate;
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
   // the next shift reads exactly what was accepted and what needs rework.
@@ -445,10 +590,9 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
       lines.push(`${it.id} ${it.verdict}${it.comment ? ` (${it.comment})` : ''}`);
     }
     // Verdicts get their own log entry: the worker's apply pass reads them here too
-    if (lines.length) t.log.push({ ts: nowISO(), by: agent || 'human', note: `verdicts: ${lines.join(' · ')}` });
+    if (lines.length) t.log.push({ ts: nowISO(), by: agent, note: `verdicts: ${lines.join(' · ')}`, ...(agent === 'human' ? { kind: 'verdict' } : {}) });
   }
   if (status) {
-    if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;
     // blocked keeps its assignee but pauses the lease, so it never auto-requeues
     if (status === 'done' || status === 'failed' || status === 'discarded' || status === 'review' || status === 'blocked') t.lease_until = null;
@@ -472,10 +616,15 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   if (priority !== undefined) t.priority = +priority;
   if (title) t.title = title;
   if (body !== undefined) t.body = body;
-  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent || 'unknown', ...artifact });
-  t.log.push({ ts: nowISO(), by: agent || 'unknown', note: note || (status ? `status → ${status}` : 'updated') });
+  if (artifact) t.artifacts.push({ ts: nowISO(), by: agent, ...artifact });
+  // A status change is recorded as from/to beside the note, so a PATCH that
+  // carries both keeps both (the note used to replace the status line).
+  const entry = { ts: nowISO(), by: agent, note: note || (status ? `status → ${status}` : 'updated') };
+  if (status && status !== prevStatus) { entry.from = prevStatus; entry.to = status; }
+  if (agent === 'human') entry.kind = humanKind(kind, prevStatus, status, verdicts);
+  t.log.push(entry);
   save();
-  return { task: t, prev_status: prevStatus };
+  return { task: t, prev_status: prevStatus, by: agent };
 }
 
 // ---- Review capability links ----
@@ -520,7 +669,8 @@ function getMessages({ forAgent, since }) {
 }
 
 module.exports = {
-  load, save, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  StorageError, SCHEMA_VERSION, STATE_FILE,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,

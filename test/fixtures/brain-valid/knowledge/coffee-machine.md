@@ -1,5 +1,6 @@
 ---
 title: The coffee machine
+summary: The office coffee machine is decorative pixels and does not brew.
 compartment: knowledge
 permalink: coffee-machine
 version: 1
