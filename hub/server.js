@@ -56,6 +56,15 @@ function sendPage(res, code, title, bodyHtml) {
   res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
   res.end(html);
 }
+// Review evidence: artifacts that point at brain images render inline, served
+// through the link's own capability (never the hub token). The image route
+// serves only these files, so a link can't reach the rest of the brain.
+const imgOf = a => {
+  const m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+  return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
+};
+const citedImages = task => new Set((task.artifacts || []).map(imgOf).filter(Boolean).map(f => decodeURIComponent(f)));
+
 function reviewForm(task, action, token, err, kind) {
   const lastNote = (task.log || []).slice(-1)[0];
   const context = kind === 'answer' && lastNote ? `<p style="color:#666">${escHtml(lastNote.note)}</p>` : '';
@@ -70,12 +79,6 @@ function reviewForm(task, action, token, err, kind) {
       }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
-  // Review evidence: artifacts that point at brain images render inline, served
-  // through this link's own capability (never the hub token).
-  const imgOf = a => {
-    const m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
-    return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
-  };
   const evidence = (task.artifacts || []).map(a => {
     const f = imgOf(a);
     return f ? `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(decodeURIComponent(f))}" alt="${escHtml(a.label || f)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(a.label || f)}</figcaption></figure>` : '';
@@ -181,12 +184,16 @@ const server = http.createServer(async (req, res) => {
     if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
 
     // Capability-scoped image serving: a valid review link may render the brain
-    // attachments its mission cites, without ever exposing the hub token.
+    // attachments its mission cites, without ever exposing the hub token. Only
+    // those files, and only while the link is live: before, any link reached
+    // every image in the brain, other entities' included.
     const mReviewImg = p.match(/^\/r\/([a-f0-9]{32})\/img$/);
     if (mReviewImg && req.method === 'GET') {
       const found = store.findByReviewToken(mReviewImg[1]);
-      if (!found) return send(res, 404, { error: 'not found' });
-      const r = knowledge.readKnowledgeRaw(url.searchParams.get('file') || '');
+      if (!found || Date.parse(found.exp) < Date.now()) return send(res, 404, { error: 'not found' });
+      const file = url.searchParams.get('file') || '';
+      if (!citedImages(found.task).has(file)) return send(res, 404, { error: 'not found' });
+      const r = knowledge.readKnowledgeRaw(file);
       if (r === null || !r.binary) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
       return res.end(r.buf);

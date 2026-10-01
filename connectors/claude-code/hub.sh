@@ -6,10 +6,17 @@
 # Usage: hub.sh METHOD PATH [JSON_BODY]
 #   hub.sh GET  /api/state
 #   hub.sh POST /api/tasks '{"title":"...","project":"bureau"}'
-# Env: BUREAU_URL (default https://bureau.mathieu.dev),
+# Env: BUREAU_URL, or the first line of BUREAU_URL_FILE (default ~/.bureau-url),
 #      BUREAU_TOKEN_FILE (default ~/.bureau-token)
+# No default hub: a token sent to someone else's hub by mistake is a leak.
 set -e
-B="${BUREAU_URL:-https://bureau.mathieu.dev}"
+B="${BUREAU_URL:-}"
+U="${BUREAU_URL_FILE:-$HOME/.bureau-url}"
+[ -z "$B" ] && [ -f "$U" ] && B=$(head -n 1 "$U")
+if [ -z "$B" ]; then
+  echo "hub.sh: no hub address. Set BUREAU_URL, or put it in $U (e.g. http://localhost:8100)." >&2
+  exit 1
+fi
 T=$(cat "${BUREAU_TOKEN_FILE:-$HOME/.bureau-token}")
 M="$1"; P="$2"; D="${3:-}"
 if [ -n "$D" ]; then
