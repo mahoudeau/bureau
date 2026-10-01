@@ -19,7 +19,8 @@ if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set 
 const sseClients = new Set();
 function broadcast(type, data, extra) {
   store.logEvent(type, summarize(type, data));
-  discord.mirror(type, data);
+  // S2-f: notify from settings, the mission's project overriding global
+  discord.mirror(type, data, store.effectiveSettings(store.load(), data && data.project).notify);
   poke.send(type, data, extra);
   const payload = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) { try { res.write(payload); } catch { sseClients.delete(res); } }
@@ -285,7 +286,9 @@ const server = http.createServer(async (req, res) => {
       if (!b.name) return send(res, 400, { error: 'name required' });
       const a = store.upsertAgent(b);
       broadcast('agent.registered', a);
-      return send(res, 200, { agent: a });
+      // S2-c: the tags are stored, but say plainly they grant nothing here
+      const ignored = store.rolesConfigured(store.load()) && Array.isArray(b.capabilities) && b.capabilities.some(c => c === 'lead' || c === 'critic');
+      return send(res, 200, { agent: a, ...(ignored ? { note: store.SETTINGS_ROLES_NOTE } : {}) });
     }
     if (req.method === 'POST' && p === '/api/agents/heartbeat') {
       const b = await readBody(req);

@@ -89,9 +89,13 @@ function logEvent(type, data) {
 function upsertAgent({ name, kind, capabilities }) {
   const s = load();
   let a = s.agents.find(x => x.name === name);
+  // S2-c: lead/critic tags are still stored, but grant nothing while settings
+  // hold roles. Say so in the log, so nobody mistakes the tag for authority.
+  const ignored = rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => c === 'lead' || c === 'critic');
   if (!a) {
     a = { name, kind: kind || 'other', capabilities: capabilities || [], registered_at: nowISO() };
     s.agents.push(a);
+    if (ignored) logEvent('agent.capabilities_changed', { name, before: [], after: a.capabilities, note: SETTINGS_ROLES_NOTE });
   } else {
     if (kind) a.kind = kind;
     // A re-registration replaces the capabilities array, and that is how
@@ -105,7 +109,7 @@ function upsertAgent({ name, kind, capabilities }) {
       const same = before.length === capabilities.length && before.every(c => capabilities.includes(c));
       if (!same) {
         a.capabilities = capabilities;
-        logEvent('agent.capabilities_changed', { name, before, after: capabilities });
+        logEvent('agent.capabilities_changed', { name, before, after: capabilities, ...(ignored ? { note: SETTINGS_ROLES_NOTE } : {}) });
       }
     }
   }
@@ -384,14 +388,20 @@ function agentHasCapability(s, agentName, cap) {
   const a = s.agents.find(x => x.name === agentName);
   return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
 }
-// S2: when the boss set roles for an agent in settings, those decide lead and
-// critic, and self-registered capabilities no longer count for either. No
-// roles in settings: the capability check above, as before.
-function agentHasRole(s, agentName, role) {
-  const cfg = s.settings && s.settings.agents && s.settings.agents[agentName];
-  if (cfg && Array.isArray(cfg.roles)) return cfg.roles.includes(role);
-  return agentHasCapability(s, agentName, role);
+// S2-c (boss ruling 2026-10-01): once any agent has roles in settings, lead
+// and critic come from settings only, for every agent; an agent missing from
+// settings.agents holds neither, whatever it registered with. No roles set
+// anywhere: the capability check above, as before. librarian stays a capability.
+function rolesConfigured(s) {
+  const agents = s.settings && s.settings.agents;
+  return !!agents && Object.values(agents).some(a => a && Array.isArray(a.roles));
 }
+function agentHasRole(s, agentName, role) {
+  if (!rolesConfigured(s)) return agentHasCapability(s, agentName, role);
+  const cfg = s.settings.agents[agentName];
+  return !!(cfg && Array.isArray(cfg.roles) && cfg.roles.includes(role));
+}
+const SETTINGS_ROLES_NOTE = 'settings govern lead and critic; self-registered lead/critic tags grant nothing';
 function isLead(s, agentName) { return agentName === 'human' || agentHasRole(s, agentName, 'lead'); }
 function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasRole(s, agentName, 'critic'); }
 
@@ -666,5 +676,5 @@ module.exports = {
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
-  patchSettings, settingsOf, effectiveSettings,
+  patchSettings, settingsOf, effectiveSettings, rolesConfigured, SETTINGS_ROLES_NOTE,
 };
