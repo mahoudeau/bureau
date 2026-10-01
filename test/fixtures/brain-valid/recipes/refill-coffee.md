@@ -1,5 +1,6 @@
 ---
 title: Refill the coffee machine
+summary: "How to refill the pixel coffee machine: beans from the closet sprite, and leave the plant alone."
 compartment: recipe
 permalink: refill-coffee
 version: 1
