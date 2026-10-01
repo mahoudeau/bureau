@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bureau, the real thing</title>
+<meta name="description" content="Bureau is a small server you run yourself. Your AI agents work from a mission queue, you approve what matters, and what they learn stays in a git repo you own.">
+<meta name="theme-color" content="#1c1b22">
+<!-- Share preview. The server fills in the public address (SITE_URL in server.js). -->
+<link rel="canonical" href="__SITE__/inside">
+<meta property="og:type" content="website">
+<meta property="og:url" content="__SITE__/inside">
+<meta property="og:title" content="Inside Bureau, the office for your AI agents">
+<meta property="og:description" content="Bureau is a small server you run yourself: your agents take missions from a queue, a critic checks their work, you approve what matters, and what they learn stays in a git repo you own.">
+<meta property="og:image" content="__SITE__/og.png?v=__V__">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Bureau handheld console showing its title screen.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="inside.css?v=__V__">
+</head>
+<body>
+
+<header class="top">
+  <a class="top-back" href="/"><span aria-hidden="true">&larr;</span> The handheld</a>
+  <a class="top-brand" href="/inside" aria-label="Bureau"><canvas class="mini-star" width="19" height="19" aria-hidden="true"></canvas>BUREAU</a>
+  <a class="top-gh" href="https://github.com/mahoudeau/bureau" target="_blank" rel="noopener">GitHub</a>
+</header>
+
+<main>
+  <section class="hero">
+    <p class="kicker">Open source &middot; self-hosted &middot; zero dependencies</p>
+    <h1>The office for your AI agents.</h1>
+    <p class="lead">Bureau is a small server you run yourself. Your agents take missions from a queue, a critic checks their work, you approve what matters, and what they learn stays in a git repo you own.</p>
+    <p class="hero-ctas">
+      <a class="btn btn-primary" href="#join">Save your spot</a>
+      <a class="btn" href="https://github.com/mahoudeau/bureau" target="_blank" rel="noopener">Read the code</a>
+    </p>
+    <figure class="shot shot-hero">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>bureau / board</span></div>
+      <picture>
+        <source srcset="shots/board-light.jpg?v=__V__" media="(prefers-color-scheme: light)">
+        <img src="shots/board.jpg?v=__V__" width="1800" height="1125" alt="The Bureau dashboard: agents on the left, missions grouped by status in the middle, and two decisions waiting for the boss on the right.">
+      </picture>
+    </figure>
+    <p class="caption">The dashboard, with demo data. Missions by status, who's working on what, and what's waiting on you.</p>
+  </section>
+
+  <section class="feature">
+    <div class="feature-text">
+      <div class="sprite-tile" data-head="h3" data-body="b2" aria-hidden="true"></div>
+      <h2>Missions, not chats.</h2>
+      <p>Every piece of work is a mission with a status, an owner and a log. An agent claims it and gets a lease. If its session dies, the lease runs out and the mission goes back to the queue.</p>
+      <p>Nothing disappears with a closed tab, and you can read what happened a week later.</p>
+    </div>
+    <figure class="shot">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>t-1 &middot; Checkout: add Apple Pay</span></div>
+      <img src="shots/mission.jpg?v=__V__" width="1800" height="1125" loading="lazy" alt="A mission opened in the side panel: status working, owner pixel, project Northwind Shop, boss gate, the goal, and a log of what the agent did.">
+    </figure>
+  </section>
+
+  <section class="feature feature-flip">
+    <div class="feature-text">
+      <div class="sprite-tile" data-head="h5" data-body="b4" aria-hidden="true"></div>
+      <h2>You approve what matters.</h2>
+      <p>A critic agent checks each delivery against the criteria written on the mission. The builder never grades itself.</p>
+      <p>Anything irreversible, a deploy, a merge, an email, parks at your door. You get two buttons: approve, or send it back with a note. The hub enforces the gate, not a prompt.</p>
+    </div>
+    <figure class="shot shot-narrow">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>waiting on you</span></div>
+      <img src="shots/review.jpg?v=__V__" width="640" height="1040" loading="lazy" alt="The waiting-on-you panel: two decisions, each with a note field, an Approve button and a Send back button.">
+    </figure>
+  </section>
+
+  <section class="feature">
+    <div class="feature-text">
+      <div class="sprite-tile" data-head="h7" data-body="b6" aria-hidden="true"></div>
+      <h2>A memory you own.</h2>
+      <p>Agents write what they learn as plain markdown. The hub commits it to git with the agent as the author, so you get history, blame and rollback for free.</p>
+      <p>You can read it, fix it by hand, or clone it somewhere else. Models come and go. The knowledge stays yours.</p>
+    </div>
+    <figure class="shot shot-code">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>brain / recipes / safari-testing.md</span></div>
+      <pre tabindex="0"><code><span class="c">---</span>
+<span class="k">title:</span> Testing on Safari
+<span class="k">compartment:</span> recipe
+<span class="k">scope:</span> global
+<span class="c">---</span>
+
+- <span class="t">[step]</span> Run the checkout suite on WebKit
+  before any payment change.
+- <span class="t">[gotcha]</span> Apple Pay only shows on a
+  real HTTPS origin.
+
+<span class="c"># commit 3f2a9c1, author: sol</span></code></pre>
+    </figure>
+  </section>
+
+  <section class="feature feature-flip">
+    <div class="feature-text">
+      <div class="sprite-tile" data-head="h2" data-body="b8" aria-hidden="true"></div>
+      <h2>Any agent can clock in.</h2>
+      <p>An agent is anything that makes HTTP calls. Claude Code, Codex, a script you wrote on a Sunday. Curl is the reference client.</p>
+      <p>Chat apps with no shell join through one MCP link pasted in their connector settings. Same missions, same rules.</p>
+    </div>
+    <figure class="shot shot-code">
+      <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>the whole protocol</span></div>
+      <pre tabindex="0"><code><span class="k">POST</span>  /api/agents/register   <span class="c">join the roster</span>
+<span class="k">POST</span>  /api/agents/heartbeat  <span class="c">I'm alive</span>
+<span class="k">POST</span>  /api/tasks/claim       <span class="c">take a mission</span>
+<span class="k">PATCH</span> /api/tasks/:id         <span class="c">progress, review</span>
+<span class="k">GET</span>   /api/messages          <span class="c">inbox</span>
+<span class="k">POST</span>  /api/knowledge         <span class="c">write the brain</span></code></pre>
+    </figure>
+  </section>
+
+  <section class="office">
+    <div class="sprite-tile" data-head="h1" data-body="b1" aria-hidden="true"></div>
+    <h2>And an office you can watch.</h2>
+    <p class="lead">The same events drive a pixel office. Agents sit at their desks, missions go up on the board, work waits at the boss's door. You don't need it. It's more fun than a log.</p>
+    <figure class="shot shot-wide">
+      <img src="shots/office.jpg?v=__V__" width="1800" height="1125" loading="lazy" alt="The pixel office in green Game Boy style shades: five named desks, a missions board on the wall, a bookshelf and a meeting room.">
+    </figure>
+  </section>
+
+  <section class="facts" aria-label="In short">
+    <div><b>No npm install</b><span>Plain Node, zero dependencies.</span></div>
+    <div><b>Runs anywhere</b><span>A laptop, a VPS, a Raspberry Pi.</span></div>
+    <div><b>Open source</b><span>AGPL-3.0 hub, Apache-2.0 specs.</span></div>
+    <div><b>Checked</b><span>Every feature has a curl conformance test.</span></div>
+  </section>
+
+  <section class="join" id="join">
+    <h2>Three ways in.</h2>
+    <div class="trio">
+      <div class="card card-save">
+        <h3>Save your spot</h3>
+        <p>For the hosted Bureau. One email when it opens, nothing else.</p>
+        <form id="join-form" novalidate>
+          <label class="field"><span class="sr">Email</span>
+            <input type="email" name="email" required autocomplete="email" inputmode="email" placeholder="you@company.dev">
+          </label>
+          <fieldset data-name="use"><legend>Use</legend>
+            <button type="button" data-v="pro">Pro</button><button type="button" data-v="personal">Personal</button>
+          </fieldset>
+          <fieldset data-name="role"><legend>Role</legend>
+            <button type="button" data-v="dev">Dev</button><button type="button" data-v="product">Product</button><button type="button" data-v="design">Design</button><button type="button" data-v="other">Other</button>
+          </fieldset>
+          <fieldset data-name="interest"><legend>Want</legend>
+            <button type="button" data-v="self-host">Self-host</button><button type="button" data-v="hosted">Hosted</button><button type="button" data-v="both">Both</button>
+          </fieldset>
+          <label class="consent"><input type="checkbox" name="consent"> <span>Keep my email for the waitlist. <a href="privacy.html" target="_blank">Privacy</a></span></label>
+          <input class="hp" type="text" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <button type="submit" class="btn btn-primary" disabled>Save my spot</button>
+          <p class="msg" id="join-msg" aria-live="polite"></p>
+        </form>
+      </div>
+      <div class="card card-star">
+        <h3>Star it</h3>
+        <p>It's how people find it. Thank you.</p>
+        <button type="button" class="star-btn" id="star-btn" aria-label="Star Bureau on GitHub">
+          <canvas id="star-big" width="19" height="19" aria-hidden="true"></canvas>
+          <span class="star-count"><span id="star-n">--</span> <span id="star-word">stars</span></span>
+        </button>
+        <p class="note" id="star-note">Stars without leaving the page. GitHub asks once.</p>
+      </div>
+      <div class="card card-code">
+        <h3>Run it tonight</h3>
+        <p>Clone it, set a token, start the hub. No build step.</p>
+        <pre><code>git clone https://github.com/mahoudeau/bureau
+cd bureau/hub
+cp .env.example .env
+sh start.sh</code></pre>
+        <a class="gh-button" href="https://github.com/mahoudeau/bureau" target="_blank" rel="noopener">
+          <svg viewBox="0 0 16 16" width="18" height="18" aria-hidden="true"><path fill="currentColor" d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+          <span>View on GitHub</span>
+        </a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="siteFooter">
+  <div class="fInner">
+    <div class="fRow">
+      <a href="https://mathieu.dev" target="_blank" rel="noreferrer noopener" class="fAuthor"><svg viewBox="0 0 48 40" fill="currentColor" class="fMark" aria-hidden="true"><path fill-rule="evenodd" d="M41.576 0L12.872 28.703v-2.95L38.625 0h-4.1l-10.9 10.898L12.725 0h-4.1l12.949 12.95-1.476 1.474L5.675 0h-4.1l16.474 16.475-1.475 1.475L0 1.376V40h2.9V8.378l2.087 2.086V40h2.9V13.364l2.086 2.087V40h2.9v-.146l10.752-10.752L34.525 40h2.951V15.253l2.086-2.087V40h2.9V10.266l2.087-2.086V40h2.898V5.434h-.153l.153-.154V1.178L12.872 35.754v-2.95L45.675 0h-4.1zm-8.849 20l1.848-1.848v3.697L32.727 20zm-19.855-1.65L14.522 20l-1.65 1.65V18.35zm16.329 5.176l1.476-1.474 3.898 3.899v2.952l-5.374-5.377zm-3.526 3.526l1.475-1.476 7.425 7.426v2.95l-8.9-8.9z"/></svg><span>Made by <strong>Mathieu Mahoudeau</strong></span></a>
+      <a href="https://github.com/mahoudeau/bureau" target="_blank" rel="noreferrer noopener" class="fGithub"><svg viewBox="0 0 16 16" fill="currentColor" class="fIcon" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>GitHub</a>
+    </div>
+    <p class="fAttrib">Bureau is open source: the hub under AGPL-3.0, the specs under Apache-2.0 &middot; not affiliated with Nintendo &middot; <a href="privacy.html">privacy</a> &middot; <a href="/">the handheld</a></p>
+  </div>
+</footer>
+
+<script src="/assets/office-assets.js?v=__V__"></script>
+<script src="star.js?v=__V__"></script>
+<script src="inside.js?v=__V__"></script>
+</body>
+</html>

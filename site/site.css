@@ -1,0 +1,630 @@
+/* Bureau public site: the handheld.
+   Every console dimension is in --u, one "millimetre" of an original
+   90x148 handheld body. site.js sets --u and the console position each
+   frame, so the whole device scales as one object (whole view, or zoomed
+   so the screen fills the viewport). */
+
+@font-face { font-family: 'OfficePixel'; src: url('/assets/office-font.ttf?v=__V__') format('truetype'); }
+
+:root {
+  --u: 5px;
+  --desk: #1c1b22;
+  --desk-hi: #2a2833;
+  --plastic: #cdcac1;
+  --plastic-hi: #dddad2;
+  --plastic-lo: #aeaba2;
+  --bezel: #54535f;
+  --bezel-hi: #63626f;
+  --ink: #3b3a48;
+  --accent: #b8742a;
+  --accent-lo: #8c5519;
+  --rubber: #7d7c86;
+  --led-off: #3a2626;
+  --led-on: #ff4d3a;
+  /* LCD shades, set from the active palette by site.js */
+  --sh0: #0f380f; --sh1: #306230; --sh2: #8bac0f; --sh3: #9bbc0f;
+  --font: 'Pixelify Sans', 'OfficePixel', monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-snap-type: y mandatory; }
+html, body { margin: 0; background: var(--desk); color: #e8e6f0; }
+/* The console may be wider than a phone while it zooms; it must never
+   widen the page, or mobile browsers zoom the whole site out to fit.
+   `clip`, not `hidden`: hidden turns body into a scroll container, which
+   steals the stops from html's scroll snapping. */
+html, body { overflow-x: clip; max-width: 100%; }
+#room { contain: strict; }
+body {
+  font-family: var(--font);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+button { font: inherit; color: inherit; }
+
+/* ---------- the room (fixed stage) ---------- */
+#room {
+  position: fixed; inset: 0; overflow: hidden;
+  background:
+    radial-gradient(ellipse 70% 60% at 50% 42%, var(--desk-hi), transparent 70%),
+    var(--desk);
+  perspective: 1400px;
+}
+
+/* ---------- scroll track ---------- */
+#track { position: relative; z-index: 0; pointer-events: none; }
+.stop { height: 100vh; height: 100svh; scroll-snap-align: start; }
+.sr {
+  position: absolute; width: 1px; height: 1px; overflow: hidden;
+  clip: rect(0 0 0 0); white-space: nowrap;
+}
+
+/* ---------- the console ---------- */
+#console {
+  position: absolute; left: 0; top: 0;
+  width: calc(var(--u) * 90); height: calc(var(--u) * 148);
+  border-radius: calc(var(--u) * 4) calc(var(--u) * 4) calc(var(--u) * 18) calc(var(--u) * 4);
+  background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 .07 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>"),
+    linear-gradient(162deg, var(--plastic-hi) 0%, var(--plastic) 38%, var(--plastic-lo) 100%);
+  box-shadow:
+    inset calc(var(--u) * .5) calc(var(--u) * .5) calc(var(--u) * .8) rgba(255,255,255,.55),
+    inset calc(var(--u) * -.6) calc(var(--u) * -.8) calc(var(--u) * 1.2) rgba(0,0,0,.18),
+    0 calc(var(--u) * 3) calc(var(--u) * 7) rgba(0,0,0,.55),
+    0 calc(var(--u) * 1) calc(var(--u) * 1.5) rgba(0,0,0,.35);
+  will-change: transform;
+  z-index: 2;
+}
+.edge-line {
+  position: absolute; left: calc(var(--u) * 2); right: calc(var(--u) * 2);
+  top: calc(var(--u) * 5.2); height: calc(var(--u) * .35);
+  background: rgba(0,0,0,.12); box-shadow: 0 calc(var(--u) * .3) 0 rgba(255,255,255,.4);
+}
+
+/* ---------- cartridges ----------
+   One design at two scales, in --cu (a cartridge "millimetre", 57x65 like
+   the real ones): boxy grey plastic, the top corner cut off, an engraved
+   grip strip, a recessed full-colour label, the insert arrow. */
+.cartridge {
+  position: relative; display: block;
+  width: calc(var(--cu) * 57); height: calc(var(--cu) * 65);
+  filter: drop-shadow(0 calc(var(--cu) * 1.2) calc(var(--cu) * 1.6) rgba(0,0,0,.45));
+}
+.cartridge .shell {
+  position: absolute; inset: 0;
+  clip-path: polygon(0 0, 84% 0, 100% 11%, 100% 100%, 0 100%);
+  background:
+    linear-gradient(90deg, rgba(255,255,255,.18), rgba(255,255,255,0) 8%, rgba(0,0,0,0) 92%, rgba(0,0,0,.14)),
+    linear-gradient(180deg, #a8a5ae, #8c8994 70%, #7e7b86);
+}
+.cartridge .grip {
+  position: absolute; left: calc(var(--cu) * 5); top: calc(var(--cu) * 2.2);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--cu) * 3.2); letter-spacing: .1em;
+  color: #8a8792; text-shadow: 0 calc(var(--cu) * -.25) 0 rgba(0,0,0,.35), 0 calc(var(--cu) * .25) 0 rgba(255,255,255,.3);
+}
+.cartridge .ridges {
+  position: absolute; right: calc(var(--cu) * 12); top: calc(var(--cu) * 2.4);
+  width: calc(var(--cu) * 12); height: calc(var(--cu) * 4);
+  background: repeating-linear-gradient(180deg, rgba(0,0,0,.22) 0 calc(var(--cu) * .5), rgba(255,255,255,.18) calc(var(--cu) * .5) calc(var(--cu) * 1));
+}
+.cartridge .label {
+  position: absolute; left: calc(var(--cu) * 5); right: calc(var(--cu) * 5);
+  top: calc(var(--cu) * 9); height: calc(var(--cu) * 45);
+  border-radius: calc(var(--cu) * 1); overflow: hidden;
+  background: var(--lb, #f6ecd4);
+  box-shadow: inset 0 calc(var(--cu) * .5) calc(var(--cu) * .6) rgba(0,0,0,.4), 0 calc(var(--cu) * .3) 0 rgba(255,255,255,.25);
+  display: flex; flex-direction: column;
+}
+.cartridge .label canvas { width: 100%; flex: 1; min-height: 0; image-rendering: pixelated; display: block; }
+.cartridge .label b {
+  display: block; text-align: center; font-weight: normal;
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--cu) * 4.6); letter-spacing: .06em;
+  padding: calc(var(--cu) * 1.4) 0 calc(var(--cu) * 1.2);
+  color: var(--lt, #f6ecd4); background: var(--lband, #1f2d4a);
+}
+.cartridge .arrow {
+  position: absolute; left: 50%; bottom: calc(var(--cu) * 3); transform: translateX(-50%);
+  border-left: calc(var(--cu) * 3) solid transparent; border-right: calc(var(--cu) * 3) solid transparent;
+  border-top: calc(var(--cu) * 3.4) solid rgba(0,0,0,.2);
+  filter: drop-shadow(0 calc(var(--cu) * .3) 0 rgba(255,255,255,.3));
+}
+
+/* In the console: loaded from the back, so it is hidden once it is in.
+   The clip ends at the console's top edge; the cartridge only shows while
+   it rises out and drops back in. */
+.cart-slot {
+  position: absolute; left: calc(var(--u) * 16.5); top: calc(var(--u) * -70);
+  width: calc(var(--u) * 57); height: calc(var(--u) * 70);
+  overflow: hidden; pointer-events: none;
+}
+/* Positions in % of the cartridge's own height, not in --u: the console
+   grows while it zooms, and a --u offset would change with it and replay
+   the slide, as if the cartridge popped out on every scroll. */
+.cart { --cu: var(--u); position: absolute; left: 0; top: 0; transform: translateY(111%); transition: transform .45s cubic-bezier(.5,.1,.3,1); }
+.cart.out { transform: translateY(62%); } /* half out: the grip and the top of the label show */
+
+.power-switch {
+  border: 0; background: none; padding: calc(var(--u) * .4); cursor: pointer;
+  position: absolute; left: calc(var(--u) * 7.6); top: calc(var(--u) * 1);
+  display: flex; align-items: center; gap: calc(var(--u) * .8);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.3); color: rgba(59,58,72,.7);
+}
+.power-switch i {
+  width: calc(var(--u) * 6); height: calc(var(--u) * 1.8); border-radius: calc(var(--u) * .9);
+  background: rgba(0,0,0,.18); position: relative;
+}
+.power-switch i::after {
+  content: ''; position: absolute; top: calc(var(--u) * .25); left: calc(var(--u) * .3);
+  width: calc(var(--u) * 2.4); height: calc(var(--u) * 1.3); border-radius: calc(var(--u) * .6);
+  background: var(--plastic-hi); box-shadow: 0 1px 1px rgba(0,0,0,.3);
+  transition: left .3s;
+}
+#console.powered .power-switch i::after { left: calc(var(--u) * 3.3); }
+
+/* volume wheel: the sound toggle, on the right edge */
+.wheel {
+  position: absolute; right: calc(var(--u) * -1.4); top: calc(var(--u) * 40);
+  width: calc(var(--u) * 2.6); height: calc(var(--u) * 13);
+  border: 0; padding: 0; cursor: pointer;
+  border-radius: calc(var(--u) * 1.2);
+  background: linear-gradient(90deg, #9e9ba3, #c9c6cc 40%, #8b8891);
+  display: flex; flex-direction: column; justify-content: space-evenly; align-items: center;
+  overflow: hidden;
+}
+.wheel i { width: 70%; height: calc(var(--u) * .35); background: rgba(0,0,0,.28); transition: transform .3s; }
+.wheel[aria-checked="true"] i { transform: translateY(calc(var(--u) * .9)); }
+.wheel-label {
+  position: absolute; right: calc(var(--u) * 1.8); top: calc(var(--u) * 45.5);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.2); color: rgba(59,58,72,.6);
+  writing-mode: vertical-rl;
+}
+
+/* ---------- bezel and screen ---------- */
+.bezel {
+  position: absolute; left: calc(var(--u) * 5); top: calc(var(--u) * 9);
+  width: calc(var(--u) * 80); height: calc(var(--u) * 66);
+  border-radius: calc(var(--u) * 3) calc(var(--u) * 3) calc(var(--u) * 12) calc(var(--u) * 3);
+  background: linear-gradient(170deg, var(--bezel-hi), var(--bezel));
+  box-shadow:
+    inset 0 calc(var(--u) * .4) calc(var(--u) * .6) rgba(0,0,0,.45),
+    inset 0 calc(var(--u) * -.3) calc(var(--u) * .4) rgba(255,255,255,.08);
+}
+.bezel-top {
+  position: absolute; left: 0; right: 0; top: calc(var(--u) * 2.2); text-align: center;
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.5);
+  color: #b9b8c4; letter-spacing: .12em;
+}
+.led-wrap {
+  position: absolute; left: calc(var(--u) * 2.6); top: calc(var(--u) * 24);
+  display: flex; flex-direction: column; align-items: center; gap: calc(var(--u) * .9);
+}
+.led {
+  width: calc(var(--u) * 2.2); height: calc(var(--u) * 2.2); border-radius: 50%;
+  background: var(--led-off); box-shadow: inset 0 0 calc(var(--u) * .4) rgba(0,0,0,.6);
+  transition: background .25s, box-shadow .25s;
+}
+#console.on .led {
+  background: var(--led-on);
+  box-shadow: 0 0 calc(var(--u) * 1.4) rgba(255,77,58,.75), inset 0 0 calc(var(--u) * .3) rgba(255,255,255,.5);
+  animation: breathe 3.2s ease-in-out infinite;
+}
+@keyframes breathe { 50% { box-shadow: 0 0 calc(var(--u) * .7) rgba(255,77,58,.45), inset 0 0 calc(var(--u) * .3) rgba(255,255,255,.4); } }
+.led-label { font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.1); color: #9f9eab; }
+
+.screen {
+  position: absolute; left: calc(var(--u) * 11); top: calc(var(--u) * 7);
+  width: calc(var(--u) * 58); height: calc(var(--u) * 52.2);
+  overflow: hidden; background: #8e9a6c;
+  box-shadow: inset 0 0 calc(var(--u) * .8) rgba(0,0,0,.55);
+}
+#lcd { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+/* switching off: the picture collapses to a bright line, then a dot */
+#lcd.poweroff { animation: poweroff .5s ease-in forwards; }
+@keyframes poweroff {
+  0%   { transform: scale(1, 1); filter: brightness(1); }
+  45%  { transform: scale(1, .012); filter: brightness(2.6); }
+  75%  { transform: scale(.08, .012); filter: brightness(3.2); opacity: 1; }
+  100% { transform: scale(0, 0); filter: brightness(3.2); opacity: 0; }
+}
+.glare {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(var(--glare-angle, 125deg), rgba(255,255,255,.13) 0%, rgba(255,255,255,0) 38%, rgba(255,255,255,0) 72%, rgba(255,255,255,.05) 100%);
+  mix-blend-mode: screen;
+}
+
+/* words laid over the living office */
+.words { position: absolute; inset: 0; pointer-events: none; font-family: var(--font); }
+.headline {
+  position: absolute; left: 4%; right: 4%; bottom: 4%; margin: 0;
+  padding: .55em .8em; font-size: calc(var(--screen-w, 300px) * .058); line-height: 1.25;
+  color: var(--sh0); background: var(--sh3);
+  border: max(2px, calc(var(--px, 3px) * 1)) solid var(--sh0);
+  box-shadow: inset 0 0 0 max(1px, calc(var(--px, 3px) * .5)) var(--sh3), inset 0 0 0 max(2px, calc(var(--px, 3px) * 1)) var(--sh0);
+  opacity: 0; transform: translateY(12%);
+  transition: opacity .25s steps(3), transform .25s steps(3);
+}
+.headline.show { opacity: 1; transform: none; }
+.headline .caret { display: inline-block; width: .5em; animation: caret .8s steps(1) infinite; }
+@keyframes caret { 50% { opacity: 0; } }
+
+.role-card {
+  position: absolute; left: 0; top: 0; min-width: 32%; max-width: 46%;
+  padding: .45em .65em .55em; font-size: calc(var(--screen-w, 300px) * .047); line-height: 1.25;
+  color: var(--sh0); background: var(--sh3);
+  border: max(2px, calc(var(--px, 3px) * 1)) solid var(--sh0);
+  box-shadow: max(2px, calc(var(--px, 3px) * 1)) max(2px, calc(var(--px, 3px) * 1)) 0 var(--sh1);
+  transform-origin: 0 50%;
+}
+.role-card[hidden] { display: block; visibility: hidden; }
+.role-card b {
+  display: block; font-family: 'OfficePixel', monospace; font-weight: normal;
+  font-size: .78em; letter-spacing: .08em; margin-bottom: .35em;
+}
+.role-card span { display: block; }
+.role-card.pop { animation: pop .32s steps(4) both; }
+@keyframes pop { 0% { transform: scale(.2); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+
+/* ---------- stop 10: the save form, laid over the save screen ---------- */
+.save-form, .saved {
+  position: absolute; left: 6%; right: 6%; top: 6%; bottom: 5%;
+  display: flex; flex-direction: column; gap: 2.2%;
+  font-family: var(--font); color: var(--sh0);
+  font-size: calc(var(--screen-w, 300px) * .042); line-height: 1.2;
+}
+.save-form[hidden], .saved[hidden] { display: none; }
+.save-head { display: flex; align-items: center; justify-content: space-between; gap: 4%; }
+.save-title { margin: 0; font-family: 'OfficePixel', monospace; font-weight: normal; font-size: 1.05em; }
+/* one block fills per answered field, like a memory card saving */
+.save-blocks { display: flex; gap: .25em; flex: none; }
+.save-blocks i { width: .9em; height: .55em; border: max(1px, calc(var(--screen-w, 300px) * .005)) solid var(--sh0); background: var(--sh3); }
+.save-blocks i.on { background: var(--sh1); }
+.save-blocks i.next { animation: blocknext .8s steps(1) infinite; }
+@keyframes blocknext { 50% { background: var(--sh2); } }
+.save-sub { margin: 0 0 1%; font-size: .82em; color: var(--sh1); }
+/* Always a shade lighter than the screen: it reads as "type here". */
+.save-field input {
+  width: 100%; font: inherit; color: var(--sh0); background: color-mix(in srgb, var(--sh3) 50%, #fff);
+  border: max(2px, calc(var(--screen-w, 300px) * .008)) solid var(--sh0);
+  padding: .35em .5em; border-radius: 0; outline: none;
+}
+.save-field input::placeholder { color: var(--sh2); }
+.save-field input:focus { background: color-mix(in srgb, var(--sh3) 25%, #fff); box-shadow: inset 0 0 0 2px var(--sh1); }
+.save-form fieldset { border: 0; padding: 0; margin: 0; display: flex; gap: 2%; align-items: center; flex-wrap: wrap; }
+.save-form legend { float: left; width: 18%; font-size: .78em; font-family: 'OfficePixel', monospace; }
+.save-form fieldset button {
+  flex: 1; min-width: 0; font: inherit; font-size: .88em; padding: .3em 0; cursor: pointer;
+  color: var(--sh0); background: var(--sh3);
+  border: max(2px, calc(var(--screen-w, 300px) * .006)) solid var(--sh0);
+  box-shadow: 0 max(2px, calc(var(--screen-w, 300px) * .006)) 0 var(--sh1);
+}
+.save-form fieldset button[aria-pressed="true"] { background: var(--sh0); color: var(--sh3); box-shadow: none; transform: translateY(2px); }
+.save-consent { display: flex; gap: .6em; align-items: center; font-size: .78em; cursor: pointer; }
+/* a pixel checkbox in the screen's shades: empty square, then a solid
+   inner square once ticked */
+.save-consent input {
+  -webkit-appearance: none; appearance: none; flex: none; margin: .05em 0 0; cursor: pointer;
+  width: max(22px, calc(var(--screen-w, 300px) * .065)); height: max(22px, calc(var(--screen-w, 300px) * .065)); border-radius: 0;
+  border: max(2px, calc(var(--screen-w, 300px) * .008)) solid var(--sh0);
+  background: color-mix(in srgb, var(--sh3) 50%, #fff);
+}
+.save-consent input:checked { background: var(--sh0); box-shadow: inset 0 0 0 max(4px, calc(var(--screen-w, 300px) * .014)) color-mix(in srgb, var(--sh3) 50%, #fff); }
+.save-consent input:focus-visible { outline: max(2px, calc(var(--screen-w, 300px) * .006)) solid var(--sh1); outline-offset: 2px; }
+.save-consent a { color: var(--sh0); }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.save-go {
+  font-family: 'OfficePixel', monospace; font-size: .95em; padding: .45em; cursor: pointer;
+  color: var(--sh3); background: var(--sh0); border: 0;
+  box-shadow: 0 max(3px, calc(var(--screen-w, 300px) * .01)) 0 var(--sh1);
+}
+.save-go:active { transform: translateY(3px); box-shadow: none; }
+.save-go:disabled { cursor: default; color: var(--sh1); background: var(--sh2); box-shadow: none; transform: none; }
+.save-msg { margin: 0; min-height: 1.2em; font-size: .8em; }
+.saved { align-items: center; justify-content: center; text-align: center; }
+.saved-title { margin: 0; font-family: 'OfficePixel', monospace; font-size: 1em; }
+.saved-title:focus { outline: none; } /* focused by script after a save, for screen readers only */
+.saved img { width: 92%; image-rendering: pixelated; border: 0; }
+.saved-actions { margin: 0; display: flex; gap: 6%; justify-content: center; }
+.saved-actions a, .saved-actions button {
+  font: inherit; font-size: .9em; color: var(--sh3); background: var(--sh0); border: 0;
+  padding: .35em .8em; text-decoration: none; cursor: pointer;
+}
+#console.blink .led { animation: ledblink .15s steps(1) 6; }
+@keyframes ledblink { 50% { background: var(--led-off); box-shadow: none; } }
+
+/* ---------- the GitHub star: a footnote line under the console ---------- */
+.gh-star {
+  position: absolute; z-index: 3; left: 50%; bottom: 2.6vh; transform: translateX(-50%);
+  white-space: nowrap;
+}
+.gh-star[hidden] { display: none; }
+.gh-star { transition: opacity .25s steps(4); }
+.gh-star.away { opacity: 0; pointer-events: none; }
+.gh-star a {
+  display: flex; flex-direction: row; align-items: center; gap: 8px;
+  color: #e8e6f0; text-decoration: none; font-family: var(--font);
+}
+.gh-star canvas {
+  width: 30px; height: 30px; image-rendering: pixelated;
+  animation: bob 1.2s steps(4) infinite;
+  filter: drop-shadow(0 4px 4px rgba(0,0,0,.45));
+}
+@keyframes bob { 50% { transform: translateY(-3px); } }
+/* the star and its count are one object: the number sits right under it */
+.star-stack { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.star-count { font-family: 'OfficePixel', monospace; font-size: 12px; line-height: 1; letter-spacing: .06em; }
+.star-label { font-size: 15px; opacity: .8; }
+.gh-star a:hover .star-label, .gh-star a:focus-visible .star-label { text-decoration: underline; opacity: 1; }
+/* GitHub's own button look, with their unmodified mark (allowed for
+   linking to a repository). */
+.gh-star .gh-button {
+  display: inline-flex; flex-direction: row; align-items: center; gap: 6px;
+  padding: 3px 10px; border-radius: 6px;
+  font: 600 13px/20px -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans', Helvetica, Arial, sans-serif;
+  color: #f0f6fc; background: #212830; border: 1px solid #3d444d; text-decoration: none;
+  box-shadow: 0 1px 0 rgba(1,4,9,.1);
+}
+.gh-star .gh-button:hover { background: #262c36; border-color: #656c76; }
+.gh-star .gh-button:focus-visible { outline: 2px solid #1f6feb; outline-offset: 2px; }
+.gh-star { display: flex; flex-direction: row; align-items: center; gap: 14px; }
+/* narrow phones: the button says it, the label goes */
+@media (max-width: 480px) { .gh-star .star-label { display: none; } }
+
+/* the CODE cartridge's screen: a two-line menu over the star */
+.code-menu {
+  position: absolute; left: 10%; right: 10%; bottom: 9%;
+  display: flex; flex-direction: column; gap: 3%;
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--screen-w, 300px) * .042);
+}
+.code-menu[hidden] { display: none; }
+.code-menu button {
+  font: inherit; text-align: left; cursor: pointer; padding: .55em .7em .55em 1.6em; position: relative;
+  color: var(--sh0); background: var(--sh3); border: max(2px, calc(var(--screen-w, 300px) * .008)) solid var(--sh0);
+}
+/* the cursor: a drawn triangle, centred on the line (the pixel font has no ▶) */
+.code-menu button.sel::before {
+  content: ''; position: absolute; left: .5em; top: 50%; transform: translateY(-50%);
+  border-left: .5em solid var(--sh0); border-top: .32em solid transparent; border-bottom: .32em solid transparent;
+  animation: caret .8s steps(1) infinite;
+}
+.code-menu button:focus-visible { outline: none; background: var(--sh2); }
+.gh-star.collected canvas { animation: collect .5s steps(5) 1, bob 1.2s steps(4) .5s infinite; }
+@keyframes collect { 0% { transform: scale(1); } 40% { transform: scale(1.5) translateY(-20px); } 100% { transform: scale(1); } }
+
+/* power-on */
+.boot {
+  position: absolute; inset: 0; background: var(--sh3);
+  display: flex; align-items: flex-start; justify-content: center; overflow: hidden;
+}
+.boot[hidden] { display: none; }
+.boot-logo {
+  font-family: 'OfficePixel', monospace; color: var(--sh0);
+  font-size: calc(var(--screen-w, 300px) * .1); letter-spacing: .06em;
+  transform: translateY(-120%);
+}
+.boot.run .boot-logo { animation: logo 1.3s steps(26) forwards; }
+@keyframes logo { to { transform: translateY(calc(var(--screen-h, 270px) * .42)); } }
+.boot.off { background: #8e9a6c; }
+.boot.fade { animation: bootfade .35s steps(4) forwards; }
+@keyframes bootfade { to { opacity: 0; } }
+
+/* ---------- below the screen ---------- */
+.wordmark {
+  position: absolute; left: calc(var(--u) * 7); top: calc(var(--u) * 78.5);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 4.6);
+  color: var(--ink); letter-spacing: .04em; font-style: italic;
+  text-shadow: 0 calc(var(--u) * .25) 0 rgba(255,255,255,.35);
+}
+
+.dpad {
+  position: absolute; left: calc(var(--u) * 8); top: calc(var(--u) * 93);
+  width: calc(var(--u) * 22); height: calc(var(--u) * 22);
+  transition: transform .08s;
+}
+.dpad::before, .dpad::after {
+  content: ''; position: absolute; background: #2c2b33; border-radius: calc(var(--u) * .8);
+  box-shadow: 0 calc(var(--u) * .5) calc(var(--u) * .6) rgba(0,0,0,.45), inset 0 calc(var(--u) * .3) 0 rgba(255,255,255,.12);
+}
+.dpad::before { left: calc(var(--u) * 7.5); top: 0; width: calc(var(--u) * 7); height: 100%; }
+.dpad::after { top: calc(var(--u) * 7.5); left: 0; height: calc(var(--u) * 7); width: 100%; }
+.dp { position: absolute; z-index: 1; width: calc(var(--u) * 7); height: calc(var(--u) * 7.5); border: 0; background: transparent; cursor: pointer; padding: 0; }
+.dp-up { left: calc(var(--u) * 7.5); top: 0; }
+.dp-down { left: calc(var(--u) * 7.5); bottom: 0; }
+.dp-left { left: 0; top: calc(var(--u) * 7.5); width: calc(var(--u) * 7.5); height: calc(var(--u) * 7); }
+.dp-right { right: 0; top: calc(var(--u) * 7.5); width: calc(var(--u) * 7.5); height: calc(var(--u) * 7); }
+.dp-hub {
+  position: absolute; z-index: 1; left: calc(var(--u) * 9); top: calc(var(--u) * 9);
+  width: calc(var(--u) * 4); height: calc(var(--u) * 4); border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #3a3942, #25242b); pointer-events: none;
+}
+/* The pad rocks toward the pressed arm. Its own perspective keeps the tilt
+   flat against the console (no shared 3D space, so it never sinks behind
+   the plastic). */
+.dpad.tilt-up { transform: perspective(calc(var(--u) * 60)) rotateX(10deg); }
+.dpad.tilt-down { transform: perspective(calc(var(--u) * 60)) rotateX(-10deg); }
+.dpad.tilt-left { transform: perspective(calc(var(--u) * 60)) rotateY(-10deg); }
+.dpad.tilt-right { transform: perspective(calc(var(--u) * 60)) rotateY(10deg); }
+
+.btn-round {
+  position: absolute; width: calc(var(--u) * 10.5); height: calc(var(--u) * 10.5);
+  border-radius: 50%; border: 0; cursor: pointer; padding: 0;
+  background: radial-gradient(circle at 38% 32%, #d38c3d, var(--accent) 45%, var(--accent-lo));
+  box-shadow: 0 calc(var(--u) * .7) 0 #5f3a10, 0 calc(var(--u) * 1.2) calc(var(--u) * 1.4) rgba(0,0,0,.45),
+              inset 0 calc(var(--u) * .3) calc(var(--u) * .3) rgba(255,255,255,.3);
+  transition: transform .06s, box-shadow .06s;
+}
+.btn-b { left: calc(var(--u) * 56); top: calc(var(--u) * 102); }
+.btn-a { left: calc(var(--u) * 72); top: calc(var(--u) * 95); }
+.btn-round.pressed, .btn-round:active {
+  transform: translateY(calc(var(--u) * .6));
+  box-shadow: 0 calc(var(--u) * .1) 0 #5f3a10, 0 calc(var(--u) * .4) calc(var(--u) * .6) rgba(0,0,0,.4),
+              inset 0 calc(var(--u) * .3) calc(var(--u) * .4) rgba(0,0,0,.25);
+}
+.btn-label {
+  position: absolute; font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.9); color: var(--ink);
+}
+.lab-b { left: calc(var(--u) * 60); top: calc(var(--u) * 114.5); }
+.lab-a { left: calc(var(--u) * 76); top: calc(var(--u) * 107.5); }
+
+.pill {
+  position: absolute; width: calc(var(--u) * 11); height: calc(var(--u) * 3.2);
+  border-radius: calc(var(--u) * 1.6); border: 0; cursor: pointer; padding: 0;
+  background: linear-gradient(180deg, #8a8993, var(--rubber));
+  box-shadow: 0 calc(var(--u) * .45) 0 #4e4d56, inset 0 calc(var(--u) * .25) 0 rgba(255,255,255,.25);
+  transform: rotate(-25deg); transition: transform .06s;
+}
+.pill-select { left: calc(var(--u) * 29); top: calc(var(--u) * 127); }
+.pill-start { left: calc(var(--u) * 44); top: calc(var(--u) * 127); }
+.pill.pressed, .pill:active { transform: rotate(-25deg) translateY(calc(var(--u) * .4)); box-shadow: 0 0 0 #4e4d56; }
+.pill-label {
+  position: absolute; font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.25);
+  color: rgba(59,58,72,.8); transform: rotate(-25deg); letter-spacing: .06em;
+}
+.lab-select { left: calc(var(--u) * 29.5); top: calc(var(--u) * 132.5); }
+.lab-start { left: calc(var(--u) * 45.5); top: calc(var(--u) * 132.5); }
+
+.speaker {
+  position: absolute; left: calc(var(--u) * 63); top: calc(var(--u) * 121);
+  width: calc(var(--u) * 22); height: calc(var(--u) * 20);
+  transform: rotate(-28deg); display: flex; gap: calc(var(--u) * 2.1); justify-content: center;
+}
+.speaker i {
+  width: calc(var(--u) * 1.5); height: calc(var(--u) * 15); border-radius: calc(var(--u) * .75);
+  background: rgba(0,0,0,.22); box-shadow: inset 0 calc(var(--u) * .3) calc(var(--u) * .3) rgba(0,0,0,.35), 0 calc(var(--u) * .2) 0 rgba(255,255,255,.35);
+}
+
+button:focus-visible { outline: 2px solid #ffd27a; outline-offset: 2px; }
+
+/* ---------- cartridge rack (desktop) ---------- */
+#rack {
+  position: absolute; display: flex; flex-direction: column; gap: 14px;
+  right: max(4vw, 24px); top: 50%; transform: translateY(-50%);
+  transition: opacity .3s; z-index: 1;
+}
+.cart-pick {
+  --cu: min(2.1px, 0.26vh);
+  border: 0; padding: 0; background: none; cursor: pointer;
+  transition: transform .15s steps(3);
+}
+.cart-pick:hover, .cart-pick:focus-visible { transform: translateY(-5px) rotate(-1.5deg); }
+#rack.faded { opacity: 0; pointer-events: none; }
+@media (max-width: 900px) { #rack { display: none; } }
+
+/* ---------- the headline above the console ---------- */
+.site-title {
+  position: absolute; z-index: 1; left: 50%; top: 3.2vh; transform: translateX(-50%); /* under the console: a zoom covers it */
+  margin: 0; width: max-content; max-width: 92vw; text-align: center;
+  font-family: 'OfficePixel', monospace; font-weight: normal; letter-spacing: .04em;
+  font-size: clamp(13px, 1.9vw, 26px); line-height: 1.4; color: #f0eef7;
+  text-shadow: 0 3px 0 #0e0d12;
+  transition: opacity .25s steps(4);
+}
+.site-title.away { opacity: 0; }
+@media (max-width: 600px) { .site-title { top: calc(max(10px, env(safe-area-inset-top)) + 64px); font-size: min(11px, 2.9vw); letter-spacing: 0; white-space: nowrap; } }
+
+/* ---------- left of the console: the bridge to the full page ----------
+   Deliberately not pixel: it's the door out of the console, so it looks
+   like the page it leads to. */
+.bridge {
+  position: absolute; z-index: 3; left: max(4vw, 28px); top: 50%; transform: translateY(-50%);
+  width: clamp(230px, 19vw, 300px);
+  display: flex; flex-direction: column; gap: 16px; padding: 14px 14px 18px;
+  color: #f0eef7; text-decoration: none;
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* the same card as on /inside: square, 2px line, hard green offset */
+  background: #262430; border: 2px solid #3d3a4a;
+  box-shadow: 6px 6px 0 rgba(48,98,48,.55);
+  transition: opacity .3s, transform .35s cubic-bezier(.2,.8,.2,1), border-color .3s, box-shadow .35s;
+}
+.bridge:hover { transform: translateY(calc(-50% - 4px)); border-color: #5b5770; box-shadow: 8px 10px 0 rgba(48,98,48,.7); }
+.bridge:focus-visible { outline: 3px solid #ffd27a; outline-offset: 4px; }
+.bridge.away { opacity: 0; pointer-events: none; }
+.bridge-shot {
+  display: block; position: relative; overflow: hidden;
+  aspect-ratio: 16 / 10; background: #111;
+  border: 2px solid #3d3a4a;
+}
+.bridge-shot img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: left top; transform: scale(1.12); transform-origin: 30% 20%; transition: transform .6s cubic-bezier(.2,.8,.2,1); }
+.bridge:hover .bridge-shot img { transform: scale(1); }
+.bridge-shot::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 55%, rgba(28,27,34,.55)); }
+.bridge-text { display: flex; flex-direction: column; gap: 6px; padding: 0 4px; }
+.bridge-title { font-size: 18px; font-weight: 650; letter-spacing: -.01em; line-height: 1.25; }
+.bridge-sub { font-size: 13.5px; line-height: 1.45; color: #b9b7c6; }
+.bridge-go { margin-top: 6px; font-size: 14px; font-weight: 600; color: #b5d33a; }
+.bridge-arrow { display: inline-block; transition: transform .3s cubic-bezier(.2,.8,.2,1); }
+.bridge:hover .bridge-arrow { transform: translateX(5px); }
+/* narrow screens: no side column, so a compact row above the star line */
+@media (max-width: 900px) {
+  .bridge {
+    top: auto; bottom: calc(3vh + 50px); left: 50%; transform: translateX(-50%);
+    width: min(92vw, 420px); flex-direction: row; align-items: center; gap: 12px; padding: 8px 14px 8px 8px;
+    box-shadow: 4px 4px 0 rgba(48,98,48,.55);
+  }
+  .bridge:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 5px 6px 0 rgba(48,98,48,.7); }
+  .bridge-shot { width: 72px; flex: none; }
+  .bridge-sub { display: none; }
+  .bridge-title { font-size: 15px; }
+  .bridge-go { margin: 0; font-size: 13px; }
+}
+@media (prefers-reduced-motion: reduce) { .bridge, .bridge-shot img, .bridge-arrow { transition: opacity .3s; } }
+
+/* ---------- the X: zoom back out to the whole console ---------- */
+.unzoom {
+  position: absolute; z-index: 6; top: max(14px, env(safe-area-inset-top)); left: 16px;
+  width: 40px; height: 40px; padding: 0; cursor: pointer;
+  font-family: 'OfficePixel', monospace; font-size: 20px; line-height: 1;
+  color: #e8e6f0; background: #2a2833; border: 2px solid #e8e6f0;
+  box-shadow: 0 3px 0 #0e0d12;
+}
+.unzoom[hidden] { display: none; }
+.unzoom:hover { background: #3a3845; }
+.unzoom:active { transform: translateY(3px); box-shadow: none; }
+
+/* ---------- plain view ---------- */
+/* The way in for anyone the console doesn't suit: visible, labelled, never
+   a footnote. */
+.plain-link {
+  position: fixed; left: 16px; bottom: 16px; z-index: 5;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 10px 16px; border-radius: 8px;
+  color: #f0eef7; background: #2a2833; border: 1px solid #4a4857;
+  text-decoration: none; font-family: system-ui, sans-serif;
+  box-shadow: 0 4px 14px rgba(0,0,0,.35);
+}
+.plain-link-title { font-size: 16px; font-weight: 600; }
+.plain-link-sub { font-size: 13px; color: #b9b7c6; }
+.plain-link:hover { background: #34323f; border-color: #6a6879; }
+.plain-link:focus-visible { outline: 3px solid #ffd27a; outline-offset: 2px; }
+@media (max-width: 600px) {
+  .plain-link { bottom: auto; top: max(10px, env(safe-area-inset-top)); left: auto; right: 12px; padding: 7px 12px; }
+  .plain-link-title { font-size: 14px; }
+  .plain-link-sub { font-size: 11px; }
+}
+
+.plain {
+  --p-bg: #f7f4ea; --p-ink: #1d1c24; --p-soft: #55535f; --p-line: #d9d4c4; --p-link: #7a3d0c;
+  position: fixed; inset: 0; z-index: 10; overflow: auto;
+  background: var(--p-bg); color: var(--p-ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; font-size: 20px; line-height: 1.6;
+}
+@media (prefers-color-scheme: dark) {
+  .plain { --p-bg: #1c1b22; --p-ink: #eeecf5; --p-soft: #b3b1c0; --p-line: #3a3845; --p-link: #f2c94c; }
+}
+.plain[hidden] { display: none; }
+.plain-in { max-width: 720px; margin: 0 auto; padding: 40px 20px 80px; }
+.plain h2 { font-size: 34px; line-height: 1.2; margin: 24px 0 12px; }
+.plain h3 { font-size: 24px; margin: 40px 0 10px; padding-top: 20px; border-top: 1px solid var(--p-line); }
+.plain-lead { font-size: 21px; color: var(--p-soft); margin: 0 0 8px; }
+.plain ul { padding-left: 1.2em; }
+.plain li { margin: 0 0 10px; }
+.plain a { color: var(--p-link); text-underline-offset: 3px; }
+.plain-close {
+  font: 600 17px/1 system-ui, sans-serif; padding: 12px 18px; cursor: pointer; border-radius: 8px;
+  color: var(--p-ink); background: none; border: 2px solid var(--p-ink);
+}
+.plain-close:focus-visible, .plain a:focus-visible { outline: 3px solid var(--p-link); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .led, #console.on .led { animation: none; }
+  .cart, .headline, .role-card.pop { transition: none; animation: none; }
+  .gh-star canvas, .gh-star.collected canvas { animation: none; }
+}
