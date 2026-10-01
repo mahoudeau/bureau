@@ -45,7 +45,7 @@ Edit `.env` and set `BUREAU_TOKEN` to the random string. Keep `PORT=8100` unless
 | `BUREAU_SWEEP_MS` | 60000 | Lease-expiry and standing-work sweep interval. |
 | `BUREAU_RESERVATION_TTL_MIN` | 30 | Minutes before a `cowork` agent's reservation lapses. Tests set 0.02. |
 
-`start.sh` sources `.env`, so values in `.env` override the same variables in the calling shell.
+`start.sh` loads `.env` only for variables the calling shell or host left unset: a variable already set in the environment wins. The listen address comes from `IP`, then `HOST`, then `::`.
 
 ## 4. Start
 
@@ -146,7 +146,7 @@ curl -s -X POST http://localhost:8100/api/knowledge -H "Authorization: Bearer $T
 | Symptom | Cause | Fix |
 |---|---|---|
 | `data dir is owned by a live hub process (pid N); refusing to boot` | Another hub uses the same `BUREAU_DATA_DIR`. | Stop that process, or point this one at another data dir. A lock left by a dead process is taken over automatically. |
-| `Error: listen EADDRINUSE: address already in use :::8100` | Port taken. | Change `PORT` in `.env` (not in the shell: `.env` wins). |
+| `Error: listen EADDRINUSE: address already in use :::8100` | Port taken. | Change `PORT` in `.env`, or set it in the shell (the shell wins over `.env`). |
 | `{"error": "unauthorized"}` | Wrong or missing token. | Send `Authorization: Bearer <BUREAU_TOKEN>`. |
 | `{"error": "unknown project: x", "projects": [...]}` | Missions need an existing project. | Use one from the list, or create it: `POST /api/projects` with `{"label":"x"}`. |
 
