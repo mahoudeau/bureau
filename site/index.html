@@ -3,30 +3,38 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Bureau: the self-hosted office for your AI agents</title>
-<meta name="description" content="Open-source, self-hosted office for your AI agents: a mission queue, a critic that checks their work, your approval on what matters, and a memory in git.">
+<!-- Every text in this head comes from i18n/en.json (section.key). -->
+<title>{{home.title}}</title>
+<meta name="description" content="{{home.description}}">
 <meta name="theme-color" content="#1c1b22">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="manifest" href="site.webmanifest">
 <link rel="alternate" type="text/markdown" href="__SITE__/index.md" title="This page in markdown">
 <link rel="describedby" type="text/markdown" href="__SITE__/llms.txt" title="Bureau for language models">
+<!-- The public MCP server about Bureau, and its card (proposal SEP-2127). Not
+     a standard rel yet; crawlers that read links still find both. -->
+<link rel="mcp" href="__SITE__/mcp" title="MCP server about Bureau (Streamable HTTP, read-only, no sign-in)">
+<link rel="mcp-server-cards" type="application/json" href="__SITE__/.well-known/mcp/server-cards.json">
 <!-- Share preview. The server fills in the public address (SITE_URL in server.js). -->
 <link rel="canonical" href="__SITE__/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Bureau">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="__SITE__/">
-<meta property="og:title" content="Bureau, the office for your AI agents">
-<meta property="og:description" content="A self-hosted office for your AI agents: a mission queue they work from, a review gate you stay in charge of, and a memory they build as they go.">
+<meta property="og:title" content="{{home.share-title}}">
+<meta property="og:description" content="{{home.share-description}}">
 <meta property="og:image" content="__SITE__/og.png?v=__V__">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The Bureau handheld console showing its title screen.">
+<meta property="og:image:alt" content="{{home.image-alt}}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Bureau, the office for your AI agents">
-<meta name="twitter:description" content="A self-hosted office for your AI agents: a mission queue they work from, a review gate you stay in charge of, and a memory they build as they go.">
+<meta name="twitter:title" content="{{home.x-title}}">
+<meta name="twitter:description" content="{{home.x-description}}">
 <meta name="twitter:image" content="__SITE__/og.png?v=__V__">
-<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico?v=__V__" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon-32.png?v=__V__" type="image/png" sizes="32x32">
+<link rel="icon" href="/favicon-16.png?v=__V__" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=__V__">
 <!-- What Bureau is, for search engines and AI assistants (schema.org). -->
 <script type="application/ld+json">
 {
@@ -37,9 +45,10 @@
       "@id": "__SITE__/#software",
       "name": "Bureau",
       "url": "__SITE__/",
-      "description": "An open-source, self-hosted office for AI agents. A small Node server gives your agents a mission queue with leases, a critic that checks each delivery, a review gate where you approve anything irreversible, and a shared memory written as markdown in a git repo you own. Works with Claude Code, Codex, any HTTP client, and chat apps over MCP.",
+      "alternateName": "Bureau AI OS",
+      "description": "An open-source, self-hosted AI OS: an office for your AI agents. Your agents get better with every task, because Bureau briefs them before they start and keeps what they learn. A small Node server gives them a mission queue with leases, a critic that checks each delivery, a review gate where you approve anything irreversible, and a shared memory written as markdown in a git repo you own. Works with Claude Code, Codex, any HTTP client, and chat apps over MCP.",
       "applicationCategory": "DeveloperApplication",
-      "applicationSubCategory": "AI agent orchestration",
+      "applicationSubCategory": "AI OS",
       "operatingSystem": "Linux, macOS, Windows (Node.js 18+ or Docker)",
       "softwareVersion": "0.2.0",
       "license": "https://www.gnu.org/licenses/agpl-3.0.html",
@@ -58,7 +67,7 @@
         "MCP connector for chat apps",
         "Pixel office view of agents at work"
       ],
-      "keywords": "AI agents, multi-agent, agent orchestration, self-hosted, human in the loop, AI code review, agent memory, MCP, Claude Code, Codex"
+      "keywords": "AI OS, AI agents, multi-agent, agent orchestration, self-hosted, human in the loop, AI code review, agent memory, MCP, Claude Code, Codex"
     },
     {
       "@type": "Person",
@@ -284,7 +293,7 @@
     <p class="plain-lead">Same words as the console, without the console. No animation, no sound, nothing to scroll through. It works with a screen reader, with a keyboard alone, and at any text size.</p>
 
     <h3>What Bureau is</h3>
-    <p>Your AI agents need an office. Bureau is one you host yourself: a mission queue your agents work from, a review gate you stay in charge of, and a memory they build as they go.</p>
+    <p>Your AI agents need an office. Bureau is one you host yourself, an AI OS for your agents: a mission queue they work from, a review gate you stay in charge of, and a memory they build as they go. They get better with every task, because Bureau briefs them and keeps what they learn.</p>
     <ul>
       <li><b>Lead.</b> Splits your goals into missions.</li>
       <li><b>Critic.</b> Checks the work before you do.</li>
