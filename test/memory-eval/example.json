@@ -1,0 +1,10 @@
+[
+  { "id": "ex-01", "question": "How do I refill the coffee machine?", "expected": [{ "file": "recipes/refill-coffee.md" }], "tags": ["recipe", "easy"] },
+  { "id": "ex-02", "question": "What is the deploy process for the arcade cabinet?", "expected": [{ "file": "recipes/deploy-arcade.md" }], "tags": ["recipe", "deploy"] },
+  { "id": "ex-03", "question": "Which recipe covers the toaster network errors?", "expected": [{ "file": "recipes/toaster-network.md" }], "tags": ["recipe"] },
+  { "id": "ex-04", "question": "Can the coffee machine actually brew?", "expected": [{ "file": "knowledge/coffee-machine.md" }], "tags": ["knowledge"] },
+  { "id": "ex-05", "question": "What did we decide about the license and why?", "expected": [{ "file": "projects/demo/decisions.md", "section": "License" }], "tags": ["decision", "project"] },
+  { "id": "ex-06", "question": "What is the next step on the demo project?", "expected": [{ "file": "projects/demo/STATE.md", "section": "Now" }], "tags": ["state", "project"] },
+  { "id": "ex-07", "question": "When does the office go quiet in the evening?", "expected": [{ "file": "knowledge/office-hours.md" }], "tags": ["knowledge"] },
+  { "id": "ex-08", "question": "Should I water the greenery by the window?", "expected": [{ "file": "knowledge/plant-care.md" }], "tags": ["knowledge", "paraphrase"] }
+]

@@ -27,6 +27,39 @@ import { icon } from './components.js';
   }
 
   ready(init);
+  ready(followOfficeLink);
+
+  // The full office links back here with a hash naming what was clicked:
+  // #board (the mission list), #review (what waits on you), #brain, or
+  // #mission=<id>. Handled once on load and on later hash changes, then
+  // the hash is cleared so a reload does not reopen it.
+  function followOfficeLink() {
+    function follow() {
+      var h = location.hash.replace(/^#/, '');
+      if (!h) return;
+      var V2 = window.BureauV2, m = h.match(/^mission=(.+)$/);
+      if (m) V2.emit('v2:mission:open', { id: decodeURIComponent(m[1]) });
+      else if (h === 'brain') V2.emit('v2:brain:open', {});
+      else if (h === 'review' || h === 'board') {
+        var el = document.getElementById(h === 'review' ? 'v2-needs-me-now' : 'v2-board');
+        if (el) {
+          el.scrollIntoView({ block: 'start' });
+          if (!el.hasAttribute('tabindex')) el.setAttribute('tabindex', '-1');
+          el.focus({ preventScroll: true });
+        }
+      } else return;
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+    // peek-panel.js loads after this file: wait until it has booted (it
+    // fills BureauV2.peekPanel) so a mission link has a listener, 2s max
+    var tries = 0;
+    (function wait() {
+      var pp = window.BureauV2.peekPanel;
+      if ((pp && pp.registerSection) || tries++ > 40) return setTimeout(follow, 0);
+      setTimeout(wait, 50);
+    })();
+    window.addEventListener('hashchange', follow);
+  }
 
   function init() {
     var agentsRail = document.getElementById('v2-agents-rail');
@@ -71,6 +104,14 @@ import { icon } from './components.js';
     frame.src = '/office?mini=1';
     frame.title = 'The pixel office (live)';
     frameWrap.appendChild(frame);
+    // A click, tap or Enter anywhere on the mini office opens the full
+    // office: one transparent link over the frame (the frame itself takes
+    // no pointer input in mini mode).
+    var open = document.createElement('a');
+    open.className = 'v2-office-card__open';
+    open.href = '/office';
+    open.setAttribute('aria-label', 'Open the office full screen');
+    frameWrap.appendChild(open);
     card.appendChild(frameWrap);
 
     agentsRail.insertAdjacentElement('beforebegin', card);
@@ -99,7 +140,9 @@ import { icon } from './components.js';
       '.v2-office-card__caret:hover, .v2-office-card__full:hover { color: var(--v2-color-text-primary); }',
       // Edge to edge: the frame bleeds through the card padding so the
       // canvas fills the full card width with no bars around it.
-      '.v2-office-card__frame { margin: 0 calc(-1 * var(--v2-space-3, 12px)) calc(-1 * var(--v2-space-3, 12px)); overflow: hidden; border-radius: 0 0 var(--v2-radius, 8px) var(--v2-radius, 8px); background: #14121f; }',
+      '.v2-office-card__frame { position: relative; margin: 0 calc(-1 * var(--v2-space-3, 12px)) calc(-1 * var(--v2-space-3, 12px)); overflow: hidden; border-radius: 0 0 var(--v2-radius, 8px) var(--v2-radius, 8px); background: #14121f; }',
+      '.v2-office-card__open { position: absolute; inset: 0; cursor: pointer; }',
+      '.v2-office-card__open:focus-visible { outline: 2px solid var(--v2-color-text-primary); outline-offset: -2px; }',
       '.v2-office-card__frame iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }',
     ].join('\n');
     document.head.appendChild(style);
