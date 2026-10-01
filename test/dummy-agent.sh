@@ -183,6 +183,43 @@ check "approval persisted on the item" "$IT_DETAIL" '"verdict": "approved"'
 check "rejection comment persisted" "$IT_DETAIL" 'not yet convinced'
 check "verdicts reached the log" "$IT_DETAIL" 'verdicts: i1 approved'
 
+echo "7c. history at write time: from/to on status changes, agent fallback, the boss's kind"
+# The boss's hand, read back from the log entries sections 4, 7 and 7b wrote
+TID_LOG=$(api GET "/api/tasks/$TID")
+check "a review-link approve carries kind approve" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"kind": "approve"'
+check "the approve records from review" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"from": "review"'
+check "the approve records to done" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"to": "done"'
+check "a review-link send-back carries kind send_back" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"kind": "send_back"'
+check "the send-back records to queued" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"to": "queued"'
+check "an answer carries kind answer, from blocked" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"from": "blocked"'
+check "an answer carries kind answer" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"kind": "answer"'
+check "a claim records from queued" "$(echo "$TID_LOG" | grep -A2 '"note": "claimed')" '"from": "queued"'
+check "the boss's verdicts carry kind verdict" "$(api GET "/api/tasks/$TIID" | grep -A1 '"note": "verdicts: i1')" '"kind": "verdict"'
+# A worker's PATCH that carries both a status and a note keeps both
+TW=$(api POST /api/tasks '{"title":"History probe","project":"ops","priority":4,"gate":"critic"}')
+TWID=$(echo "$TW" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+TW_CLAIM="{\"agent\":\"menace\",\"id\":\"$TWID\"}"
+api POST /api/tasks/claim "$TW_CLAIM" > /dev/null
+TW_START='{"agent":"menace","status":"in_progress","note":"history probe started"}'
+api PATCH "/api/tasks/$TWID" "$TW_START" > /dev/null
+check "a status change with a note keeps the note" "$(api GET "/api/tasks/$TWID")" 'history probe started'
+check "and records from" "$(api GET "/api/tasks/$TWID" | grep -A2 '"note": "history probe started"')" '"from": "claimed"'
+check "and records to" "$(api GET "/api/tasks/$TWID" | grep -A2 '"note": "history probe started"')" '"to": "in_progress"'
+check "a worker's entry carries no kind" "$(api GET "/api/tasks/$TWID" | grep -A3 '"note": "history probe started"' | grep -c '"kind"' || true)" '^0$'
+TW_NOAGENT='{"note":"nobody named here"}'
+check "an update without agent is accepted while a lease is held" "$(api PATCH "/api/tasks/$TWID" "$TW_NOAGENT")" '"status": "in_progress"'
+check "and is credited to the lease holder" "$(api GET "/api/tasks/$TWID" | grep -B1 '"note": "nobody named here"')" '"by": "menace"'
+TW_DONE='{"agent":"menace","status":"done","note":"probe closed"}'
+api PATCH "/api/tasks/$TWID" "$TW_DONE" > /dev/null
+TU=$(api POST /api/tasks '{"title":"Unheld probe","project":"ops","priority":5}')
+TUID=$(echo "$TU" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
+TU_NOAGENT='{"note":"who am I"}'
+check "an update without agent and no holder is refused" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/tasks/$TUID" -H "$AUTH" -H "$JSON" -d "$TU_NOAGENT")" '400'
+check "the refusal says an agent is required" "$(api PATCH "/api/tasks/$TUID" "$TU_NOAGENT")" 'agent required'
+check "the refused update wrote nothing" "$(api GET "/api/tasks/$TUID" | grep -c 'who am I' || true)" '^0$'
+TU_HUMAN='{"agent":"human","status":"discarded","note":"probe not needed"}'
+check "a human edit outside review carries kind edit" "$(api PATCH "/api/tasks/$TUID" "$TU_HUMAN" | grep -A3 '"note": "probe not needed"')" '"kind": "edit"'
+
 echo "8. lease expiry re-queues abandoned work"
 T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3}')
 T2ID=$(echo "$T2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
@@ -190,6 +227,7 @@ api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minute
 sleep 3
 check "expired lease returns to queue" "$(api GET '/api/tasks?status=queued')" "\"id\": \"$T2ID\""
 check "non-cowork expiry keeps the reservation" "$(api GET "/api/tasks/$T2ID")" '"reserved_for": "menace"'
+check "a lease expiry records from and to" "$(api GET "/api/tasks/$T2ID" | grep -A3 '"note": "lease expired')" '"to": "queued"'
 # Unified reservations: cowork holders keep their mission only for the TTL.
 # The lapse check needs a hub started with a tiny BUREAU_RESERVATION_TTL_MIN (the
 # local runner sets 0.02 = 1.2s); against a default hub it would wait 30 minutes.
