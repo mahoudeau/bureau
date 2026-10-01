@@ -437,10 +437,20 @@ S6=$(new_claimed "Settings: roles drop critic" menace)
 check "settings roles override a self-registered critic tag" "$(api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review"}')" 'only the critic, the lead, or the boss'
 check "re-registering with critic changes nothing" "$(api POST /api/agents/register '{"name":"moneta","kind":"cowork","capabilities":["review","critic"]}' > /dev/null; api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review"}')" 'only the critic'
 check "role changes logged" "$(api GET /api/state)" '"type": "agent.roles_changed"'
+# S2-c: once any roles exist, settings are the only source of lead and critic.
+check "an agent absent from settings.agents has no lead (consul's capability ignored)" "$(api PATCH "/api/tasks/$S6" '{"agent":"consul","gate":"critic"}')" 'only the boss or the lead'
+UPSTART=$(api POST /api/agents/register '{"name":"upstart","kind":"dummy","capabilities":["code","lead"]}')
+check "registering with lead still succeeds" "$UPSTART" '"name": "upstart"'
+check "the reply says settings govern lead and critic" "$UPSTART" 'settings govern lead and critic'
+check "the capabilities are stored anyway" "$(agents_section | grep -A6 '"name": "upstart"')" '"lead"'
+check "the capability log says the tag grants nothing" "$(api GET /api/state | grep -A12 '"name": "upstart"')" 'grant nothing'
+check "a self-registered lead is ignored once roles exist" "$(api PATCH "/api/tasks/$S6" '{"agent":"upstart","gate":"critic"}')" 'only the boss or the lead'
 
 check "null clears back to no settings" "$(api PATCH /api/settings '{"global":{"approval":null,"default_gate":null,"notify":null,"librarian":null},"projects":{"ops":null},"agents":{"menace":null,"moneta":null}}' | tr -d ' \n')" '"settings":{"global":{},"projects":{},"agents":{}}'
 check "cleared: moneta's capability counts again" "$(api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review","note":"parked by critic"}')" '"status": "review"'
 S7=$(new_claimed "Settings: cleared" menace)
+check "cleared: a self-registered lead counts again" "$(api PATCH "/api/tasks/$S7" '{"agent":"upstart","gate":"critic"}')" '"gate": "critic"'
+api PATCH "/api/tasks/$S7" '{"agent":"menace","gate":"boss"}' > /dev/null
 check "cleared: an agent closes boss-gate work done again" "$(api PATCH "/api/tasks/$S7" '{"agent":"menace","status":"done"}')" '"status": "done"'
 check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
 
