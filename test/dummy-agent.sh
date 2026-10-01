@@ -79,7 +79,9 @@ api POST /api/agents/heartbeat '{"name":"menace","sub_agents":[{"label":"phantom
 check "still absent from the roster after being reported as a sub-agent label" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
 GHOST=$(api POST /api/tasks '{"title":"Ghost errand","priority":5}')
 GHOSTID=$(echo "$GHOST" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
-check "claiming under that same string only works via the normal claim path" "$(api POST /api/tasks/claim "{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}")" '"claimed"'
+# Body in a variable: macOS bash 3.2 mangles escaped quotes inside "$(...)"
+GHOSTCLAIM="{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}"
+check "claiming under that same string only works via the normal claim path" "$(api POST /api/tasks/claim "$GHOSTCLAIM")" '"status": "claimed"'
 check "it is now an independent roster agent, unrelated to menace's fleet" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^1$'
 api PATCH "/api/tasks/$GHOSTID" '{"agent":"phantom-crew-1","status":"done","note":"closed - was only a claim-path identity-blur proof"}' > /dev/null
 
@@ -371,7 +373,8 @@ BBID=$(echo "$BB" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 check "first worker takes the busy corner" "$(api POST /api/tasks/claim '{"agent":"worker-a"}')" "\"id\": \"$BAID\""
 check "second worker spills to the next project" "$(api POST /api/tasks/claim '{"agent":"worker-b"}')" 'Dust the pixel plants'
 check "third worker finds every desk taken" "$(api POST /api/tasks/claim '{"agent":"worker-c"}')" 'all_busy'
-check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "{\"agent\":\"worker-c\",\"id\":\"$BBID\"}")" '"claimed"'
+BBCLAIM="{\"agent\":\"worker-c\",\"id\":\"$BBID\"}"
+check "claim by id bypasses capacity" "$(api POST /api/tasks/claim "$BBCLAIM")" '"status": "claimed"'
 GOAL=$(api POST /api/tasks '{"title":"goal: tidy the corner","project":"busy-corner","priority":1}')
 GOALID=$(echo "$GOAL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 GKID=$(api POST /api/tasks '{"title":"Sweep under the goal","project":"busy-corner","priority":1}')
