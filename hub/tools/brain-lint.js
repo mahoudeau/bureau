@@ -15,6 +15,25 @@ const AUTHORITATIVE = ['knowledge', 'recipes'];
 const KNOWN_TOP = ['journal', 'meetings', 'import', 'knowledge', 'recipes', 'entities', 'projects', 'agents', 'daily', 'archive', 'attic'];
 const REQUIRED_FRONT = ['title', 'compartment', 'permalink', 'version'];
 const ATTIC_FRONT = ['retired', 'retired_by', 'retired_reason', 'superseded_by'];
+const SUMMARY_MAX = 200;
+const RULE_RE = /^\s*-\s*\**(RULE-[A-Z0-9]+-\d{2,})\b/;
+const RULE_SOURCE_RE = /\(source:\s*[^)\s][^)]*\)/;
+
+// Files an agent reads first when it loads a scope: they carry a one-line
+// `summary:` so a map of the brain can be built without opening every file.
+function needsSummary(f) {
+  const segs = f.rel.split(path.sep);
+  if (AUTHORITATIVE.includes(f.compartment)) return true;
+  if (segs[0] === 'entities' && segs.length === 3 && segs[2] === 'PROFILE.md') return true;
+  if (segs[0] === 'projects' && segs.length === 3 && segs[2] === 'STATE.md') return true;
+  return false;
+}
+
+// projects/<slug>/specs/<domain>.md: what the product does, as numbered rules.
+function isSpec(rel) {
+  const segs = rel.split(path.sep);
+  return segs[0] === 'projects' && segs.length === 4 && segs[2] === 'specs';
+}
 
 // The v0.2 layout has two axes: memory type and scope. entities/<slug>/knowledge
 // is the knowledge compartment at entity scope, held to the same strictness as
@@ -132,6 +151,25 @@ function lint(brainDir) {
         else if (!bySupersedes.has(f.front.permalink) && !bySupersedes.has(f.rel.replace(/\.md$/, '')))
           errors.push(`${f.rel}: replacement carries no "supersedes" back-link`);
       }
+    }
+
+    // Summary: one line, required on the files a scope load reads first
+    if (needsSummary(f)) {
+      const raw = f.front && f.front.summary !== undefined ? String(f.front.summary).trim().replace(/^(["'])(.*)\1$/, '$2') : '';
+      if (!raw) warnings.push(`${f.rel}: missing "summary" (one line, ${SUMMARY_MAX} chars or fewer)`);
+      else if (raw.length > SUMMARY_MAX) errors.push(`${f.rel}: summary is ${raw.length} chars, over the ${SUMMARY_MAX} limit`);
+    }
+
+    // Specs: every rule has a unique id within its file and names its source
+    if (isSpec(f.rel)) {
+      const seen = new Map();
+      f.body.split('\n').forEach(line => {
+        const m = line.match(RULE_RE);
+        if (!m) return;
+        if (seen.has(m[1])) errors.push(`${f.rel}: duplicate rule id ${m[1]}`);
+        seen.set(m[1], true);
+        if (!RULE_SOURCE_RE.test(line)) errors.push(`${f.rel}: rule ${m[1]} has no source`);
+      });
     }
 
     // Belief status and freshness (warnings in v0)

@@ -1,3 +1,8 @@
+---
+title: demo state
+summary: Demo project. The coffee machine is studied; the plastic plant is next.
+---
+
 # demo
 
 ## debrief 2026-08-11 (menace)
