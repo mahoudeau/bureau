@@ -66,11 +66,11 @@ A new hub feature comes with checks in `test/dummy-agent.sh`. If curl can't reac
 
 ## The CLA
 
-Outside contributions need a signed [Contributor License Agreement](CLA.md). The CLA assistant bot comments on your first PR with a link; sign in with GitHub and accept once. [CLA.md](CLA.md) explains what it covers and why it exists.
+Contributions to the AGPL-3.0 parts (`hub/` and everything else not listed below) need a signed [Contributor License Agreement](CLA.md). The Apache-2.0 parts need none: `docs/protocol.md`, `docs/brain-format.md`, `hub/tools/brain-lint.js`, `connectors/` and `skills/`. The CLA assistant bot comments on your first PR with a link; sign in with GitHub, give your name and email, and accept once. It asks on every PR, so ignore it if yours only touches the Apache-2.0 parts. [CLA.md](CLA.md) explains what it covers and why it exists.
 
 ## Licenses
 
-The hub is AGPL-3.0 ([LICENSE](LICENSE)). The protocol spec, the Brain Format spec, `brain-lint`, `connectors/` and `skills/` are Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)). Your contribution ships under the license of the part it touches.
+The hub is AGPL-3.0 ([LICENSE](LICENSE)). The protocol spec (`docs/protocol.md`), the Brain Format spec (`docs/brain-format.md`), brain-lint (`hub/tools/brain-lint.js`), `connectors/` and `skills/` are Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)). Your contribution ships under the license of the part it touches.
 
 ## Conduct and security
 
