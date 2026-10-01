@@ -10,13 +10,28 @@ function git(args, opts = {}) {
   return execFileSync('git', args, { cwd: BRAIN_DIR, encoding: 'utf8', ...opts });
 }
 
+// A repo with no commits makes git log complain ("does not have any commits
+// yet"), so the brain starts with an empty root commit by the hub. Built with
+// commit-tree so anything already staged in an existing empty repo stays
+// staged and is not swept into it. Checked once per process.
+let hasRoot = false;
 function ensureRepo() {
+  if (hasRoot && fs.existsSync(path.join(BRAIN_DIR, '.git'))) return;
   fs.mkdirSync(BRAIN_DIR, { recursive: true });
   if (!fs.existsSync(path.join(BRAIN_DIR, '.git'))) {
     git(['init']);
     git(['config', 'user.email', 'hub@bureau.local']);
     git(['config', 'user.name', 'Bureau']);
   }
+  try {
+    git(['rev-parse', '--verify', '-q', 'HEAD'], { stdio: 'pipe' });
+  } catch {
+    const hub = { GIT_AUTHOR_NAME: 'Bureau', GIT_AUTHOR_EMAIL: 'hub@bureau.local', GIT_COMMITTER_NAME: 'Bureau', GIT_COMMITTER_EMAIL: 'hub@bureau.local' };
+    const tree = git(['mktree'], { input: '' }).trim();
+    const sha = git(['commit-tree', tree, '-m', 'brain created'], { env: { ...process.env, ...hub } }).trim();
+    git(['update-ref', 'HEAD', sha]);
+  }
+  hasRoot = true;
 }
 
 // Confine writes to brain/, no traversal, text plus a short attachment whitelist.
