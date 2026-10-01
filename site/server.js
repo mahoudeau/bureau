@@ -39,12 +39,14 @@ const SHARED = {
   '/assets/office-assets.js': path.join(HUB_PUBLIC, 'office-assets.js'),
   '/assets/office-font.ttf': path.join(HUB_PUBLIC, 'office-font.ttf'),
 };
-const PRIVATE = new Set(['server.js', 'start.sh']);
+const PRIVATE = new Set(['server.js', 'start.sh', 'mcp.js', 'mcp-registry.json']);
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.svg': 'image/svg+xml',
   '.png': 'image/png', '.ttf': 'font/ttf', '.woff2': 'font/woff2', '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg', '.webp': 'image/webp',
+  '.txt': 'text/plain; charset=utf-8', '.xml': 'application/xml; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8', '.webmanifest': 'application/manifest+json',
 };
 
 // ---- helpers ------------------------------------------------------------
@@ -254,7 +256,7 @@ async function githubCallback(res, url) {
 // server, as deploys do) changes the version, so there is nothing to bump
 // by hand. Set ASSET_VERSION in the environment to pin it instead.
 const CACHEABLE = new Set(['.js', '.css', '.svg', '.png', '.jpg', '.webp', '.ttf', '.woff2', '.ico']);
-const VERSIONED = new Set(['.html', '.css']); // text files where __V__ and __SITE__ are replaced
+const VERSIONED = new Set(['.html', '.css', '.txt', '.xml', '.webmanifest']); // text files where __V__ and __SITE__ are replaced
 function assetVersion() {
   const h = crypto.createHash('sha1');
   const files = Object.values(SHARED);
@@ -300,10 +302,138 @@ function sendFile(res, code, file) {
   if (!VERSIONED.has(ext)) return fs.createReadStream(file).pipe(res);
   const mtime = fs.statSync(file).mtimeMs, hit = versioned.get(file);
   if (hit && hit.mtime === mtime) return res.end(hit.body);
-  const body = fs.readFileSync(file, 'utf8').split('__V__').join(ASSET_VERSION).split('__SITE__').join(SITE_URL);
+  let body = fs.readFileSync(file, 'utf8').split('__V__').join(ASSET_VERSION).split('__SITE__').join(SITE_URL);
+  if (body.includes('__FAQ_LD__')) body = body.replace('__FAQ_LD__', faqLd(body));
   versioned.set(file, { mtime, body });
   res.end(body);
 }
+
+// ---- the questions, for search engines and AI assistants -------------------
+// The FAQ is written once, as <details> in inside.html. Its structured data
+// (FAQPage JSON-LD) and the plain-text copy in /llms-full.txt are both built
+// from that markup when served, so they can never drift from the page.
+const FAQ_RE = /<details id="([^"]+)"><summary>([\s\S]*?)<\/summary><div class="faq-a">([\s\S]*?)<\/div><\/details>/g;
+const ENTITIES = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'", '&nbsp;': ' ', '&middot;': '·', '&rarr;': '→', '&larr;': '←', '&times;': '×' };
+function textOf(html) {
+  return html.replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/g, (e) => ENTITIES[e] || e).replace(/\s+/g, ' ').trim();
+}
+function faqLd(html) {
+  const qs = [...html.matchAll(FAQ_RE)].map((m) => ({
+    '@type': 'Question', name: textOf(m[2]),
+    acceptedAnswer: { '@type': 'Answer', text: textOf(m[3]) },
+  }));
+  return JSON.stringify({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: qs }).replace(/</g, '\\u003c');
+}
+// /llms-full.txt: llms.txt, then the whole of /inside as plain markdown.
+function insideAsText() {
+  const html = fs.readFileSync(path.join(SITE, 'inside.html'), 'utf8').split('__SITE__').join(SITE_URL);
+  let main = (html.match(/<main>([\s\S]*?)<\/main>/) || ['', ''])[1];
+  main = main
+    .replace(/<form[\s\S]*?<\/form>/g, '').replace(/<figure[\s\S]*?<\/figure>/g, '').replace(/<button[\s\S]*?<\/button>/g, '')
+    .replace(/<div class="faq-search">[\s\S]*?<\/div>/, '').replace(/<p class="faq-empty"[\s\S]*?<\/p>/, '')
+    .replace(/<a [^>]*href="([^"#][^"]*)"[^>]*>([\s\S]*?)<\/a>/g, (m, href, t) => '[' + textOf(t) + '](' + (href.startsWith('/') ? SITE_URL + href : href) + ')')
+    .replace(/<pre[^>]*><code>([\s\S]*?)<\/code><\/pre>/g, (m, c) => '\n```\n' + c.replace(/<[^>]+>/g, '') + '\n```\n')
+    .replace(/<h1[^>]*>([\s\S]*?)<\/h1>/g, (m, t) => '\n# ' + textOf(t) + '\n')
+    .replace(/<h2[^>]*>([\s\S]*?)<\/h2>/g, (m, t) => '\n## ' + textOf(t) + '\n')
+    .replace(/<h3[^>]*>([\s\S]*?)<\/h3>/g, (m, t) => '\n### ' + textOf(t) + '\n')
+    .replace(/<summary>([\s\S]*?)<\/summary>/g, (m, t) => '\n#### ' + textOf(t) + '\n')
+    .replace(/<li>([\s\S]*?)<\/li>/g, (m, t) => '- ' + textOf(t) + '\n')
+    .replace(/<p[^>]*>([\s\S]*?)<\/p>/g, (m, t) => '\n' + textOf(t) + '\n')
+    .replace(/<div><b>([\s\S]*?)<\/b><span>([\s\S]*?)<\/span><\/div>/g, (m, a, b) => '- ' + textOf(a) + ': ' + textOf(b) + '\n')
+    .replace(/<[^>]+>/g, '').replace(/&[a-z#0-9]+;/g, (e) => ENTITIES[e] || e)
+    .split('\n').map((l) => l.trim()).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return main;
+}
+let llmsFull = null;
+function getLlmsFull(res) {
+  const files = [path.join(SITE, 'llms.txt'), path.join(SITE, 'inside.html')];
+  const key = files.map((f) => fs.statSync(f).mtimeMs).join('|');
+  if (!llmsFull || llmsFull.key !== key) {
+    const head = fs.readFileSync(files[0], 'utf8').split('__SITE__').join(SITE_URL).trim();
+    llmsFull = { key, body: head + '\n\n---\n\n# The full page (' + SITE_URL + '/inside), as text\n\n' + insideAsText() + '\n' };
+  }
+  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(llmsFull.body);
+}
+// ---- /mcp: the public, read-only MCP server about Bureau (mcp.js) ---------
+// The product version comes from the hub's version.js when it sits next to
+// the site (the repo, and the deploy, which syncs it), else the last release.
+let PRODUCT_VERSION = '0.2.0';
+try { PRODUCT_VERSION = require('../hub/version.js').VERSION; } catch (e) {}
+const mcp = require('./mcp.js')({ SITE, SITE_URL, textOf, FAQ_RE, insideAsText, version: PRODUCT_VERSION });
+const MCP_CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Accept, Authorization, MCP-Protocol-Version, Mcp-Method, Mcp-Name, Mcp-Session-Id, Last-Event-ID',
+  'Access-Control-Expose-Headers': 'Mcp-Session-Id',
+};
+const mcpCalls = new Map(); // ip -> timestamps: 120 calls a minute is plenty for a reader
+function mcpLimited(ip) {
+  const now = Date.now(), list = (mcpCalls.get(ip) || []).filter((t) => now - t < 60 * 1000);
+  list.push(now); mcpCalls.set(ip, list);
+  if (mcpCalls.size > 5000) mcpCalls.clear();
+  return list.length > 120;
+}
+async function serveMcp(req, res) {
+  if (req.method === 'OPTIONS') { res.writeHead(204, MCP_CORS); return res.end(); }
+  if (req.method !== 'POST') {
+    // No server-sent stream: this server never pushes. A browser landing
+    // here gets a line on what this is.
+    res.writeHead(405, Object.assign({ Allow: 'POST, OPTIONS', 'Content-Type': 'application/json' }, MCP_CORS));
+    return res.end(JSON.stringify({ name: 'getbureau', about: 'Public, read-only MCP server about Bureau. POST JSON-RPC here (Streamable HTTP).', docs: SITE_URL + '/inside#faq' }));
+  }
+  const reply = (code, body) => { res.writeHead(code, Object.assign({ 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }, MCP_CORS)); res.end(body === null ? '' : JSON.stringify(body)); };
+  if (mcpLimited(clientIp(req))) return reply(429, { jsonrpc: '2.0', id: null, error: { code: -32000, message: 'too many requests, slow down' } });
+  let msg;
+  try { msg = await readJson(req, 64 * 1024); } catch (e) { return reply(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' } }); }
+  const out = mcp.handle(msg, req.headers);
+  if (out.body === null) { res.writeHead(202, MCP_CORS); return res.end(); } // notifications only
+  reply(out.status, out.body);
+}
+
+// ---- markdown versions of the pages, for agents ----------------------------
+// llms.txt v2 (llmstxt.org) points agents at page.md versions; some clients
+// ask for markdown with Accept: text/markdown instead. Both get the same text.
+const MARKDOWN = { '/index.md': 'home', '/inside.md': 'inside' };
+const MARKDOWN_OF = { '/': 'home', '/inside': 'inside' };
+function wantsMarkdown(req) {
+  const a = String(req.headers.accept || '');
+  // only when markdown is asked for ahead of HTML, never for a browser
+  return /text\/markdown/.test(a) && (!/text\/html/.test(a) || a.indexOf('text/markdown') < a.indexOf('text/html'));
+}
+function sendMarkdown(res, which) {
+  let body;
+  try {
+    const llms = fs.readFileSync(path.join(SITE, 'llms.txt'), 'utf8').split('__SITE__').join(SITE_URL).trim();
+    body = which === 'home' ? llms : '# Bureau: features, roadmap and FAQ\n\nSource: ' + SITE_URL + '/inside\n\n' + insideAsText() + '\n';
+  } catch (e) { return send(res, 500, 'markdown unavailable'); }
+  res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Cache-Control': 'no-store', Vary: 'Accept', 'X-Markdown-Tokens': String(Math.round(body.length / 4)) });
+  res.end(body);
+}
+// The sitemap, with each page's last change taken from its file.
+function sendSitemap(res) {
+  const pages = [['/', 'index.html', '1.0'], ['/inside', 'inside.html', '0.9'], ['/privacy', 'privacy.html', '0.3'], ['/llms.txt', 'llms.txt', '0.5'], ['/llms-full.txt', 'inside.html', '0.4']];
+  const urls = pages.map(([loc, file, pri]) => {
+    let mod = '';
+    try { mod = '<lastmod>' + fs.statSync(path.join(SITE, file)).mtime.toISOString().slice(0, 10) + '</lastmod>'; } catch (e) {}
+    return '  <url><loc>' + SITE_URL + loc + '</loc>' + mod + '<priority>' + pri + '</priority></url>';
+  });
+  res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' + urls.join('\n') + '\n</urlset>\n');
+}
+
+// Public proofs of ownership. Both values are public by design: the MCP
+// Registry checks the ed25519 public key (the private half lives in
+// ~/.config/getbureau on the publisher's machine), and IndexNow checks that
+// the key in a ping is served from the site.
+const INDEXNOW_KEY = '7c88e4e9ff376587e120760c193c2e83';
+const PROOFS = {
+  '/.well-known/mcp-registry-auth': 'v=MCPv1; k=ed25519; p=+l5rX4eVJ3P94rVH6jaaV0l0wpoo8kkhObEqhZeJSt8=',
+  ['/' + INDEXNOW_KEY + '.txt']: INDEXNOW_KEY,
+};
+
+// Short addresses for the two sections people link to.
+const ALIASES = { '/faq': '/inside#faq', '/roadmap': '/inside#roadmap' };
 function serveStatic(res, pathname) {
   let file;
   try { file = resolve(pathname); } catch (e) { file = null; } // a malformed %-escape is a 404, not a crash
@@ -314,6 +444,13 @@ function serveStatic(res, pathname) {
 // ---- routes ---------------------------------------------------------------
 loadWaitlist();
 http.createServer((req, res) => {
+  // Proof files for directories and search engines, answered on every host
+  // (the registry checks getbureau.dev itself, before any redirect).
+  const proof = PROOFS[req.url.split('?')[0]];
+  if (proof && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
+    return res.end(proof);
+  }
   const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
   if (REDIRECT_HOSTS.has(host) && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(301, { Location: SITE_URL + req.url, 'Cache-Control': 'public, max-age=3600' });
@@ -326,7 +463,21 @@ http.createServer((req, res) => {
   if (req.method === 'GET' && p === '/api/stars') return getStars(res);
   if (req.method === 'GET' && p === '/api/github/login') return githubLogin(res);
   if (req.method === 'GET' && p === '/api/github/callback') return githubCallback(res, url);
+  if (p === '/mcp') return serveMcp(req, res);
   if (req.method !== 'GET' && req.method !== 'HEAD') return send(res, 405, 'method not allowed');
+  if (ALIASES[p]) { res.writeHead(301, { Location: ALIASES[p], 'Cache-Control': 'public, max-age=3600' }); return res.end(); }
+  // One address per page: /index.html and /inside.html move to / and /inside.
+  if (/^\/[\w-]+\.html$/.test(p) && p !== '/404.html') {
+    const clean = p === '/index.html' ? '/' : p.slice(0, -5);
+    res.writeHead(301, { Location: clean + url.search, 'Cache-Control': 'public, max-age=3600' });
+    return res.end();
+  }
+  if (p === '/llms-full.txt') { try { return getLlmsFull(res); } catch (e) { return notFound(res, p); } }
+  if (p === '/sitemap.xml') return sendSitemap(res);
+  // Markdown for agents: /index.md and /inside.md, or the page itself when
+  // a client asks for markdown (Accept: text/markdown).
+  const md = MARKDOWN[p] || (wantsMarkdown(req) && MARKDOWN_OF[p]);
+  if (md) return sendMarkdown(res, md);
   serveStatic(res, p);
 }).listen(PORT, HOST, () => {
   console.log(`Bureau site on http://localhost:${PORT} (${signups.size} on the waitlist)`);

@@ -1,0 +1,9 @@
+{
+  "name": "Bureau, the office for your AI agents",
+  "short_name": "Bureau",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1c1b22",
+  "theme_color": "#1c1b22",
+  "icons": [{ "src": "favicon.svg?v=__V__", "sizes": "any", "type": "image/svg+xml" }]
+}
