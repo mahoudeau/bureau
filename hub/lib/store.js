@@ -401,12 +401,14 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
   const prevStatus = t.status, prevAssignee = t.assignee;
+  // Every check runs before anything changes, so a refused update leaves the
+  // mission exactly as it was (the gate used to be raised before a refusal).
+  if (status && !TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
-  if (gate !== undefined) {
-    if (gate === 'boss') t.gate = 'boss';
-    else if (gate === 'critic' && isLead(s, agent)) t.gate = 'critic';
-    else return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
-  }
+  if (gate !== undefined && gate !== 'boss' && !(gate === 'critic' && isLead(s, agent)))
+    return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
+  // The guards below judge the update against the gate it asks for.
+  const effGate = (gate !== undefined ? gate : t.gate) || 'boss';
   // Boss-gate review entry, hub-enforced (t-119, boss ruling 2026-08-16 after
   // t-59 rounds 22-23 reached his door with no critic pass): a mission with
   // gate:boss may be PARKED into review only by an agent authorized to clear
@@ -415,13 +417,14 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
   // not by convention a builder has to remember. Critic-gate missions are
   // unaffected: any agent parks those exactly as before (see the plain
   // `status === 'review'` handling below, unguarded).
-  if (status === 'review' && t.status !== 'review' && (t.gate || 'boss') === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
+  if (status === 'review' && t.status !== 'review' && effGate === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
     return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review (the librarian may park its own digest) - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
-  if ((status === 'done' || status === 'queued') && t.status === 'review' && (t.gate || 'boss') === 'boss' && agent !== 'human')
+  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human')
     return { error: 'boss-gate: only the boss moves this mission out of review' };
+  if (gate !== undefined) t.gate = gate;
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
   // the next shift reads exactly what was accepted and what needs rework.
@@ -448,7 +451,6 @@ function updateTask({ id, agent, status, note, artifact, lease_minutes, priority
     if (lines.length) t.log.push({ ts: nowISO(), by: agent || 'human', note: `verdicts: ${lines.join(' · ')}` });
   }
   if (status) {
-    if (!TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
     t.status = status;
     // blocked keeps its assignee but pauses the lease, so it never auto-requeues
     if (status === 'done' || status === 'failed' || status === 'discarded' || status === 'review' || status === 'blocked') t.lease_until = null;
