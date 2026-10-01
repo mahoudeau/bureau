@@ -222,6 +222,71 @@ fieldset button[aria-pressed="true"] { background: var(--lcd2); border-color: va
 }
 .gh-button:hover { background: #262c36; border-color: #656c76; }
 
+/* ---------- top bar links ---------- */
+.top-nav { display: flex; gap: 18px; align-items: center; }
+@media (max-width: 600px) {
+  .top { gap: 10px; }
+  .top-nav { gap: 12px; }
+  .top-back-t { display: none; } /* the arrow alone, labelled for screen readers */
+  .top-brand { font-size: 15px; }
+}
+/* anchors land below the sticky bar */
+section[id], .faq details { scroll-margin-top: 72px; }
+
+/* ---------- roadmap ---------- */
+.roadmap { border-top: 1px solid var(--line); }
+.roadmap h2, .faq h2 { font-size: clamp(30px, 5vw, 52px); }
+.roadmap .lead { margin-bottom: 1.6em; }
+.road { display: grid; grid-template-columns: 1fr; gap: 20px; }
+@media (min-width: 900px) { .road { grid-template-columns: 1.3fr 1fr 1fr; } }
+.road-col { padding: 24px; background: var(--panel); border: 2px solid var(--line); }
+.road-now { box-shadow: 6px 6px 0 color-mix(in srgb, var(--lcd1) 55%, transparent); border-color: var(--lcd1); }
+.road-col h3 { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 22px; }
+.road-col h3 small { font: 13px var(--mono); color: var(--muted); }
+.road-col .tag {
+  font-family: 'OfficePixel', monospace; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  padding: 3px 8px; border: 2px solid var(--line); color: var(--muted);
+}
+.road-now .tag { color: var(--lcd3); border-color: var(--lcd1); background: color-mix(in srgb, var(--lcd0) 60%, transparent); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .road-now .tag { color: var(--lcd0); background: color-mix(in srgb, var(--lcd3) 35%, transparent); } }
+.road-next .tag { color: var(--accent-hi); border-color: var(--accent); }
+.road ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.road li { color: var(--muted); font-size: 15.5px; line-height: 1.5; padding-left: 18px; position: relative; }
+.road li::before { content: ''; position: absolute; left: 0; top: .55em; width: 7px; height: 7px; background: var(--line); }
+.road-now li::before { background: var(--lcd2); }
+.road-next li::before { background: var(--accent); }
+.road li b { color: var(--fg); font-weight: 600; }
+
+/* ---------- FAQ ---------- */
+.faq { border-top: 1px solid var(--line); }
+.faq-search { position: sticky; top: 58px; z-index: 5; display: flex; align-items: center; gap: 14px; padding: 10px 0; margin-bottom: 14px; background: var(--bg); }
+.faq-search input {
+  flex: 1; min-width: 0; padding: 13px 16px; font: 17px var(--sans); color: var(--fg);
+  background: var(--panel); border: 2px solid var(--line);
+}
+.faq-search input:focus { border-color: var(--lcd2); outline: none; }
+.faq-count { font: 13px var(--mono); color: var(--muted); white-space: nowrap; }
+.faq-empty { color: var(--muted); }
+.faq-group { margin-top: 30px; }
+.faq-group[hidden] { display: none; }
+.faq-group h3 { font-size: 15px; font-family: 'OfficePixel', monospace; font-weight: normal; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.faq details { border: 2px solid var(--line); background: var(--panel); margin-bottom: -2px; }
+.faq details[hidden] { display: none; }
+.faq summary {
+  cursor: pointer; list-style: none; padding: 16px 48px 16px 18px; position: relative;
+  font-weight: 600; font-size: 17px;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: '+'; position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+  font-family: 'OfficePixel', monospace; font-size: 20px; color: var(--muted);
+}
+.faq details[open] summary::after { content: '\2212'; }
+.faq summary:hover { background: var(--panel-hi); }
+.faq-a { padding: 0 18px 4px; color: var(--muted); max-width: 48em; }
+.faq-a a { color: var(--fg); }
+.faq mark { background: color-mix(in srgb, var(--lcd2) 45%, transparent); color: inherit; padding: 0 1px; }
+
 /* ---------- footer (the mathieu.dev footer, as on allmiibo) ---------- */
 .siteFooter { border-top: 2px solid var(--line); margin-top: 2.5rem; }
 .fInner { max-width: 60rem; margin: 0 auto; padding: 1.25rem 1.25rem 1.5rem;

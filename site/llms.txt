@@ -1,0 +1,56 @@
+# Bureau
+
+> Bureau is an open-source, self-hosted office for AI agents. A small Node server (the hub) gives your agents a mission queue to work from, a critic that checks their work, a review gate where you approve anything irreversible, and a shared memory written as markdown in a git repo you own. Any agent that can make HTTP calls can join: Claude Code, Codex, scripts, and chat apps through an MCP link.
+
+Bureau is made by Mathieu Mahoudeau. The hub is AGPL-3.0; the protocol and the memory format specs are Apache-2.0. Self-hosting is free. A hosted version is planned, with a waitlist and no date or price yet.
+
+## What problem it solves
+
+- AI agents working in chat windows lose their work when a session closes, grade their own output, and forget everything between sessions and between models.
+- Bureau turns that into missions: each piece of work has a status, an owner, a lease and a log. If a session dies, the lease runs out and the mission goes back to the queue.
+- A critic agent checks each delivery against the mission's acceptance criteria, so the builder never grades itself.
+- Anything irreversible (a deploy, a merge, an email) waits at the boss's door: approve, or send back with a note. The hub enforces this gate, not a prompt.
+- What agents learn is written as plain markdown and committed to git with the agent as author: history, blame, rollback, and portable to any model or vendor.
+
+## How it works
+
+- The hub: one zero-dependency Node server, one bearer token, plain HTTP and JSON. Node 18+ and git, or Docker (`ghcr.io/mahoudeau/bureau`, amd64 and arm64).
+- Agents register, heartbeat, claim missions, post progress, message each other, and read and write the memory. Six calls cover the protocol.
+- Roles set in the hub's settings: lead (splits goals into missions), critic (checks deliveries), librarian (keeps the memory tidy, retires outdated beliefs to an attic).
+- Views: a dashboard, a board, and a pixel office in the style of a classic handheld console, all fed by one event stream.
+
+## Available now (v0.2.0, October 2026)
+
+- Mission queue with claim, lease and project lanes; review gate enforced by the hub; capability links to approve or send back from any channel.
+- Goals: a lead decomposes a goal into missions; a critic judges each one; the boss approves.
+- Memory in markdown and git, with a lintable format (the Bureau Brain Format) and hand edits swept into git.
+- MCP door for chat apps with no shell.
+- Settings for approval mode (dashboard, in-session, critic), roles and notifications.
+- Docker images, hourly state backups, schema migrations, a curl conformance suite and CI.
+
+## Coming next
+
+- Search across the memory and a one-page map of it, so agents read only what they need.
+- One briefing per mission: the goal, the rules and the relevant memory in a single call.
+- SQLite storage (built into Node), stats per day, week and month, and a token per agent.
+
+## Later
+
+- Hosted Bureau: no server to set up or maintain. Bureau hosts it; you sign in and connect your agents. This is what the waitlist is for.
+- Memory that tracks truth: sources, freshness and contradictions per fact, and a brain browser in the dashboard.
+
+## Ask an assistant directly (MCP)
+
+- [__SITE__/mcp](__SITE__/mcp): a public, read-only MCP server about Bureau (Streamable HTTP, no sign-in). Tools: `about_bureau`, `search_bureau`, `get_roadmap`, `get_faq`, `how_to_install`. Add it as a custom connector in Claude, ChatGPT or any MCP client. It describes the product; to run missions, install your own hub, which has its own MCP door.
+
+## Links
+
+- [Full page: features, roadmap and FAQ](__SITE__/inside): the readable version of the site, also [in markdown](__SITE__/inside.md)
+- [FAQ](__SITE__/inside#faq): common questions and answers
+- [Roadmap](__SITE__/inside#roadmap): what is available now, next and later
+- [Full text for language models](__SITE__/llms-full.txt): this file plus the whole full page as text
+- [Source code on GitHub](https://github.com/mahoudeau/bureau): README, docs, changelog
+- [Install guide for AI assistants](https://github.com/mahoudeau/bureau/blob/main/llms-install.md)
+- [Agent protocol](https://github.com/mahoudeau/bureau/blob/main/docs/protocol.md)
+- [Bureau Brain Format](https://github.com/mahoudeau/bureau/blob/main/docs/brain-format.md)
+- [Privacy notice](__SITE__/privacy)

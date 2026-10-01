@@ -929,6 +929,18 @@
 
   // ---- console layout: whole device, or zoomed so the screen fills ----
   var consoleEl = $('console'), rackEl = $('rack');
+  // What the console has to fit between on a narrow screen. Those boxes
+  // only move when the viewport does, so they are measured once per size.
+  var narrowBox = { key: '' };
+  var STRIP_H = 85; // the strip's cartridges: 65 units at --cu 1.3px (site.css)
+  function measureNarrow(vw, vh) {
+    var k = vw + 'x' + vh;
+    if (narrowBox.key === k) return narrowBox;
+    var tb = titleEl.getBoundingClientRect(), rb = realEl.getBoundingClientRect();
+    // 16px clear of the headline: fadeIfCovered hides anything within 12
+    narrowBox = { key: k, top: tb.bottom + 16, bottom: rb.top - 10 };
+    return narrowBox;
+  }
   var tilt = { x: 0, y: 0, tx: 0, ty: 0 };
   var lastLayout = '';
   function layout(zoomT) {
@@ -938,12 +950,35 @@
     var availW = wideRoom ? vw - 440 : vw;
     // leaves a band above for the headline, below for the real-thing link
     // (on narrow screens, also for the star row under it)
-    var uWhole = Math.min(vh * (wideRoom ? 0.78 : 0.62) / 156, availW * 0.92 / 92);
+    var uWhole = Math.min(vh * 0.78 / 156, availW * 0.92 / 92);
     var uZoom = Math.min(vw * 0.94 / 58, vh * 0.8 / 52.2);
     var z = REDUCED ? Math.round(zoomT) : zoomT;
+    var wholeT = vh / 2 - 74 * uWhole + 1 * uWhole, rackTop = '', strip = false;
+    if (!wideRoom) {
+      // Narrow screens stack it all: the headline, the console, the strip of
+      // cartridges under it, then the link to the full page. The console
+      // takes whatever height is left between them.
+      var nb = measureNarrow(vw, vh), gap = 12;
+      var room = nb.bottom - nb.top - STRIP_H - gap;
+      var stackU = Math.min(room / 148, availW * 0.92 / 92);
+      var plainU = Math.min(vh * 0.62 / 156, availW * 0.92 / 92);
+      // Short screens (a phone on its side, a low window) have no room for
+      // the strip: the console keeps its size, START still has the carts.
+      strip = stackU >= plainU * 0.8;
+      if (strip) {
+        uWhole = stackU;
+        wholeT = nb.top + (room - 148 * uWhole) / 2;
+        rackTop = Math.round(wholeT + 148 * uWhole + gap) + 'px';
+      } else {
+        uWhole = plainU;
+        wholeT = Math.min(vh / 2 - 73 * uWhole, vh * 0.46 - 70 * uWhole); // room below for the star
+      }
+    }
+    if (rackEl.style.top !== rackTop) rackEl.style.top = rackTop;
+    var noStrip = !wideRoom && !strip;
+    if (rackEl.classList.contains('nostrip') !== noStrip) rackEl.classList.toggle('nostrip', noStrip);
     var u = uWhole + (uZoom - uWhole) * z;
-    var wholeL = vw / 2 - 45 * uWhole, wholeT = vh / 2 - 74 * uWhole + 1 * uWhole;
-    if (!wideRoom) wholeT = Math.min(wholeT, vh * 0.46 - 70 * uWhole); // room below for the star
+    var wholeL = vw / 2 - 45 * uWhole;
     var zoomL = vw / 2 - 45 * uZoom, zoomT2 = vh * 0.47 - 42.1 * uZoom;
     var L = wholeL + (zoomL - wholeL) * z, T = wholeT + (zoomT2 - wholeT) * z;
     var sig = u.toFixed(3) + '|' + L.toFixed(1) + '|' + T.toFixed(1) + '|' + tilt.x.toFixed(2) + '|' + tilt.y.toFixed(2);
@@ -999,6 +1034,7 @@
     Snd.unlock();
     vibrate();
     if (mode === 'swap' || !powered) return;
+    if (mode === 'menu') { menuKey(key); return; }
     if (cheat(key)) return;
     if (mode === 'game') {
       if (/^(up|down|left|right)$/.test(key)) rock(key); else flash(key);
@@ -1008,11 +1044,12 @@
       return;
     }
     if (isProgram()) {
-      // SAVE and CODE: START or B ejects back to the tour; CODE's menu
-      // moves with up and down, A picks.
+      // SAVE and CODE: START opens the cartridges, B ejects back to the
+      // tour; CODE's menu moves with up and down, A picks.
       if (/^(up|down|left|right)$/.test(key)) rock(key); else flash(key);
       Snd.play('press');
-      if (key === 'start' || key === 'b') backToTour(1);
+      if (key === 'start') openMenu();
+      else if (key === 'b') backToTour(1);
       else if (key === 'select') cyclePalette();
       else if (mode === 'code' && (key === 'up' || key === 'down')) selectCode(codeSel + (key === 'down' ? 1 : -1));
       else if (mode === 'code' && key === 'a') codeAct(codeMenu.querySelectorAll('button')[codeSel].getAttribute('data-act'));
@@ -1033,7 +1070,7 @@
       else if (!a) { var l = agent('lead'); l.facing = 'front'; l.waveUntil = performance.now() + 2400; Snd.play('press'); }
     } else if (key === 'b') { Snd.play('back'); goTo(current() - 1); }
     else if (key === 'select') cyclePalette();
-    else if (key === 'start') swapCartridge(1);
+    else if (key === 'start') openMenu();
   }
   function flash(key) {
     var el = document.querySelector('[data-key="' + key + '"]');
@@ -1096,65 +1133,54 @@
   }
 
   // sound wheel
-  var wheel = $('wheel');
-  function syncWheel() { wheel.setAttribute('aria-checked', Snd.enabled ? 'true' : 'false'); }
-  wheel.addEventListener('click', function () { Snd.setEnabled(!Snd.enabled); syncWheel(); Snd.play('select'); });
+  // The state shows in three places: the wheel itself (turned, with a lit
+  // notch), ON or OFF printed next to VOL, and a speaker on the screen.
+  var wheel = $('wheel'), sndCorner = $('snd-corner'), sndToast = $('snd-toast'), sndToastT = 0;
+  // The corner speaker shows exactly when sound is on and no message is up.
+  function syncWheel() {
+    var on = Snd.enabled;
+    wheel.setAttribute('aria-checked', on ? 'true' : 'false');
+    $('wheel-state').textContent = on ? 'ON' : 'OFF';
+    sndCorner.hidden = !on || !sndToast.hidden;
+  }
+  function toggleSound() {
+    if (!powered) return;
+    if (Snd.enabled) { Snd.play('mute'); Snd.setEnabled(false); }
+    else { Snd.setEnabled(true); Snd.play('select'); }
+    sndToast.querySelector('b').textContent = Snd.enabled ? 'SOUND ON' : 'SOUND OFF';
+    sndToast.classList.toggle('off', !Snd.enabled);
+    sndToast.hidden = false;
+    clearTimeout(sndToastT);
+    sndToastT = setTimeout(function () { sndToast.hidden = true; syncWheel(); }, 1400);
+    syncWheel();
+  }
+  wheel.addEventListener('click', toggleSound);
+  addEventListener('keydown', function (e) {
+    if ((e.key === 'm' || e.key === 'M') && !(e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) && $('plain').hidden) toggleSound();
+  });
   syncWheel();
   addEventListener('pointerdown', function () { Snd.unlock(); lastInput = performance.now(); }, { passive: true });
 
   // ---- cartridges --------------------------------------------------------
-  // Printed labels, in full colour (not the screen's 4 shades): each has
-  // its own 4-colour palette, small pixel art, and a title band.
+  // Printed labels, in full colour (not the screen's 4 shades): the name
+  // and one line saying what the cartridge does (boss pick, 2026-10-01:
+  // words over pictures, the scenes were too fiddly to read).
   var LABELS = {
-    tour:    { title: 'BUREAU',   shades: ['#1f2d4a', '#3d7a8c', '#e7a93b', '#f6ecd4'] },
-    save:    { title: 'SAVE',     shades: ['#3a1c24', '#b53d2e', '#f09a4a', '#f8edd6'] },
-    code:    { title: 'CODE',     shades: ['#1e1633', '#5b3ea6', '#f2c94c', '#f1ebf7'] },
-    bughunt: { title: 'BUG HUNT', shades: ['#10251a', '#2e7d4f', '#9fd356', '#eef7d9'] },
+    tour:    { title: 'TOUR',     line: 'See how it works',    shades: ['#1f2d4a', '#3d7a8c', '#e7a93b', '#f6ecd4'] },
+    save:    { title: 'JOIN',     line: 'Get on the waitlist', shades: ['#3a1c24', '#b53d2e', '#f09a4a', '#f8edd6'] },
+    code:    { title: 'CODE',     line: 'Star it on GitHub',   shades: ['#1e1633', '#5b3ea6', '#f2c94c', '#f1ebf7'] },
+    bughunt: { title: 'BUG HUNT', line: 'The hidden game',     shades: ['#10251a', '#2e7d4f', '#9fd356', '#eef7d9'] },
   };
-  Object.keys(LABELS).forEach(function (k) { A.PALETTES['label-' + k] = { label: k, shades: LABELS[k].shades }; });
-  A.SPRITES['site-bug'] = ['.0....0.', '..0000..', '.031130.', '01111110', '.011110.', '01111110', '.011110.', '0.0..0.0'];
-  function drawLabelArt(kind, cv) {
-    var c = cv.getContext('2d'), p = 'label-' + kind, sh = LABELS[kind].shades;
-    c.imageSmoothingEnabled = false;
-    var box = function (x, y, w, h, i) { c.fillStyle = sh[i]; c.fillRect(x, y, w, h); };
-    if (kind === 'tour') {
-      // an agent at work, window behind, a folder on the desk
-      box(0, 0, 48, 30, 3); box(0, 0, 48, 11, 1); box(0, 11, 48, 1, 0);
-      A.drawSprite(c, 'window-night', p, 29, -4);
-      var key = A.assemble('h2', 'b1', 'front', 0);
-      if (key) c.drawImage(A.sprite(key, p), 5, 12);
-      A.drawSprite(c, 'monitor-on', p, 24, 13);
-      box(20, 26, 26, 2, 0); box(20, 25, 26, 1, 2);
-      A.drawSprite(c, 'folder-working', p, 38, 18);
-    } else if (kind === 'save') {
-      // a memory card, its blocks filling
-      box(0, 0, 48, 30, 3);
-      box(7, 3, 20, 24, 0); box(8, 4, 18, 22, 1); box(11, 6, 12, 8, 3);
-      for (var l = 0; l < 3; l++) box(12, 7 + l * 2, 6 + (l * 3) % 5, 1, 0);
-      box(10, 18, 14, 6, 0); box(11, 19, 3, 4, 2);
-      for (var b = 0; b < 4; b++) { box(31, 4 + b * 6, 12, 5, 0); box(32, 5 + b * 6, 10, 3, b < 3 ? 2 : 3); }
-    } else if (kind === 'code') {
-      // the star and a </>, on night purple
-      box(0, 0, 48, 30, 1);
-      // the star, big and crisp on the left; </> on the right
-      c.drawImage(makeStar(sh, 0), 2, 6); // 1:1, so every pixel stays square
-      c.save(); c.scale(2, 2); A.drawText(c, '</>', p, 13, 5, 2); c.restore();
-    } else if (kind === 'bughunt') {
-      // a bug in the maze, a coffee cup
-      box(0, 0, 48, 30, 3);
-      box(2, 2, 44, 2, 1); box(2, 26, 44, 2, 1); box(2, 2, 2, 26, 1); box(44, 2, 2, 26, 1);
-      box(12, 9, 10, 2, 1); box(28, 17, 10, 2, 1); box(22, 9, 2, 10, 1);
-      c.save(); c.scale(2, 2); A.drawSprite(c, 'site-bug', p, 14, 3); c.restore();
-      A.drawSprite(c, 'emote-coffee', p, 7, 14);
-    }
-  }
   function paintLabel(el, kind) {
-    var L = LABELS[kind];
+    var L = LABELS[kind], lab = el.querySelector('.label');
     el.dataset.label = kind;
-    el.style.setProperty('--lb', L.shades[3]);
-    el.style.setProperty('--lband', L.shades[0]);
+    el.style.setProperty('--lb', L.shades[1]);
     el.style.setProperty('--lt', L.shades[3]);
-    drawLabelArt(kind, el.querySelector('canvas'));
+    el.style.setProperty('--lbar', L.shades[2]);
+    lab.textContent = '';
+    var b = document.createElement('b'), s = document.createElement('span'), bar = document.createElement('i');
+    b.textContent = L.title; s.textContent = L.line; s.className = 'line'; bar.className = 'bar';
+    lab.appendChild(b); lab.appendChild(s); lab.appendChild(bar);
   }
   function paintAllLabels() {
     document.querySelectorAll('.cartridge[data-label]').forEach(function (el) { paintLabel(el, el.dataset.label); });
@@ -1163,7 +1189,9 @@
   var cartEl = $('cart');
   function setCart(kind) {
     paintLabel(cartEl, kind);
-    cartEl.querySelector('.label b').textContent = LABELS[kind].title;
+    document.querySelectorAll('.cart-pick').forEach(function (b) {
+      b.classList.toggle('current', b.querySelector('.cartridge').dataset.label === kind);
+    });
   }
   // The new cartridge simply drops into the slot (no ejecting the old one):
   // it appears above the console with its label, slides in, clacks, power on.
@@ -1185,7 +1213,8 @@
     requestAnimationFrame(function () {
       setTimeout(function () {
         cartEl.classList.remove('out');
-        setTimeout(function () { Snd.play('clack'); consoleEl.classList.add('on'); done(); }, 440);
+        // switched off mid-swap: the cartridge still seats, nothing lights up
+        setTimeout(function () { if (!powered) return; Snd.play('clack'); consoleEl.classList.add('on'); done(); }, 440);
       }, 180);
     });
   }
@@ -1226,9 +1255,14 @@
     mode = 'swap'; zoomedOut = false;
     insertCart(kind, function () {
       mode = kind;
-      if (kind === 'save') saveEnter();
-      if (kind === 'code') { codeMenu.hidden = false; selectCode(0); refreshStars(); }
+      showProgram(kind);
+      // a link to a program: getbureau.dev/#waitlist, getbureau.dev/#code
+      try { history.replaceState(null, '', '#' + (kind === 'save' ? 'waitlist' : 'code')); } catch (e) {}
     });
+  }
+  function showProgram(kind) {
+    if (kind === 'save') saveEnter();
+    if (kind === 'code') { codeMenu.hidden = false; selectCode(0); refreshStars(); }
   }
   function closePrograms() { saveLeave(); codeMenu.hidden = true; }
   function backToTour(stop) {
@@ -1273,19 +1307,94 @@
     blitCentered(codeCv, t, 3, 0.8);
   }
 
-  document.querySelectorAll('.cart-pick').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var id = b.getAttribute('data-jump');
-      if (mode === 'swap') return;
-      // Console off: a cartridge turns it straight on; the cartridge going
-      // in is the power-on, no boot screen to wait through.
-      if (!powered) powerOnForCart();
-      if (id === 'bughunt') { if (mode !== 'game') enterGame(); else zoomedOut = false; return; }
-      if (id === 'save' || id === 'code' || id === 'star') { runProgram(id === 'star' ? 'code' : id); return; }
-      // TOUR starts like the first scroll does: the console zooms into the office
-      if (mode === 'tour') swapCartridge(1); else backToTour(1);
-    });
+  // One way in for every cartridge, from the rack, the strip or the menu.
+  function pickCart(id) {
+    if (mode === 'swap' && powered) return; // switched off mid-swap: the reset below clears it
+    if (mode === 'menu') closeMenu(true);
+    // Console off: a cartridge turns it straight on; the cartridge going
+    // in is the power-on, no boot screen to wait through.
+    if (!powered) powerOnForCart();
+    if (id === 'bughunt') { if (mode !== 'game') enterGame(); else zoomedOut = false; return; }
+    if (id === 'save' || id === 'code' || id === 'star') { runProgram(id === 'star' ? 'code' : id); return; }
+    // TOUR already in: like the others, just zoom back in where you were
+    // (from the title screen, into the office). Not in yet: it slots, and
+    // the console zooms into the office like the first scroll does.
+    if (mode === 'tour' && cartLoaded) { zoomedOut = false; if (current() === 0) goTo(1); return; }
+    if (mode === 'tour') swapCartridge(1); else backToTour(1);
+  }
+  document.querySelectorAll('#rack .cart-pick').forEach(function (b) {
+    b.addEventListener('click', function () { pickCart(b.getAttribute('data-jump')); });
   });
+
+  // ---- START: the cartridge menu, on the screen ---------------------------
+  // The same cartridges as the rack (which a phone may have scrolled or
+  // zoomed out of view), picked with the D-pad and A, or a tap. B goes
+  // back to whatever was running.
+  var cartMenu = $('cart-menu'), cartMenuList = $('cart-menu-list'), menuSel = 0, menuFrom = null;
+  var MODE_OF = { start: 'tour', save: 'save', star: 'code', bughunt: 'game' };
+  function openMenu() {
+    menuFrom = mode;
+    if (mode === 'tour') leaveTourScreen(); else closePrograms();
+    cartMenuList.textContent = '';
+    var picks = Array.prototype.filter.call(document.querySelectorAll('#rack .cart-pick'), function (b) { return !b.hidden; });
+    picks.forEach(function (src, k) {
+      var b = document.createElement('button');
+      var id = src.getAttribute('data-jump'), cart = src.querySelector('.cartridge').cloneNode(true);
+      b.type = 'button'; b.className = 'cart-menu-item'; b.setAttribute('data-jump', id);
+      b.setAttribute('aria-label', src.getAttribute('aria-label'));
+      if (MODE_OF[id] === menuFrom) b.classList.add('current');
+      b.appendChild(cart);
+      paintLabel(cart, cart.dataset.label);
+      b.addEventListener('click', function () { Snd.play('select'); menuPick(id); });
+      b.addEventListener('pointerenter', function () { selectMenu(k); });
+      cartMenuList.appendChild(b);
+    });
+    mode = 'menu'; zoomedOut = false;
+    cartMenu.hidden = false;
+    var cur = picks.findIndex(function (p) { return MODE_OF[p.getAttribute('data-jump')] === menuFrom; });
+    selectMenu(cur < 0 ? 0 : cur);
+    Snd.play('select');
+  }
+  // A hash typed or followed on the page: a program or a tour stop.
+  // (Our own replaceState calls never fire this.)
+  addEventListener('hashchange', function () {
+    var h = location.hash.slice(1), prog = { waitlist: 'save', code: 'code' }[h], i = stopIndex(h);
+    if (h === 'guide' && powered) { openGuide(); return; }
+    if (!powered || mode === 'swap' || (!prog && i < 0)) return;
+    if (mode === 'menu') closeMenu();
+    if (prog) { if (mode !== prog) runProgram(prog); return; }
+    if (mode === 'tour') goTo(i); else backToTour(i);
+  });
+  function selectMenu(i) {
+    var items = cartMenuList.children, n = items.length;
+    menuSel = (i + n) % n;
+    for (var k = 0; k < n; k++) items[k].classList.toggle('sel', k === menuSel);
+  }
+  // keepMode: a cartridge was picked, so pickCart takes it from here
+  function closeMenu(keepMode) {
+    cartMenu.hidden = true;
+    var from = menuFrom; menuFrom = null;
+    mode = from || 'tour';
+    if (keepMode) return;
+    if (mode === 'tour') { document.documentElement.style.overflow = ''; shownStop = null; }
+    else showProgram(mode);
+  }
+  function menuPick(id) {
+    // the cartridge already in: nothing to swap, back to it
+    if (MODE_OF[id] === menuFrom) { closeMenu(); return; }
+    pickCart(id);
+  }
+  function menuKey(key) {
+    if (/^(up|down|left|right)$/.test(key)) {
+      rock(key); Snd.play('press');
+      selectMenu(menuSel + (key === 'right' || key === 'down' ? 1 : -1));
+      return;
+    }
+    flash(key);
+    if (key === 'a' || key === 'start') { Snd.play('select'); menuPick(cartMenuList.children[menuSel].getAttribute('data-jump')); }
+    else if (key === 'b') { Snd.play('back'); closeMenu(); }
+    else if (key === 'select') cyclePalette();
+  }
 
   // ---- zooming out: Escape, the X, or a click outside the screen ----------
   // Shows the whole console where you are; the screen, a scroll or a new
@@ -1299,6 +1408,7 @@
   addEventListener('wheel', gestureZoomIn, { passive: true });
   addEventListener('touchmove', gestureZoomIn, { passive: true });
   addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && mode === 'menu') { Snd.play('back'); closeMenu(); return; }
     if (e.key === 'Escape' && zoomShown > 0.5 && !zoomedOut) { setZoomedOut(true); Snd.play('back'); }
   });
   $('room').addEventListener('click', function (e) {
@@ -1357,7 +1467,7 @@
   // ---- plain view ------------------------------------------------------
   // A modal dialog: what is behind it goes inert while it is open, Escape
   // closes it, and focus goes back to the link that opened it.
-  var plainBehind = ['room', 'track', 'plain-link'].map($);
+  var plainBehind = ['room', 'track', 'plain-link', 'guide-btn'].map($);
   function setPlain(open) {
     $('plain').hidden = !open;
     plainBehind.forEach(function (el) { el.inert = open; });
@@ -1370,23 +1480,51 @@
   }, true);
   $('plain-save').addEventListener('click', function (e) { e.preventDefault(); setPlain(false); goTo(stopIndex('save')); });
 
+  // ---- the guide: a tour of the controls, only when asked -----------------
+  // The console zooms out first so every control is on screen, then
+  // guide.js (loaded the first time) walks through them.
+  var guideLoad = null;
+  function openGuide() {
+    if (!$('plain').hidden) setPlain(false);
+    if (mode === 'menu') closeMenu();
+    if (booting) finishBoot();
+    setZoomedOut(true);
+    if (!guideLoad) guideLoad = new Promise(function (ok, fail) {
+      var s = document.createElement('script');
+      s.src = 'guide.js?v=' + (document.querySelector('script[src^="site.js"]').src.split('v=')[1] || '');
+      s.onload = ok; s.onerror = fail;
+      document.head.appendChild(s);
+    });
+    // wait for the zoom-out to settle, so the spotlight lands on still controls
+    guideLoad.then(function () { setTimeout(function () { window.BureauGuide.start(); }, REDUCED ? 0 : 450); })
+      .catch(function () { guideLoad = null; });
+  }
+  $('guide-btn').addEventListener('click', function (e) { e.preventDefault(); openGuide(); });
+
   // ---- power-on (every load, skippable) ---------------------------------
-  var bootEl = $('boot'), booting = false, bootTimers = [];
+  var bootEl = $('boot'), booting = false, bootTimers = [], pendingProgram = null;
   function later(ms, f) { bootTimers.push(setTimeout(f, ms)); }
+  function afterBoot() {
+    if (!pendingProgram) return;
+    var k = pendingProgram; pendingProgram = null;
+    if (k === 'guide') openGuide(); else runProgram(k);
+  }
   function finishBoot() {
     if (!booting) return;
     booting = false;
+    removeEventListener('pointerdown', skipBoot);
     bootTimers.forEach(clearTimeout);
     bootEl.hidden = true;
     cartEl.classList.remove('out');
     consoleEl.classList.add('on');
     shownStop = null;
+    afterBoot();
   }
   // fromSwitch: the power switch was flipped on, so the cartridge is
   // already in; only the screen comes up.
   function boot(fromSwitch) {
     // Every load powers on (boss call, 2026-09-30); any key or tap skips it.
-    if (REDUCED || (!fromSwitch && params.has('noboot'))) { consoleEl.classList.add('on'); bootEl.hidden = true; return; }
+    if (REDUCED || (!fromSwitch && params.has('noboot'))) { consoleEl.classList.add('on'); bootEl.hidden = true; afterBoot(); return; }
     booting = true;
     bootEl.hidden = false; bootEl.className = 'boot off';
     // No cartridge on power-on: the console boots to its own title screen,
@@ -1397,10 +1535,14 @@
     later(lead + 1600, function () { Snd.play('boot'); });
     later(lead + 2350, function () { bootEl.className = 'boot run fade'; });
     later(lead + 2700, finishBoot);
-    addEventListener('pointerdown', function skip(e) {
-      removeEventListener('pointerdown', skip);
-      if (booting && !(e.target && e.target.closest && e.target.closest('#power'))) finishBoot();
-    });
+    addEventListener('pointerdown', skipBoot);
+  }
+  // Any tap skips the power-on, except on the switch itself. Removed when
+  // the boot ends, so it never outlives it.
+  function skipBoot(e) {
+    if (e.target && e.target.closest && e.target.closest('#power')) return;
+    removeEventListener('pointerdown', skipBoot);
+    finishBoot();
   }
 
   // ---- the power switch on the top edge ---------------------------------
@@ -1415,6 +1557,7 @@
     Snd.unlock(); Snd.play('clack');
     if (!on) {
       booting = false; bootTimers.forEach(clearTimeout);
+      removeEventListener('pointerdown', skipBoot);
       hideWords(); leaveScene(); shownStop = null;
       consoleEl.classList.remove('on');
       // the old picture-tube goodbye, then the unpowered screen
@@ -1428,11 +1571,27 @@
       }, 520);
     } else {
       lcd.classList.remove('poweroff');
-      if (mode === 'game') game.start(); // like the real thing: power cycling restarts the cartridge
+      resetToTitle();
       boot(true);
     }
   }
   powerEl.addEventListener('click', function () { setPower(!powered); });
+  // Power cycling is a reset, like the real thing (boss call, 2026-10-01):
+  // whatever was running stops, and the console comes back on the title
+  // screen at the top of the page with the TOUR cartridge in.
+  function resetToTitle() {
+    closePrograms();
+    cartMenu.hidden = true; menuFrom = null;
+    mode = 'tour'; zoomedOut = false; zoomShown = 0;
+    setCart('tour'); cartEl.classList.remove('out'); cartLoaded = true;
+    document.documentElement.style.overflow = '';
+    hideWords(); leaveScene(); shownStop = null;
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    scrollTo({ top: 0, behavior: 'instant' });
+    onScroll();
+  }
+  // A cartridge picked while the console is off: the same reset, without
+  // the power-on screen; the cartridge going in is the power-on.
   function powerOnForCart() {
     powered = true;
     powerEl.setAttribute('aria-checked', 'true');
@@ -1440,6 +1599,7 @@
     booting = false; bootTimers.forEach(clearTimeout);
     lcd.classList.remove('poweroff');
     bootEl.hidden = true;
+    resetToTitle();
   }
 
   // ---- main loop -------------------------------------------------------
@@ -1454,7 +1614,7 @@
     // a click outside) shows the whole console wherever you are.
     // During a swap the whole console shows, so the cartridge and its label
     // are seen going in; the program zooms in once it is seated.
-    var zoomTarget = mode === 'tour' ? zoomFor() : mode === 'swap' ? 0 : isProgram() ? 1 : (FINE_POINTER ? 1 : 0);
+    var zoomTarget = mode === 'tour' ? zoomFor() : mode === 'swap' ? 0 : isProgram() || mode === 'menu' ? 1 : (FINE_POINTER ? 1 : 0);
     if (zoomedOut) zoomTarget = 0;
     zoomShown = REDUCED || mode === 'tour' && !zoomedOut && Math.abs(zoomTarget - zoomShown) < 0.02
       ? zoomTarget : zoomShown + (zoomTarget - zoomShown) * Math.min(1, dt / 140);
@@ -1468,6 +1628,7 @@
     if (unzoomEl.hidden === showX) unzoomEl.hidden = !showX;
     if (!powered) { requestAnimationFrame(tick); return; } // switched off: the off screen covers the glass
     if (mode === 'game') { game.update(dt); renderGame(t); drawStar(t); requestAnimationFrame(tick); return; }
+    if (mode === 'menu') { drawStar(t); requestAnimationFrame(tick); return; } // the menu covers the glass
     if (mode === 'code') { renderCode(t); drawStar(t); requestAnimationFrame(tick); return; }
     if (mode === 'save') { renderSave(t); drawStar(t); requestAnimationFrame(tick); return; }
     if (!REDUCED) life(t, dt);
@@ -1501,6 +1662,8 @@
   var nav = performance.getEntriesByType && performance.getEntriesByType('navigation')[0];
   var reloaded = nav && nav.type === 'reload';
   var startIdx = reloaded ? 0 : stopIndex(location.hash.slice(1));
+  // #waitlist and #code open those cartridges once the console is on
+  pendingProgram = reloaded ? null : { waitlist: 'save', code: 'code', guide: 'guide' }[location.hash.slice(1)] || null;
   if (reloaded && location.hash) { try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {} }
   scrollTo(0, startIdx > 0 ? startIdx * stopHeight() : 0);
   onScroll();
