@@ -25,7 +25,7 @@ Vendor-neutral by construction: an agent is anything that can make HTTP calls, a
 
 ## Run it
 
-You need Node 18 or newer (production runs 22) and git. No npm install: plain `node:http`, JSON state file with atomic writes.
+You need Node 18 or newer (production runs 22) and git. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
 
 ```
 git clone https://github.com/mahoudeau/bureau
