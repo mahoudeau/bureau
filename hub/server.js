@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
+const work = require('./lib/work');
 const discord = require('./lib/discord');
 const poke = require('./lib/poke');
 const { VERSION } = require('./version');
@@ -65,6 +66,48 @@ const imgOf = a => {
   return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
 };
 const citedImages = task => new Set((task.artifacts || []).map(imgOf).filter(Boolean).map(f => decodeURIComponent(f)));
+// The work store joins the rule: a link may also show the images in its own
+// mission's work/<t-id>/ folder, cited or not, and never another mission's.
+// A brain path still has to be cited.
+const IMG_RE = /\.(png|jpe?g|gif)$/i;
+function evidenceAllowed(task, file) {
+  const owner = work.taskOf(file);
+  if (owner) return owner === task.id;
+  return !/^work\//i.test(file) && citedImages(task).has(file);
+}
+function evidenceFiles(task) {
+  const out = [];
+  for (const a of task.artifacts || []) {
+    const raw = imgOf(a);
+    const f = raw && decodeURIComponent(raw);
+    if (f && evidenceAllowed(task, f) && !out.some(x => x.file === f)) out.push({ file: f, label: a.label || f });
+  }
+  let own = [];
+  try { own = work.listWork(task.id); } catch { own = []; }
+  for (const f of own) if (IMG_RE.test(f) && !out.some(x => x.file === f)) out.push({ file: f, label: f });
+  return out;
+}
+function readEvidence(file) {
+  return work.taskOf(file) ? work.readWorkRaw(file) : knowledge.readKnowledgeRaw(file);
+}
+
+// Curated compartments: refused before anything touches disk or git.
+function knowledgeWriteRefusal(file, author) {
+  const comp = knowledge.curatedCompartment(file);
+  if (!comp || store.canCurate(store.load(), author)) return null;
+  return `curated compartment ${comp}: only the boss, the librarian or a curator writes here (settings roles librarian or curator; author was ${author || 'agent'}). File the change as a journal line or a proposal item for the librarian instead`;
+}
+
+// The work store takes evidence for open missions only: a closed mission's
+// folder is already gone, and a write to it would never be cleaned up.
+function workWriteRefusal(file) {
+  let task;
+  try { task = work.parse(file).task; } catch (e) { return { code: 400, error: e.message }; }
+  const t = store.load().tasks.find(x => x.id === task);
+  if (!t) return { code: 404, error: `unknown mission ${task}` };
+  if (store.TERMINAL_STATUSES.includes(t.status)) return { code: 409, error: `${task} is ${t.status}: its work store is closed` };
+  return null;
+}
 
 function reviewForm(task, action, token, err, kind) {
   const lastNote = (task.log || []).slice(-1)[0];
@@ -80,10 +123,8 @@ function reviewForm(task, action, token, err, kind) {
       }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
-  const evidence = (task.artifacts || []).map(a => {
-    const f = imgOf(a);
-    return f ? `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(decodeURIComponent(f))}" alt="${escHtml(a.label || f)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(a.label || f)}</figcaption></figure>` : '';
-  }).join('');
+  const evidence = evidenceFiles(task).map(({ file, label }) =>
+    `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(label)}</figcaption></figure>`).join('');
   return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
 }
 
@@ -187,14 +228,15 @@ const server = http.createServer(async (req, res) => {
     // Capability-scoped image serving: a valid review link may render the brain
     // attachments its mission cites, without ever exposing the hub token. Only
     // those files, and only while the link is live: before, any link reached
-    // every image in the brain, other entities' included.
+    // every image in the brain, other entities' included. Its own mission's
+    // work store images count too (evidenceAllowed).
     const mReviewImg = p.match(/^\/r\/([a-f0-9]{32})\/img$/);
     if (mReviewImg && req.method === 'GET') {
       const found = store.findByReviewToken(mReviewImg[1]);
       if (!found || Date.parse(found.exp) < Date.now()) return send(res, 404, { error: 'not found' });
       const file = url.searchParams.get('file') || '';
-      if (!citedImages(found.task).has(file)) return send(res, 404, { error: 'not found' });
-      const r = knowledge.readKnowledgeRaw(file);
+      if (!evidenceAllowed(found.task, file)) return send(res, 404, { error: 'not found' });
+      const r = readEvidence(file);
       if (r === null || !r.binary) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
       return res.end(r.buf);
@@ -300,7 +342,7 @@ const server = http.createServer(async (req, res) => {
       const a = store.upsertAgent(b);
       broadcast('agent.registered', a);
       // S2-c: the tags are stored, but say plainly they grant nothing here
-      const ignored = store.rolesConfigured(store.load()) && Array.isArray(b.capabilities) && b.capabilities.some(c => c === 'lead' || c === 'critic');
+      const ignored = store.ignoredRoleTags(store.load(), b.capabilities);
       return send(res, 200, { agent: a, ...(ignored ? { note: store.SETTINGS_ROLES_NOTE } : {}) });
     }
     if (req.method === 'POST' && p === '/api/agents/heartbeat') {
@@ -455,6 +497,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && p === '/api/knowledge') {
       const b = await readBody(req);
       if (!b.file || b.content === undefined) return send(res, 400, { error: 'file and content required' });
+      const refusal = knowledgeWriteRefusal(b.file, b.author);
+      if (refusal) return send(res, 403, { error: refusal });
       const r = knowledge.writeKnowledge(b);
       broadcast('knowledge.written', { ...r, author: b.author || 'agent' });
       return send(res, 200, r);
@@ -483,6 +527,31 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { files: knowledge.listKnowledge(url.searchParams.get('dir') || '') });
     }
 
+    // ----- work (a mission's evidence while it is open; plain files, no git) -----
+    if (req.method === 'POST' && p === '/api/work') {
+      const b = await readBody(req);
+      if (!b.file || b.content === undefined) return send(res, 400, { error: 'file and content required' });
+      const refusal = workWriteRefusal(b.file);
+      if (refusal) return send(res, refusal.code, { error: refusal.error });
+      try { return send(res, 200, work.writeWork(b)); } catch (e) { return send(res, 400, { error: e.message }); }
+    }
+    if (req.method === 'GET' && p === '/api/work') {
+      const file = url.searchParams.get('file');
+      let r;
+      try {
+        if (!file) return send(res, 200, { files: work.listWork(url.searchParams.get('task') || '') });
+        r = work.readWorkRaw(file);
+      } catch (e) { return send(res, 400, { error: e.message }); }
+      if (r === null) return send(res, 404, { error: 'not found' });
+      if (url.searchParams.get('raw') === '1') {
+        res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
+        return res.end(r.buf);
+      }
+      return r.binary
+        ? send(res, 200, { file, content_base64: r.buf.toString('base64') })
+        : send(res, 200, { file, content: r.buf.toString('utf8') });
+    }
+
     return send(res, 404, { error: 'not found' });
   } catch (e) {
     return send(res, 500, { error: e.message });
@@ -503,8 +572,10 @@ const MCP_TOOLS = [
   { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review. Need a project that does not exist? Never invent an id — file a proposal instead: a mission in general titled "Propose project: <label>", body carrying the proposed id, entity, repo and why, parked at the boss (status review if your capabilities allow it, otherwise blocked with a note starting "waiting on: boss approval"). The boss creates the project in the dashboard and closes the proposal; only then does the id exist.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
   { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. When the boss approved the work in this conversation, set done directly and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), close done with the note approved by boss in session: "<his exact words>" instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
+  { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
+  { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
+  { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
 ];
 
 function mcpToolCall(name, a = {}) {
@@ -548,6 +619,10 @@ function mcpToolCall(name, a = {}) {
       return { id: r.task.id, status: r.task.status };
     }
     case 'write_knowledge': {
+      // The MCP wire writes as consul; the curated compartments take it only
+      // when settings give consul the librarian or curator role.
+      const refusal = knowledgeWriteRefusal(a.file, 'consul');
+      if (refusal) throw new Error(refusal);
       const r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message, encoding: a.encoding });
       broadcast('knowledge.written', { ...r, author: 'consul' });
       return r;
@@ -559,6 +634,17 @@ function mcpToolCall(name, a = {}) {
         return { file: a.file, content };
       }
       return { files: knowledge.listKnowledge(a.dir || '') };
+    }
+    case 'write_work': {
+      const refusal = workWriteRefusal(a.file);
+      if (refusal) throw new Error(refusal.error);
+      return work.writeWork({ file: a.file, content: a.content, mode: a.mode, encoding: a.encoding });
+    }
+    case 'read_work': {
+      if (!a.file) return { files: work.listWork(a.task || '') };
+      const r = work.readWorkRaw(a.file);
+      if (r === null) throw new Error('not found');
+      return r.binary ? { file: a.file, content_base64: r.buf.toString('base64') } : { file: a.file, content: r.buf.toString('utf8') };
     }
     default: throw new Error(`unknown tool: ${name}`);
   }
