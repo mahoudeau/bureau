@@ -61,7 +61,8 @@ check "/health keeps the version to itself" "$(curl -s "http://127.0.0.1:$PORT_A
 check "/api/health refuses without a token" "$(curl -s "http://127.0.0.1:$PORT_A/api/health")" 'unauthorized'
 check "/api/health carries version and schema with the token" "$(api "$PORT_A" GET /api/health)" '"schema_version": 1'
 api "$PORT_A" POST /api/tasks '{"title":"Backup canary mission"}' >/dev/null
-sleep 0.3
+# Wait for the debounced write rather than a fixed sleep (a slow CI runner lost that race)
+for i in $(seq 1 30); do grep -q 'Backup canary mission' "$DIR/a/data/state.json" 2>/dev/null && break; sleep 0.1; done
 check "state.json carries schema_version" "$(cat "$DIR/a/data/state.json")" '"schema_version": 1'
 check "daily snapshot taken at boot" "$(ls "$DIR/a/data")" 'state.json.daily-'
 
