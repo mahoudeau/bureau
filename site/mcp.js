@@ -116,7 +116,7 @@ module.exports = function makeMcp({ SITE, SITE_URL, textOf, FAQ_RE, insideAsText
   const RO = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   const TOOLS = [
     { name: 'about_bureau', title: 'What Bureau is',
-      description: 'Overview of Bureau, the open-source self-hosted office for AI agents: what it is, the problem it solves, how it works, what is available now, what is coming, and links. Start here.',
+      description: 'Overview of Bureau, the open-source, self-hosted AI OS for your agents: what it is, the problem it solves, how it works, what is available now, what is coming, and links. Start here.',
       inputSchema: { type: 'object', properties: {}, additionalProperties: false }, annotations: RO },
     { name: 'search_bureau', title: 'Search Bureau\'s FAQ, roadmap and features',
       description: 'Search everything getbureau.dev says about Bureau (FAQ answers, roadmap items, feature descriptions). Returns the best matching passages with their URL, to quote and cite.',
@@ -162,7 +162,7 @@ module.exports = function makeMcp({ SITE, SITE_URL, textOf, FAQ_RE, insideAsText
     throw Object.assign(new Error('unknown resource: ' + uri), { code: -32002 });
   }
 
-  const INSTRUCTIONS = 'This server describes Bureau (getbureau.dev), an open-source, self-hosted office for AI agents: a mission queue, a critic, a review gate the server enforces, and a memory in markdown and git. Use about_bureau for an overview and search_bureau to answer specific questions; cite the URLs it returns. It only describes the product: to run missions, a user installs their own hub (how_to_install).';
+  const INSTRUCTIONS = 'This server describes Bureau (getbureau.dev), an open-source, self-hosted AI OS: an office where AI agents get better with every task, briefed before they start, with what they learn kept. It has a mission queue, a critic, a review gate the server enforces, and a memory in markdown and git. Use about_bureau for an overview and search_bureau to answer specific questions; cite the URLs it returns. It only describes the product: to run missions, a user installs their own hub (how_to_install).';
 
   // ---- the protocol, both eras -----------------------------------------------
   // Modern clients (2026-07-28 on) send no handshake: every request carries
@@ -173,7 +173,7 @@ module.exports = function makeMcp({ SITE, SITE_URL, textOf, FAQ_RE, insideAsText
   const MODERN = ['2026-07-28'];
   const SUPPORTED = MODERN.concat(VERSIONS);
   const META_V = 'io.modelcontextprotocol/protocolVersion';
-  const SERVER_INFO = { name: 'getbureau', title: 'Bureau (about)', version, websiteUrl: SITE_URL, icons: [{ src: SITE_URL + '/favicon.svg', mimeType: 'image/svg+xml' }] };
+  const SERVER_INFO = { name: 'getbureau', title: 'Bureau (about)', version, websiteUrl: SITE_URL, icons: [{ src: SITE_URL + '/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }] };
   const CAPS = { tools: { listChanged: false }, resources: { listChanged: false } };
   const CACHE = { ttlMs: 3600000, cacheScope: 'public' }; // the answers change only on a deploy
   const err = (id, code, message, data, status) => ({ status: status || 200, body: { jsonrpc: '2.0', id: id === undefined ? null : id, error: data ? { code, message, data } : { code, message } } });

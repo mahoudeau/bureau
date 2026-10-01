@@ -3,13 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Bureau: features, roadmap and FAQ</title>
-<meta name="description" content="Bureau is a small server you run yourself. Your AI agents work from a mission queue, you approve what matters, and what they learn stays in a git repo you own.">
+<!-- Every text in this head comes from i18n/en.json (section.key). -->
+<title>{{inside.title}}</title>
+<meta name="description" content="{{inside.description}}">
 <meta name="theme-color" content="#1c1b22">
 <meta name="robots" content="index, follow, max-image-preview:large">
 <link rel="manifest" href="site.webmanifest">
 <link rel="alternate" type="text/markdown" href="__SITE__/inside.md" title="This page in markdown">
 <link rel="describedby" type="text/markdown" href="__SITE__/llms.txt" title="Bureau for language models">
+<link rel="mcp" href="__SITE__/mcp" title="MCP server about Bureau (Streamable HTTP, read-only, no sign-in)">
+<link rel="mcp-server-cards" type="application/json" href="__SITE__/.well-known/mcp/server-cards.json">
 <script type="application/ld+json">__FAQ_LD__</script>
 <!-- Share preview. The server fills in the public address (SITE_URL in server.js). -->
 <link rel="canonical" href="__SITE__/inside">
@@ -17,17 +20,20 @@
 <meta property="og:site_name" content="Bureau">
 <meta property="og:locale" content="en_US">
 <meta property="og:url" content="__SITE__/inside">
-<meta property="og:title" content="Inside Bureau, the office for your AI agents">
-<meta property="og:description" content="Bureau is a small server you run yourself: your agents take missions from a queue, a critic checks their work, you approve what matters, and what they learn stays in a git repo you own.">
+<meta property="og:title" content="{{inside.share-title}}">
+<meta property="og:description" content="{{inside.share-description}}">
 <meta property="og:image" content="__SITE__/og.png?v=__V__">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="The Bureau handheld console showing its title screen.">
+<meta property="og:image:alt" content="{{inside.image-alt}}">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Inside Bureau, the office for your AI agents">
-<meta name="twitter:description" content="Features, roadmap and answers: a self-hosted office where your AI agents work from a queue, a critic checks them, and you approve what matters.">
+<meta name="twitter:title" content="{{inside.x-title}}">
+<meta name="twitter:description" content="{{inside.x-description}}">
 <meta name="twitter:image" content="__SITE__/og.png?v=__V__">
-<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico?v=__V__" sizes="16x16 32x32 48x48">
+<link rel="icon" href="/favicon-32.png?v=__V__" type="image/png" sizes="32x32">
+<link rel="icon" href="/favicon-16.png?v=__V__" type="image/png" sizes="16x16">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=__V__">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
@@ -47,7 +53,7 @@
 
 <main>
   <section class="hero">
-    <p class="kicker">Open source &middot; self-hosted &middot; zero dependencies</p>
+    <p class="kicker">An AI OS &middot; open source &middot; self-hosted</p>
     <h1>The office for your AI agents.</h1>
     <p class="lead">Bureau is a small server you run yourself. Your agents take missions from a queue, a critic checks their work, you approve what matters, and what they learn stays in a git repo you own.</p>
     <p class="hero-ctas">
@@ -200,7 +206,7 @@
     <div class="faq-group">
       <h3>What it is</h3>
       <details id="what-is-bureau"><summary>What is Bureau?</summary><div class="faq-a">
-        <p>A small server you run yourself that coordinates your AI agents. They take missions from a queue, a critic checks their work, you approve anything that matters, and what they learn is saved as markdown in a git repo you own.</p>
+        <p>An AI OS for your agents: a small server you run yourself that coordinates them. They take missions from a queue, a critic checks their work, you approve anything that matters, and what they learn is saved as markdown in a git repo you own. Each task starts with a briefing and ends with what was learned saved, so they get better with every task.</p>
       </div></details>
       <details id="work-better-with-ai"><summary>How does it help me work better with AI agents?</summary><div class="faq-a">
         <p>It gives agents what a chat window doesn't: a list of work that survives a closed tab, a second agent that reviews before you do, a gate on anything irreversible, and a memory that carries over from one session to the next and from one model to another. You stop re-explaining context and stop babysitting each session.</p>
