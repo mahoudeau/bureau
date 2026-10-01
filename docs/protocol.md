@@ -42,6 +42,21 @@ Registration replaces an agent's `capabilities` array wholesale, on purpose: a r
 
 Authorization is role-based, never name-based (the vendor-neutrality rule applies to doctrine roles the same as it applies to vendors): "the lead" and "the critic" are whichever registered agent's own `capabilities` array includes the literal tag `"lead"` or `"critic"` - set at `POST /api/agents/register` like any other capability, nothing new to learn. The hub never compares an agent `name`; a role moves to a different agent, a different shift, a different session, just by that agent registering with the tag. `agent: "human"` is the existing sentinel for the boss's own actions (the review capability-link handlers already pass it) - itself a role word, not an individual's name, and always authorized. Concretely: `isLead(agent)` is `agent === "human"` or `capabilities.includes("lead")`; `isCriticOrLead(agent)` adds `capabilities.includes("critic")`. The same `isLead` check now also gates raising a mission's `gate` to `"critic"` (previously true anyway, just expressed generically instead of by name).
 
+**Settings (policy knobs).** `GET /api/settings` returns `{settings: {global, projects, agents}}`; `PATCH /api/settings` (same Bearer token) merges one level deep: `global` key by key, and each `projects.<id>` or `agents.<name>` entry key by key; `null` clears a key or a whole entry. Enums are validated and nothing applies on a refusal. Every change logs `settings.changed` with `before` and `after`, and a changed role list also logs `agent.roles_changed`. **With no settings, the hub behaves exactly as described above; every rule below is opt-in.**
+
+```
+{"global":   {"approval": "dashboard", "default_gate": "boss", "notify": "review",
+              "librarian": {"schedule": "03:00", "gap_missions_per_week": 5}},
+ "projects": {"bureau": {"approval": "in-session"}},
+ "agents":   {"consul": {"roles": ["critic", "lead"]}}}
+```
+
+- `approval` (`dashboard` | `in-session` | `critic`; project overrides global) decides how an agent may close a `gate: "boss"` mission `done`. Unset: anyone may, as before. `dashboard`: refused, only the boss closes it. `in-session`: allowed when the PATCH carries `approved_in_session: "<the boss's words>"`; the mission log records `approved by boss in session: "<quote>" (recorded by <agent>)` and the activity log gets `task.approved_in_session`. Under in-session the quote also lets an agent move a boss-gate mission from `review` to `done`. `critic`: a critic or lead closes it (the review exit stays the boss's). A quote sent under any other policy is refused: that project does not accept chat approvals.
+- `default_gate` (`boss` | `critic`) applies on task create when no `gate` is given.
+- `agents.<name>.roles` (`lead`, `critic`): when set, these decide the lead and critic checks and the agent's self-registered capabilities stop counting for those two roles. Not set: the capability check, as before.
+- `notify` (`all` | `review` | `blocked` | `none`) and `librarian` are stored and served only; nothing reads them yet.
+- MCP `update_mission` takes `approved_in_session` too.
+
 Goals are a convention, not an API object: a mission titled `goal: ...` filed by the human, carrying a `## Bar` of concrete references. The lead agent decomposes it into missions with `## Acceptance` sections a fresh-context critic can verify; goal-titled missions do not occupy project capacity. See `architecture.md` for the gauntlet loop and perpetual goals.
 
 **Terminal statuses: `done`, `failed`, `discarded`.** `done` is verified success. `failed` is a real attempt that did not clear and is worth the audit trail. `discarded` is closed-as-not-work: verification fixtures (a critic's live claim probes, a builder's scratch missions), duplicates, and missions re-scoped into a better-cut replacement (the closing note names the replacement). Fixtures and tombstones close `discarded`, never `failed`, so the failed column keeps its meaning. None of the three occupies project capacity; dashboards may hide `discarded` by default.
