@@ -15,7 +15,9 @@
 // Environment (all optional; features switch off cleanly without them):
 //   PORT, SITE_DATA_DIR (default site/.data), WAITLIST_TOKEN,
 //   GITHUB_TOKEN (raises the API rate limit for the star count),
-//   GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, SITE_PUBLIC_URL
+//   GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET, SITE_PUBLIC_URL,
+//   BREVO_API_KEY, BREVO_LIST_ID, BREVO_API_URL (see "Brevo" below),
+//   ASSET_VERSION (see "caching" below)
 'use strict';
 const http = require('http');
 const fs = require('fs');
@@ -107,6 +109,51 @@ async function postWaitlist(req, res) {
   const slot = prev ? prev.slot : signups.size + 1;
   signups.set(email, { slot, rec });
   send(res, 200, { slot, again: !!prev });
+  toBrevo(rec);
+}
+
+// ---- Brevo ----------------------------------------------------------------
+// The JSONL file stays the source of truth. Once a signup is saved, a copy
+// goes to a Brevo contact list so the opening email can be sent from there.
+// Fire and forget: the visitor never waits on Brevo, and a failure only
+// leaves a line in .data/brevo.log (status and reason, never the key or
+// the email). Without BREVO_API_KEY this does nothing.
+//
+//   BREVO_API_KEY   the API key (Brevo: SMTP & API, API keys)
+//   BREVO_LIST_ID   the id of the waitlist list (Contacts, Lists)
+//   BREVO_API_URL   optional, default https://api.brevo.com/v3 (tests point
+//                   it at a local fake)
+//
+// Create these four contact attributes in Brevo first, all of type Text
+// (Contacts, Settings, Contact attributes): USE, ROLE, INTEREST, SOURCE.
+// A repeat signup updates the contact (updateEnabled).
+const BREVO_URL = (process.env.BREVO_API_URL || 'https://api.brevo.com/v3').replace(/\/$/, '');
+function brevoFail(why) {
+  console.error('brevo: ' + why);
+  try { fs.mkdirSync(DATA_DIR, { recursive: true }); fs.appendFileSync(path.join(DATA_DIR, 'brevo.log'), new Date().toISOString() + ' ' + why + '\n'); } catch (e) {}
+}
+function toBrevo(rec) {
+  const key = process.env.BREVO_API_KEY;
+  if (!key) return;
+  const body = {
+    email: rec.email,
+    attributes: { USE: rec.use, ROLE: rec.role, INTEREST: rec.interest, SOURCE: rec.source },
+    updateEnabled: true,
+  };
+  const list = Number(process.env.BREVO_LIST_ID);
+  if (list) body.listIds = [list];
+  fetch(BREVO_URL + '/contacts', {
+    method: 'POST',
+    headers: { 'api-key': key, 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(8000),
+  }).then(async (r) => {
+    // 201 created, 204 updated; anything else is worth a line in the log
+    if (r.status === 201 || r.status === 204) return;
+    let reason = '';
+    try { const j = await r.json(); reason = (j.code || '') + ' ' + (j.message || ''); } catch (e) {}
+    brevoFail('contacts answered ' + r.status + ': ' + reason.split(rec.email).join('<email>').slice(0, 300));
+  }).catch((e) => brevoFail('request failed: ' + (e.name === 'TimeoutError' ? 'timeout' : e.message)));
 }
 function exportWaitlist(req, res, url) {
   const token = process.env.WAITLIST_TOKEN;
@@ -198,7 +245,33 @@ async function githubCallback(res, url) {
   } catch (e) { starFail(res, 'exception: ' + e.message); }
 }
 
-// ---- static files -------------------------------------------------------
+// ---- static files and caching -------------------------------------------
+// Assets (scripts, styles, images, fonts) are cached for a day; HTML pages,
+// robots and every /api/ route are no-store. Deploys keep file names, so
+// the pages and stylesheets link assets as name?v=__V__ and the server
+// swaps __V__ for ASSET_VERSION: a short hash of every asset's content,
+// taken at start. A deploy that changes any asset (and restarts the
+// server, as deploys do) changes the version, so there is nothing to bump
+// by hand. Set ASSET_VERSION in the environment to pin it instead.
+const CACHEABLE = new Set(['.js', '.css', '.svg', '.png', '.jpg', '.webp', '.ttf', '.woff2', '.ico']);
+const VERSIONED = new Set(['.html', '.css']); // text files where __V__ and __SITE__ are replaced
+function assetVersion() {
+  const h = crypto.createHash('sha1');
+  const files = Object.values(SHARED);
+  for (const dir of [SITE, path.join(SITE, 'shots')]) {
+    try { for (const f of fs.readdirSync(dir).sort()) files.push(path.join(dir, f)); } catch (e) {}
+  }
+  for (const f of files) {
+    if (!CACHEABLE.has(path.extname(f)) || PRIVATE.has(path.basename(f))) continue;
+    try { h.update(f).update(fs.readFileSync(f)); } catch (e) {}
+  }
+  return h.digest('hex').slice(0, 8);
+}
+const ASSET_VERSION = process.env.ASSET_VERSION || assetVersion();
+// The public address, for the share preview tags and the canonical link
+// (pages write it as __SITE__). Change it here when the domain moves.
+const SITE_URL = 'https://getbureau.dev';
+const versioned = new Map(); // file -> { mtime, body with the tokens replaced }
 function resolve(urlPath) {
   if (SHARED[urlPath]) return SHARED[urlPath];
   let rel = urlPath === '/' ? 'index.html' : decodeURIComponent(urlPath).replace(/^\/+/, '').replace(/\/+$/, '');
@@ -212,15 +285,26 @@ function resolve(urlPath) {
 const NOT_FOUND_PAGE = path.join(SITE, '404.html');
 function notFound(res, pathname) {
   if (pathname.startsWith('/api/') || !fs.existsSync(NOT_FOUND_PAGE)) return send(res, 404, 'not found');
-  res.writeHead(404, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
-  fs.createReadStream(NOT_FOUND_PAGE).pipe(res);
+  sendFile(res, 404, NOT_FOUND_PAGE);
+}
+function sendFile(res, code, file) {
+  const ext = path.extname(file);
+  res.writeHead(code, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': CACHEABLE.has(ext) ? 'public, max-age=86400' : 'no-store',
+  });
+  if (!VERSIONED.has(ext)) return fs.createReadStream(file).pipe(res);
+  const mtime = fs.statSync(file).mtimeMs, hit = versioned.get(file);
+  if (hit && hit.mtime === mtime) return res.end(hit.body);
+  const body = fs.readFileSync(file, 'utf8').split('__V__').join(ASSET_VERSION).split('__SITE__').join(SITE_URL);
+  versioned.set(file, { mtime, body });
+  res.end(body);
 }
 function serveStatic(res, pathname) {
   let file;
   try { file = resolve(pathname); } catch (e) { file = null; } // a malformed %-escape is a 404, not a crash
   if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return notFound(res, pathname);
-  res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
-  fs.createReadStream(file).pipe(res);
+  sendFile(res, 200, file);
 }
 
 // ---- routes ---------------------------------------------------------------
