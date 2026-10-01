@@ -1,0 +1,66 @@
+{
+  "_note": "The site's texts in English. Pages say {{section.key}} where a text goes (e.g. {{home.title}}); the server fills them from this file. Keys starting with _ are notes and are never used. A translation is the same file with the same keys, e.g. fr.json. Mathieu's voice: plain, short, contractions, no em dashes, no slogans. Titles under 60 characters, descriptions under 155.",
+
+  "home": {
+    "_note": "www.getbureau.dev, the console. The page people share.",
+    "title": "Bureau: the self-hosted office for your AI agents",
+    "description": "Bureau is a self-hosted AI OS for your agents. It briefs them before each task and keeps what they learn, so they get better every time.",
+    "share-title": "Bureau, the AI OS for your agents",
+    "share-description": "Your agents get better with every task: Bureau briefs them and keeps what they learn. An open-source AI OS you run yourself.",
+    "x-title": "Bureau, the AI OS for your agents",
+    "x-description": "Bureau is an open-source AI OS for your agents. It briefs them before each task and keeps what they learn, so they get better every time.",
+    "image-alt": "BUREAU in pixel letters on a green handheld screen: the office for your AI agents. Self-hosted, open source."
+  },
+
+  "inside": {
+    "_note": "www.getbureau.dev/inside, the full page with the roadmap and the FAQ.",
+    "title": "Bureau: features, roadmap and FAQ",
+    "description": "Bureau is an open-source AI OS for your agents: how it briefs them and keeps what they learn, the roadmap, and answers to common questions.",
+    "share-title": "Inside Bureau, the AI OS for your agents",
+    "share-description": "How Bureau briefs your agents, keeps what they learn, and leaves you the final say. The features, the roadmap, and answers to common questions.",
+    "x-title": "Inside Bureau, the AI OS for your agents",
+    "x-description": "How Bureau, an open-source AI OS, briefs your agents and keeps what they learn, so they get better with every task. Features, roadmap and FAQ.",
+    "image-alt": "BUREAU in pixel letters on a green handheld screen: the office for your AI agents. Self-hosted, open source."
+  },
+
+  "privacy": {
+    "title": "Bureau · Privacy",
+    "description": "What the Bureau site keeps, why, and how to get it deleted."
+  },
+
+  "image": {
+    "_note": "The share image, og.png (1200x630): the logo, this tagline and the address, all inside the centre square. After a change, rebuild it: see site/tools/og-image.js.",
+    "line-1": "THE OFFICE FOR YOUR AI AGENTS",
+    "tag": "GETBUREAU.DEV"
+  },
+
+  "app": {
+    "_note": "When someone adds the site to a phone's home screen.",
+    "name": "Bureau, the office for your AI agents",
+    "short-name": "Bureau"
+  },
+
+  "_drafts": {
+    "_note": "Not used anywhere. The core message, approved 2026-10-01: 'Your agents get better with every task: Bureau briefs them and keeps what they learn.' Variations of it to swap in.",
+    "short": [
+      "AI agents that get better with every task.",
+      "Your agents get better with every task.",
+      "Briefed before every task. Nothing they learn is lost."
+    ],
+    "medium": [
+      "Bureau briefs your agents before each task and keeps what they learn, so they get better every time.",
+      "Every task starts with what your agents already know, and ends with what they learned.",
+      "Your agents start each task briefed and finish it a little wiser. Bureau does both for you."
+    ],
+    "with-proof": [
+      "Your agents get better with every task: Bureau briefs them and keeps what they learn, in a git repo you own.",
+      "Your agents get better with every task. You see what each one did, and nothing ships without your yes."
+    ],
+    "image.line-1-with-ai-os": "THE AI OS FOR YOUR AGENTS",
+    "title-variants": [
+      "Bureau: the self-hosted AI OS for your agents",
+      "Bureau: AI agents that get better with every task",
+      "Bureau: the office where your AI agents get better"
+    ]
+  }
+}

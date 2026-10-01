@@ -1,6 +1,6 @@
 # Bureau
 
-> Bureau is an open-source, self-hosted office for AI agents. A small Node server (the hub) gives your agents a mission queue to work from, a critic that checks their work, a review gate where you approve anything irreversible, and a shared memory written as markdown in a git repo you own. Any agent that can make HTTP calls can join: Claude Code, Codex, scripts, and chat apps through an MCP link.
+> Bureau is an open-source, self-hosted AI OS: an office for your AI agents. Your agents get better with every task, because Bureau briefs them before they start and keeps what they learn. A small Node server (the hub) gives them a mission queue to work from, a critic that checks their work, a review gate where you approve anything irreversible, and a shared memory written as markdown in a git repo you own. Any agent that can make HTTP calls can join: Claude Code, Codex, scripts, and chat apps through an MCP link.
 
 Bureau is made by Mathieu Mahoudeau. The hub is AGPL-3.0; the protocol and the memory format specs are Apache-2.0. Self-hosting is free. A hosted version is planned, with a waitlist and no date or price yet.
 
@@ -41,7 +41,7 @@ Bureau is made by Mathieu Mahoudeau. The hub is AGPL-3.0; the protocol and the m
 
 ## Ask an assistant directly (MCP)
 
-- [__SITE__/mcp](__SITE__/mcp): a public, read-only MCP server about Bureau (Streamable HTTP, no sign-in). Tools: `about_bureau`, `search_bureau`, `get_roadmap`, `get_faq`, `how_to_install`. Add it as a custom connector in Claude, ChatGPT or any MCP client. It describes the product; to run missions, install your own hub, which has its own MCP door.
+- [__SITE__/mcp](__SITE__/mcp): a public, read-only MCP server about Bureau (Streamable HTTP, no sign-in). Tools: `about_bureau`, `search_bureau`, `get_roadmap`, `get_faq`, `how_to_install`. Add it as a custom connector in Claude, ChatGPT or any MCP client. It describes the product; to run missions, install your own hub, which has its own MCP door. Listed in the official MCP Registry as `dev.getbureau/about`; its server card is at [__SITE__/.well-known/mcp/server-cards.json](__SITE__/.well-known/mcp/server-cards.json).
 
 ## Links
 

@@ -285,6 +285,7 @@ function resolve(urlPath) {
   const abs = path.normalize(path.join(SITE, rel));
   if (!abs.startsWith(SITE + path.sep)) return null; // no traversal
   if (PRIVATE.has(path.basename(abs)) || abs.startsWith(DATA_DIR) || rel.split(/[\\/]/).some((p) => p.startsWith('.'))) return null;
+  if (rel.startsWith('i18n/') || rel.startsWith('tools/')) return null; // read by the server, not served
   return abs;
 }
 // Unknown pages get the empty-slot page; unknown API paths stay plain text.
@@ -300,12 +301,52 @@ function sendFile(res, code, file) {
     'Cache-Control': CACHEABLE.has(ext) ? 'public, max-age=86400' : 'no-store',
   });
   if (!VERSIONED.has(ext)) return fs.createReadStream(file).pipe(res);
-  const mtime = fs.statSync(file).mtimeMs, hit = versioned.get(file);
+  const share = shareTexts();
+  const mtime = fs.statSync(file).mtimeMs + '|' + share.mtime, hit = versioned.get(file);
   if (hit && hit.mtime === mtime) return res.end(hit.body);
   let body = fs.readFileSync(file, 'utf8').split('__V__').join(ASSET_VERSION).split('__SITE__').join(SITE_URL);
   if (body.includes('__FAQ_LD__')) body = body.replace('__FAQ_LD__', faqLd(body));
+  body = fillShare(body, ext, share.texts);
   versioned.set(file, { mtime, body });
   res.end(body);
+}
+
+// ---- i18n: the site's texts, site/i18n/<lang>.json ------------------------------
+// One object per section, keys starting with _ are notes. Pages say
+// {{section.key}} where a text goes. English only for now; a translation is
+// the same file under another language code. Read at start (an invalid file
+// stops the boot, so a typo can't ship), re-read when it changes (an invalid
+// save keeps the last good version and says so in the log).
+const LANG = 'en';
+const I18N_FILE = path.join(SITE, 'i18n', LANG + '.json');
+function flatten(obj, prefix, out) {
+  for (const [k, v] of Object.entries(obj)) {
+    if (k.startsWith('_')) continue;
+    if (v && typeof v === 'object' && !Array.isArray(v)) flatten(v, prefix + k + '.', out);
+    else if (typeof v === 'string') out[prefix + k] = v;
+  }
+  return out;
+}
+function loadI18n() {
+  const mtime = fs.statSync(I18N_FILE).mtimeMs;
+  return { mtime, texts: flatten(JSON.parse(fs.readFileSync(I18N_FILE, 'utf8')), '', {}) };
+}
+let shareCache;
+try { shareCache = loadI18n(); } catch (e) { console.error('site/i18n/' + LANG + '.json: ' + e.message); process.exit(1); }
+function shareTexts() {
+  let mtime;
+  try { mtime = fs.statSync(I18N_FILE).mtimeMs; } catch (e) { return shareCache; }
+  if (mtime === shareCache.mtime) return shareCache;
+  try { shareCache = loadI18n(); } catch (e) { console.error('site/i18n/' + LANG + '.json is invalid, keeping the last good one: ' + e.message); shareCache.mtime = mtime; }
+  return shareCache;
+}
+const escHtml = (s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function fillShare(body, ext, texts) {
+  return body.replace(/\{\{([\w-]+\.[\w-]+)\}\}/g, (m, key) => {
+    if (!(key in texts)) { console.error('i18n/' + LANG + '.json has no ' + key); return m; }
+    const v = texts[key];
+    return ext === '.html' ? escHtml(v) : ext === '.webmanifest' ? JSON.stringify(v).slice(1, -1) : v;
+  });
 }
 
 // ---- the questions, for search engines and AI assistants -------------------
@@ -432,6 +473,31 @@ const PROOFS = {
   ['/' + INDEXNOW_KEY + '.txt']: INDEXNOW_KEY,
 };
 
+// ---- the MCP server card (proposal SEP-2127, not yet in the spec) -------------
+// So a client that only knows the domain can find /mcp: a list of cards at
+// /.well-known/mcp/server-cards.json, and the single card at server-card.json
+// (the path early adopters serve). Built from mcp-registry.json and mcp.js,
+// so it says exactly what the registry and the server say.
+function serverCard() {
+  const reg = JSON.parse(fs.readFileSync(path.join(SITE, 'mcp-registry.json'), 'utf8'));
+  const card = {
+    name: reg.name, title: reg.title, description: reg.description, version: reg.version,
+    websiteUrl: reg.websiteUrl, repository: reg.repository,
+    icons: [{ src: SITE_URL + '/icon-512.png', mimeType: 'image/png', sizes: ['512x512'] }],
+    remotes: reg.remotes.map((r) => Object.assign({}, r, { supportedProtocolVersions: mcp.SUPPORTED })),
+    capabilities: { tools: { listChanged: false }, resources: { listChanged: false } },
+    tools: mcp.TOOLS, resources: mcp.RESOURCES, prompts: [],
+  };
+  delete card.$schema;
+  return card;
+}
+function sendCard(res, list) {
+  let body;
+  try { const card = serverCard(); body = JSON.stringify(list ? [card] : card, null, 1); } catch (e) { return send(res, 500, 'server card unavailable'); }
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=3600', 'Access-Control-Allow-Origin': '*' });
+  res.end(body);
+}
+
 // Short addresses for the two sections people link to.
 const ALIASES = { '/faq': '/inside#faq', '/roadmap': '/inside#roadmap' };
 function serveStatic(res, pathname) {
@@ -446,10 +512,14 @@ loadWaitlist();
 http.createServer((req, res) => {
   // Proof files for directories and search engines, answered on every host
   // (the registry checks getbureau.dev itself, before any redirect).
-  const proof = PROOFS[req.url.split('?')[0]];
+  const bare = req.url.split('?')[0], proof = PROOFS[bare];
   if (proof && (req.method === 'GET' || req.method === 'HEAD')) {
     res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' });
     return res.end(proof);
+  }
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    if (bare === '/.well-known/mcp/server-cards.json') return sendCard(res, true);
+    if (bare === '/.well-known/mcp/server-card.json') return sendCard(res, false);
   }
   const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
   if (REDIRECT_HOSTS.has(host) && (req.method === 'GET' || req.method === 'HEAD')) {
