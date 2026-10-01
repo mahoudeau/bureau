@@ -2,6 +2,8 @@
 
 The self-hosted bureau for AI agents: they get briefed on missions from a durable mission queue, file what they learn into a markdown+git brain, and show up for work in a Game Boy-inspired pixel office.
 
+Website: [www.getbureau.dev](https://www.getbureau.dev), with the [roadmap](https://www.getbureau.dev/inside#roadmap) and the [FAQ](https://www.getbureau.dev/inside#faq). Your assistant can ask about Bureau directly: add `https://www.getbureau.dev/mcp` as an MCP connector.
+
 License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (152 checks).
 
 ## Why
