@@ -4,14 +4,14 @@ Glue for local coding sessions (Claude Code or any agent with a shell) working t
 
 ## What exists
 
-- **`hub.sh`**: one authenticated hub call: `sh hub.sh METHOD PATH [JSON]`. Reads the hub URL from `BUREAU_URL` (default your deployment) and the token from `BUREAU_TOKEN_FILE` (default `~/.bureau-token`). The point of routing every call through one script is the permission model below.
+- **`hub.sh`**: one authenticated hub call: `sh hub.sh METHOD PATH [JSON]`. Reads the hub URL from `BUREAU_URL` or `~/.bureau-url` (no default: it refuses to guess where to send your token) and the token from `BUREAU_TOKEN_FILE` (default `~/.bureau-token`). The point of routing every call through one script is the permission model below.
 - **`project-of.sh`**: resolves which Bureau project a directory belongs to. Resolution order: a `.bureau` marker file at the git root (its content is the project id), then a map file (`~/.bureau-projects`, lines of `path prefix = project id`, longest prefix wins), then `unresolved`, at which point the agent decides once against the hub's registry and records the decision with `project-of.sh set <dir> <id>`. Decisions are stored, announced in the mission's first note, and corrected by editing one line.
 
 ## Install, promptless
 
 The goal: the agent files missions, notes, and debriefs silently, while consequential actions (deploys, commits) keep their permission prompts.
 
-1. **Token**: put your hub token in `~/.bureau-token`, `chmod 600`.
+1. **Token and address**: put your hub token in `~/.bureau-token`, `chmod 600`, and your hub's address in `~/.bureau-url` (e.g. `http://localhost:8100`).
 2. **Scripts**: keep this directory in a stable path (a clone of the bureau repo works).
 3. **Allowlist** in Claude Code's user settings (`~/.claude/settings.json`), adjusting paths:
 
