@@ -738,6 +738,8 @@
       }
     });
     savedEl.hidden = false; savedEl.dataset.done = '1';
+    // the form (and the focus in it) just went away: land on the result
+    $('saved-title').focus({ preventScroll: true });
     consoleEl.classList.add('blink');
     setTimeout(function () { consoleEl.classList.remove('blink'); }, 900);
   }
@@ -1036,12 +1038,13 @@
   });
   addEventListener('keydown', function (e) {
     if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    if (!$('plain').hidden) return; // the plain view is a dialog: the console sleeps behind it
     if (booting) { finishBoot(); e.preventDefault(); return; }
     var map = { ArrowDown: 'down', ArrowUp: 'up', ArrowLeft: 'left', ArrowRight: 'right', PageDown: 'down', PageUp: 'up',
                 z: 'a', Z: 'a', x: 'b', X: 'b', a: 'a', A: 'a', b: 'b', B: 'b', Enter: 'start', Shift: 'select' };
     var k = map[e.key];
     if (!k) return;
-    if (e.target && e.target.tagName === 'BUTTON' && (k === 'start' || e.target.closest('form'))) return; // buttons keep their own keys
+    if (e.target && /^(BUTTON|A)$/.test(e.target.tagName) && (k === 'start' || e.target.closest('form'))) return; // buttons and links keep their own keys
     e.preventDefault();
     press(k);
   });
@@ -1343,9 +1346,20 @@
   });
 
   // ---- plain view ------------------------------------------------------
-  $('plain-link').addEventListener('click', function (e) { e.preventDefault(); $('plain').hidden = false; $('plain-close').focus(); });
-  $('plain-close').addEventListener('click', function () { $('plain').hidden = true; });
-  $('plain-save').addEventListener('click', function (e) { e.preventDefault(); $('plain').hidden = true; goTo(stopIndex('save')); });
+  // A modal dialog: what is behind it goes inert while it is open, Escape
+  // closes it, and focus goes back to the link that opened it.
+  var plainBehind = ['room', 'track', 'plain-link'].map($);
+  function setPlain(open) {
+    $('plain').hidden = !open;
+    plainBehind.forEach(function (el) { el.inert = open; });
+  }
+  $('plain-link').addEventListener('click', function (e) { e.preventDefault(); setPlain(true); $('plain-close').focus(); });
+  $('plain-close').addEventListener('click', function () { setPlain(false); $('plain-link').focus(); });
+  // capture phase, so it runs before the console's own Escape (zoom out)
+  addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('plain').hidden) { e.preventDefault(); e.stopImmediatePropagation(); setPlain(false); $('plain-link').focus(); }
+  }, true);
+  $('plain-save').addEventListener('click', function (e) { e.preventDefault(); setPlain(false); goTo(stopIndex('save')); });
 
   // ---- power-on (every load, skippable) ---------------------------------
   var bootEl = $('boot'), booting = false, bootTimers = [];

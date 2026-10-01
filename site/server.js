@@ -208,9 +208,17 @@ function resolve(urlPath) {
   if (PRIVATE.has(path.basename(abs)) || abs.startsWith(DATA_DIR) || rel.split(/[\\/]/).some((p) => p.startsWith('.'))) return null;
   return abs;
 }
+// Unknown pages get the empty-slot page; unknown API paths stay plain text.
+const NOT_FOUND_PAGE = path.join(SITE, '404.html');
+function notFound(res, pathname) {
+  if (pathname.startsWith('/api/') || !fs.existsSync(NOT_FOUND_PAGE)) return send(res, 404, 'not found');
+  res.writeHead(404, { 'Content-Type': MIME['.html'], 'Cache-Control': 'no-store' });
+  fs.createReadStream(NOT_FOUND_PAGE).pipe(res);
+}
 function serveStatic(res, pathname) {
-  const file = resolve(pathname);
-  if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return send(res, 404, 'not found');
+  let file;
+  try { file = resolve(pathname); } catch (e) { file = null; } // a malformed %-escape is a 404, not a crash
+  if (!file || !fs.existsSync(file) || fs.statSync(file).isDirectory()) return notFound(res, pathname);
   res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
   fs.createReadStream(file).pipe(res);
 }
