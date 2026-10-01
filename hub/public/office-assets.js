@@ -1511,7 +1511,21 @@ S['chair-office'] = [
     '(': ['001','010','010','010','001'], ')': ['100','010','010','010','100'],
     '>': ['100','010','001','010','100'], '<': ['001','010','100','010','001'],
     '*': ['101','010','101','000','000'],
+    '_': ['000','000','000','000','111'], '#': ['101','111','101','111','101'],
+    '&': ['010','101','010','101','011'], '"': ['101','101','000','000','000'],
+    '=': ['000','111','000','111','000'], '@': ['010','101','111','100','011'],
+    '%': ['101','001','010','100','101'], '…': ['000','000','000','000','101'],
+    // stand-in for anything else: a small hollow box, so a missing glyph
+    // shows as a gap you can see instead of silently becoming a space
+    '\u0000': ['000','111','101','111','000'],
   };
+  // Accented letters fold to their base letter (é -> E); everything the
+  // table still lacks draws the stand-in box. Width stays 4px per glyph.
+  function glyphs(str) {
+    str = String(str);
+    if (str.normalize) str = str.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    return Array.from(str.toUpperCase());
+  }
 
   // ---- rasterizer ---------------------------------------------------------
   // sprite(name, paletteKey) -> cached offscreen canvas. The cache is keyed
@@ -1585,15 +1599,15 @@ S['chair-office'] = [
   }
 
   // ---- bitmap text --------------------------------------------------------
-  // drawText(ctx, 'HELLO', pal, x, y, shadeIndex). Uppercases; unknown
-  // glyphs render as space. Returns the advance width.
+  // drawText(ctx, 'HELLO', pal, x, y, shadeIndex). Uppercases; accents
+  // fold, unknown glyphs draw a small box. Returns the advance width.
   function drawText(ctx, str, pal, x, y, shade) {
     var sh = PALETTES[pal].shades[shade === undefined ? 0 : shade];
     ctx.fillStyle = sh;
     var cx = x | 0;
-    str = String(str).toUpperCase();
+    str = glyphs(str);
     for (var i = 0; i < str.length; i++) {
-      var g = FONT[str[i]] || FONT[' '];
+      var g = FONT[str[i]] || FONT['\u0000'];
       for (var gy = 0; gy < 5; gy++)
         for (var gx = 0; gx < 3; gx++)
           if (g[gy][gx] === '1') ctx.fillRect(cx + gx, (y | 0) + gy, 1, 1);
@@ -1601,7 +1615,7 @@ S['chair-office'] = [
     }
     return cx - x;
   }
-  function textWidth(str) { return String(str).length * 4; }
+  function textWidth(str) { return glyphs(str).length * 4; }
 
   // ---- TTF pixel text (Press Start, vendored at /office/font.ttf) ---------
   // fillText anti-aliases, which would break the 4-shade law on readback —

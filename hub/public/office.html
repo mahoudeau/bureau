@@ -18,14 +18,17 @@
   @font-face { font-family: 'OfficePixel'; src: url('/office/font.ttf') format('truetype'); }
   html, body { margin: 0; height: 100%; background: var(--sh0, #14121f); overflow: hidden;
                font-family: 'OfficePixel', 'Courier New', monospace; }
+  /* the HUD and ticker live in bands above and below the canvas, never on it;
+     fit() reserves the same heights (HUD_BAND, TICKER_BAND) */
   #stage { position: relative; width: 100vw; height: 100vh; display: flex;
-           align-items: center; justify-content: center; }
+           align-items: center; justify-content: center;
+           box-sizing: border-box; padding: 36px 0 60px; }
   #wrap { position: relative; }
   canvas { image-rendering: pixelated; display: block; }
   /* GB dialog register for every HTML overlay: lightest fill, double dark
      border (outer border + inset ring), hard corners, no shadow blur. */
   .bubble {
-    position: absolute; transform: translate(-50%, -100%);
+    position: absolute; box-sizing: border-box; /* left/top clamped in frame() */
     background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
     border: 2px solid var(--sh0, #33382b);
     box-shadow: inset 0 0 0 1px var(--sh3), inset 0 0 0 3px var(--sh0);
@@ -34,12 +37,32 @@
     transition: opacity .3s; z-index: 3;
   }
   .bubble .who { text-decoration: underline; }
+  /* the agent card: same dialog register as the bubbles, but it takes clicks */
+  .card {
+    position: absolute; box-sizing: border-box; z-index: 5;
+    background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
+    border: 2px solid var(--sh0, #33382b);
+    box-shadow: inset 0 0 0 1px var(--sh3), inset 0 0 0 3px var(--sh0);
+    padding: 10px 26px 10px 12px; font-size: 8px; line-height: 1.9; width: 220px;
+  }
+  .card[hidden] { display: none; }
+  .card .name { font-size: 10px; }
+  .card a { color: inherit; }
+  .card a:focus, .card button:focus { outline: 2px solid var(--sh0); outline-offset: 1px; }
+  .card button { position: absolute; top: 6px; right: 6px; font: inherit; font-size: 8px;
+    background: var(--sh1); color: var(--sh3); border: 2px solid var(--sh0); cursor: pointer; padding: 1px 4px; }
+  canvas#c:focus { outline: none; } /* the ring is drawn on the canvas, in pixels */
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   #hud {
     position: absolute; left: 0; right: 0; top: 0; display: flex; gap: 14px;
     padding: 10px 46px 10px 14px; color: var(--sh3, #e8e4c9); font-size: 8px;
     align-items: center; z-index: 2; /* right padding clears the fixed minimize icon */
+    flex-wrap: wrap; row-gap: 6px;
   }
+  @media (max-width: 480px) { #hud { gap: 8px; } #hud .logo { font-size: 12px; } }
   #hud .logo { font-size: 16px; }
+  #hud .leg { display: inline-flex; align-items: center; gap: 5px; cursor: default; }
+  #hud .leg canvas { image-rendering: pixelated; }
   #hud a { text-decoration: none; }
   #hud button {
     font: inherit; font-size: 8px; padding: 5px 8px; cursor: pointer;
@@ -51,7 +74,7 @@
   #hud #conn.live { opacity: 1; }
   #ticker {
     position: absolute; left: 50%; transform: translateX(-50%);
-    bottom: 10px; width: min(92vw, 900px); box-sizing: border-box;
+    bottom: 8px; width: min(92vw, 900px); box-sizing: border-box; /* fit() matches the canvas width */
     background: var(--sh3, #e8e4c9); color: var(--sh0, #33382b);
     border: 3px solid var(--sh0, #33382b);
     box-shadow: inset 0 0 0 2px var(--sh3), inset 0 0 0 4px var(--sh0);
@@ -82,18 +105,24 @@
 <body>
 <style>
   [data-mini] #hud, [data-mini] #ticker, [data-mini] #btn-min { display: none !important; }
-  /* mini fills its iframe edge to edge: the parent fixes a 16:9 box, so
-     stretching to the viewport keeps the aspect and kills the bars. */
-  [data-mini] #stage { align-items: stretch; justify-content: stretch; }
-  [data-mini] #wrap, [data-mini] canvas { width: 100vw !important; height: 100vh !important; }
+  /* mini obeys the same whole-number law as the full office: fit() picks
+     the largest integer scale the iframe allows and letterboxes it. A box
+     narrower than one art pixel per device pixel shows a centered 1x crop
+     instead of a smeared downscale. */
+  [data-mini] #stage { padding: 0; overflow: hidden; }
+  [data-mini] .bubble { display: none; }
 </style>
-<div id="stage"><div id="wrap"><canvas id="c"></canvas></div></div>
+<div id="stage"><div id="wrap"><canvas id="c" tabindex="0" aria-label="The office. Tab moves between desks, the board, the brain shelf and the boss door; Enter opens."></canvas><div class="card" id="card" role="dialog" hidden></div></div></div>
+<span class="sr" id="sr" aria-live="polite"></span>
 <div id="hud">
   <span class="logo">BUREAU</span>
-  <span>ACT:<span id="n-active">0</span></span>
-  <span>Q:<span id="n-queued">0</span></span>
-  <span>REV:<span id="n-review">0</span></span>
-  <span>DONE:<span id="n-done">0</span></span>
+  <!-- legend: a tiny office sprite plus a number; the words live in the
+       title and aria-label, filled in by setLegend() -->
+  <span class="leg" id="leg-active" data-icon="monitor-on"><canvas></canvas><span class="n">0</span></span>
+  <span class="leg" id="leg-queued" data-icon="folder-queued"><canvas></canvas><span class="n">0</span></span>
+  <span class="leg" id="leg-working" data-icon="folder-working"><canvas></canvas><span class="n">0</span></span>
+  <span class="leg" id="leg-review" data-icon="folder-review"><canvas></canvas><span class="n">0</span></span>
+  <span class="leg" id="leg-done" data-icon="folder-done"><canvas></canvas><span class="n">0</span></span>
   <!-- boss order 2026-08-23: no menu nav on the office — the palette and
        scale settings live on the P and S keys (and on /office/assets);
        the only chrome is the minimize icon, fixed top right. The buttons
@@ -103,7 +132,7 @@
   <span id="conn">connecting</span>
 </div>
 <a id="btn-min" href="/v2" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
-<div id="ticker">OPENING THE OFFICE...</div>
+<div id="ticker">&gt; Opening the office...</div>
 <div id="gate" hidden>
   <div>BUREAU · STAFF ENTRANCE</div>
   <input id="gate-token" type="password" placeholder="access token" autocomplete="off">
@@ -130,6 +159,51 @@
   }
   var cv = document.getElementById('c'), ctx = cv.getContext('2d');
   cv.width = W; cv.height = H;
+
+  // ---- test mode: the regression guard (test/office-guard.sh) -------------
+  // On with ?test=1 or window.__OFFICE_TEST set before load (an init
+  // script sets it in the mini iframe too). Every canvas draw is checked
+  // against the 384x216 bounds, tagged with what was being drawn, and
+  // window.__officeTest.check() also reads the pixels back to confirm each
+  // one is one of the palette's 4 shades. Only the canvas is checked; the
+  // HUD, ticker, bubbles and card are DOM.
+  var drawTag = '';
+  if (new URLSearchParams(location.search).has('test') || window.__OFFICE_TEST) {
+    var oob = [], oobSeen = {};
+    var rawImage = ctx.drawImage, rawRect = ctx.fillRect;
+    var note = function (x, y, w, h) {
+      if (x >= 0 && y >= 0 && x + w <= W && y + h <= H) return;
+      var k = drawTag + '@' + x + ',' + y + ',' + w + 'x' + h;
+      if (oobSeen[k] || oob.length >= 50) return;
+      oobSeen[k] = true;
+      oob.push({ what: drawTag, x: x, y: y, w: w, h: h });
+    };
+    ctx.drawImage = function (img) {
+      var a = arguments;
+      if (a.length === 3) note(a[1], a[2], img.width, img.height);
+      else if (a.length === 5) note(a[1], a[2], a[3], a[4]);
+      else note(a[5], a[6], a[7], a[8]);
+      return rawImage.apply(ctx, a);
+    };
+    ctx.fillRect = function (x, y, w, h) { note(x, y, w, h); return rawRect.apply(ctx, arguments); };
+    window.__officeTest = {
+      check: function () {
+        var sh = A.PALETTES[palKey].shades.map(function (s) {
+          return [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+        });
+        var d = ctx.getImageData(0, 0, W, H).data, off = 0, where = [];
+        for (var i = 0; i < d.length; i += 4) {
+          var ok = d[i + 3] === 255 && sh.some(function (c) { return c[0] === d[i] && c[1] === d[i + 1] && c[2] === d[i + 2]; });
+          if (ok) continue;
+          off++;
+          if (where.length < 10) where.push({ x: (i / 4) % W, y: Math.floor(i / 4 / W), rgba: [d[i], d[i + 1], d[i + 2], d[i + 3]] });
+        }
+        var r = { palette: palKey, outOfBounds: oob.slice(), offPalette: off, offPaletteAt: where };
+        oob = []; oobSeen = {};
+        return r;
+      },
+    };
+  }
   ctx.imageSmoothingEnabled = false;
 
   // ---- settings: palette + super-pixel scale (both persisted) ------------
@@ -161,23 +235,35 @@
     root.style.setProperty('--sh2', sh[2]);
     root.style.setProperty('--sh3', sh[3]);
     document.getElementById('btn-pal').textContent = A.PALETTES[palKey].label;
+    if (!MINI) drawLegendIcons();
   }
 
   // ---- super-pixel integer scaling (device pixels, letterboxed) ----------
   var SCALE = 3;
+  var HUD_BAND = 36, TICKER_BAND = 60; // same as the #stage padding
   function fit() {
-    if (MINI) return; // mini stretches via CSS to fill the iframe, no bars
     var dpr = window.devicePixelRatio || 1;
-    var n = scaleSetting === 'auto'
-      ? Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)))
-      : scaleSetting * Math.round(dpr); // fixed setting: N super-pixels per art pixel in CSS terms
+    if (MINI) {
+      // no bands in mini; below 1x we crop at 1x rather than smear
+      var m = Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)));
+      SCALE = m;
+      cv.style.width = (m * W / dpr) + 'px';
+      cv.style.height = (m * H / dpr) + 'px';
+      return;
+    }
+    var availH = Math.max(H / dpr, innerHeight - HUD_BAND - TICKER_BAND);
+    var fitN = Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, availH * dpr / H)));
+    // fixed setting: N super-pixels per art pixel in CSS terms, never past the window
+    var n = scaleSetting === 'auto' ? fitN : Math.min(scaleSetting * Math.round(dpr), fitN);
     SCALE = n;
-    cv.style.width = (n * W / dpr) + 'px';
+    var cssW = n * W / dpr;
+    cv.style.width = cssW + 'px';
     cv.style.height = (n * H / dpr) + 'px';
+    document.getElementById('ticker').style.width = Math.min(cssW, innerWidth - 16) + 'px';
     document.getElementById('btn-scale').textContent =
-      scaleSetting === 'auto' ? 'AUTO(' + n + ')' : 'X' + scaleSetting;
+      scaleSetting === 'auto' ? 'AUTO(' + n + ')' : 'X' + scaleSetting + (n < scaleSetting * Math.round(dpr) ? '(' + n + ')' : '');
   }
-  fit(); addEventListener('resize', fit);
+  fit(); addEventListener('resize', function () { fit(); if (!MINI) drawLegendIcons(); });
 
   document.getElementById('btn-pal').addEventListener('click', function () {
     var keys = Object.keys(A.PALETTES).filter(function (k) { return k.slice(-4) !== '-inv'; });
@@ -200,14 +286,59 @@
   });
 
   // ---- landmarks (re-gridded to the 8px tile grid) -----------------------
+  // A spot is where the sprite is drawn from: feet land at y + 16, so
+  // nothing may sit below y = 200 or the feet leave the canvas.
   var SPOT = {
-    door:    { x: 16,  y: 204 },
+    door:    { x: 48,  y: 194 },
     board:   { x: 72,  y: 56 },
     shelf:   { x: 36,  y: 108 },
-    coffee:  { x: 28,  y: 196 },
-    bossdoor:{ x: 288, y: 184 },
+    coffee:  { x: 28,  y: 194 },
+    bossdoor:{ x: 266, y: 176 }, // beside the mat, not on it
     meet:    { x: 336, y: 84 },
   };
+  // Aisles for walking: three horizontal lanes (above the desks, between
+  // the rows, along the rug) joined by vertical lanes between the desk
+  // columns. Walkers leave a spot straight up or down onto the nearest
+  // lane, follow the lanes, and come off the same way.
+  var LANE = { top: 56, mid: 108, low: 176 };
+  var CROSS = [
+    { x: 36,  from: LANE.mid, to: LANE.low },  // left of the desks, under the shelf
+    { x: 126, from: LANE.top, to: LANE.low },
+    { x: 218, from: LANE.top, to: LANE.low },
+  ];
+  var MEET_GAP_X = 316; // the gap in the conference room wall
+  function laneFor(pt) {
+    if (pt.y <= 72) return LANE.top;
+    if (pt.y <= 124) return LANE.mid;
+    return LANE.low;
+  }
+  function route(from, to) {
+    var pts = [];
+    function add(x, y) {
+      var l = pts.length ? pts[pts.length - 1] : from;
+      if (Math.abs(l.x - x) > 0.5 || Math.abs(l.y - y) > 0.5) pts.push({ x: x, y: y });
+    }
+    function exitPath(pt) { // pt -> a point on a lane, in walking order
+      if (pt.x >= 312 && pt.y < 104) return [{ x: MEET_GAP_X, y: pt.y }, { x: MEET_GAP_X, y: LANE.mid }];
+      return [{ x: pt.x, y: laneFor(pt) }];
+    }
+    var out = exitPath(from), back = exitPath(to).reverse();
+    var a = out[out.length - 1], b = back[0];
+    out.forEach(function (p) { add(p.x, p.y); });
+    if (a.y !== b.y) {
+      var best = null, cost = Infinity;
+      CROSS.forEach(function (c) {
+        var lo = Math.min(a.y, b.y), hi = Math.max(a.y, b.y);
+        if (c.from > lo || c.to < hi) return;
+        var k = Math.abs(a.x - c.x) + Math.abs(c.x - b.x);
+        if (k < cost) { cost = k; best = c; }
+      });
+      if (best) { add(best.x, a.y); add(best.x, b.y); }
+    }
+    back.forEach(function (p) { add(p.x, p.y); });
+    add(to.x, to.y);
+    return pts;
+  }
   var DESK_SLOTS = [
     { x: 60, y: 88 }, { x: 152, y: 88 }, { x: 244, y: 88 },
     { x: 60, y: 152 }, { x: 152, y: 152 }, { x: 244, y: 152 },
@@ -218,7 +349,8 @@
   var token = null;
   var AGENTS = [];
   var boardCounts = { queued: 0, working: 0, review: 0, done: 0 };
-  var reviewCount = 0;
+  var reviewCount = 0; // reviews waiting on the boss
+  var TASKS = [];
   var bubbles = new Map();
 
   function isVisitor(a) { return a.kind === 'dummy' || a.kind === 'demo' || a.kind === 'other'; }
@@ -227,14 +359,22 @@
     return mins < 5 ? 'active' : mins < 60 ? 'idle' : 'offline';
   }
 
+  // Desks are sticky: an agent keeps its desk until it goes offline or
+  // leaves the roster. Only then is the desk freed, and a newcomer walks
+  // in from the door to the free desk. No re-sort ever moves anyone.
   function syncRoster(agents) {
-    var team = agents.filter(function (a) { return !isVisitor(a); });
+    var team = agents.filter(function (a) { return !isVisitor(a) && liveness(a) !== 'offline'; });
     team.sort(function (a, b) { return new Date(b.last_seen) - new Date(a.last_seen); });
-    var seated = team.slice(0, DESK_SLOTS.length);
-    seated.forEach(function (a, i) {
+    AGENTS = AGENTS.filter(function (ag) {
+      var still = team.find(function (a) { return a.name === ag.name; });
+      if (!still) { var b = bubbles.get(ag.name); if (b) { b.el.remove(); bubbles.delete(ag.name); } }
+      return !!still;
+    });
+    team.forEach(function (a) {
       var ag = AGENTS.find(function (x) { return x.name === a.name; });
-      var desk = DESK_SLOTS[i];
       if (!ag) {
+        var desk = DESK_SLOTS.find(function (d) { return !AGENTS.some(function (x) { return x.desk === d; }); });
+        if (!desk) return; // every desk taken: they wait off screen
         ag = {
           name: a.name, kind: a.kind,
           desk: desk, pos: { x: SPOT.door.x, y: SPOT.door.y },
@@ -244,32 +384,54 @@
         AGENTS.push(ag);
         enqueue(ag, [{ walk: deskSeat(desk) }]);
       }
-      ag.desk = desk;
       ag.state = liveness(a);
       ag.activity = a.activity || '';
     });
-    AGENTS = AGENTS.filter(function (ag) {
-      var still = seated.find(function (a) { return a.name === ag.name; });
-      if (!still) { var b = bubbles.get(ag.name); if (b) b.el.remove(); }
-      return !!still;
-    });
-    document.getElementById('n-active').textContent =
-      AGENTS.filter(function (a) { return a.state === 'active'; }).length;
+    setLegend('leg-active', AGENTS.filter(function (a) { return a.state === 'active'; }).length,
+      function (n) { return 'At work: ' + n + (n === 1 ? ' agent' : ' agents'); });
   }
 
+  // The boss door counts only what waits on the boss: reviews behind the
+  // boss gate. Critic-gate reviews wait on the critic, not on you.
   function syncBoard(tasks) {
-    var c = { queued: 0, working: 0, review: 0, done: 0 };
+    TASKS = tasks;
+    var c = { queued: 0, working: 0, review: 0, done: 0 }, boss = 0;
     for (var i = 0; i < tasks.length; i++) {
       var t = tasks[i];
       if (t.status === 'queued') c.queued++;
       else if (t.status === 'claimed' || t.status === 'in_progress') c.working++;
-      else if (t.status === 'review') c.review++;
+      else if (t.status === 'review') { c.review++; if (t.gate !== 'critic') boss++; }
       else if (t.status === 'done') c.done++;
     }
-    boardCounts = c; reviewCount = c.review;
-    document.getElementById('n-queued').textContent = c.queued;
-    document.getElementById('n-review').textContent = c.review;
-    document.getElementById('n-done').textContent = c.done;
+    boardCounts = c; reviewCount = boss;
+    setLegend('leg-queued', c.queued, function (n) { return 'On the board: ' + n; });
+    setLegend('leg-working', c.working, function (n) { return 'In progress: ' + n; });
+    setLegend('leg-review', boss, function (n) { return 'Waiting for you: ' + n; });
+    setLegend('leg-done', c.done, function (n) { return 'Shipped: ' + n; });
+  }
+
+  function setLegend(id, n, words) {
+    var el = document.getElementById(id);
+    el.querySelector('.n').textContent = n;
+    el.title = words(n);
+    el.setAttribute('aria-label', words(n));
+  }
+  // Legend icons: the office's own sprites on a light tile, at a
+  // whole-number device-pixel scale (about 16 CSS px tall).
+  function drawLegendIcons() {
+    var dpr = window.devicePixelRatio || 1, p = palKey, sh = shades();
+    Array.prototype.forEach.call(document.querySelectorAll('#hud .leg'), function (el) {
+      var spr = A.sprite(el.getAttribute('data-icon'), p);
+      var c = el.querySelector('canvas');
+      if (!spr) return;
+      c.width = spr.width + 2; c.height = spr.height + 2;
+      var g = c.getContext('2d');
+      g.fillStyle = sh[3]; g.fillRect(0, 0, c.width, c.height);
+      g.drawImage(spr, 1, 1);
+      var m = Math.max(1, Math.round(16 * dpr / c.height));
+      c.style.width = (c.width * m / dpr) + 'px';
+      c.style.height = (c.height * m / dpr) + 'px';
+    });
   }
 
   // ---- per-sprite action queues ------------------------------------------
@@ -285,7 +447,8 @@
     if (step.wait) { ag.busy = true; setTimeout(function () { ag.busy = false; }, step.wait); return; }
   }
   function walkTo(a, tx, ty, speed) {
-    a.target = { x: tx, y: ty }; a.walking = true; a.speed = speed || 0.05;
+    a.path = route(a.pos, { x: tx, y: ty });
+    a.target = a.path.shift() || null; a.walking = !!a.target; a.speed = speed || 0.05;
   }
   function stepAgents(dt) {
     for (var i = 0; i < AGENTS.length; i++) {
@@ -295,7 +458,11 @@
         var dx = a.target.x - a.pos.x, dy = a.target.y - a.pos.y;
         var dist = Math.hypot(dx, dy);
         a.dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
-        if (dist < 1.5) { a.pos = { x: a.target.x, y: a.target.y }; a.target = null; a.walking = false; a.dir = 'down'; }
+        if (dist < 1.5) {
+          a.pos = { x: a.target.x, y: a.target.y };
+          a.target = (a.path && a.path.shift()) || null; // next waypoint, if any
+          if (!a.target) { a.walking = false; a.dir = 'down'; }
+        }
         else { a.pos.x += (dx / dist) * a.speed * dt; a.pos.y += (dy / dist) * a.speed * dt; }
         continue;
       }
@@ -313,13 +480,15 @@
   // ---- bubbles & ticker ---------------------------------------------------
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function say(agent, text, ms) {
+    // mini: no room for words, a "!" over the head stands in for the bubble
+    if (MINI) { agent.emote = 'emote-bang'; agent.emoteUntil = performance.now() + (ms || 4200); return; }
     var b = bubbles.get(agent.name);
     if (!b) {
       var el = document.createElement('div'); el.className = 'bubble';
       document.getElementById('wrap').appendChild(el);
       b = { el: el }; bubbles.set(agent.name, b);
     }
-    b.el.innerHTML = '<span class="who">' + esc(agent.name) + '</span> ' + text;
+    b.el.innerHTML = '<span class="who">' + person(agent.name) + '</span> ' + text;
     b.el.style.opacity = 1; b.until = performance.now() + (ms || 4200);
   }
   function tick(msg) { document.getElementById('ticker').innerHTML = '&gt; ' + msg; }
@@ -327,78 +496,101 @@
 
   // ---- choreography (unchanged event mapping; GB props) -------------------
   function agentByName(name) { return AGENTS.find(function (a) { return a.name === name; }); }
+  // One ticker line per event, in words, shared by the live stream and
+  // the boot line (the last log entry); '' for events that should not move
+  // the ticker (heartbeats). Sentence case throughout: the pixel font reads
+  // lowercase fine and mission titles keep their own casing. A mission is
+  // named by its title, or "a mission", never by a bare id.
+  function person(name) {
+    if (!name) return 'Someone';
+    if (name === 'human' || name === 'boss') return 'You';
+    return '<b>' + esc(String(name).charAt(0).toUpperCase() + String(name).slice(1)) + '</b>';
+  }
+  function titled(d, n) { return d.title ? '"' + esc(clip(d.title, n)) + '"' : 'a mission'; }
+  function fileName(f) { return String(f || '').split(',')[0].split('/').pop() || 'a note'; }
+  function tickFor(type, d) {
+    var who = d.assignee || d.by || d.author || d.from || d.name;
+    var note = d.note ? ': ' + esc(clip(d.note, 44)) : '';
+    switch (type) {
+      case 'agent.registered': return person(d.name) + ' clocked in';
+      case 'agent.removed': return person(d.name) + ' left the building';
+      case 'task.created': return 'New on the board: ' + titled(d, 56);
+      case 'task.claimed': return person(who) + ' picked up ' + titled(d, 48);
+      case 'task.review': return person(who) + ' left ' + titled(d, 40) + ' at your door';
+      case 'task.done': return (who ? person(who) + ' shipped ' : 'Shipped ') + titled(d, 48);
+      case 'task.failed': return titled(d, 48) + ' failed' + note;
+      case 'task.requeued': return titled(d, 40) + ' is back on the board' + note;
+      case 'task.blocked': return titled(d, 40) + ' is stuck' + note;
+      case 'task.updated': return d.note ? person(who) + ' on ' + titled(d, 30) + ': ' + esc(clip(d.note, 50)) : '';
+      case 'knowledge.written': return person(d.author) + ' filed ' + esc(clip(fileName(d.file), 40)) + ' in the brain';
+      case 'message.posted':
+        return person(d.from) + ' to ' + (d.to === '*' ? 'everyone' : d.to === 'boss' ? 'you' : person(d.to)) +
+          (d.body ? ': ' + esc(clip(d.body, 44)) : '');
+      case 'project.created': return 'New project: ' + esc(clip(d.note, 50));
+    }
+    return '';
+  }
   function onEvent(type, d) {
     var who = d.assignee || d.by || d.author || d.from || d.name;
     var ag = who ? agentByName(who) : null;
+    var line = tickFor(type, d);
+    if (line) tick(line);
     switch (type) {
       case 'agent.registered':
-        tick('<b>' + esc(d.name) + '</b> CLOCKED IN');
         refreshState();
         break;
       case 'agent.heartbeat':
         if (ag) { ag.state = 'active'; ag.activity = d.activity || ag.activity; }
         break;
       case 'agent.removed':
-        tick('<b>' + esc(d.name) + '</b> LEFT THE BUILDING');
         refreshState();
         break;
       case 'task.created':
-        tick('NEW MISSION <b>' + esc(d.id) + '</b> · ' + esc(clip(d.title, 58)));
         refreshState();
         break;
       case 'task.claimed':
-        tick('<b>' + esc(who) + '</b> CLAIMED <b>' + esc(d.id) + '</b> · ' + esc(clip(d.title, 46)));
         if (ag) enqueue(ag, [
           { walk: SPOT.board }, { carry: 'folder-working' },
-          { say: 'claimed <b>' + esc(d.id) + '</b>', ms: 3000 },
+          { say: 'on it: ' + titled(d, 40), ms: 3000 },
           { walk: deskSeat(ag.desk) }, { carry: null },
         ]);
         refreshState();
         break;
       case 'task.review':
-        tick('<b>' + esc(who) + '</b> PARKED <b>' + esc(d.id) + '</b> AT THE BOSS DOOR');
         if (ag) enqueue(ag, [
           { carry: 'folder-review' }, { walk: SPOT.bossdoor },
-          { say: '<b>' + esc(d.id) + '</b> ready for review', ms: 3500 },
+          { say: titled(d, 40) + ' is ready for you', ms: 3500 },
           { wait: 1200 }, { carry: null }, { walk: deskSeat(ag.desk) },
         ]);
         refreshState();
         break;
       case 'task.done':
-        tick('<b>' + esc(d.id) + '</b> SHIPPED' + (who ? ' · <b>' + esc(who) + '</b>' : ''));
         if (ag) enqueue(ag, [
           { carry: 'folder-done' }, { walk: SPOT.board },
-          { say: '<b>' + esc(d.id) + '</b> done', ms: 3000 },
+          { say: 'shipped ' + titled(d, 40), ms: 3000 },
           { carry: null }, { walk: deskSeat(ag.desk) },
         ]);
         refreshState();
         break;
       case 'task.failed':
-        tick('<b>' + esc(d.id) + '</b> FAILED');
         alarmUntil = performance.now() + 2000;
         refreshState();
         break;
       case 'task.requeued':
       case 'task.blocked':
-        tick('<b>' + esc(d.id) + '</b> ' + (type === 'task.blocked' ? 'BLOCKED' : 'BACK ON THE BOARD') + (d.note ? ' · ' + esc(clip(d.note, 44)) : ''));
         refreshState();
         break;
       case 'task.updated':
-        if (d.note) {
-          tick('<b>' + esc(who) + '</b> · ' + esc(d.id) + ': ' + esc(clip(d.note, 56)));
-          if (ag) enqueue(ag, [{ say: esc(clip(d.note, 60)), ms: 4200 }]);
-        }
+        if (d.note && ag) enqueue(ag, [{ say: esc(clip(d.note, 60)), ms: 4200 }]);
         break;
       case 'knowledge.written':
-        tick('<b>' + esc(d.author) + '</b> FILED ' + esc(clip(d.file, 46)));
         if (ag) enqueue(ag, [
           { walk: SPOT.shelf },
-          { say: 'filing ' + esc(clip(d.file, 34)), ms: 3000 },
+          { say: 'filing ' + esc(clip(fileName(d.file), 34)), ms: 3000 },
           { walk: deskSeat(ag.desk) },
         ]);
         break;
       case 'message.posted': {
-        tick('<b>' + esc(d.from) + '</b> &gt; <b>' + esc(d.to) + '</b>' + (d.body ? ' · ' + esc(clip(d.body, 44)) : ''));
         var rcpt = agentByName(d.to);
         if (ag) enqueue(ag, [{ emote: 'emote-mail' }]);
         if (ag && rcpt) enqueue(ag, [
@@ -406,7 +598,7 @@
           { say: esc(clip(d.body, 60)), ms: 4200 },
           { walk: deskSeat(ag.desk) },
         ]);
-        else if (ag) enqueue(ag, [{ say: '&gt; ' + esc(d.to) + ': ' + esc(clip(d.body, 40)), ms: 4200 }]);
+        else if (ag) enqueue(ag, [{ say: 'to ' + (d.to === '*' ? 'everyone' : d.to === 'boss' ? 'you' : person(d.to)) + ': ' + esc(clip(d.body, 40)), ms: 4200 }]);
         break;
       }
     }
@@ -449,7 +641,7 @@
 
     // BRAIN shelf (queue #6, hand-drawn)
     A.drawSprite(ctx, 'shelf-brain', p, 8, 60);
-    A.ttfText(ctx, 'BRAIN', p, 9, 106, 3, 8);
+    plaque(p, 'BRAIN', 28, 52); // sign on top of the shelf, like the desk nameplates
 
     // coffee corner + plant (queue #7, hand-drawn; the machine drips)
     A.drawSprite(ctx, Math.floor(t / 400) % 2 ? 'coffee-b' : 'coffee-a', p, 8, 188);
@@ -476,15 +668,23 @@
     A.drawSprite(ctx, 'bench', p, 252, 202);       // the waiting bench
     shadeRect(p, 328, 176, 48, 16, 1);
     shadeRect(p, 330, 178, 44, 10, 2);
-    A.ttfText(ctx, 'BOSS', p, 330, 196, 3, 8);
-    // review folders bounce at the door
-    var bounce = Math.floor(Math.sin(t / 250) * 2);
+    plaque(p, 'BOSS', 344, 152); // sign on the boss office wall
+    // review folders wait in a pile on the mat
     for (var k2 = 0; k2 < Math.min(reviewCount, 4); k2++)
-      A.drawSprite(ctx, 'folder-review', p, 282 - k2 * 4, 166 + bounce + k2);
-    if (reviewCount > 4) A.drawText(ctx, '+' + (reviewCount - 4), p, 264, 160, 3);
+      A.drawSprite(ctx, 'folder-review', p, 288 + (k2 % 2), 184 - k2 * 3);
+    if (reviewCount > 4) plaque(p, '+' + (reviewCount - 4), 292, 168);
 
-    // front door mark
-    shadeRect(p, 8, 210, 20, 4, 1);
+    // front door mark, under the spawn spot
+    shadeRect(p, 46, 212, 24, 4, 1);
+  }
+
+  // Small sign: dark border, light fill, dark pixel text, centered on cx.
+  function plaque(p, text, cx, y) {
+    var tw = A.textWidth(text);
+    var x0 = cx - Math.floor((tw + 5) / 2);
+    shadeRect(p, x0, y, tw + 5, 9, 0);
+    shadeRect(p, x0 + 1, y + 1, tw + 3, 7, 3);
+    A.drawText(ctx, text, p, x0 + 3, y + 2, 0);
   }
 
   function drawDeskAt(d, t, p) {
@@ -497,12 +697,10 @@
     // screen; only the offline/absent lose their plate (boss refinement:
     // sol idled and her name vanished — presence, not activity, owns it).
     if (ag && ag.state !== 'offline') {
-      var nm = ag.name.slice(0, 7).toUpperCase();
-      var tw = A.textWidth(nm);
-      var px0 = d.x + 42 - Math.floor((tw + 5) / 2);
-      shadeRect(p, px0, d.y - 23, tw + 5, 9, 0);
-      shadeRect(p, px0 + 1, d.y - 22, tw + 3, 7, 3);
-      A.drawText(ctx, nm, p, px0 + 3, d.y - 21, 0);
+      // full name when it fits in 14 glyphs (64px, well clear of the next
+      // desk), else the first 13 and an ellipsis
+      var nm = ag.name.length > 14 ? ag.name.slice(0, 13) + '…' : ag.name;
+      plaque(p, nm, d.x + 42, d.y - 23);
     }
   }
 
@@ -534,7 +732,15 @@
     }
     var frame = a.walking ? (Math.floor(t / 140) % 2) : 0;
     var key = A.assemble(a.cast.head, a.cast.body, facing, frame);
+    a.lastKey = key; // the bubble anchors to the head too
     var bob = (!a.walking && Math.floor(t / 600) % 2) ? 1 : 0;
+    // Props hang off the drawn sprite, not a fixed offset: the carried
+    // folder sits in the hands at chest height (behind the body when we
+    // see their back), the emote sits just above the top of the head.
+    var headY = y - 16 + bob + 2 * spriteTopRow(key);
+    var carryX = facing === 'left' ? x - 2 : facing === 'right' ? x + 10 : x + 4;
+    var carryY = y + 2 + bob;
+    if (a.carry && facing === 'back') A.drawSprite(ctx, a.carry, p, carryX, carryY - 4);
     // 2x super-size (boss: the 10-wide parts were dwarfed by the
     // furniture): integer scale, feet stay on the same line — the
     // sprite grows upward and outward from the old 16-box.
@@ -545,12 +751,162 @@
         ctx.drawImage(cnv, (x - 8) | 0, (y - 16 + bob) | 0, 32, 32);
       }
     }
-    if (a.carry) A.drawSprite(ctx, a.carry, p, x + 4, y - 24);
+    if (a.carry && facing !== 'back') A.drawSprite(ctx, a.carry, p, carryX, carryY);
     if (a.emote && performance.now() < a.emoteUntil) {
-      A.drawSprite(ctx, a.emote, p, x + 14, y - 24);
+      A.drawSprite(ctx, a.emote, p, x + 12, headY - 9);
     } else if (!a.walking && atSeat(a) && a.state === 'idle' && Math.floor(t / 900) % 2) {
-      A.drawSprite(ctx, 'emote-zzz', p, x + 14, y - 24);
+      A.drawSprite(ctx, 'emote-zzz', p, x + 12, headY - 9);
     }
+  }
+
+  // First non-empty row of a 16x16 agent sprite (the top of the head).
+  var topRowCache = {};
+  function spriteTopRow(key) {
+    if (!key) return 0;
+    if (topRowCache[key] !== undefined) return topRowCache[key];
+    var rows = A.SPRITES[key] || [], r = 0;
+    while (r < rows.length && !/[^.]/.test(rows[r])) r++;
+    return (topRowCache[key] = r < rows.length ? r : 0);
+  }
+
+  // ---- hotspots: click, tap or Tab + Enter --------------------------------
+  // Rects are in canvas pixels. Pointer coordinates come back through the
+  // whole-number scale: the canvas box is exactly SCALE device pixels per
+  // art pixel, so floor(offset * W / boxWidth) is the art pixel under it.
+  var ACTIVITY_WORDS = {
+    editing: 'Editing', reading: 'Reading', executing: 'Running commands', thinking: 'Thinking',
+    waiting_input: 'Waiting for input', waiting_permission: 'Waiting for permission',
+    blocked: 'Blocked', idle: 'Idle',
+  };
+  function go(href) { location.href = href; }
+  function hotspots() {
+    var list = [
+      { label: 'Mission board: open the mission list', rect: { x: 24, y: 6, w: 80, h: 32 }, act: function () { go('/v2#board'); } },
+      { label: 'Brain shelf: open the brain', rect: { x: 8, y: 52, w: 40, h: 52 }, act: function () { go('/v2#brain'); } },
+    ];
+    DESK_SLOTS.forEach(function (d) {
+      var ag = AGENTS.find(function (a) { return a.desk === d; });
+      if (!ag) return;
+      list.push({ label: 'Desk of ' + ag.name, rect: { x: d.x, y: d.y - 23, w: 56, h: 39 }, agent: ag,
+        act: function () { openCard(ag); } });
+    });
+    list.push({ label: 'Boss door: ' + reviewCount + ' waiting for you. Open the review inbox',
+      rect: { x: 284, y: 174, w: 32, h: 26 }, act: function () { go('/v2#review'); } });
+    return list;
+  }
+  function inRect(r, x, y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
+  function hitAt(x, y) {
+    // people first (they stand in front of the furniture), front-most first
+    var people = AGENTS.slice().sort(function (a, b) { return b.pos.y - a.pos.y; });
+    for (var i = 0; i < people.length; i++) {
+      var a = people[i];
+      var top = a.pos.y - 16 + 2 * spriteTopRow(a.lastKey);
+      if (inRect({ x: a.pos.x - 2, y: top, w: 20, h: a.pos.y + 16 - top }, x, y))
+        return { label: a.name, agent: a, act: function () { openCard(a); } };
+    }
+    var hs = hotspots();
+    for (var j = 0; j < hs.length; j++) if (inRect(hs[j].rect, x, y)) return hs[j];
+    return null;
+  }
+  function artPoint(e) {
+    var r = cv.getBoundingClientRect();
+    return { x: Math.floor((e.clientX - r.left) * W / r.width), y: Math.floor((e.clientY - r.top) * H / r.height) };
+  }
+
+  // the card
+  var cardEl = document.getElementById('card'), cardFor = null;
+  function currentMission(name) {
+    var mine = TASKS.filter(function (t) { return t.assignee === name; });
+    var working = mine.filter(function (t) { return t.status === 'claimed' || t.status === 'in_progress'; });
+    if (working.length) return { t: working[working.length - 1], how: 'On' };
+    var parked = mine.filter(function (t) { return t.status === 'review'; });
+    if (parked.length) return { t: parked[parked.length - 1], how: 'Waiting on review' };
+    return null;
+  }
+  function openCard(ag) {
+    cardFor = ag;
+    var m = currentMission(ag.name);
+    var act = ACTIVITY_WORDS[ag.activity] || (ag.state === 'idle' ? 'Away for a bit' : 'At work');
+    cardEl.innerHTML =
+      '<div class="name">' + person(ag.name) + '</div>' +
+      '<div>' + esc(act) + (ag.state === 'idle' && ag.activity !== 'idle' ? ' (idle)' : '') + '</div>' +
+      '<div>' + (m
+        ? esc(m.how) + ': <a href="/v2#mission=' + encodeURIComponent(m.t.id) + '">' + titled(m.t, 60) + '</a>'
+        : 'No mission in hand') + '</div>' +
+      '<button type="button" aria-label="Close">x</button>';
+    cardEl.setAttribute('aria-label', ag.name);
+    cardEl.hidden = false;
+    cardEl.querySelector('button').addEventListener('click', function () { closeCard(true); });
+    placeCard();
+    (cardEl.querySelector('a') || cardEl.querySelector('button')).focus();
+    announce(ag.name + '. ' + act + '. ' + (m ? m.how + ': ' + (m.t.title || 'a mission') : 'No mission in hand'));
+  }
+  function placeCard() {
+    if (!cardFor || cardEl.hidden) return;
+    var r = cv.getBoundingClientRect(), s = r.width / W;
+    var d = cardFor.desk, cw = cardEl.offsetWidth, ch = cardEl.offsetHeight;
+    var left = Math.max(0, Math.min(r.width - cw, (d.x + 28) * s - cw / 2));
+    var top = (d.y - 26) * s - ch; // above the nameplate
+    if (top < 0) top = (d.y + 30) * s; // or below the chair
+    cardEl.style.left = left + 'px';
+    cardEl.style.top = Math.max(0, Math.min(r.height - ch, top)) + 'px';
+  }
+  function closeCard(refocus) {
+    if (cardEl.hidden) return;
+    cardEl.hidden = true; cardFor = null;
+    if (refocus) cv.focus();
+  }
+  function announce(s) { document.getElementById('sr').textContent = s; }
+
+  // keyboard: Tab walks the hotspots while the canvas has focus, then
+  // lets focus leave the canvas as usual; Enter or Space opens; Escape closes
+  var focusIdx = -1;
+  function drawFocusRing() {
+    if (MINI || document.activeElement !== cv || focusIdx < 0) return;
+    var h = hotspots()[focusIdx];
+    if (!h) return;
+    var r = h.rect, p = pal();
+    // dark outer ring, light inner ring, one art pixel each
+    shadeRect(p, r.x - 2, r.y - 2, r.w + 4, 1, 0); shadeRect(p, r.x - 2, r.y + r.h + 1, r.w + 4, 1, 0);
+    shadeRect(p, r.x - 2, r.y - 2, 1, r.h + 4, 0); shadeRect(p, r.x + r.w + 1, r.y - 2, 1, r.h + 4, 0);
+    shadeRect(p, r.x - 1, r.y - 1, r.w + 2, 1, 3); shadeRect(p, r.x - 1, r.y + r.h, r.w + 2, 1, 3);
+    shadeRect(p, r.x - 1, r.y - 1, 1, r.h + 2, 3); shadeRect(p, r.x + r.w, r.y - 1, 1, r.h + 2, 3);
+  }
+  function setFocus(i) {
+    focusIdx = i;
+    var h = hotspots()[i];
+    if (h) announce(h.label);
+  }
+  if (MINI) {
+    cv.removeAttribute('tabindex'); // the dashboard card's own link opens the full office
+  } else {
+    var lastIdx = 0; // Escape from the card lands back on the same hotspot
+    cv.addEventListener('focus', function () { if (focusIdx < 0) setFocus(Math.min(lastIdx, hotspots().length - 1)); });
+    cv.addEventListener('blur', function () { if (focusIdx >= 0) lastIdx = focusIdx; focusIdx = -1; });
+    cv.addEventListener('keydown', function (e) {
+      var n = hotspots().length;
+      if (e.key === 'Tab') {
+        var next = focusIdx + (e.shiftKey ? -1 : 1);
+        if (next >= 0 && next < n) { e.preventDefault(); setFocus(next); }
+        else { focusIdx = -1; lastIdx = 0; } // let the browser move focus on
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        var h = hotspots()[focusIdx];
+        if (h) { e.preventDefault(); h.act(); }
+      }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeCard(true); });
+    cv.addEventListener('pointermove', function (e) {
+      var p = artPoint(e);
+      cv.style.cursor = hitAt(p.x, p.y) ? 'pointer' : 'default';
+    });
+    // click covers mouse and touch taps alike
+    cv.addEventListener('click', function (e) {
+      var p = artPoint(e), h = hitAt(p.x, p.y);
+      if (h) h.act(); else closeCard(false);
+    });
+    document.addEventListener('click', function (e) {
+      if (e.target !== cv && !cardEl.contains(e.target)) closeCard(false);
+    });
   }
 
   // ---- live wiring (unchanged) -------------------------------------------
@@ -593,11 +949,13 @@
       for (var i = 0; i < AGENTS.length; i++) {
         AGENTS[i].queue = []; AGENTS[i].pos = deskSeat(AGENTS[i].desk);
       }
-      var lastLog = (s.log || [])[(s.log || []).length - 1];
-      tick(lastLog ? esc(lastLog.type).toUpperCase() : 'THE OFFICE IS OPEN');
+      // the newest log entry that reads as words (heartbeats are skipped)
+      var log = s.log || [], line = '';
+      for (var j = log.length - 1; j >= 0 && !line; j--) line = tickFor(log[j].type, log[j]);
+      tick(line || 'The office is open');
       connectSSE();
       setInterval(refreshState, 60000);
-    }).catch(function () { tick('COULD NOT REACH THE HUB'); });
+    }).catch(function () { tick('Could not reach the hub'); });
   }
   (function gate() {
     token = localStorage.getItem('bureau_token');
@@ -620,40 +978,62 @@
   function frame(t) {
     var dt = Math.min(50, t - last); last = t;
     stepAgents(dt);
+    drawTag = 'world';
     drawWorld(t);
     // painter's algorithm over desks + agents: sort by baseline (bottom
     // edge). Agent baseline = feet (pos.y + 16); desk baseline = its
     // front bottom edge.
     var paint = [];
     DESK_SLOTS.forEach(function (d) {
-      paint.push({ y: d.y + 16, draw: function () { drawDeskAt(d, t, pal()); } });
+      paint.push({ y: d.y + 16, draw: function () { drawTag = 'desk ' + d.x + ',' + d.y; drawDeskAt(d, t, pal()); } });
       // chair south of the desk, left half; baseline below the seated
       // agent's feet so the chair back overlaps their legs (sit illusion)
       // the office chair, native 20x16 (between the too-small 16 and the
       // too-big 32), back view wrapping the seated agent's lower body
-      paint.push({ y: d.y + 31, draw: function () { A.drawSprite(ctx, 'chair-office', pal(), d.x + 8, d.y + 12); } });
+      paint.push({ y: d.y + 31, draw: function () { drawTag = 'chair ' + d.x + ',' + d.y; A.drawSprite(ctx, 'chair-office', pal(), d.x + 8, d.y + 12); } });
     });
-    AGENTS.forEach(function (a) { paint.push({ y: a.pos.y + 16, draw: function () { drawAgent(a, t); } }); });
+    AGENTS.forEach(function (a) { paint.push({ y: a.pos.y + 16, draw: function () { drawTag = 'agent ' + a.name; drawAgent(a, t); } }); });
     paint.sort(function (a, b) { return a.y - b.y; }).forEach(function (e) { e.draw(); });
+    drawTag = 'focus ring';
+    drawFocusRing();
+    drawTag = 'outside the draw loop';
     // bubble positions in CSS pixels (canvas CSS size / internal size)
     var rect = cv.getBoundingClientRect(), wrap = document.getElementById('wrap');
     wrap.style.width = rect.width + 'px'; wrap.style.height = rect.height + 'px';
     var cssScale = rect.width / W;
+    placeCard();
+    // Bubbles scale with the canvas in whole steps (8px text at 3x, 16px
+    // at 6x), stay under half the canvas wide, and are clamped inside it.
+    var k = Math.max(1, Math.round(cssScale / 3));
     bubbles.forEach(function (b, name) {
       var a = agentByName(name);
       if (!a) return;
       if (b.until && t > b.until) { b.el.style.opacity = 0; return; }
-      b.el.style.left = ((a.pos.x + 8) * cssScale) + 'px';
-      b.el.style.top = ((a.pos.y - 18) * cssScale) + 'px';
+      if (b.k !== k || b.w !== rect.width) {
+        b.k = k; b.w = rect.width;
+        b.el.style.fontSize = (8 * k) + 'px';
+        b.el.style.padding = (7 * k) + 'px ' + (9 * k) + 'px';
+        b.el.style.maxWidth = Math.min(240 * k, Math.floor(rect.width / 2)) + 'px';
+      }
+      b.el.style.left = '0px'; // measure at full available width
+      var bw = b.el.offsetWidth, bh = b.el.offsetHeight;
+      var cx = (a.pos.x + 8) * cssScale;
+      var headTop = (a.pos.y - 16 + 2 * spriteTopRow(a.lastKey)) * cssScale;
+      var left = Math.max(0, Math.min(rect.width - bw, cx - bw / 2));
+      var top = headTop - 4 - bh;
+      if (top < 0) top = (a.pos.y + 18) * cssScale; // no room above: below the feet
+      top = Math.max(0, Math.min(rect.height - bh, top));
+      b.el.style.left = left + 'px';
+      b.el.style.top = top + 'px';
     });
-    requestAnimationFrame(frame);
   }
-  requestAnimationFrame(frame);
-  // rAF watchdog: some browsers throttle or pause rAF in embedded/
-  // battery-saver contexts (the dashboard mini iframe is exactly that
-  // shape). If no frame has run for 500ms, tick one manually — the mini
-  // keeps breathing at a reduced rate instead of freezing.
+  // One draw loop only. The watchdog below may draw a frame by hand when
+  // rAF is throttled (the dashboard mini iframe), but it never schedules
+  // another rAF, so a hidden tab cannot stack loops.
+  function loop(t) { frame(t); requestAnimationFrame(loop); }
+  requestAnimationFrame(loop);
   setInterval(function () {
+    if (document.hidden) return; // nobody is looking; rAF resumes on its own
     if (performance.now() - last > 500) frame(performance.now());
   }, 500);
 })();
