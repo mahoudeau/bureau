@@ -53,6 +53,8 @@ docker run -d -p 8100:8100 -e BUREAU_TOKEN=... -v bureau-data:/data -v bureau-br
 
 The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.
 
+Prebuilt images, amd64 and arm64, appear from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.2.0`. Use one in place of `bureau` above to skip the build.
+
 ## The six calls
 
 | Call | Purpose |

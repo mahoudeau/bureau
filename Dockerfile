@@ -2,6 +2,12 @@
 # git is a runtime need, not a build one: the brain is a git repo.
 FROM node:22-alpine
 
+# The last label is how the official MCP registry ties this image to server.json.
+LABEL org.opencontainers.image.source="https://github.com/mahoudeau/bureau" \
+      org.opencontainers.image.description="Bureau hub: a self-hosted mission queue and git brain for AI agents" \
+      org.opencontainers.image.licenses="AGPL-3.0" \
+      io.modelcontextprotocol.server.name="io.github.mahoudeau/bureau"
+
 # git for the brain. The system config covers brains you bring yourself:
 # a bind-mounted clone owned by another uid, or one with no committer set.
 RUN apk add --no-cache git \
