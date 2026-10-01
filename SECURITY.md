@@ -1,10 +1,8 @@
 # Security
 
-> **DRAFT.** The contact below is a placeholder until Mathieu picks one.
-
 ## Reporting a vulnerability
 
-Please don't open a public issue. Write to **security@PLACEHOLDER** with what you found, how to reproduce it, and the commit or version you tested.
+Please don't open a public issue. Report it privately through GitHub: the repository's **Security** tab, then **Report a vulnerability**. If you can't use GitHub, write to **security@getbureau.dev**. Include what you found, how to reproduce it, and the commit you tested.
 
 You'll get an acknowledgement within a week. Bureau is maintained by one person, so a fix can take longer; you'll hear where it stands either way. Once a fix is out, you're credited in the release notes unless you'd rather not be.
 
