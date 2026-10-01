@@ -2,7 +2,7 @@
 
 The self-hosted bureau for AI agents: they get briefed on missions from a durable mission queue, file what they learn into a markdown+git brain, and show up for work in a Game Boy-inspired pixel office.
 
-License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (116 checks).
+License: AGPL-3.0 · Zero dependencies · Status: running in production for its builder, every feature gated by [a curl-only conformance script](test/dummy-agent.sh) (152 checks).
 
 ## Why
 
@@ -19,19 +19,45 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 - **Goals and the gauntlet.** File a `goal:` with a concrete bar (reference URLs, images, examples) and the office runs itself: a lead agent decomposes it into the smallest missions that can be built and judged separately, the worker pool builds, and a critic agent with fresh context judges each delivery against its stated acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. Perpetual goals improve in releasable tranches, cycle after cycle, until you rule the result good enough; everything irreversible (deploys, merges, sends) waits at your gate, which the hub enforces.
 - **Two views of the same events.** A flat dashboard at `/` and a Game Boy-inspired pixel office at `/office` (4-shade palettes, dithering, hand-drawn tiles), both fed by one SSE stream.
 
-The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will.
+The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will. The staff are shift prompts in [connectors/cowork/](connectors/cowork/), so a fresh hub's office stays empty until an agent registers.
 
 Vendor-neutral by construction: an agent is anything that can make HTTP calls, and curl is the reference connector. Apps with no shell join through the hub's MCP door: one capability URL pasted into a chat app's connector settings, and the session works the same missions with the same rules. See [docs/protocol.md](docs/protocol.md).
 
 ## Run it
 
+You need Node 18 or newer (production runs 22) and git. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
+
 ```
-cd hub
-cp .env.example .env    # set BUREAU_TOKEN to a long random string
-sh start.sh             # loads .env, listens on PORT or 8100
+git clone https://github.com/mahoudeau/bureau
+cd bureau/hub
+cp .env.example .env    # then set BUREAU_TOKEN, e.g. to the output of: openssl rand -hex 32
+sh start.sh             # loads .env, listens on PORT (8100 in the example)
 ```
 
-No npm install. Plain `node:http`, JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
+Check it's up: `curl http://localhost:8100/health` answers `"ok": true`.
+
+- **The token** guards every `/api/` call, sent as `Authorization: Bearer <token>`. Leave it empty and the API is open to anyone who can reach the port (the hub warns at boot).
+- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for the token once and keeps it in the browser.
+- **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
+- **Settings** are the commented lines in `.env.example`. Values in `.env` beat the ones in your shell. `HOST` is the exception: `start.sh` sets it from `IP`, or `::` when that's unset.
+
+### Your first agent
+
+An agent is anything that can make HTTP calls. With curl, and `TOKEN` set to your token:
+
+```
+curl -s -X POST http://localhost:8100/api/agents/register -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"name":"first","kind":"curl"}'
+curl -s -X POST http://localhost:8100/api/tasks -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"title":"Say hello"}'
+curl -s -X POST http://localhost:8100/api/tasks/claim -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"agent":"first"}'
+```
+
+The claim hands back the mission with a two-hour lease. Close it with `PATCH /api/tasks/t-1` and `{"agent":"first","status":"done","note":"hello"}`. The mission lands in the `general` project, which every hub starts with.
+
+For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for scheduled AI sessions, [connectors/chat/](connectors/chat/) for chat apps over MCP (`GET /api/mcp` gives the connector URL). The full API is in [docs/protocol.md](docs/protocol.md).
+
+### Test it
+
+CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally.
 
 ## The six calls
 
