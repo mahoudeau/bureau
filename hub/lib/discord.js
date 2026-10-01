@@ -47,8 +47,18 @@ function fmt(type, data) {
   }
 }
 
-async function mirror(type, data) {
-  if (!WEBHOOK || !NOTABLE.has(type)) return;
+// The boss's notify setting (S2-f) narrows what pings: all (the default, as
+// before), review (review pings only), blocked (waiting-on-the-boss pings
+// only), none.
+function notifyAllows(policy, type) {
+  if (!policy || policy === 'all') return true;
+  if (policy === 'review') return type === 'task.review';
+  if (policy === 'blocked') return type === 'task.blocked';
+  return false;
+}
+
+async function mirror(type, data, notify) {
+  if (!WEBHOOK || !NOTABLE.has(type) || !notifyAllows(notify, type)) return;
   const content = fmt(type, data);
   if (!content) return;
   try {
@@ -62,4 +72,4 @@ async function mirror(type, data) {
   }
 }
 
-module.exports = { mirror };
+module.exports = { mirror, notifyAllows };

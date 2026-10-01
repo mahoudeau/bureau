@@ -57,6 +57,11 @@ jobs:
       - name: Pokes (test/pokes.sh)
         run: sh test/pokes.sh
 
+      # The Discord notify policy: a decision table and an end-to-end run
+      # against a local sink, no webhook needed.
+      - name: Notify (test/notify.test.js)
+        run: node test/notify.test.js
+
       # Self-contained: starts its own hubs on ports 4711 and 4712.
       - name: Storage (test/storage.sh)
         run: bash test/storage.sh

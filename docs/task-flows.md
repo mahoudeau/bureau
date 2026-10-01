@@ -24,7 +24,7 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 
 **Chat fallback:** tell any connected agent session "approve t-42" / "send t-42 back, the tone is wrong" and it PATCHes the hub.
 
-**Pair mode: approval in the session counts.** When the boss works live with consul and approves the result in the chat, consul closes the mission `done` itself, straight from `in_progress`, with the note `approved by boss in session: "<his exact words>"`. No second approval in the dashboard. Consul does not park it in `review` first: a boss-gate mission in review closes only by the boss's hand, so parking it would force the double click. `review` stays for two cases: work finished while the boss is away, and irreversible steps (deploys, merges, external sends, purchases, credentials) he has not explicitly approved in the chat.
+**Pair mode: approval in the session counts.** When the boss works live with consul and approves the result in the chat, consul closes the mission `done` itself, straight from `in_progress`, with his exact words in `approved_in_session` (where the project's approval policy is `in-session`, the hub logs the quote; where it isn't set, the note `approved by boss in session: "<his exact words>"` does the same job). No second approval in the dashboard. Consul does not park it in `review` first: a boss-gate mission in review closes only by the boss's hand, so parking it would force the double click. `review` stays for two cases: work finished while the boss is away, and irreversible steps (deploys, merges, external sends, purchases, credentials) he has not explicitly approved in the chat.
 
 ## Statuses
 
