@@ -64,3 +64,49 @@ jobs:
       - name: Hub log
         if: always()
         run: cat "$RUNNER_TEMP/bureau/hub.log" || true
+
+  # The office regression guard: every draw stays on the 384x216 canvas and
+  # every pixel is one of the palette's 4 shades, at every phase and view.
+  # Playwright and Chromium are installed in CI only; the hub itself keeps
+  # zero dependencies.
+  office-guard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-1
+
+      - name: Install Playwright and Chromium (CI only)
+        run: |
+          npm install --no-save --no-package-lock playwright@1
+          npx playwright install --with-deps chromium
+
+      - name: Start a scratch hub
+        run: |
+          mkdir -p "$RUNNER_TEMP/office"
+          PORT=4714 BUREAU_TOKEN=demo \
+          BUREAU_DATA_DIR="$RUNNER_TEMP/office/data" \
+          BUREAU_BRAIN_DIR="$RUNNER_TEMP/office/brain" \
+            nohup node hub/server.js > "$RUNNER_TEMP/office/hub.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:4714/health > /dev/null && exit 0
+            sleep 0.5
+          done
+          echo "hub never answered /health"
+          cat "$RUNNER_TEMP/office/hub.log"
+          exit 1
+
+      - name: Office guard (test/office-guard.sh)
+        run: BASE=http://127.0.0.1:4714 TOKEN=demo bash test/office-guard.sh
+
+      - name: Hub log
+        if: always()
+        run: cat "$RUNNER_TEMP/office/hub.log" || true
