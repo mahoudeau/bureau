@@ -161,6 +161,9 @@ async function main() {
 
   // a review park: wren carries the folder to the boss door
   await patch(ids.picnic, { agent: 'wren', status: 'review', note: 'memo drafted, needs a yes' });
+  // and a block that waits on the boss's answer (the waiting bench)
+  await claim('basil', ids.sign);
+  await patch(ids.sign, { agent: 'basil', status: 'blocked', note: 'waiting on: boss, which shade of green' });
   await sleep(1500);
   await shoot('review-walk');
   await sleep(3000);
