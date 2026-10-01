@@ -39,7 +39,7 @@ Check it's up: `curl http://localhost:8100/health` answers `"ok": true`.
 - **The token** guards every `/api/` call, sent as `Authorization: Bearer <token>`. Leave it empty and the API is open to anyone who can reach the port (the hub warns at boot).
 - **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for the token once and keeps it in the browser.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
-- **Settings** are the commented lines in `.env.example`. Values in `.env` beat the ones in your shell. `HOST` is the exception: `start.sh` sets it from `IP`, or `::` when that's unset.
+- **Settings** are the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`.
 
 ### Your first agent
 
