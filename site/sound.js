@@ -60,6 +60,8 @@
     press: function (t) { tone(880, t, 0.03, { vol: 0.25 }); },
     back: function (t) { tone(660, t, 0.03, { vol: 0.25 }); tone(440, t + 0.035, 0.04, { vol: 0.25 }); },
     select: function (t) { tone(988, t, 0.04, { vol: 0.25 }); tone(1319, t + 0.045, 0.05, { vol: 0.25 }); },
+    // the volume wheel turned down: the last thing you hear
+    mute: function (t) { tone(1319, t, 0.04, { vol: 0.22 }); tone(659, t + 0.045, 0.07, { vol: 0.2 }); },
     // The character-select twirl: a square sweep with a sparkle on top.
     spin: function (t) {
       tone(330, t, 0.22, { to: 990, vol: 0.28 });

@@ -111,17 +111,21 @@ button { font: inherit; color: inherit; }
   position: absolute; left: calc(var(--cu) * 5); right: calc(var(--cu) * 5);
   top: calc(var(--cu) * 9); height: calc(var(--cu) * 45);
   border-radius: calc(var(--cu) * 1); overflow: hidden;
-  background: var(--lb, #f6ecd4);
+  background: var(--lb, #3d7a8c); color: var(--lt, #f6ecd4);
   box-shadow: inset 0 calc(var(--cu) * .5) calc(var(--cu) * .6) rgba(0,0,0,.4), 0 calc(var(--cu) * .3) 0 rgba(255,255,255,.25);
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: calc(var(--cu) * 4) calc(var(--cu) * 3.5) 0; text-align: left;
 }
-.cartridge .label canvas { width: 100%; flex: 1; min-height: 0; image-rendering: pixelated; display: block; }
+/* the label: the name, one line on what it does, a colour bar at the foot */
 .cartridge .label b {
-  display: block; text-align: center; font-weight: normal;
-  font-family: 'OfficePixel', monospace; font-size: calc(var(--cu) * 4.6); letter-spacing: .06em;
-  padding: calc(var(--cu) * 1.4) 0 calc(var(--cu) * 1.2);
-  color: var(--lt, #f6ecd4); background: var(--lband, #1f2d4a);
+  display: block; font-weight: normal; line-height: 1;
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--cu) * 8.5); letter-spacing: .02em;
 }
+.cartridge .label .line {
+  display: block; flex: 1; padding-top: calc(var(--cu) * 3);
+  font: 650 calc(var(--cu) * 4.6)/1.15 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.cartridge .label .bar { display: block; height: calc(var(--cu) * 1.6); margin: 0 calc(var(--cu) * -3.5); background: var(--lbar, #e7a93b); }
 .cartridge .arrow {
   position: absolute; left: 50%; bottom: calc(var(--cu) * 3); transform: translateX(-50%);
   border-left: calc(var(--cu) * 3) solid transparent; border-right: calc(var(--cu) * 3) solid transparent;
@@ -154,12 +158,14 @@ button { font: inherit; color: inherit; }
   background: rgba(0,0,0,.18); position: relative;
 }
 .power-switch i::after {
-  content: ''; position: absolute; top: calc(var(--u) * .25); left: calc(var(--u) * .3);
-  width: calc(var(--u) * 2.4); height: calc(var(--u) * 1.3); border-radius: calc(var(--u) * .6);
+  content: ''; position: absolute; top: calc(var(--u) * .25); left: 5%;
+  width: 40%; height: calc(var(--u) * 1.3); border-radius: calc(var(--u) * .6);
   background: var(--plastic-hi); box-shadow: 0 1px 1px rgba(0,0,0,.3);
   transition: left .3s;
 }
-#console.powered .power-switch i::after { left: calc(var(--u) * 3.3); }
+/* In % of the track, not --u: the console resizes every frame while it
+   zooms, and a --u value under a transition would trail behind and slide. */
+#console.powered .power-switch i::after { left: 55%; }
 
 /* volume wheel: the sound toggle, on the right edge */
 .wheel {
@@ -171,13 +177,49 @@ button { font: inherit; color: inherit; }
   display: flex; flex-direction: column; justify-content: space-evenly; align-items: center;
   overflow: hidden;
 }
+/* Turned: the stripes roll down and a notch lights. Offsets in % of the
+   stripe and the wheel, never --u (see the power switch). */
 .wheel i { width: 70%; height: calc(var(--u) * .35); background: rgba(0,0,0,.28); transition: transform .3s; }
-.wheel[aria-checked="true"] i { transform: translateY(calc(var(--u) * .9)); }
-.wheel-label {
-  position: absolute; right: calc(var(--u) * 1.8); top: calc(var(--u) * 45.5);
-  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.2); color: rgba(59,58,72,.6);
-  writing-mode: vertical-rl;
+.wheel[aria-checked="true"] i { transform: translateY(260%); }
+.wheel-notch {
+  position: absolute; left: 25%; width: 50%; height: 9%; top: 12%;
+  border-radius: 2px; background: #7d7a84; box-shadow: inset 0 1px 1px rgba(0,0,0,.4);
+  transition: top .3s, background .3s, box-shadow .3s;
 }
+.wheel[aria-checked="true"] .wheel-notch {
+  top: 79%; background: var(--led-on);
+  box-shadow: 0 0 calc(var(--u) * .8) rgba(255,77,58,.7);
+}
+.wheel:hover { filter: brightness(1.08); }
+.wheel:focus-visible { outline: 2px solid var(--led-on); outline-offset: 2px; }
+.wheel-label {
+  position: absolute; right: calc(var(--u) * 1.8); top: calc(var(--u) * 42);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--u) * 1.2); color: rgba(59,58,72,.6);
+  writing-mode: vertical-rl; white-space: nowrap;
+}
+.wheel-label b { font-weight: normal; color: rgba(59,58,72,.85); margin-top: calc(var(--u) * .8); display: inline-block; }
+
+/* On the screen: SOUND ON / OFF along the top for a moment after the wheel
+   turns, then a small speaker in the corner for as long as sound is on.
+   Two elements with no transitions, so neither can flicker. */
+.snd-corner, .snd-toast {
+  position: absolute; z-index: 3; pointer-events: none;
+  display: flex; align-items: center; gap: .45em;
+  font-family: 'OfficePixel', monospace; color: var(--sh0); background: var(--sh3);
+  border: max(2px, calc(var(--px, 3px) * 1)) solid var(--sh0);
+}
+.snd-corner[hidden], .snd-toast[hidden] { display: none; }
+.snd-corner { right: 3%; top: 3.5%; padding: .2em .3em; font-size: calc(var(--screen-w, 300px) * .04); opacity: .85; }
+.snd-toast {
+  left: 50%; top: 4%; transform: translateX(-50%); padding: .35em .6em;
+  font-size: calc(var(--screen-w, 300px) * .055);
+  box-shadow: max(2px, calc(var(--px, 3px) * 1)) max(2px, calc(var(--px, 3px) * 1)) 0 var(--sh1);
+}
+.snd-corner svg, .snd-toast svg { width: 1.3em; height: 1.3em; display: block; }
+.snd-toast b { font-weight: normal; letter-spacing: .06em; white-space: nowrap; }
+.snd-toast .cross, .snd-toast.off .waves { display: none; }
+.snd-toast.off .cross { display: inline; }
+#console:not(.powered) .snd-corner, #console:not(.powered) .snd-toast { display: none; }
 
 /* ---------- bezel and screen ---------- */
 .bezel {
@@ -387,6 +429,35 @@ button { font: inherit; color: inherit; }
   animation: caret .8s steps(1) infinite;
 }
 .code-menu button:focus-visible { outline: none; background: var(--sh2); }
+/* START: the cartridge menu, covering the glass */
+.cart-menu {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5%;
+  background: var(--sh3); color: var(--sh0);
+  font-family: 'OfficePixel', monospace; font-size: calc(var(--screen-w, 300px) * .045);
+}
+.cart-menu[hidden] { display: none; }
+.cart-menu-title { margin: 0; letter-spacing: .12em; }
+.cart-menu-list { display: flex; flex-wrap: wrap; justify-content: center; gap: calc(var(--screen-w, 300px) * .035); }
+.cart-menu-item {
+  --cu: calc(var(--screen-w, 300px) * .0037);
+  position: relative; border: 0; padding: 0; background: none; cursor: pointer;
+  transition: transform .15s steps(3);
+}
+.cart-menu-item.sel { transform: translateY(-6%); }
+/* the cursor under the picked one, like the CODE menu's */
+.cart-menu-item.sel::after {
+  content: ''; position: absolute; left: 50%; bottom: -12%; transform: translateX(-50%);
+  border-bottom: .55em solid var(--sh0); border-left: .4em solid transparent; border-right: .4em solid transparent;
+  animation: caret .8s steps(1) infinite;
+}
+/* the one already in the console */
+.cart-menu-item.current::before {
+  content: 'IN'; position: absolute; z-index: 1; left: 50%; top: -.6em; transform: translateX(-50%);
+  font-size: .7em; letter-spacing: .1em; padding: .15em .4em; color: var(--sh3); background: var(--sh0);
+}
+.cart-menu-item:focus-visible { outline: 2px solid var(--sh0); outline-offset: 3px; }
+.cart-menu-hint { margin: 0; font-size: .75em; letter-spacing: .08em; opacity: .8; }
 .gh-star.collected canvas { animation: collect .5s steps(5) 1, bob 1.2s steps(4) .5s infinite; }
 @keyframes collect { 0% { transform: scale(1); } 40% { transform: scale(1.5) translateY(-20px); } 100% { transform: scale(1); } }
 
@@ -507,7 +578,19 @@ button:focus-visible { outline: 2px solid #ffd27a; outline-offset: 2px; }
 }
 .cart-pick:hover, .cart-pick:focus-visible { transform: translateY(-5px) rotate(-1.5deg); }
 #rack.faded { opacity: 0; pointer-events: none; }
-@media (max-width: 900px) { #rack { display: none; } }
+/* the cartridge in the console: a lit bar under it, in the rack and the strip */
+.cart-pick { position: relative; }
+.cart-pick.current::after {
+  content: ''; position: absolute; left: 22%; right: 22%; bottom: -8px; height: 3px;
+  background: var(--led-on); box-shadow: 0 0 8px rgba(255,77,58,.7);
+}
+/* narrow screens: a strip under the console (the script sets its top) */
+@media (max-width: 900px) {
+  #rack { flex-direction: row; left: 50%; right: auto; top: 0; transform: translateX(-50%); gap: 10px; }
+  .cart-pick { --cu: 1.3px; } /* site.js STRIP_H assumes this size */
+  #rack.nostrip { display: none; }
+  .cart-pick:hover, .cart-pick:focus-visible { transform: translateY(-3px); }
+}
 
 /* ---------- the headline above the console ---------- */
 .site-title {
@@ -582,8 +665,9 @@ button:focus-visible { outline: 2px solid #ffd27a; outline-offset: 2px; }
 /* ---------- plain view ---------- */
 /* The way in for anyone the console doesn't suit: visible, labelled, never
    a footnote. */
+/* bottom left: the plain view and the guide, side by side */
+.help-links { position: fixed; left: 16px; bottom: 16px; z-index: 5; display: flex; gap: 10px; }
 .plain-link {
-  position: fixed; left: 16px; bottom: 16px; z-index: 5;
   display: flex; flex-direction: column; gap: 2px;
   padding: 10px 16px; border-radius: 8px;
   color: #f0eef7; background: #2a2833; border: 1px solid #4a4857;
@@ -595,10 +679,53 @@ button:focus-visible { outline: 2px solid #ffd27a; outline-offset: 2px; }
 .plain-link:hover { background: #34323f; border-color: #6a6879; }
 .plain-link:focus-visible { outline: 3px solid #ffd27a; outline-offset: 2px; }
 @media (max-width: 600px) {
-  .plain-link { bottom: auto; top: max(10px, env(safe-area-inset-top)); left: auto; right: 12px; padding: 7px 12px; }
+  .help-links { bottom: auto; top: max(10px, env(safe-area-inset-top)); left: auto; right: 12px; gap: 8px; }
+  .plain-link { padding: 7px 12px; }
   .plain-link-title { font-size: 14px; }
   .plain-link-sub { font-size: 11px; }
 }
+@media (max-width: 380px) { .plain-link-sub { display: none; } }
+
+/* ---------- the guide (guide.js): a spotlight and a bubble ----------
+   The veil is one element with a huge spread shadow, so the hole sits
+   exactly on the control with nothing to keep in sync (from allmiibo). */
+.guide { position: fixed; inset: 0; z-index: 20; }
+.guide-veil { position: absolute; inset: 0; cursor: pointer; }
+.guide-spot {
+  position: fixed; pointer-events: none;
+  border: 2px solid #ffd27a; box-shadow: 0 0 0 9999px rgba(10, 9, 14, .74);
+  transition: top .12s steps(3, end), left .12s steps(3, end), width .12s steps(3, end), height .12s steps(3, end);
+}
+.guide:not(.ready) .guide-spot, .guide:not(.ready) .guide-bubble { visibility: hidden; }
+.guide.still .guide-spot { transition: none; }
+.guide-bubble {
+  position: fixed; width: min(25rem, calc(100vw - 24px)); padding: 14px 16px;
+  color: #f0eef7; background: #2a2833; border: 2px solid #e8e6f0; box-shadow: 4px 4px 0 #0e0d12;
+  font: 15px/1.5 system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.guide-bubble:focus { outline: none; }
+.guide-step { font: 11px 'OfficePixel', monospace; color: #a8a5b8; letter-spacing: .08em; }
+.guide-bubble h2 { margin: 4px 0 6px; font: 15px 'OfficePixel', monospace; letter-spacing: .06em; color: #ffd27a; }
+.guide-bubble p { margin: 0 0 12px; }
+.guide-row { display: flex; align-items: center; gap: 8px; }
+.guide-dots { display: flex; gap: 3px; margin-right: auto; min-width: 0; }
+.guide-dot { width: 5px; height: 5px; background: #4a4857; flex: none; }
+.guide-dot.on { background: #ffd27a; }
+.guide-row button {
+  font: 12px 'OfficePixel', monospace; letter-spacing: .06em; padding: 7px 10px; cursor: pointer;
+  color: #f0eef7; background: #1c1b22; border: 2px solid #4a4857;
+}
+.guide-row button:hover { border-color: #a8a5b8; }
+.guide-row button:focus-visible { outline: 2px solid #ffd27a; outline-offset: 2px; }
+.guide-row .guide-skip { color: #a8a5b8; }
+.guide-row .guide-next { color: #1b1305; background: #ffd27a; border-color: #ffd27a; }
+.guide-row button[hidden] { display: none; }
+@media (max-width: 480px) { .guide-dots { display: none; } .guide-row .guide-skip { margin-right: auto; } }
+
+.noscript { position: fixed; inset: auto 16px 16px; z-index: 9; max-width: 560px; margin: 0 auto; padding: 16px 20px; background: #2a2833; border: 1px solid #4a4857; border-radius: 8px; font: 16px/1.5 system-ui, sans-serif; }
+.noscript h2 { font-size: 18px; margin: 0 0 6px; }
+.noscript p { margin: 0; }
+.noscript a { color: #f2c94c; }
 
 .plain {
   --p-bg: #f7f4ea; --p-ink: #1d1c24; --p-soft: #55535f; --p-line: #d9d4c4; --p-link: #7a3d0c;

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "dev.getbureau/about",
+  "title": "Bureau (about)",
+  "description": "Ask about Bureau, the open-source self-hosted office for AI agents: overview, FAQ search, roadmap, install steps.",
+  "version": "1.0.0",
+  "websiteUrl": "https://www.getbureau.dev/inside",
+  "repository": {
+    "url": "https://github.com/mahoudeau/bureau",
+    "source": "github",
+    "subfolder": "site"
+  },
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.getbureau.dev/mcp"
+    }
+  ]
+}

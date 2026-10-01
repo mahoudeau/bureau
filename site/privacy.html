@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bureau · Privacy</title>
 <meta name="description" content="What the Bureau site keeps, why, and how to get it deleted.">
+<link rel="canonical" href="__SITE__/privacy">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bureau">
+<meta property="og:url" content="__SITE__/privacy">
+<meta property="og:title" content="Bureau · Privacy">
+<meta property="og:description" content="What the Bureau site keeps, why, and how to get it deleted.">
+<meta property="og:image" content="__SITE__/og.png?v=__V__">
+<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
 <style>
   :root { --ink: #22212a; --paper: #f3f0e6; --soft: #6a6873; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ink: #e8e6f0; --paper: #1c1b22; --soft: #a9a7b6; } }
@@ -25,10 +33,13 @@
   <h2>The waitlist</h2>
   <p>When you save your spot, I keep your email, your three answers (pro or personal, your role, self-host or hosted) and the date. That's it.</p>
   <p>I use it for one thing: emailing you when the hosted Bureau opens. The answers help me decide what to build first. I don't sell it, share it or add you to anything else.</p>
-  <p>It's stored on a server in France (alwaysdata). I keep it until the hosted version launches, plus twelve months, or until you ask me to delete it.</p>
+  <p>It's stored on a server in France (alwaysdata), and in Brevo, an email service based in France, which sends that one email. I keep it until the hosted version launches, plus twelve months, or until you ask me to delete it.</p>
 
   <h2>Starring on GitHub from the site</h2>
   <p>If you use the star button and approve it on GitHub, the site gets a token that can only star repositories. It stars Bureau once and the token is thrown away. Nothing about your GitHub account is kept.</p>
+
+  <h2>The MCP server</h2>
+  <p>The public MCP server at <code>/mcp</code> answers questions about Bureau from the text of this site. It needs no account, keeps no record of what you ask, and stores nothing. Like every web request, it passes through Cloudflare and the host, whose logs hold your IP address for a short time.</p>
 
   <h2>Everything else</h2>
   <p>No cookies, no analytics, no trackers. Your browser remembers the palette you picked and whether sound is on. That stays on your device.</p>

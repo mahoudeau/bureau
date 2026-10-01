@@ -1,0 +1,32 @@
+# Everyone is welcome to read, cite and learn from this site, AI included.
+# Bureau is open source: the more assistants know about it, the better.
+# Content signals (contentsignals.org): search, AI answers and training all yes.
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
+
+User-agent: *
+Allow: /
+Disallow: /api/
+
+# Named so a stricter rule upstream never catches them by mistake.
+User-agent: OAI-SearchBot
+User-agent: ChatGPT-User
+User-agent: GPTBot
+User-agent: Claude-SearchBot
+User-agent: Claude-User
+User-agent: ClaudeBot
+User-agent: PerplexityBot
+User-agent: Perplexity-User
+User-agent: meta-webindexer
+User-agent: meta-externalagent
+User-agent: meta-externalfetcher
+User-agent: Google-Extended
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: Applebot
+User-agent: Applebot-Extended
+User-agent: DuckAssistBot
+User-agent: MistralAI-User
+Allow: /
+Disallow: /api/
+
+Sitemap: __SITE__/sitemap.xml
