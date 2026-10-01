@@ -1,52 +1,42 @@
 # Design
 
-Scaffold, not a system. This records the direction, what is decided, and what is still open. It becomes a real design system only after the office look is settled; until then, decide against this doc and append, do not redesign in place.
+Scaffold, not a system. This records the direction, what is decided, and what is still open. Decide against this doc and append; don't redesign in place.
 
 ## Direction
 
-**Inspiration: Sea of Stars.** Modern retro, not authentic retro. Pixel art with today's rendering: rich saturated color, dramatic light, painterly skies through the windows, smooth animation. The office should feel warm and alive, like a place you would want to check on, not a museum of 1994 constraints. We take the constraints that read as charm (chunky pixels, limited palette per element, tile grid) and drop the ones that read as poverty (dithered gradients, 3-frame walks, flat lighting).
+**The original Game Boy.** The office is drawn in the register of the 1989 handheld: four shades on screen at once, dithering for the tones in between, 8px tiles, 16x16 characters. It started out aiming at Sea of Stars, modern retro with rich color and dramatic light. The Game Boy direction replaced it. The hi-bit 16-bit track from that time is parked, not deleted (PRs #50 and #55).
 
-What that means concretely for Bureau:
+What that means concretely:
 
-- **Light is the mood carrier.** Time of day changes the office: warm lamps at night, cool morning light, long shadows in the evening. Quiet hours look quiet. Activity looks lit.
-- **Color is saturated but disciplined.** Each element owns a small ramp. Status meaning never rides on hue alone; position, icon, and animation carry it too.
-- **Animation is fluid where it counts.** Walk cycles and idle loops can be simple; the money is in easing, bounce, and transitions (a card floating to the shipping wall, a ghost card drifting back to the board).
+- **Four shades, one palette at a time.** Meaning comes from shape, position, icons and motion, never from a fifth color.
+- **Charm from the constraints.** Chunky pixels, a tile grid and a small screen are the point. Smoothness goes into easing and choreography: a folder carried to the board, a card left at the boss's door.
 - **The dashboard stays quiet.** The flat view at `/` is the office's opposite: neutral surfaces, restrained color, information first. The office is the show; the dashboard is the desk drawer.
 
 ## Knowns (decided)
 
-- Two surfaces, one event stream: flat dashboard at `/`, pixel office at `/office`.
+- Two surfaces, one event stream: the flat dashboard at `/`, the pixel office at `/office`.
 - The office is the brand. The dashboard borrows nothing from the pixel style.
-- Office animates only the generic activity verbs (docs/protocol.md), never vendor events.
-- Canvas at a small logical resolution, integer-scaled, `image-rendering: pixelated`. The mockup uses 320x180; resolution may change, the integer-scaling rule does not.
-- Crisp text lives in HTML overlays (bubbles, ticker, HUD), not on the canvas.
-- Art is currently 100% procedural (drawn in code, no image assets). Whether that survives contact with the Sea of Stars bar is an open question below.
-- Status colors on the dashboard follow the token roles already in `hub/public/index.html` (light and dark, system preference).
-- A shared `tokens.css` will be extracted when office v1 is wired, so the two surfaces stop drifting.
+- The office animates only the generic activity verbs (docs/protocol.md), never vendor events.
+- **Canvas:** 384x216 logical pixels, upscaled by whole device pixels, `image-rendering: pixelated`. The viewer can set the scale; auto picks the largest that fits.
+- **Palettes:** four, switchable by the viewer: olive, DMG pea-green, pocket gray and amber, each also available inverted.
+- **Art:** hand-drawn 4-shade sprites, authored as indexed pixel maps in `hub/public/office-assets.js` and browsable at `/office/assets`. No image files.
+- **Guarded in CI:** `test/office-guard.sh` checks that every draw stays on the 384x216 canvas and every pixel is one of the palette's four shades, at every phase and view.
+- **Type:** OfficePixel (`hub/public/office-font.ttf`) for everything in the office. Crisp text lives in HTML overlays (bubbles, ticker, HUD), not on the canvas. The dashboard uses the system sans.
+- **Engine:** hand-rolled canvas, no game library. The zero-dependency rule is server-side only, but nothing has needed a library yet.
+- **Dashboard tokens:** the v2 dashboard (`/v2`) takes its colors and spacing from `hub/public/v2/tokens.css`, light and dark, following the system preference. The office takes its colors from its palettes. They don't share tokens, on purpose.
+- **The website** (getbureau.dev) reuses the office's sprites, palettes and font, so the brand is one thing.
 - If external sprite or furniture packs are ever supported, they load from a simple manifest format (a folder of PNGs plus a manifest file), so packs are makeable without touching code.
 
-## Unknowns (open, decide during office v1)
+## Unknowns (open)
 
-- **Final office palette.** The mockup's warm SNES-ish palette is a placeholder. Needs a real ramp set designed under the Sea of Stars bar, validated for contrast in both day and night scenes.
-- **Lighting technique.** Sea of Stars lighting in a hand-rolled canvas: per-tile tint layers, a simple normal-map trick, or baked day/night palettes. Pick the cheapest one that looks alive.
-- **Day/night source.** Mapped to the server's local time, the viewer's, or to activity (office dims when no sessions have run)? Leaning: activity first, clock second.
-- **Tile size and character resolution.** 16px tiles with 12x16 characters (current mockup) vs 32px tiles with taller characters. Bigger reads better on large screens and matches the inspiration; costs more art.
-- **Procedural vs drawn assets.** Procedural got the mockup approved cheaply. The Sea of Stars bar probably wants real sprite sheets eventually, custom or from licensed packs. Decide when the palette is locked.
-- **Character identity.** One body with palette swaps (current) vs distinct silhouettes per agent. Distinct silhouettes matter if agents are the demo.
-- **Typeface.** Press Start 2P is the placeholder; it is loud. Candidates: a quieter pixel font for the HUD, system sans for the dashboard (already true).
-- **Sound.** Chimes on review-ready and task-done, ambient office loop, or nothing. Off by default either way.
-- **Engine.** Hand-rolled canvas vs PixiJS/Phaser from CDN. Hand-rolled holds up for v1; revisit if lighting or pathfinding get expensive.
-- **Motion accessibility.** A reduced-motion mode honoring the OS preference; scope unknown until the animation set exists.
+- **Character identity.** One body with palette swaps (today) or distinct silhouettes per agent. Silhouettes matter if agents are the demo.
+- **Day and night.** Whether the office changes with the clock, with activity, or not at all.
+- **Sound.** Chimes on review-ready and task-done, an ambient loop, or nothing. Off by default either way.
+- **Motion accessibility.** A reduced-motion mode honoring the OS preference; scope unknown until the animation set settles.
+- **Pathfinding.** Agents walk in straight lines. A* only if the office layout starts to need it.
 
 ## Non-negotiables (survive any redesign)
 
 - Meaning never rides on color alone.
 - The office must be readable as a status display at a glance, from across a demo room: who is here, who is stuck, what needs the boss.
 - Everything renders from the same SSE stream a curl script can feed. No design decision may require a richer event source than the protocol provides.
-
-## Next steps
-
-1. Wire office v1 to the live stream (roadmap phase 1.5).
-2. Design the real palette and lighting pass under the Sea of Stars bar.
-3. Extract `tokens.css` from what survives.
-4. Promote this scaffold to a real design doc: palette values, sprite specs, animation timings, asset manifest.
