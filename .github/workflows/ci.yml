@@ -57,10 +57,9 @@ jobs:
       - name: Pokes (test/pokes.sh)
         run: sh test/pokes.sh
 
-      # Storage tests land separately (test/storage.sh). Check its header for
-      # how it wants to be run, then uncomment.
-      # - name: Storage (test/storage.sh)
-      #   run: bash test/storage.sh
+      # Self-contained: starts its own hubs on ports 4711 and 4712.
+      - name: Storage (test/storage.sh)
+        run: bash test/storage.sh
 
       - name: Hub log
         if: always()
