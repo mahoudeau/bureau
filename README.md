@@ -59,6 +59,28 @@ For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for
 
 CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally.
 
+## Run it with Docker
+
+```
+echo "BUREAU_TOKEN=$(openssl rand -hex 32)" > .env
+docker compose up -d    # builds the image, listens on 8100
+```
+
+State lives in two named volumes: `bureau-data` (the JSON state) and `bureau-brain` (the brain's git repo). They survive restarts and rebuilds. `docker compose down -v` deletes them, so don't.
+
+If the hub sits behind another port or a domain, set `BUREAU_PUBLIC_URL` in `.env` too. The MCP connector URL and the review links are built from it. `BUREAU_PORT` changes the host port. The optional settings from `hub/.env.example` (Discord, pokes, sweep) go in the same file.
+
+Without compose:
+
+```
+docker build -t bureau .
+docker run -d -p 8100:8100 -e BUREAU_TOKEN=... -v bureau-data:/data -v bureau-brain:/brain bureau
+```
+
+The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.
+
+Prebuilt images, amd64 and arm64, appear from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.2.0`. Use one in place of `bureau` above to skip the build.
+
 ## The six calls
 
 | Call | Purpose |
@@ -80,6 +102,7 @@ Plus `GET /api/events` (SSE) for anything that watches.
 - [docs/office.md](docs/office.md): the pixel office design
 - [docs/design.md](docs/design.md): visual direction, knowns and unknowns
 - [docs/brain-format.md](docs/brain-format.md): the Bureau Brain Format, a lintable memory format
+- [docs/distribution.md](docs/distribution.md): where Bureau could be listed, and what fits a self-hosted MCP door
 - [mockups/office.html](mockups/office.html): static office mockup, open it in a browser
 
 ## License
