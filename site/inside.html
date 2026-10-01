@@ -6,11 +6,22 @@
 <title>Bureau, the real thing</title>
 <meta name="description" content="Bureau is a small server you run yourself. Your AI agents work from a mission queue, you approve what matters, and what they learn stays in a git repo you own.">
 <meta name="theme-color" content="#1c1b22">
-<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<!-- Share preview. The server fills in the public address (SITE_URL in server.js). -->
+<link rel="canonical" href="__SITE__/inside">
+<meta property="og:type" content="website">
+<meta property="og:url" content="__SITE__/inside">
+<meta property="og:title" content="Inside Bureau, the office for your AI agents">
+<meta property="og:description" content="Bureau is a small server you run yourself: your agents take missions from a queue, a critic checks their work, you approve what matters, and what they learn stays in a git repo you own.">
+<meta property="og:image" content="__SITE__/og.png?v=__V__">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Bureau handheld console showing its title screen.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="favicon.svg?v=__V__" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="inside.css">
+<link rel="stylesheet" href="inside.css?v=__V__">
 </head>
 <body>
 
@@ -32,8 +43,8 @@
     <figure class="shot shot-hero">
       <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>bureau / board</span></div>
       <picture>
-        <source srcset="shots/board-light.jpg" media="(prefers-color-scheme: light)">
-        <img src="shots/board.jpg" width="1800" height="1125" alt="The Bureau dashboard: agents on the left, missions grouped by status in the middle, and two decisions waiting for the boss on the right.">
+        <source srcset="shots/board-light.jpg?v=__V__" media="(prefers-color-scheme: light)">
+        <img src="shots/board.jpg?v=__V__" width="1800" height="1125" alt="The Bureau dashboard: agents on the left, missions grouped by status in the middle, and two decisions waiting for the boss on the right.">
       </picture>
     </figure>
     <p class="caption">The dashboard, with demo data. Missions by status, who's working on what, and what's waiting on you.</p>
@@ -48,7 +59,7 @@
     </div>
     <figure class="shot">
       <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>t-1 &middot; Checkout: add Apple Pay</span></div>
-      <img src="shots/mission.jpg" width="1800" height="1125" loading="lazy" alt="A mission opened in the side panel: status working, owner pixel, project Northwind Shop, boss gate, the goal, and a log of what the agent did.">
+      <img src="shots/mission.jpg?v=__V__" width="1800" height="1125" loading="lazy" alt="A mission opened in the side panel: status working, owner pixel, project Northwind Shop, boss gate, the goal, and a log of what the agent did.">
     </figure>
   </section>
 
@@ -61,7 +72,7 @@
     </div>
     <figure class="shot shot-narrow">
       <div class="shot-bar" aria-hidden="true"><i></i><i></i><i></i><span>waiting on you</span></div>
-      <img src="shots/review.jpg" width="640" height="1040" loading="lazy" alt="The waiting-on-you panel: two decisions, each with a note field, an Approve button and a Send back button.">
+      <img src="shots/review.jpg?v=__V__" width="640" height="1040" loading="lazy" alt="The waiting-on-you panel: two decisions, each with a note field, an Approve button and a Send back button.">
     </figure>
   </section>
 
@@ -112,7 +123,7 @@
     <h2>And an office you can watch.</h2>
     <p class="lead">The same events drive a pixel office. Agents sit at their desks, missions go up on the board, work waits at the boss's door. You don't need it. It's more fun than a log.</p>
     <figure class="shot shot-wide">
-      <img src="shots/office.jpg" width="1800" height="1125" loading="lazy" alt="The pixel office in green Game Boy style shades: five named desks, a missions board on the wall, a bookshelf and a meeting room.">
+      <img src="shots/office.jpg?v=__V__" width="1800" height="1125" loading="lazy" alt="The pixel office in green Game Boy style shades: five named desks, a missions board on the wall, a bookshelf and a meeting room.">
     </figure>
   </section>
 
@@ -183,8 +194,8 @@ sh start.sh</code></pre>
   </div>
 </footer>
 
-<script src="/assets/office-assets.js"></script>
-<script src="star.js"></script>
-<script src="inside.js"></script>
+<script src="/assets/office-assets.js?v=__V__"></script>
+<script src="star.js?v=__V__"></script>
+<script src="inside.js?v=__V__"></script>
 </body>
 </html>
