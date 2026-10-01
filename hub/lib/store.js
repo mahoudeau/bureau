@@ -209,9 +209,13 @@ function logEvent(type, data) {
 function upsertAgent({ name, kind, capabilities }) {
   const s = load();
   let a = s.agents.find(x => x.name === name);
+  // S2-c: lead/critic tags are still stored, but grant nothing while settings
+  // hold roles. Say so in the log, so nobody mistakes the tag for authority.
+  const ignored = rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => c === 'lead' || c === 'critic');
   if (!a) {
     a = { name, kind: kind || 'other', capabilities: capabilities || [], registered_at: nowISO() };
     s.agents.push(a);
+    if (ignored) logEvent('agent.capabilities_changed', { name, before: [], after: a.capabilities, note: SETTINGS_ROLES_NOTE });
   } else {
     if (kind) a.kind = kind;
     // A re-registration replaces the capabilities array, and that is how
@@ -225,7 +229,7 @@ function upsertAgent({ name, kind, capabilities }) {
       const same = before.length === capabilities.length && before.every(c => capabilities.includes(c));
       if (!same) {
         a.capabilities = capabilities;
-        logEvent('agent.capabilities_changed', { name, before, after: capabilities });
+        logEvent('agent.capabilities_changed', { name, before, after: capabilities, ...(ignored ? { note: SETTINGS_ROLES_NOTE } : {}) });
       }
     }
   }
@@ -380,6 +384,8 @@ function updateProject(id, { label, capacity, entity, repo }) {
 }
 
 function createTask({ title, body, priority, project, created_by, gate }) {
+  // No gate given: the project's default_gate from settings, boss when unset.
+  if (gate === undefined || gate === null || gate === '') gate = effectiveSettings(load(), project || 'general').default_gate;
   const t = {
     id: nextId('t'),
     title: String(title || 'untitled'),
@@ -503,8 +509,127 @@ function agentHasCapability(s, agentName, cap) {
   const a = s.agents.find(x => x.name === agentName);
   return !!(a && Array.isArray(a.capabilities) && a.capabilities.includes(cap));
 }
-function isLead(s, agentName) { return agentName === 'human' || agentHasCapability(s, agentName, 'lead'); }
-function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasCapability(s, agentName, 'critic'); }
+// S2-c (boss ruling 2026-10-01): once any agent has roles in settings, lead
+// and critic come from settings only, for every agent; an agent missing from
+// settings.agents holds neither, whatever it registered with. No roles set
+// anywhere: the capability check above, as before. librarian stays a capability.
+function rolesConfigured(s) {
+  const agents = s.settings && s.settings.agents;
+  return !!agents && Object.values(agents).some(a => a && Array.isArray(a.roles));
+}
+function agentHasRole(s, agentName, role) {
+  if (!rolesConfigured(s)) return agentHasCapability(s, agentName, role);
+  const cfg = s.settings.agents[agentName];
+  return !!(cfg && Array.isArray(cfg.roles) && cfg.roles.includes(role));
+}
+const SETTINGS_ROLES_NOTE = 'settings govern lead and critic; self-registered lead/critic tags grant nothing';
+function isLead(s, agentName) { return agentName === 'human' || agentHasRole(s, agentName, 'lead'); }
+function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasRole(s, agentName, 'critic'); }
+
+// ---- Settings (S2) ----
+// Absent settings mean today's behavior, exactly. Every stricter rule is
+// opt-in: approval only bites when the boss set it, globally or per project.
+const APPROVALS = ['dashboard', 'in-session', 'critic'];
+const GATES = ['boss', 'critic'];
+const NOTIFY = ['all', 'review', 'blocked', 'none'];
+const ROLES = ['lead', 'critic'];
+
+function settingsOf(s) {
+  const st = s.settings || {};
+  return { global: st.global || {}, projects: st.projects || {}, agents: st.agents || {} };
+}
+// Project override wins over global. approval stays undefined when nobody set
+// it, which is how the hub tells "dashboard by default" from "dashboard by choice".
+function effectiveSettings(s, project) {
+  const { global: g, projects } = settingsOf(s);
+  const p = projects[project] || {};
+  return {
+    approval: p.approval ?? g.approval,
+    default_gate: p.default_gate ?? g.default_gate ?? 'boss',
+    notify: p.notify ?? g.notify ?? 'all',
+  };
+}
+
+function checkPolicyKeys(obj, where, allowLibrarian) {
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return `${where} must be an object`;
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === null) continue; // null clears the key
+    if (k === 'approval') { if (!APPROVALS.includes(v)) return `${where}.approval: use one of ${APPROVALS.join(', ')}`; }
+    else if (k === 'default_gate') { if (!GATES.includes(v)) return `${where}.default_gate: use one of ${GATES.join(', ')}`; }
+    else if (k === 'notify') { if (!NOTIFY.includes(v)) return `${where}.notify: use one of ${NOTIFY.join(', ')}`; }
+    else if (k === 'librarian' && allowLibrarian) {
+      if (typeof v !== 'object' || Array.isArray(v)) return `${where}.librarian must be an object`;
+      for (const [lk, lv] of Object.entries(v)) {
+        if (lk === 'schedule') { if (lv !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(lv))) return `${where}.librarian.schedule: use HH:MM`; }
+        else if (lk === 'gap_missions_per_week') { if (lv !== null && (!Number.isInteger(lv) || lv < 0 || lv > 100)) return `${where}.librarian.gap_missions_per_week: an integer from 0 to 100`; }
+        else return `${where}.librarian: unknown key ${lk}`;
+      }
+    }
+    else return `${where}: unknown key ${k}`;
+  }
+  return null;
+}
+
+// Merge a {key: value} patch into target; null deletes the key.
+function mergeInto(target, patch) {
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete target[k];
+    else if (k === 'librarian') { target[k] = { ...(target[k] || {}) }; mergeInto(target[k], v); }
+    else target[k] = v;
+  }
+  return target;
+}
+
+// PATCH /api/settings. Merges one level deep: global keys, and each project
+// or agent entry key by key. null clears a key or a whole entry. Everything is
+// validated before anything is applied.
+function patchSettings(patch) {
+  const s = load();
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { error: 'settings patch must be an object' };
+  for (const k of Object.keys(patch)) if (!['global', 'projects', 'agents'].includes(k)) return { error: `unknown section ${k}; use global, projects, agents` };
+  if (patch.global !== undefined) { const e = checkPolicyKeys(patch.global, 'global', true); if (e) return { error: e }; }
+  if (patch.projects !== undefined) {
+    if (!patch.projects || typeof patch.projects !== 'object' || Array.isArray(patch.projects)) return { error: 'projects must be an object keyed by project id' };
+    for (const [pid, v] of Object.entries(patch.projects)) {
+      if (!s.projects.some(pj => pj.id === pid)) return { error: `unknown project: ${pid}` };
+      if (v === null) continue;
+      const e = checkPolicyKeys(v, `projects.${pid}`, false); if (e) return { error: e };
+    }
+  }
+  if (patch.agents !== undefined) {
+    if (!patch.agents || typeof patch.agents !== 'object' || Array.isArray(patch.agents)) return { error: 'agents must be an object keyed by agent name' };
+    for (const [name, v] of Object.entries(patch.agents)) {
+      if (v === null) continue;
+      if (typeof v !== 'object' || Array.isArray(v)) return { error: `agents.${name} must be an object` };
+      for (const [k, r] of Object.entries(v)) {
+        if (k !== 'roles') return { error: `agents.${name}: unknown key ${k}` };
+        if (r === null) continue;
+        if (!Array.isArray(r) || r.some(x => !ROLES.includes(x))) return { error: `agents.${name}.roles: an array of ${ROLES.join(', ')}` };
+      }
+    }
+  }
+  const before = structuredClone(settingsOf(s));
+  const next = structuredClone(before);
+  if (patch.global) mergeInto(next.global, patch.global);
+  for (const sec of ['projects', 'agents']) {
+    for (const [id, v] of Object.entries(patch[sec] || {})) {
+      if (v === null) { delete next[sec][id]; continue; }
+      next[sec][id] = mergeInto(next[sec][id] || {}, v);
+      if (!Object.keys(next[sec][id]).length) delete next[sec][id];
+    }
+  }
+  if (next.global.librarian && !Object.keys(next.global.librarian).length) delete next.global.librarian;
+  s.settings = next;
+  logEvent('settings.changed', { before, after: next });
+  // Role changes get their own event, like capability changes (t-356)
+  const names = new Set([...Object.keys(before.agents), ...Object.keys(next.agents)]);
+  for (const name of names) {
+    const b = before.agents[name] && before.agents[name].roles, a = next.agents[name] && next.agents[name].roles;
+    if (JSON.stringify(b ?? null) !== JSON.stringify(a ?? null)) logEvent('agent.roles_changed', { name, before: b ?? null, after: a ?? null });
+  }
+  save();
+  return { settings: next, before };
+}
 // The librarian's own digest (t-356): a mission titled "<name>: ..." by an
 // agent registered with the "librarian" tag is a proposal set the boss rules
 // item by item. No builder is promoting its own build past a critic, so the
@@ -530,7 +655,7 @@ function humanKind(kind, prevStatus, status, verdicts) {
   return 'edit';
 }
 
-function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate }) {
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
@@ -546,6 +671,16 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // Every check runs before anything changes, so a refused update leaves the
   // mission exactly as it was (the gate used to be raised before a refusal).
   if (status && !TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
+  // S2 approval policy. Settings decide it; with none set, nothing below
+  // refuses anything that was allowed before.
+  const policy = effectiveSettings(s, t.project).approval;
+  let quote = null;
+  if (approved_in_session !== undefined && approved_in_session !== null) {
+    quote = String(approved_in_session).trim();
+    if (!quote) return { error: 'approved_in_session: quote the boss\'s words, it cannot be empty' };
+    if (policy !== 'in-session') return { error: `approved_in_session: the ${t.project} project's policy does not accept chat approvals (approval: ${policy || 'not set'}); the boss approves in the dashboard` };
+    if (status !== 'done') return { error: 'approved_in_session: only rides a close to done' };
+  }
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
   if (gate !== undefined && gate !== 'boss' && !(gate === 'critic' && isLead(s, agent)))
     return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
@@ -564,8 +699,21 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
   // (done or back to queued) only by the human's hand. Missions without a gate
   // predate the field and are boss-gate by definition.
-  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human')
+  // S2 in-session: the boss's quoted words count as his hand, for done only.
+  const chatApproved = quote && policy === 'in-session' && status === 'done';
+  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human' && !chatApproved)
     return { error: 'boss-gate: only the boss moves this mission out of review' };
+  // S2 close policy, only when the boss set approval explicitly. dashboard:
+  // agents never close boss-gate work done. in-session: they may, quoting
+  // the boss. critic: a critic or lead pass closes it. Unset: as before.
+  if (status === 'done' && t.status !== 'done' && effGate === 'boss' && agent !== 'human' && policy) {
+    if (policy === 'dashboard')
+      return { error: `approval policy (dashboard) for ${t.project}: only the boss closes a gate:boss mission done; park it in review for him instead` };
+    if (policy === 'in-session' && !chatApproved)
+      return { error: `approval policy (in-session) for ${t.project}: closing a gate:boss mission done needs approved_in_session with the boss's words, or the boss's own hand in the dashboard` };
+    if (policy === 'critic' && !isCriticOrLead(s, agent))
+      return { error: `approval policy (critic) for ${t.project}: only the critic, the lead, or the boss closes a gate:boss mission done` };
+  }
   if (gate !== undefined) t.gate = gate;
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
@@ -623,6 +771,10 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   if (status && status !== prevStatus) { entry.from = prevStatus; entry.to = status; }
   if (agent === 'human') entry.kind = humanKind(kind, prevStatus, status, verdicts);
   t.log.push(entry);
+  if (chatApproved) {
+    t.log.push({ ts: nowISO(), by: agent, note: `approved by boss in session: "${quote}" (recorded by ${agent})` });
+    logEvent('task.approved_in_session', { id: t.id, project: t.project, approval: 'in-session', channel: 'chat', by: `${agent} for human`, quote });
+  }
   save();
   return { task: t, prev_status: prevStatus, by: agent };
 }
@@ -674,4 +826,5 @@ module.exports = {
   createTask, claimTask, updateTask, expireLeases, findByReviewToken,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, ACTIVITIES,
+  patchSettings, settingsOf, effectiveSettings, rolesConfigured, SETTINGS_ROLES_NOTE,
 };
