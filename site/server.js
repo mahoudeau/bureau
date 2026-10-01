@@ -270,7 +270,11 @@ function assetVersion() {
 const ASSET_VERSION = process.env.ASSET_VERSION || assetVersion();
 // The public address, for the share preview tags and the canonical link
 // (pages write it as __SITE__). Change it here when the domain moves.
-const SITE_URL = 'https://getbureau.dev';
+const SITE_URL = 'https://www.getbureau.dev';
+// Other addresses of the same site send visitors to SITE_URL for good. Only
+// GET and HEAD move, so a form posted to an old address is never turned
+// into a GET by the browser.
+const REDIRECT_HOSTS = new Set(['getbureau.dev', 'getbureau.mathieu.dev']);
 const versioned = new Map(); // file -> { mtime, body with the tokens replaced }
 function resolve(urlPath) {
   if (SHARED[urlPath]) return SHARED[urlPath];
@@ -310,6 +314,11 @@ function serveStatic(res, pathname) {
 // ---- routes ---------------------------------------------------------------
 loadWaitlist();
 http.createServer((req, res) => {
+  const host = String(req.headers.host || '').toLowerCase().replace(/:\d+$/, '');
+  if (REDIRECT_HOSTS.has(host) && (req.method === 'GET' || req.method === 'HEAD')) {
+    res.writeHead(301, { Location: SITE_URL + req.url, 'Cache-Control': 'public, max-age=3600' });
+    return res.end();
+  }
   const url = new URL(req.url, 'http://local');
   const p = url.pathname;
   if (req.method === 'POST' && p === '/api/waitlist') return postWaitlist(req, res);
