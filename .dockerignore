@@ -1,0 +1,21 @@
+# Only hub/ goes in the image. Keep the build context small and secret-free.
+.git
+.claude/
+bureau-internal/
+site/
+mockups/
+docs/
+test/
+connectors/
+projects/
+node_modules/
+**/node_modules/
+data/
+brain/
+hub/data/
+hub/brain/
+.env
+**/.env
+*.log
+.DS_Store
+**/.DS_Store

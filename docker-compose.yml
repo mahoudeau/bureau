@@ -1,0 +1,27 @@
+# Bureau hub, one service. Put BUREAU_TOKEN in a .env file next to this one,
+# then: docker compose up -d
+# Optional in the same .env: BUREAU_PORT (host port), BUREAU_PUBLIC_URL,
+# DISCORD_WEBHOOK_URL, BUREAU_POKES, BUREAU_SWEEP_MS. See hub/.env.example.
+# Paths, HOST and PORT are fixed by the image on purpose.
+services:
+  bureau:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${BUREAU_PORT:-8100}:8100"
+    environment:
+      BUREAU_TOKEN: ${BUREAU_TOKEN:?set BUREAU_TOKEN in .env}
+      BUREAU_PUBLIC_URL: ${BUREAU_PUBLIC_URL:-}
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      BUREAU_POKES: ${BUREAU_POKES:-}
+      BUREAU_SWEEP_MS: ${BUREAU_SWEEP_MS:-60000}
+    volumes:
+      - bureau-data:/data
+      - bureau-brain:/brain
+
+# Fixed names, so the state does not hang off the folder you cloned into.
+volumes:
+  bureau-data:
+    name: bureau-data
+  bureau-brain:
+    name: bureau-brain
