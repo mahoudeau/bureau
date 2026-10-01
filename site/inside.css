@@ -2,7 +2,7 @@
    Same desk, same pixels for the accents, but plain readable type for
    everything you have to read. */
 
-@font-face { font-family: 'OfficePixel'; src: url('/assets/office-font.ttf') format('truetype'); }
+@font-face { font-family: 'OfficePixel'; src: url('/assets/office-font.ttf?v=__V__') format('truetype'); }
 
 :root {
   color-scheme: dark;

@@ -673,25 +673,31 @@
     if (f.consent.checked) n++;
     return n;
   }
+  // The blocks and the SAVE button follow the form's own events, so the
+  // form works with the console off or the draw loop stopped. The loop
+  // calls it too; with nothing changed, it does nothing.
+  function syncSave() {
+    // the memory blocks live in the form itself, so they flow with it
+    var n = savedEl.hidden ? saveProgress() : 5;
+    if (n === lastBlocks) return;
+    lastBlocks = n;
+    saveBlocks.forEach(function (b, i) { b.className = i < n ? 'on' : i === n ? 'next' : ''; });
+    // SAVE only lights up once all five steps are done
+    var go = saveForm.querySelector('.save-go');
+    go.disabled = n < 5;
+    go.textContent = n < 5 ? 'SAVE (' + n + '/5)' : 'SAVE';
+  }
   function renderSave(t) {
     var p = palKey, sh = A.PALETTES[p].shades;
     sctx.fillStyle = sh[3]; sctx.fillRect(0, 0, 160, 144);
-    // the memory blocks live in the form itself, so they flow with it
-    var n = savedEl.hidden ? saveProgress() : 5;
-    if (n !== lastBlocks) {
-      lastBlocks = n;
-      saveBlocks.forEach(function (b, i) { b.className = i < n ? 'on' : i === n ? 'next' : ''; });
-      // SAVE only lights up once all five steps are done
-      var go = saveForm.querySelector('.save-go');
-      go.disabled = n < 5;
-      go.textContent = n < 5 ? 'SAVE (' + n + '/5)' : 'SAVE';
-    }
+    syncSave();
     blitCentered(saveCv, t, 3, 1);
   }
   // Coming back after signing up shows the saved slot, not a fresh form.
   function saveEnter() {
     var done = !!savedEl.dataset.done;
     saveForm.hidden = done; savedEl.hidden = !done;
+    syncSave();
   }
   function saveLeave() { saveForm.hidden = true; savedEl.hidden = true; }
 
@@ -701,10 +707,13 @@
       b.setAttribute('aria-pressed', 'false');
       b.addEventListener('click', function () {
         fs.querySelectorAll('button').forEach(function (o) { o.setAttribute('aria-pressed', o === b ? 'true' : 'false'); });
+        syncSave();
         Snd.play('press');
       });
     });
   });
+  saveForm.email.addEventListener('input', syncSave);
+  saveForm.consent.addEventListener('change', syncSave);
   saveForm.addEventListener('submit', function (e) {
     e.preventDefault();
     var f = saveForm, msg = $('save-msg');
