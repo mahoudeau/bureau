@@ -1,0 +1,30 @@
+{
+  "format": null,
+  "frontmatter": {
+    "title": "Legacy note",
+    "summary": "Fixture for a v0.2 note read leniently.",
+    "compartment": "recipe",
+    "scope": "global",
+    "permalink": "fixture-legacy",
+    "version": "2"
+  },
+  "claims": [
+    {
+      "id": null, "kind": "gotcha", "form": "short", "line": 10,
+      "text": "A hard-wrapped observation from v0.2 keeps reading as one claim, joined to its first line.",
+      "tags": [],
+      "sources": [{ "ref": "journal/2026-08-11", "type": "wikilink" }],
+      "source_note": null,
+      "fields": {}
+    },
+    {
+      "id": null, "kind": "step", "form": "short", "line": 12,
+      "text": "A second v0.2 observation, on one line",
+      "tags": [],
+      "sources": [{ "ref": "journal/2026-08-12", "type": "wikilink" }],
+      "source_note": null,
+      "fields": {}
+    }
+  ],
+  "errors": []
+}

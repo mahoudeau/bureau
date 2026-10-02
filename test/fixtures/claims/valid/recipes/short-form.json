@@ -1,0 +1,40 @@
+{
+  "format": "0.3",
+  "frontmatter": {
+    "title": "Short-form claims",
+    "summary": "Fixture for the v0.3 short form.",
+    "compartment": "recipe",
+    "scope": "global",
+    "permalink": "fixture-short-form",
+    "version": "3",
+    "format": "0.3",
+    "source": "t-12"
+  },
+  "claims": [
+    {
+      "id": "c-8k2m1q", "kind": "gotcha", "form": "short", "line": 12,
+      "text": "lftp --exclude-glob skips .gitignore but not the .git directory #deploy",
+      "tags": ["deploy"],
+      "sources": [{ "ref": "j-4f2a91c0", "type": "record" }, { "ref": "t-356", "type": "mission" }],
+      "source_note": null,
+      "fields": {}
+    },
+    {
+      "id": "c-3n7p0a", "kind": "step", "form": "short", "line": 13,
+      "text": "Anchor .gitignore patterns with a leading slash",
+      "tags": [],
+      "sources": [{ "ref": "journal/2026-09-06", "type": "wikilink" }],
+      "source_note": "(mews deploy)",
+      "fields": {}
+    },
+    {
+      "id": "c-9r2t5w", "kind": "step", "form": "short", "line": 14,
+      "text": "Poll /health after a restart instead of sleeping once",
+      "tags": [],
+      "sources": [],
+      "source_note": null,
+      "fields": {}
+    }
+  ],
+  "errors": []
+}
