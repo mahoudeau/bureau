@@ -686,6 +686,10 @@ function humanKind(kind, prevStatus, status, verdicts) {
 // content}]}. The hub hashes it when the item is filed, nothing can change it
 // afterwards, and the apply route writes those bytes and no others.
 const PAYLOAD_OPS = ['write', 'append'];
+// What the boss can rule on an item. later is a decision too: deferred on
+// purpose, carried to the librarian's next digest. Only proposed (nobody
+// ruled yet) blocks an approval.
+const ITEM_VERDICTS = ['approved', 'rejected', 'later'];
 // Canonical form: every op is exactly {op, file, content}, in that order, so
 // the hash does not depend on how the caller ordered its keys.
 function canonicalOps(ops) { return ops.map(o => ({ op: o.op, file: o.file, content: o.content })); }
@@ -774,6 +778,11 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
       if (it.payload !== undefined) {
         const e = payloadError(it.payload);
         if (e) return { error: `items: "${String(it.title).slice(0, 60)}": ${e}` };
+        // The boss only ever sees proposals that would pass write-time lint:
+        // each op is linted against the brain as it is now. Several ops on
+        // one file are each judged against the file on disk, not each other.
+        const lint = it.payload.ops.flatMap(o => knowledge.writeLintErrors({ file: o.file, content: o.content, mode: o.op === 'append' ? 'append' : 'replace' }));
+        if (lint.length) return { error: `items: "${String(it.title).slice(0, 60)}": the payload would fail brain-lint: ${lint.join('; ')}`, lint };
       }
     }
   }
@@ -836,7 +845,7 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   if (approving) {
     const verdictOf = new Map((t.items || []).map(it => [it.id, it.verdict]));
     for (const v of Array.isArray(verdicts) ? verdicts : [])
-      if (v && verdictOf.has(v.id) && (v.verdict === 'approved' || v.verdict === 'rejected')) verdictOf.set(v.id, v.verdict);
+      if (v && verdictOf.has(v.id) && ITEM_VERDICTS.includes(v.verdict)) verdictOf.set(v.id, v.verdict);
     const open = [...verdictOf].filter(([, v]) => v === 'proposed').map(([iid]) => iid);
     if (Array.isArray(items) && items.some(it => it && it.title)) open.push('the items filed with this request');
     if (open.length) return { error: `undecided items: ${open.join(', ')} still proposed; accept or reject each before approving` };
@@ -869,7 +878,7 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     for (const v of verdicts) {
       const it = t.items.find(x => x.id === v.id);
       if (!it) continue;
-      if (v.verdict === 'approved' || v.verdict === 'rejected') it.verdict = v.verdict;
+      if (ITEM_VERDICTS.includes(v.verdict)) it.verdict = v.verdict;
       if (v.comment) it.comment = String(v.comment).slice(0, 2000);
       lines.push(`${it.id} ${it.verdict}${it.comment ? ` (${it.comment})` : ''}`);
     }

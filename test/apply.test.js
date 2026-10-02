@@ -23,7 +23,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 async function main() {
   console.log('1. the hash, unit level');
-  const ops = [{ op: 'write', file: 'knowledge/pinned.md', content: '- [fact] pinned (fake)\n' }];
+  // a well-formed note: payloads to curated folders are linted when filed
+  const ops = [{ op: 'write', file: 'knowledge/pinned.md', content: '---\ntitle: Pinned\ncompartment: knowledge\npermalink: pinned\nversion: 1\n---\n\n- [fact] pinned (fake) (source: t-1)\n' }];
   const want = crypto.createHash('sha256').update(JSON.stringify(ops)).digest('hex');
   check('sha256 of the canonical JSON of ops', payloadHash(ops) === want);
   check('key order does not change it', payloadHash([{ content: ops[0].content, file: ops[0].file, op: 'write' }]) === want);
@@ -65,7 +66,7 @@ async function main() {
     check('approved, back with its holder', ok.body.task && ok.body.task.status === 'approved', ok.body);
 
     await stop();
-    editPayload('- [fact] something the boss never saw\n');
+    editPayload(ops[0].content.replace('pinned (fake)', 'something the boss never saw'));
     await start();
     const bad = await api('POST', `/api/tasks/${id}/apply`, { agent: 'worker-1', item: 'i1' });
     check('a tampered payload is refused with 409', bad.code === 409, bad);

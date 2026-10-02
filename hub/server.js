@@ -106,8 +106,16 @@ function knowledgeWriteRefusal(file, author) {
 // its hash just before. Same call for the REST route and MCP apply_item.
 function applyApproved(id, agent, item) {
   const writeOp = (op, sha) => {
-    const r = knowledge.writeKnowledge({ file: op.file, content: op.content, mode: op.op === 'append' ? 'append' : 'replace', author: agent,
-      message: `${id} ${item}: apply the boss-approved ${op.op} to ${op.file} (sha256 ${sha.slice(0, 12)})` });
+    let r;
+    try {
+      r = knowledge.writeKnowledge({ file: op.file, content: op.content, mode: op.op === 'append' ? 'append' : 'replace', author: agent,
+        message: `${id} ${item}: apply the boss-approved ${op.op} to ${op.file} (sha256 ${sha.slice(0, 12)})` });
+    } catch (e) {
+      // Write-time lint still holds: the brain may have moved since the item
+      // was filed (and linted). A refusal is a 422 the agent can read.
+      if (e.code === 'E_LINT') { e.status = 422; e.message = `${e.message}: ${e.lint.join('; ')}`; }
+      throw e;
+    }
     broadcast('knowledge.written', { ...r, author: agent });
     return r;
   };
@@ -139,8 +147,9 @@ function reviewForm(task, action, token, err, kind) {
   const noteField = action === 'queued'
     ? `<p>${kind === 'answer' ? 'Your answer goes to the mission log; the next shift resumes with it.' : 'A note is required: the agent reads it as its correction.'}</p><textarea name="note" placeholder="${kind === 'answer' ? 'Your answer' : 'What should change?'}"></textarea>`
     : '';
-  // Itemized review: each proposal gets its own verdict. "Later" leaves it
-  // proposed, so a partial review never silently approves the rest.
+  // Itemized review: each proposal gets its own verdict. Later is a decision
+  // (deferred to the next digest); an item nobody ruled on starts with no
+  // choice selected, so an approval cannot defer or accept it by default.
   // A payload is shown as it will be written: the exact text the boss approves.
   const payloadBlock = it => it.payload ? it.payload.ops.map(o =>
     `<p style="margin:8px 0 2px;font-size:13px">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre>${escHtml(o.content)}</pre>`).join('') +
@@ -148,7 +157,7 @@ function reviewForm(task, action, token, err, kind) {
   const itemBlocks = (kind !== 'answer' && Array.isArray(task.items) && task.items.length)
     ? task.items.map(it => `<fieldset><legend>${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre>${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
         it.verdict !== 'proposed' ? `<p style="color:#666">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
-      }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
+      }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value="later"${it.verdict === 'later' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
   const evidence = evidenceFiles(task).map(({ file, label }) =>
@@ -296,10 +305,10 @@ const server = http.createServer(async (req, res) => {
         const note = (form.get('note') || '').trim();
         if (action === 'queued' && !note)
           return sendPage(res, 400, title, reviewForm(task, action, mReview[1], kind === 'answer' ? 'The answer is required.' : 'The note is required.', kind));
-        // Per-item verdicts ride along with the overall action ("" = Later, stays proposed)
+        // Per-item verdicts ride along with the overall action (no choice = still proposed)
         const verdicts = (task.items || []).map(it => {
           const v = form.get(`v_${it.id}`), c = (form.get(`c_${it.id}`) || '').trim();
-          return (v === 'approved' || v === 'rejected' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
+          return (v === 'approved' || v === 'rejected' || v === 'later' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
         }).filter(Boolean);
         const logKind = kind === 'sendback' ? 'send_back' : kind; // approve, send_back, answer
         const r = store.updateTask({ id: task.id, agent: 'human', kind: logKind, status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });

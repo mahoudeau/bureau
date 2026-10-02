@@ -35,7 +35,7 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 
 - RULE-REVIEW-10: A PATCH with `items` appends proposals with server ids `i1`, `i2`, ..., verdict `proposed`. Titles are cut at 200 characters, bodies at 20000; an item with no title is skipped. (source: hub/lib/store.js:721-730)
 - RULE-REVIEW-11: A PATCH with `verdicts` sets `approved` or `rejected` per item id and saves a comment of up to 2000 characters. The verdicts land in the mission log as one line, with `kind: "verdict"` when the boss filed them. (source: hub/lib/store.js:731-742)
-- RULE-REVIEW-12: The link page offers Accept, Reject or Later per item. Later leaves the item `proposed`, so a partial review never approves the rest. (source: hub/server.js:75-81, hub/server.js:227-231)
+- RULE-REVIEW-12: The link page offers Accept, Reject or Later per item. Later stores the verdict `later`: a ruling, deferred on purpose. An item nobody ruled on stays `proposed` and starts with no choice selected, so a partial review never approves or defers the rest by default. (source: hub/server.js reviewForm(), hub/server.js review link POST)
 - RULE-REVIEW-20: Approving, from a link, the dashboards or MCP, is refused while any item would stay `proposed` (RULE-MISSIONS-33). The link page then shows the form again with the undecided ids, and the link stays live. (source: hub/lib/store.js updateTask(), hub/server.js review link POST)
 - RULE-REVIEW-21: The link page and the dashboards show each item's payload as it will be written (op, file, content) with its short hash, and say when approving returns the mission to its agent. (source: hub/server.js reviewForm(), hub/public/index.html openTask(), hub/public/v2/peek-panel.js payloadRows())
 

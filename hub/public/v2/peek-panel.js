@@ -202,7 +202,7 @@ import { icon, idBadge } from './components.js';
         // finding #2's "itemized-verdict radio buttons (13x13px)" line.
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
-        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
+        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="later"' + (it.verdict === 'later' ? ' checked' : '') + '> Later</label>' +
         '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" value="' + esc(it.comment || '') + '">' +
         '</div>';
     }

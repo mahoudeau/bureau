@@ -702,10 +702,11 @@ echo "14. approval pins the text: payloads, the approved status, apply"
 sha256 () { if command -v sha256sum > /dev/null; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
 # The hub hashes the canonical JSON of ops: each op exactly {op, file, content}.
 # The item below sends its keys in another order on purpose.
-CANON='[{"op":"write","file":"knowledge/m4-kettle.md","content":"- [fact] the kettle hums at 3am (fake)\n"}]'
+# The content is a well-formed note, since curated payloads are linted when filed.
+CANON='[{"op":"write","file":"knowledge/m4-kettle.md","content":"---\ntitle: M4 kettle\ncompartment: knowledge\npermalink: m4-kettle\nversion: 1\n---\n\n- [fact] the kettle hums at 3am (fake) (source: t-1)\n"}]'
 H1=$(printf '%s' "$CANON" | sha256)
 P1=$(new_claimed "M4: pinned digest" menace)
-P1ITEMS='{"agent":"menace","items":[{"title":"Add the kettle fact","body":"from the journal","payload":{"ops":[{"content":"- [fact] the kettle hums at 3am (fake)\n","file":"knowledge/m4-kettle.md","op":"write"}]}},{"title":"Log it","payload":{"ops":[{"op":"append","file":"projects/ops/m4-log.md","content":"- kettle fact filed (fake)"}]}},{"title":"A question","body":"keep the attic copy?"}]}'
+P1ITEMS='{"agent":"menace","items":[{"title":"Add the kettle fact","body":"from the journal","payload":{"ops":[{"content":"---\ntitle: M4 kettle\ncompartment: knowledge\npermalink: m4-kettle\nversion: 1\n---\n\n- [fact] the kettle hums at 3am (fake) (source: t-1)\n","file":"knowledge/m4-kettle.md","op":"write"}]}},{"title":"Log it","payload":{"ops":[{"op":"append","file":"projects/ops/m4-log.md","content":"- kettle fact filed (fake)"}]}},{"title":"A question","body":"keep the attic copy?"}]}'
 P1R=$(api PATCH "/api/tasks/$P1" "$P1ITEMS")
 check "an item with a payload is filed" "$P1R" '"title": "Add the kettle fact"'
 check "the payload hash is stored at filing, over the canonical ops" "$P1R" "\"payload_sha256\": \"$H1\""
@@ -784,9 +785,9 @@ check "the holder applies the approved payload into knowledge/" "$P1A" '"applied
 check "the item records when" "$P1A" '"applied_at": "'
 check "the item records the commit field" "$P1A" '"commit": '
 check "the item records the hash it applied" "$P1A" "\"payload_sha256\": \"$H1\""
-check "the applied text reads back" "$(api GET '/api/knowledge?file=knowledge/m4-kettle.md')" 'the kettle hums at 3am (fake)\\n"'
+check "the applied text reads back" "$(api GET '/api/knowledge?file=knowledge/m4-kettle.md')" 'the kettle hums at 3am (fake) (source: t-1)\\n"'
 P1RAW=$(curl -s "$BUREAU_URL/api/knowledge?file=knowledge/m4-kettle.md&raw=1" -H "$AUTH"; echo x)
-P1WANT=$(printf '%s\nx' '- [fact] the kettle hums at 3am (fake)')
+P1WANT=$(printf -- '---\ntitle: M4 kettle\ncompartment: knowledge\npermalink: m4-kettle\nversion: 1\n---\n\n- [fact] the kettle hums at 3am (fake) (source: t-1)\nx')
 check "the bytes on disk are exactly the payload" "$([ "$P1RAW" = "$P1WANT" ] && echo identical)" '^identical$'
 check "the write is committed as the caller" "$(api GET /api/state)" "$P1 i1: apply the boss-approved write to knowledge/m4-kettle.md"
 check "the apply is logged on the mission" "$(api GET "/api/tasks/$P1")" 'applied i1: write knowledge/m4-kettle.md (sha256 '
@@ -840,6 +841,24 @@ B='{"agent":"human","status":"done","verdicts":[{"id":"i1","verdict":"rejected"}
 check "decided, a critic-gate approval with after_approval lands on approved" "$(api PATCH "/api/tasks/$MAID" "$B")" '"status": "approved"'
 MB=$(mcpcall update_mission "{\"id\":\"$MAID\",\"status\":\"done\",\"note\":\"nothing approved to apply\"}")
 check "MCP: nothing to apply, consul closes it done" "$(mcp "$MB")" '\\"status\\": \\"done\\"'
+
+echo "14b. Later is a ruling; curated payloads are linted when filed"
+L1=$(new_claimed "M4: one item deferred" menace)
+api PATCH "/api/tasks/$L1" '{"agent":"menace","items":[{"title":"Defer me"},{"title":"Take me"}]}' > /dev/null
+api PATCH "/api/tasks/$L1" '{"agent":"consul","status":"review"}' > /dev/null
+LTOK=$(api GET "/api/tasks/$L1" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+check "on the review page, items nobody ruled on start with no choice selected" "$(curl -s "$BUREAU_URL/r/$LTOK" | grep -c ' checked' || true)" '^0$'
+check "the page offers Later as a verdict" "$(curl -s "$BUREAU_URL/r/$LTOK")" 'value="later"'
+B='{"agent":"human","status":"done","note":"approved","verdicts":[{"id":"i1","verdict":"later"},{"id":"i2","verdict":"approved"}]}'
+check "an approval with one item deferred (later) goes through" "$(api PATCH "/api/tasks/$L1" "$B")" '"status": "done"'
+check "the deferred item keeps the verdict later" "$(api GET "/api/tasks/$L1" | grep -A3 '"title": "Defer me"')" '"verdict": "later"'
+F1=$(new_claimed "M4: lint at filing" menace)
+B='{"agent":"menace","items":[{"title":"Unsourced note","payload":{"ops":[{"op":"write","file":"knowledge/m4-unsourced.md","content":"---\ntitle: Unsourced\ncompartment: knowledge\npermalink: m4-unsourced\nversion: 1\n---\n\n- [fact] no source here\n"}]}}]}'
+check "a curated payload that would fail lint is refused at filing" "$(api PATCH "/api/tasks/$F1" "$B")" 'would fail brain-lint'
+check "and no item was filed" "$(api GET "/api/tasks/$F1" | grep -c '"id": "i1"' || true)" '^0$'
+B='{"agent":"menace","items":[{"title":"Free note","payload":{"ops":[{"op":"append","file":"projects/ops/m4-free.md","content":"- [lesson] no source needed here"}]}}]}'
+check "a payload outside the curated folders is not linted" "$(api PATCH "/api/tasks/$F1" "$B")" '"title": "Free note"'
+api PATCH "/api/tasks/$F1" '{"agent":"menace","status":"discarded","note":"probe"}' > /dev/null
 
 echo
 echo "passed $PASS, failed $FAIL"
