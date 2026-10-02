@@ -35,7 +35,7 @@ Chat is demoted on purpose: a mirror, never the brain. Message length caps, rate
 
 ### 3.1 Task queue with claim/lease semantics
 
-The heart of autonomy. A task is a JSON record: `id, title, body, status (queued → claimed → in_progress → review → done/failed, plus blocked), assignee, lease_until, priority, project, artifacts[], log[]`.
+The heart of autonomy. A task is a JSON record: `id, title, body, status (queued → claimed → in_progress → review → done/failed, plus blocked, approved and discarded), assignee, lease_until, priority, project, artifacts[], log[]`.
 
 The claim/lease model is what makes unattended work safe: an agent **claims** a task and receives a lease (e.g. 2 hours). It must post progress or renew the lease; if the lease expires (session died, container reclaimed), the task automatically returns to `queued` so another agent picks it up. No work silently dies with a session.
 

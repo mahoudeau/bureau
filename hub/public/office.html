@@ -411,7 +411,8 @@
     for (var i = 0; i < tasks.length; i++) {
       var t = tasks[i];
       if (t.status === 'queued') c.queued++;
-      else if (t.status === 'claimed' || t.status === 'in_progress') c.working++;
+      // approved is back with its holder, to apply: work in progress
+      else if (t.status === 'claimed' || t.status === 'in_progress' || t.status === 'approved') c.working++;
       else if (t.status === 'review') { c.review++; if (t.gate !== 'critic') boss++; }
       else if (t.status === 'blocked') { if (!blockedOnMission(t, byId)) blocked++; }
       else if (t.status === 'done') c.done++;
@@ -533,6 +534,8 @@
       case 'task.claimed': return person(who) + ' picked up ' + titled(d, 48);
       case 'task.review': return person(who) + ' left ' + titled(d, 40) + ' at your door';
       case 'task.done': return (who ? person(who) + ' shipped ' : 'Shipped ') + titled(d, 48);
+      case 'task.approved': return 'You approved ' + titled(d, 36) + ', back to ' + person(d.assignee) + ' to apply';
+      case 'task.applied': return person(d.by || who) + ' applied ' + (d.item ? esc(clip(d.item, 6)) : 'an item') + ' of ' + titled(d, 36);
       case 'task.failed': return titled(d, 48) + ' failed' + note;
       case 'task.requeued': return titled(d, 40) + ' is back on the board' + note;
       case 'task.blocked': return titled(d, 40) + ' is stuck' + note;
@@ -577,6 +580,20 @@
           { say: titled(d, 40) + ' is ready for you', ms: 3500 },
           { wait: 1200 }, { carry: null }, { walk: deskSeat(ag.desk) },
         ]);
+        refreshState();
+        break;
+      // Approved, back to its holder: the folder walks from the boss's door
+      // back to the agent's desk, the claim walk with the door for the board.
+      case 'task.approved':
+        if (ag) enqueue(ag, [
+          { walk: SPOT.bossdoor }, { carry: 'folder-working' },
+          { say: 'approved: ' + titled(d, 36), ms: 3000 },
+          { walk: deskSeat(ag.desk) }, { carry: null },
+        ]);
+        refreshState();
+        break;
+      // Each apply also broadcasts its brain write, which walks the shelf.
+      case 'task.applied':
         refreshState();
         break;
       case 'task.done':
@@ -959,7 +976,7 @@
     es.onerror = function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); };
     ['agent.registered', 'agent.heartbeat', 'agent.removed',
      'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
-     'task.review', 'task.blocked', 'task.requeued',
+     'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued',
      'message.posted', 'knowledge.written'].forEach(function (type) {
       es.addEventListener(type, function (ev) {
         var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}

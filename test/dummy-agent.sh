@@ -698,6 +698,149 @@ mcp "$WMD" > /dev/null
 check "closed over MCP: the evidence is gone" "$(code GET "/api/work?file=work/$WMID/chat.png")" '^404$'
 check "MCP write_work to a closed mission is refused" "$(mcp "$WMW")" '"isError": true'
 
+echo "14. approval pins the text: payloads, the approved status, apply"
+sha256 () { if command -v sha256sum > /dev/null; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi; }
+# The hub hashes the canonical JSON of ops: each op exactly {op, file, content}.
+# The item below sends its keys in another order on purpose.
+CANON='[{"op":"write","file":"knowledge/m4-kettle.md","content":"- [fact] the kettle hums at 3am (fake)\n"}]'
+H1=$(printf '%s' "$CANON" | sha256)
+P1=$(new_claimed "M4: pinned digest" menace)
+P1ITEMS='{"agent":"menace","items":[{"title":"Add the kettle fact","body":"from the journal","payload":{"ops":[{"content":"- [fact] the kettle hums at 3am (fake)\n","file":"knowledge/m4-kettle.md","op":"write"}]}},{"title":"Log it","payload":{"ops":[{"op":"append","file":"projects/ops/m4-log.md","content":"- kettle fact filed (fake)"}]}},{"title":"A question","body":"keep the attic copy?"}]}'
+P1R=$(api PATCH "/api/tasks/$P1" "$P1ITEMS")
+check "an item with a payload is filed" "$P1R" '"title": "Add the kettle fact"'
+check "the payload hash is stored at filing, over the canonical ops" "$P1R" "\"payload_sha256\": \"$H1\""
+P1TAMPER='{"agent":"menace","items":[{"id":"i1","title":"Add the kettle fact","payload":{"ops":[{"op":"write","file":"knowledge/m4-kettle.md","content":"tampered"}]}}]}'
+check "a later items PATCH cannot rewrite a filed payload" "$(api PATCH "/api/tasks/$P1" "$P1TAMPER")" 'payload is pinned'
+check "the stored hash is unchanged" "$(api GET "/api/tasks/$P1")" "\"payload_sha256\": \"$H1\""
+check "and no item was added" "$(api GET "/api/tasks/$P1" | grep -c '"id": "i4"' || true)" '^0$'
+B='{"agent":"menace","items":[{"title":"bad op","payload":{"ops":[{"op":"move","file":"knowledge/x.md","content":"x"}]}}]}'
+check "an unknown op is refused" "$(api PATCH "/api/tasks/$P1" "$B")" 'use one of write, append'
+B='{"agent":"menace","items":[{"title":"bad path","payload":{"ops":[{"op":"write","file":"journal/../../escape.md","content":"x"}]}}]}'
+check "a payload path is validated like a knowledge path" "$(api PATCH "/api/tasks/$P1" "$B")" 'bad path'
+B='{"agent":"menace","items":[{"title":"binary","payload":{"ops":[{"op":"write","file":"projects/ops/x.png","content":"x"}]}}]}'
+check "a binary target is refused" "$(api PATCH "/api/tasks/$P1" "$B")" 'text files only'
+B='{"agent":"menace","items":[{"title":"empty","payload":{"ops":[]}}]}'
+check "an empty payload is refused" "$(api PATCH "/api/tasks/$P1" "$B")" 'at least one op'
+check "refused payloads added no item" "$(api GET "/api/tasks/$P1" | grep -c '"id": "i4"' || true)" '^0$'
+B="{\"file\":\"work/$P1/draft.md\",\"content\":\"the staged draft\"}"
+api POST /api/work "$B" > /dev/null
+B='{"agent":"menace","status":"in_progress","after_approval":"return"}'
+check "after_approval rides only a move into review" "$(api PATCH "/api/tasks/$P1" "$B")" 'rides the PATCH that moves'
+B='{"agent":"consul","status":"review","after_approval":"later"}'
+check "after_approval takes only return" "$(api PATCH "/api/tasks/$P1" "$B")" 'the only value is'
+B='{"agent":"menace","item":"i1"}'
+check "apply refused while the mission is in progress" "$(api POST "/api/tasks/$P1/apply" "$B")" 'only an approved mission applies'
+B='{"agent":"consul","status":"review","after_approval":"return","note":"3 items, 2 with payloads"}'
+P1PARK=$(api PATCH "/api/tasks/$P1" "$B")
+check "parked in review with after_approval return" "$P1PARK" '"after_approval": "return"'
+check "parking issued review links" "$P1PARK" '"review_links"'
+B='{"agent":"human","status":"done","note":"approved","verdicts":[{"id":"i1","verdict":"approved"},{"id":"i2","verdict":"approved"}]}'
+check "approve with an undecided item is refused on PATCH (400)" "$(code PATCH "/api/tasks/$P1" "$B")" '^400$'
+check "the refusal names the undecided item" "$(api PATCH "/api/tasks/$P1" "$B")" 'undecided items: i3'
+P1D=$(api GET "/api/tasks/$P1")
+check "the refused approve changed nothing: still in review" "$P1D" '"status": "review"'
+check "and its verdicts were not recorded" "$(echo "$P1D" | grep -c '"verdict": "approved"' || true)" '^0$'
+P1AP=$(echo "$P1D" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
+P1PAGE=$(curl -s "$BUREAU_URL/r/$P1AP")
+check "the review page says approving returns the mission to its agent" "$P1PAGE" 'Approving returns this mission to menace'
+check "the review page shows the exact payload text" "$P1PAGE" 'the kettle hums at 3am'
+check "approve with an undecided item is refused on the review link (400)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved')" '^400$'
+check "the link page names the undecided item" "$(curl -s -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved')" 'undecided items: i3'
+check "still in review after the refused link" "$(api GET "/api/tasks/$P1")" '"status": "review"'
+check "approve via the link with every item decided" "$(curl -s -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved&v_i3=rejected&c_i3=no+attic+copy')" 'Back with menace'
+P1D=$(api GET "/api/tasks/$P1")
+check "after_approval return lands on approved, not done" "$P1D" '"status": "approved"'
+check "the holder keeps the mission" "$P1D" '"assignee": "menace"'
+check "approved holds no lease" "$P1D" '"lease_until": null'
+check "the approve is logged from review" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"from": "review"'
+check "to approved" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"to": "approved"'
+check "with kind approve" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"kind": "approve"'
+check "the work folder survives the approval" "$(api GET "/api/work?file=work/$P1/draft.md")" 'the staged draft'
+B="{\"file\":\"work/$P1/after.md\",\"content\":\"x\"}"
+check "the work store still takes writes" "$(code POST /api/work "$B")" '^200$'
+B="{\"agent\":\"worker-z\",\"id\":\"$P1\"}"
+check "an approved mission is not claimable" "$(api POST /api/tasks/claim "$B")" 'not claimable (status: approved)'
+check "approved is a listed status" "$(api GET '/api/tasks?status=approved')" "\"id\": \"$P1\""
+B='{"agent":"menace","item":"i3"}'
+check "apply refuses an item that is not approved (409)" "$(code POST "/api/tasks/$P1/apply" "$B")" '^409$'
+check "and says why" "$(api POST "/api/tasks/$P1/apply" "$B")" 'i3 is rejected, not approved'
+B='{"agent":"worker-z","item":"i1"}'
+check "apply refuses a caller who is not the holder (403)" "$(code POST "/api/tasks/$P1/apply" "$B")" '^403$'
+B='{"agent":"menace","item":"i9"}'
+check "apply refuses an unknown item (404)" "$(code POST "/api/tasks/$P1/apply" "$B")" '^404$'
+B='{"agent":"menace","status":"done","note":"closing"}'
+check "close to done refused while approved items are unapplied" "$(api PATCH "/api/tasks/$P1" "$B")" 'apply i1, i2 before closing'
+B='{"agent":"worker-z","status":"done"}'
+check "only the holder or the boss closes an approved mission" "$(api PATCH "/api/tasks/$P1" "$B")" 'only its holder (menace)'
+B='{"agent":"menace","status":"queued"}'
+check "no send-back from approved" "$(api PATCH "/api/tasks/$P1" "$B")" 'its holder applies the approved items'
+B='{"agent":"menace","items":[{"title":"late idea"}]}'
+check "an approved mission takes no new items" "$(api PATCH "/api/tasks/$P1" "$B")" 'file new ones on a new mission'
+B=$(kw knowledge/m4-kettle.md menace)
+check "menace cannot write knowledge/ directly (403)" "$(code POST /api/knowledge "$B")" '^403$'
+B='{"agent":"menace","item":"i1"}'
+P1A=$(api POST "/api/tasks/$P1/apply" "$B")
+check "the holder applies the approved payload into knowledge/" "$P1A" '"applied_by": "menace"'
+check "the item records when" "$P1A" '"applied_at": "'
+check "the item records the commit field" "$P1A" '"commit": '
+check "the item records the hash it applied" "$P1A" "\"payload_sha256\": \"$H1\""
+check "the applied text reads back" "$(api GET '/api/knowledge?file=knowledge/m4-kettle.md')" 'the kettle hums at 3am (fake)\\n"'
+P1RAW=$(curl -s "$BUREAU_URL/api/knowledge?file=knowledge/m4-kettle.md&raw=1" -H "$AUTH"; echo x)
+P1WANT=$(printf '%s\nx' '- [fact] the kettle hums at 3am (fake)')
+check "the bytes on disk are exactly the payload" "$([ "$P1RAW" = "$P1WANT" ] && echo identical)" '^identical$'
+check "the write is committed as the caller" "$(api GET /api/state)" "$P1 i1: apply the boss-approved write to knowledge/m4-kettle.md"
+check "the apply is logged on the mission" "$(api GET "/api/tasks/$P1")" 'applied i1: write knowledge/m4-kettle.md (sha256 '
+check "applying twice is refused (409)" "$(code POST "/api/tasks/$P1/apply" "$B")" '^409$'
+check "and says it was applied" "$(api POST "/api/tasks/$P1/apply" "$B")" 'was applied at'
+B='{"agent":"human","verdicts":[{"id":"i1","verdict":"rejected"}]}'
+check "an applied item's verdict cannot be flipped" "$(api PATCH "/api/tasks/$P1" "$B")" 'already applied'
+B='{"agent":"menace","status":"done","note":"closing"}'
+check "close still refused with i2 unapplied" "$(api PATCH "/api/tasks/$P1" "$B")" 'apply i2 before closing'
+B='{"agent":"menace","item":"i2"}'
+check "the append payload applies" "$(api POST "/api/tasks/$P1/apply" "$B")" '"applied_by": "menace"'
+check "and reads back" "$(api GET '/api/knowledge?file=projects/ops/m4-log.md')" 'kettle fact filed (fake)'
+B='{"agent":"menace","status":"done","note":"i1 and i2 applied"}'
+check "close to done accepted once every approved item is applied" "$(api PATCH "/api/tasks/$P1" "$B")" '"status": "done"'
+check "closing done removes the work folder" "$(code GET "/api/work?file=work/$P1/draft.md")" '^404$'
+B='{"agent":"menace","item":"i2"}'
+check "apply on a closed mission is refused" "$(api POST "/api/tasks/$P1/apply" "$B")" 'only an approved mission applies'
+# Backward compatibility: without after_approval an approve still closes done
+P2=$(new_claimed "M4: no opt-in" menace)
+B='{"agent":"menace","items":[{"title":"Fact with a payload","payload":{"ops":[{"op":"write","file":"projects/ops/m4-plain.md","content":"x"}]}}]}'
+api PATCH "/api/tasks/$P2" "$B" > /dev/null
+B="{\"file\":\"work/$P2/draft.md\",\"content\":\"x\"}"
+api POST /api/work "$B" > /dev/null
+B='{"agent":"consul","status":"review","note":"parked"}'
+check "parked without after_approval" "$(api PATCH "/api/tasks/$P2" "$B" | grep -c '"after_approval"' || true)" '^0$'
+B='{"agent":"human","status":"done","note":"approved","verdicts":[{"id":"i1","verdict":"approved"}]}'
+check "approve without after_approval still closes done" "$(api PATCH "/api/tasks/$P2" "$B")" '"status": "done"'
+check "and its work folder goes, as before" "$(code GET "/api/work?file=work/$P2/draft.md")" '^404$'
+B='{"agent":"human","status":"approved"}'
+P3=$(new_claimed "M4: explicit approved" menace)
+check "status approved is refused outside review" "$(api PATCH "/api/tasks/$P3" "$B")" 'only a mission in review'
+api PATCH "/api/tasks/$P3" '{"agent":"consul","status":"review"}' > /dev/null
+check "status approved needs after_approval return" "$(api PATCH "/api/tasks/$P3" "$B")" 'after_approval'
+api PATCH "/api/tasks/$P3" '{"agent":"human","status":"done"}' > /dev/null
+# The MCP door: the same rule, and the new tool
+check "MCP update_mission advertises after_approval" "$(mcp '{"jsonrpc":"2.0","id":50,"method":"tools/list"}')" 'after_approval'
+check "MCP lists apply_item" "$(mcp '{"jsonrpc":"2.0","id":51,"method":"tools/list"}')" 'apply_item'
+MA=$(mcp '{"jsonrpc":"2.0","id":52,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"M4: MCP undecided","project":"ops","gate":"critic"}}}')
+MAID=$(echo "$MA" | grep -o 't-[0-9]*' | head -1)
+MB=$(mcpcall start_mission "{\"id\":\"$MAID\"}")
+mcp "$MB" > /dev/null
+MB=$(mcpcall update_mission "{\"id\":\"$MAID\",\"items\":[{\"title\":\"Open question\"}]}")
+mcp "$MB" > /dev/null
+MB=$(mcpcall update_mission "{\"id\":\"$MAID\",\"status\":\"review\",\"after_approval\":\"return\"}")
+mcp "$MB" > /dev/null
+MB=$(mcpcall update_mission "{\"id\":\"$MAID\",\"status\":\"done\"}")
+check "MCP: an approval with an undecided item is refused" "$(mcp "$MB")" 'undecided items: i1'
+MB=$(mcpcall apply_item "{\"task\":\"$MAID\",\"item\":\"i1\"}")
+check "MCP apply_item on a mission in review is refused" "$(mcp "$MB")" '"isError": true'
+B='{"agent":"human","status":"done","verdicts":[{"id":"i1","verdict":"rejected"}]}'
+check "decided, a critic-gate approval with after_approval lands on approved" "$(api PATCH "/api/tasks/$MAID" "$B")" '"status": "approved"'
+MB=$(mcpcall update_mission "{\"id\":\"$MAID\",\"status\":\"done\",\"note\":\"nothing approved to apply\"}")
+check "MCP: nothing to apply, consul closes it done" "$(mcp "$MB")" '\\"status\\": \\"done\\"'
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ] && echo "CONFORMANT: the hub is fully drivable by curl." || echo "NOT CONFORMANT."

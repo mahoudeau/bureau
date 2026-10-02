@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const work = require('./work');
+const knowledge = require('./knowledge');
 
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
@@ -325,7 +326,11 @@ function deleteAgent(name) {
 }
 
 // ---- Tasks ----
-const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'done', 'failed', 'discarded'];
+// approved (M4): the boss approved a mission parked with after_approval
+// "return"; it is back with its holder, who applies the approved items and
+// then closes it done. Not terminal (its work folder stays), holds no lease,
+// takes no project capacity, and the pool never claims it.
+const TASK_STATUSES = ['queued', 'claimed', 'in_progress', 'blocked', 'review', 'approved', 'done', 'failed', 'discarded'];
 const TERMINAL_STATUSES = ['done', 'failed', 'discarded'];
 
 // Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
@@ -669,14 +674,56 @@ const HUMAN_KINDS = ['approve', 'send_back', 'answer', 'verdict', 'edit'];
 function humanKind(kind, prevStatus, status, verdicts) {
   if (HUMAN_KINDS.includes(kind)) return kind;
   const moved = status && status !== prevStatus;
-  if (moved && prevStatus === 'review' && status === 'done') return 'approve';
+  if (moved && prevStatus === 'review' && (status === 'done' || status === 'approved')) return 'approve';
   if (moved && prevStatus === 'review' && status === 'queued') return 'send_back';
   if (moved && prevStatus === 'blocked' && status === 'queued') return 'answer';
   if (!moved && Array.isArray(verdicts) && verdicts.length) return 'verdict';
   return 'edit';
 }
 
-function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session }) {
+// ---- Review item payloads (M4: approval pins the text) ----
+// An item may carry the exact brain change it proposes: {ops: [{op, file,
+// content}]}. The hub hashes it when the item is filed, nothing can change it
+// afterwards, and the apply route writes those bytes and no others.
+const PAYLOAD_OPS = ['write', 'append'];
+// Canonical form: every op is exactly {op, file, content}, in that order, so
+// the hash does not depend on how the caller ordered its keys.
+function canonicalOps(ops) { return ops.map(o => ({ op: o.op, file: o.file, content: o.content })); }
+function payloadHash(ops) { return crypto.createHash('sha256').update(JSON.stringify(canonicalOps(ops))).digest('hex'); }
+// The knowledge API's path rules (lib/knowledge.js safePath), checked at
+// filing so a bad path is refused before the boss ever sees it. Text only:
+// content is a JSON string, and a binary would not survive the trip.
+function brainPathError(rel) {
+  if (typeof rel !== 'string' || !rel.length) return 'path required';
+  const norm = path.normalize(rel).replace(/^([/\\])+/, '');
+  if (norm.split(/[/\\]/).includes('..') || norm.startsWith('.git')) return 'bad path';
+  if (!knowledge.FILE_RE.test(norm)) return knowledge.FILE_TYPES_ERROR;
+  if (knowledge.BINARY_RE.test(norm)) return 'text files only; attachments go through POST /api/knowledge';
+  return null;
+}
+function payloadError(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload) || !Array.isArray(payload.ops) || !payload.ops.length)
+    return 'payload must be {"ops": [{"op", "file", "content"}, ...]} with at least one op';
+  let bytes = 0;
+  for (let i = 0; i < payload.ops.length; i++) {
+    const o = payload.ops[i], at = `payload.ops[${i}]`;
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return `${at} must be an object {op, file, content}`;
+    if (!PAYLOAD_OPS.includes(o.op)) return `${at}.op: use one of ${PAYLOAD_OPS.join(', ')}`;
+    if (typeof o.content !== 'string') return `${at}.content must be a string`;
+    const e = brainPathError(o.file);
+    if (e) return `${at}.file: ${e}`;
+    bytes += Buffer.byteLength(o.content);
+  }
+  // The knowledge API's cap, for the whole payload: it lives in state.json.
+  if (bytes > knowledge.MAX_ATTACHMENT) return 'payload too large (5MB cap, as for the knowledge API)';
+  return null;
+}
+// Approved items with a payload that the holder has not applied yet.
+function unappliedItems(t) {
+  return (t.items || []).filter(it => it.verdict === 'approved' && it.payload && !it.applied_at).map(it => it.id);
+}
+
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session, after_approval }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
@@ -692,6 +739,51 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // Every check runs before anything changes, so a refused update leaves the
   // mission exactly as it was (the gate used to be raised before a refusal).
   if (status && !TASK_STATUSES.includes(status)) return { error: `bad status; use one of ${TASK_STATUSES.join(', ')}` };
+  // M4. approved is reached only by approving: an explicit request for it is
+  // judged below as the approval to done it is, and lands on approved.
+  if (status === 'approved') {
+    if (prevStatus !== 'review') return { error: 'approved: only a mission in review can be approved' };
+    if (t.after_approval !== 'return') return { error: 'approved: only for a mission parked with after_approval "return"; approve it to done instead' };
+    status = 'done';
+  }
+  if (after_approval !== undefined && after_approval !== null) {
+    if (after_approval !== 'return') return { error: 'after_approval: the only value is "return"' };
+    if (status !== 'review' || prevStatus === 'review') return { error: 'after_approval: rides the PATCH that moves the mission into review' };
+  }
+  // Leaving approved: the holder (or the boss) closes it done once every
+  // approved item with a payload is applied. Only the boss closes it failed
+  // or discarded. There is no send-back from here.
+  if (prevStatus === 'approved' && status && status !== 'approved') {
+    if (status === 'done') {
+      if (agent !== 'human' && agent !== t.assignee) return { error: `approved: only its holder (${t.assignee}) or the boss closes ${t.id}` };
+      const left = unappliedItems(t);
+      if (left.length) return { error: `approved: apply ${left.join(', ')} before closing done (POST /api/tasks/${t.id}/apply)` };
+    } else if (!((status === 'failed' || status === 'discarded') && agent === 'human')) {
+      return { error: 'approved: its holder applies the approved items and closes it done; only the boss closes it failed or discarded' };
+    }
+  }
+  // Payloads are checked before anything changes, and an item already filed
+  // keeps the payload it was hashed with: nothing rewrites it.
+  if (Array.isArray(items)) {
+    if (prevStatus === 'approved' && items.some(it => it && it.title))
+      return { error: `items: ${t.id} is approved; the boss ruled on its items, so file new ones on a new mission` };
+    for (const it of items) {
+      if (!it || !it.title) continue;
+      if (it.payload !== undefined && it.id && (t.items || []).some(x => x.id === it.id))
+        return { error: `items: ${it.id} is already filed and its payload is pinned; file a new item instead` };
+      if (it.payload !== undefined) {
+        const e = payloadError(it.payload);
+        if (e) return { error: `items: "${String(it.title).slice(0, 60)}": ${e}` };
+      }
+    }
+  }
+  if (Array.isArray(verdicts) && t.items) {
+    for (const v of verdicts) {
+      const it = v && t.items.find(x => x.id === v.id);
+      if (it && it.applied_at && v.verdict && v.verdict !== it.verdict)
+        return { error: `verdicts: ${it.id} is already applied; its verdict stays ${it.verdict}` };
+    }
+  }
   // S2 approval policy. Settings decide it; with none set, nothing below
   // refuses anything that was allowed before.
   const policy = effectiveSettings(s, t.project).approval;
@@ -727,7 +819,8 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // S2 close policy, only when the boss set approval explicitly. dashboard:
   // agents never close boss-gate work done. in-session: they may, quoting
   // the boss. critic: a critic or lead pass closes it. Unset: as before.
-  if (status === 'done' && t.status !== 'done' && effGate === 'boss' && agent !== 'human' && policy) {
+  // An approved mission was approved already: closing it is bookkeeping.
+  if (status === 'done' && t.status !== 'done' && t.status !== 'approved' && effGate === 'boss' && agent !== 'human' && policy) {
     if (policy === 'dashboard')
       return { error: `approval policy (dashboard) for ${t.project}: only the boss closes a gate:boss mission done; park it in review for him instead` };
     if (policy === 'in-session' && !chatApproved)
@@ -735,6 +828,22 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     if (policy === 'critic' && !isCriticOrLead(s, agent))
       return { error: `approval policy (critic) for ${t.project}: only the critic, the lead, or the boss closes a gate:boss mission done` };
   }
+  // M4: no approval with undecided items. An approval (out of review, or a
+  // close carrying the boss's quoted words) is refused while any item would
+  // still read proposed once this request's own verdicts are applied. A
+  // question inside a proposal set cannot be closed without an answer.
+  const approving = status === 'done' && prevStatus !== 'approved' && (prevStatus === 'review' || !!quote);
+  if (approving) {
+    const verdictOf = new Map((t.items || []).map(it => [it.id, it.verdict]));
+    for (const v of Array.isArray(verdicts) ? verdicts : [])
+      if (v && verdictOf.has(v.id) && (v.verdict === 'approved' || v.verdict === 'rejected')) verdictOf.set(v.id, v.verdict);
+    const open = [...verdictOf].filter(([, v]) => v === 'proposed').map(([iid]) => iid);
+    if (Array.isArray(items) && items.some(it => it && it.title)) open.push('the items filed with this request');
+    if (open.length) return { error: `undecided items: ${open.join(', ')} still proposed; accept or reject each before approving` };
+  }
+  // after_approval "return": the approval lands on approved, back with the
+  // holder, instead of done.
+  if (status === 'done' && prevStatus === 'review' && t.after_approval === 'return') status = 'approved';
   if (gate !== undefined) t.gate = gate;
   // Itemized review: a worker files proposal items; the boss files per-item
   // verdicts (approved/rejected + comment). Verdicts persist on the mission so
@@ -744,7 +853,13 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     let added = 0;
     for (const it of items) {
       if (!it || !it.title) continue;
-      t.items.push({ id: `i${t.items.length + 1}`, title: String(it.title).slice(0, 200), body: String(it.body || '').slice(0, 20000), verdict: 'proposed', comment: null });
+      const rec = { id: `i${t.items.length + 1}`, title: String(it.title).slice(0, 200), body: String(it.body || '').slice(0, 20000), verdict: 'proposed', comment: null };
+      // Stored whole, never truncated: the hash covers every byte.
+      if (it.payload !== undefined) {
+        rec.payload = { ops: canonicalOps(it.payload.ops) };
+        rec.payload_sha256 = payloadHash(rec.payload.ops);
+      }
+      t.items.push(rec);
       added++;
     }
     if (added && !note && !status) note = `filed ${added} review item(s)`;
@@ -764,8 +879,15 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   if (status) {
     t.status = status;
     // blocked keeps its assignee but pauses the lease, so it never auto-requeues
-    if (status === 'done' || status === 'failed' || status === 'discarded' || status === 'review' || status === 'blocked') t.lease_until = null;
+    // approved keeps its assignee too (the holder applies), with no lease
+    if (status === 'done' || status === 'failed' || status === 'discarded' || status === 'review' || status === 'blocked' || status === 'approved') t.lease_until = null;
     if (status === 'queued') { t.assignee = null; t.lease_until = null; }
+    // Each park decides what its approval does: after_approval "return"
+    // sends the approved mission back to its holder instead of to done.
+    if (status === 'review' && prevStatus !== 'review') {
+      if (after_approval === 'return') t.after_approval = 'return';
+      else delete t.after_approval;
+    }
     // Capability links exist exactly while the task sits in review; any transition out consumes them.
     if (status === 'review') t.review_links = makeReviewLinks();
     else delete t.review_links;
@@ -805,6 +927,63 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     try { work.removeMission(t.id); } catch (e) { console.error('[work] cleanup failed for', t.id, e.message); }
   }
   return { task: t, prev_status: prevStatus, by: agent };
+}
+
+// ---- Apply (M4) ----
+// POST /api/tasks/:id/apply. Every check runs before anything is written,
+// the hash last: a payload that no longer matches what was filed and
+// approved writes nothing. Refusals carry the HTTP code the route answers.
+function applyCheck({ id, agent, item }) {
+  const t = load().tasks.find(x => x.id === id);
+  if (!t) return { code: 404, error: 'not_found' };
+  if (!agent) return { code: 400, error: 'agent required: say which agent is applying' };
+  if (!item) return { code: 400, error: 'item required: the id of the approved item to apply' };
+  if (t.status !== 'approved') return { code: 409, error: `apply: ${t.id} is ${t.status}; only an approved mission applies its items` };
+  if (agent !== 'human' && agent !== t.assignee) return { code: 403, error: `apply: only its holder (${t.assignee}) or the boss applies ${t.id}'s items` };
+  const it = (t.items || []).find(x => x.id === item);
+  if (!it) return { code: 404, error: `apply: ${t.id} has no item ${item}` };
+  if (it.verdict !== 'approved') return { code: 409, error: `apply: ${it.id} is ${it.verdict}, not approved` };
+  if (!it.payload || !Array.isArray(it.payload.ops) || !it.payload.ops.length) return { code: 409, error: `apply: ${it.id} carries no payload` };
+  if (it.applied_at) return { code: 409, error: `apply: ${it.id} was applied at ${it.applied_at} by ${it.applied_by}` };
+  const sha = payloadHash(it.payload.ops);
+  if (sha !== it.payload_sha256) return { code: 409, error: `apply: ${it.id}'s payload does not match the hash stored when it was filed (${it.payload_sha256}); nothing written` };
+  return { task: t, item: it, sha };
+}
+
+// writeOp(op) performs one op and returns what the knowledge write returned;
+// the caller passes the knowledge route's own write function, so applied text
+// meets every rule a plain write meets. Ops run in order. If one is refused,
+// the ones before it stay written and are counted (applied_ops), and a retry
+// resumes at the refused op, so an append is never written twice.
+function applyItem({ id, agent, item }, writeOp) {
+  const pre = applyCheck({ id, agent, item });
+  if (pre.error) return pre;
+  const { task: t, item: it, sha } = pre;
+  const ops = it.payload.ops, n = ops.length;
+  let commit = null;
+  for (let i = it.applied_ops || 0; i < n; i++) {
+    let r;
+    try {
+      r = writeOp(ops[i], sha);
+    } catch (e) {
+      const kept = i ? `ops 1 to ${i} are written; a retry resumes at op ${i + 1}` : 'nothing written';
+      t.log.push({ ts: nowISO(), by: agent, note: `apply ${it.id} refused at op ${i + 1} of ${n} (${ops[i].op} ${ops[i].file}): ${e.message}; ${kept}` });
+      save();
+      const code = Number.isInteger(e.status) ? e.status : Number.isInteger(e.statusCode) ? e.statusCode : 500;
+      return { code, error: `apply ${it.id}: op ${i + 1} of ${n} (${ops[i].op} ${ops[i].file}) refused: ${e.message}; ${kept}` };
+    }
+    it.applied_ops = i + 1;
+    if (r && r.commit) commit = r.commit;
+    save();
+  }
+  delete it.applied_ops;
+  it.applied_at = nowISO();
+  it.applied_by = agent;
+  it.commit = commit;
+  it.payload_sha256 = sha;
+  t.log.push({ ts: nowISO(), by: agent, note: `applied ${it.id}: ${ops.map(o => `${o.op} ${o.file}`).join(', ')} (sha256 ${sha.slice(0, 12)}${commit ? `, commit ${commit}` : ''})` });
+  save();
+  return { task: t, item: it };
 }
 
 // ---- Review capability links ----
@@ -851,7 +1030,7 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   StorageError, SCHEMA_VERSION, STATE_FILE,
-  createTask, claimTask, updateTask, expireLeases, findByReviewToken,
+  createTask, claimTask, updateTask, expireLeases, findByReviewToken, applyCheck, applyItem, payloadHash,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, TERMINAL_STATUSES, ACTIVITIES,
   patchSettings, settingsOf, effectiveSettings, rolesConfigured, ignoredRoleTags, canCurate, SETTINGS_ROLES_NOTE,

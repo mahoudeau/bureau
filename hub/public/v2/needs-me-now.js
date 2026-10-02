@@ -242,6 +242,7 @@ import { icon, idBadge, statusGlyph } from './components.js';
       'task.created': 'filed', 'task.claimed': 'claimed', 'task.review': 'parked for review',
       'task.done': 'completed', 'task.failed': 'failed', 'task.requeued': 'sent back',
       'task.blocked': 'blocked', 'task.updated': 'updated',
+      'task.approved': 'got back, approved, to apply', 'task.applied': 'applied an approved item of',
       'agent.registered': 'clocked in', 'message.posted': 'messaged',
       'knowledge.written': 'wrote', 'project.created': 'created project'
     };

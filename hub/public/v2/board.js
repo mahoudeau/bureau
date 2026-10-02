@@ -612,6 +612,9 @@ import { icon, avatar, chip, idBadge } from './components.js';
       // reads correctly for "awaiting a look" and is visually unmistakable
       // from Working's dot at 15px.
       { key: 'review', label: 'Review', glyph: 'clock' },
+      // M4: approved by the boss, back with its holder to apply the
+      // approved items' pinned text, then close done.
+      { key: 'approved', label: 'Approved, to apply', glyph: 'square-pen' },
       { key: 'blocked', label: 'Blocked', glyph: 'circle-alert' },
       { key: 'queued', label: 'Queued', glyph: 'circle' },
       { key: 'done', label: 'Done', glyph: 'circle-check', collapsed: true },
@@ -636,6 +639,13 @@ import { icon, avatar, chip, idBadge } from './components.js';
     // priority/kids/reserved/gate, the sample's chip language) · assignee
     // avatar. Row click opens the mission (v2:mission:open, the one app-wide
     // "open detail" event); the review checkbox drives batch selection.
+    // M4: on an approved mission, how many approved items with a payload the
+    // holder has applied so far.
+    function applyChip(t) {
+      var pinned = (t.items || []).filter(function (it) { return it.verdict === 'approved' && it.payload; });
+      var applied = pinned.filter(function (it) { return it.applied_at; }).length;
+      return '<span class="v2-mchip v2-tabular-nums">' + icon('check', 'v2-icon--xs') + 'applied ' + applied + '/' + pinned.length + '</span>';
+    }
     function swimRow(state, t, group, goalKids) {
       var isGoal = /^goal:/i.test(t.title);
       var kids = isGoal ? goalKids[t.id] : null;
@@ -648,7 +658,8 @@ import { icon, avatar, chip, idBadge } from './components.js';
         '<span class="v2-mchip v2-tabular-nums">P' + t.priority + '</span>' +
         (kids ? '<span class="v2-mchip v2-tabular-nums">' + icon('git-branch', 'v2-icon--xs') + kids.done + '/' + kids.total + '</span>' : '') +
         (t.reserved_for ? '<span class="v2-mchip">' + icon('user', 'v2-icon--xs') + esc(t.reserved_for) + '</span>' : '') +
-        (t.status === 'review' ? '<span class="v2-mchip">' + icon('tag', 'v2-icon--xs') + (t.gate === 'critic' ? 'critic' : 'boss') + '</span>' : '');
+        (t.status === 'review' ? '<span class="v2-mchip">' + icon('tag', 'v2-icon--xs') + (t.gate === 'critic' ? 'critic' : 'boss') + '</span>' : '') +
+        (t.status === 'approved' ? applyChip(t) : '');
       return '<div class="v2-swim__row' + (selectedReviewIds.has(t.id) ? ' is-selected' : '') + '" data-open="' + esc(t.id) + '" role="button" tabindex="0" title="' + esc(t.title) + '">' +
         checkbox +
         '<span class="v2-swim__glyph v2-swim__glyph--' + esc(group.key) + '" aria-hidden="true">' + icon(group.glyph) + '</span>' +
@@ -1200,6 +1211,7 @@ import { icon, avatar, chip, idBadge } from './components.js';
       '.v2-swim__glyph--working { color: var(--v2-color-status-at-risk, #f2a30f); }',
       '.v2-swim__glyph--blocked { color: var(--v2-color-status-bug, #eb5757); }',
       '.v2-swim__glyph--review { color: var(--v2-color-status-in-progress, #8b5cf6); }',
+      '.v2-swim__glyph--approved { color: var(--v2-color-status-done, #29a36a); }',
       '.v2-swim__glyph--done { color: var(--v2-color-status-done, #29a36a); }',
       '.v2-swim__glyph--failed { color: var(--v2-color-status-bug, #eb5757); }',
       '.v2-swim__glyph--discarded { color: var(--v2-color-text-muted, #999); }',
