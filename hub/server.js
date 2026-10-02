@@ -16,6 +16,8 @@ const PORT = process.env.PORT || 8100;
 const HOST = process.env.HOST || '::';           // some shared hosts expect an IPv6 bind
 const TOKEN = process.env.BUREAU_TOKEN || '';
 if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set it in production.');
+// the placeholder in .env.example (test/storage.sh keeps the two in step)
+else if (TOKEN === 'change-me-long-random-string') console.warn('⚠️  BUREAU_TOKEN is still the example token from .env.example: anyone who has read the repo can use your API. Set your own, e.g. openssl rand -hex 32.');
 
 // ---------- SSE ----------
 const sseClients = new Set();
