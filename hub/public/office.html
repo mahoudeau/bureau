@@ -541,6 +541,7 @@
       case 'task.blocked': return titled(d, 40) + ' is stuck' + note;
       case 'task.updated': return d.note ? person(who) + ' on ' + titled(d, 30) + ': ' + esc(clip(d.note, 50)) : '';
       case 'knowledge.written': return person(d.author) + ' filed ' + esc(clip(fileName(d.file), 40)) + ' in the brain';
+      case 'journal.captured': return person(d.author) + ' noted a ' + esc(clip(d.kind, 12)) + ' in the journal';
       case 'message.posted':
         return person(d.from) + ' to ' + (d.to === '*' ? 'everyone' : d.to === 'boss' ? 'you' : person(d.to)) +
           (d.body ? ': ' + esc(clip(d.body, 44)) : '');
@@ -977,7 +978,7 @@
     ['agent.registered', 'agent.heartbeat', 'agent.removed',
      'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
      'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued',
-     'message.posted', 'knowledge.written'].forEach(function (type) {
+     'message.posted', 'knowledge.written', 'journal.captured'].forEach(function (type) {
       es.addEventListener(type, function (ev) {
         var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
         try { onEvent(type, d); } catch (e) {}

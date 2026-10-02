@@ -1,10 +1,8 @@
 // Brain Format v0.3 claims: the fixtures are the contract (docs/brain-format.md,
 // "The parsed form"). Zero dependencies: node test/claims.test.js
 //
-// The reader, hub/lib/claims.js, does not exist yet. Until it does, this test
-// only checks that every fixture has a well-formed expectation and reports the
-// rest as pending, so CI stays green while the contract is already in place.
-// Once the module exists, every case runs:
+// The reader is hub/lib/claims.js. Every fixture must have a well-formed
+// expectation, then every case runs against the reader:
 //   valid/    parseFile(md, {path}) deep-equals the .json next to it, and
 //             every claim in a format 0.3 file writes back byte for byte
 //   invalid/  parseFile reports each { code, line } listed in .expect.json
@@ -47,7 +45,7 @@ for (const f of invalid) {
 }
 
 if (!claims) {
-  console.log('2. reader cases: pending, hub/lib/claims.js is not built yet (' + valid.length + ' valid, ' + invalid.length + ' invalid, 1 generated)');
+  bad('2. reader cases', 'hub/lib/claims.js is missing (' + valid.length + ' valid, ' + invalid.length + ' invalid, 1 generated case cannot run)');
 } else {
   console.log('2. valid fixtures parse to their expectation and write back unchanged');
   for (const f of valid) {

@@ -576,14 +576,17 @@ function effectiveSettings(s, project) {
   };
 }
 
-function checkPolicyKeys(obj, where, allowLibrarian) {
+// isGlobal: the keys only the global section takes (librarian, journal_free_text)
+function checkPolicyKeys(obj, where, isGlobal) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return `${where} must be an object`;
   for (const [k, v] of Object.entries(obj)) {
     if (v === null) continue; // null clears the key
     if (k === 'approval') { if (!APPROVALS.includes(v)) return `${where}.approval: use one of ${APPROVALS.join(', ')}`; }
     else if (k === 'default_gate') { if (!GATES.includes(v)) return `${where}.default_gate: use one of ${GATES.join(', ')}`; }
     else if (k === 'notify') { if (!NOTIFY.includes(v)) return `${where}.notify: use one of ${NOTIFY.join(', ')}`; }
-    else if (k === 'librarian' && allowLibrarian) {
+    // The journal free-text window (M2): true or unset keeps it open, false closes it
+    else if (k === 'journal_free_text' && isGlobal) { if (typeof v !== 'boolean') return `${where}.journal_free_text: true or false`; }
+    else if (k === 'librarian' && isGlobal) {
       if (typeof v !== 'object' || Array.isArray(v)) return `${where}.librarian must be an object`;
       for (const [lk, lv] of Object.entries(v)) {
         if (lk === 'schedule') { if (lv !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(lv))) return `${where}.librarian.schedule: use HH:MM`; }
