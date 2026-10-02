@@ -7,6 +7,8 @@
 //
 // Usage: node hub/tools/brain-lint.js <brain-dir>
 // Exit codes: 0 = clean or warnings only, 1 = errors, 2 = bad invocation.
+// As a module: lint(dir) for a whole brain, lintFile(dir, rel, content) for
+// one file as it would be after a write (the hub calls it before writing).
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -18,6 +20,33 @@ const ATTIC_FRONT = ['retired', 'retired_by', 'retired_reason', 'superseded_by']
 const SUMMARY_MAX = 200;
 const RULE_RE = /^\s*-\s*\**(RULE-[A-Z0-9]+-\d{2,})\b/;
 const RULE_SOURCE_RE = /\(source:\s*[^)\s][^)]*\)/;
+
+// What a source may name (Brain Format v0.3, "Refs"): a journal record, a
+// mission, or a wikilink.
+const REF_RE = /^(j-[a-z0-9]{8}|t-\d+|\[\[[^\]]+\]\])$/;
+const refsOf = (list) => list.split(',').map(s => s.trim()).filter(Boolean);
+
+// An observation's own source: the first "(source: ...)" group whose items are
+// all refs. A group holding anything else is text, not a source; it is
+// reported as prose so the writer can move the words out of it.
+function ownSource(line) {
+  let prose = null;
+  for (const m of line.matchAll(/\(source:\s*([^)]*)\)/g)) {
+    const items = refsOf(m[1]);
+    if (items.length && items.every(r => REF_RE.test(r))) return { refs: items, prose: null };
+    if (!prose) prose = m[0];
+  }
+  return { refs: null, prose };
+}
+
+// The file-level source (option D in the v0.3 spec): covers the observations
+// that carry none of their own. Returns the refs, or the first malformed one.
+function fileSource(front) {
+  if (!front || front.source === undefined) return { refs: null, bad: null };
+  const items = Array.isArray(front.source) ? front.source.map(String) : refsOf(String(front.source));
+  const bad = items.find(r => !REF_RE.test(r));
+  return bad || !items.length ? { refs: null, bad: bad || '(empty)' } : { refs: items, bad: null };
+}
 
 // Files an agent reads first when it loads a scope: they carry a one-line
 // `summary:` so a map of the brain can be built without opening every file.
@@ -99,11 +128,15 @@ function walk(dir) {
   return out;
 }
 
-function lint(brainDir) {
+// overrides: { "<rel path>": "<content>" } lints the brain as it would be with
+// those files written (new paths included), without touching the disk.
+function lint(brainDir, overrides = {}) {
   const errors = [], warnings = [];
-  const files = walk(brainDir).map(abs => {
-    const rel = path.relative(brainDir, abs);
-    const raw = fs.readFileSync(abs, 'utf8');
+  const rels = new Set(walk(brainDir).map(abs => path.relative(brainDir, abs)));
+  for (const rel of Object.keys(overrides)) if (rel.endsWith('.md')) rels.add(rel);
+  const files = [...rels].sort().map(rel => {
+    const abs = path.join(brainDir, rel);
+    const raw = Object.prototype.hasOwnProperty.call(overrides, rel) ? overrides[rel] : fs.readFileSync(abs, 'utf8');
     const { front, body } = parseFrontmatter(raw);
     const eff = effective(rel);
     return { abs, rel, raw, front, body, compartment: eff.compartment, scope: eff.scope };
@@ -145,11 +178,17 @@ function lint(brainDir) {
         errors.push(`${f.rel}: scope "${f.front.scope}" does not match location "${f.scope}"`);
     }
 
-    // Observations: "- [category] statement ..." need provenance in authoritative compartments
+    // Observations: "- [category] statement ..." need provenance in authoritative
+    // compartments: their own (source: ...) or the file's `source:`.
+    const fsrc = fileSource(f.front);
     if (authoritative) {
+      if (fsrc.bad) errors.push(`${f.rel}: frontmatter "source" holds a malformed ref "${fsrc.bad}" (use j-xxxxxxxx, t-123 or [[target]])`);
       for (const line of f.body.split('\n')) {
         const obs = line.match(/^\s*-\s*\[([a-z0-9_-]+)\]\s+/i);
-        if (obs && !/\(source:\s*\[\[[^\]]+\]\]\)/.test(line))
+        if (!obs) continue;
+        const own = ownSource(line);
+        if (own.prose) warnings.push(`${f.rel}: source group holds prose and is read as text: "${own.prose.slice(0, 60)}" (keep only refs inside, move the words after it)`);
+        if (!own.refs && !fsrc.refs)
           errors.push(`${f.rel}: unsourced observation: "${line.trim().slice(0, 60)}"`);
       }
     }
@@ -202,8 +241,8 @@ function lint(brainDir) {
 
     // Belief status and freshness (warnings in v0)
     if (f.front) {
-      if (f.front.belief === 'validated' && !/\(source:\s*\[\[[^\]]+\]\]\)/.test(f.body))
-        warnings.push(`${f.rel}: belief is validated but no source link found in the body`);
+      if (f.front.belief === 'validated' && !fsrc.refs && !f.body.split('\n').some(l => ownSource(l).refs))
+        warnings.push(`${f.rel}: belief is validated but no source found, in the body or the frontmatter`);
       if (f.front.volatility === 'volatile' && f.front.verified === undefined)
         warnings.push(`${f.rel}: volatile fact without a "verified" date`);
     }
@@ -216,12 +255,25 @@ function lint(brainDir) {
   return { errors, warnings, count: files.length };
 }
 
+// One file as it would be after a write: only that file's errors and warnings.
+// Links resolve against the whole brain, so a dangling link is still caught.
+function lintFile(brainDir, rel, content) {
+  const norm = path.normalize(rel);
+  const { errors, warnings } = lint(brainDir, { [norm]: content });
+  const mine = (m) => m.startsWith(`${norm}: `);
+  return { errors: errors.filter(mine), warnings: warnings.filter(mine) };
+}
+
+module.exports = { lint, lintFile, parseFrontmatter, REF_RE };
+
 // ---- CLI ----
-const dir = process.argv[2];
-if (!dir) { console.error('usage: brain-lint <brain-dir>'); process.exit(2); }
-const { errors, warnings, count } = lint(path.resolve(dir));
-for (const w of warnings) console.log(`warn: ${w}`);
-for (const e of errors) console.log(`ERROR: ${e}`);
-console.log(`${count} files · ${errors.length} errors · ${warnings.length} warnings`);
-console.log(errors.length ? 'LINT FAILED: this brain does not pass.' : 'LINT PASSED: this brain is well formed.');
-process.exit(errors.length ? 1 : 0);
+if (require.main === module) {
+  const dir = process.argv[2];
+  if (!dir) { console.error('usage: brain-lint <brain-dir>'); process.exit(2); }
+  const { errors, warnings, count } = lint(path.resolve(dir));
+  for (const w of warnings) console.log(`warn: ${w}`);
+  for (const e of errors) console.log(`ERROR: ${e}`);
+  console.log(`${count} files · ${errors.length} errors · ${warnings.length} warnings`);
+  console.log(errors.length ? 'LINT FAILED: this brain does not pass.' : 'LINT PASSED: this brain is well formed.');
+  process.exit(errors.length ? 1 : 0);
+}

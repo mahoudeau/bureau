@@ -501,7 +501,12 @@ const server = http.createServer(async (req, res) => {
       if (!b.file || b.content === undefined) return send(res, 400, { error: 'file and content required' });
       const refusal = knowledgeWriteRefusal(b.file, b.author);
       if (refusal) return send(res, 403, { error: refusal });
-      const r = knowledge.writeKnowledge(b);
+      let r;
+      try { r = knowledge.writeKnowledge(b); } catch (e) {
+        if (e.code !== 'E_LINT') throw e;
+        return send(res, 422, { error: e.message, lint: e.lint, hint: 'Fix the lines named above and write again. Every observation in knowledge/ and recipes/ needs a source: its own (source: ...) or the file\'s source: in the frontmatter (docs/brain-format.md, Provenance).' });
+      }
+      if (r.forced) store.logEvent('knowledge.forced', { file: r.file, author: b.author, lint: r.forced });
       broadcast('knowledge.written', { ...r, author: b.author || 'agent' });
       return send(res, 200, r);
     }
@@ -625,7 +630,11 @@ function mcpToolCall(name, a = {}) {
       // when settings give consul the librarian or curator role.
       const refusal = knowledgeWriteRefusal(a.file, 'consul');
       if (refusal) throw new Error(refusal);
-      const r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message, encoding: a.encoding });
+      let r;
+      try { r = knowledge.writeKnowledge({ file: a.file, content: a.content, mode: a.mode, author: 'consul', message: a.message, encoding: a.encoding }); } catch (e) {
+        if (e.code !== 'E_LINT') throw e;
+        throw new Error(`${e.message}:\n${e.lint.join('\n')}\nEvery observation in knowledge/ and recipes/ needs a source: its own (source: ...) or the file's source: in the frontmatter.`);
+      }
       broadcast('knowledge.written', { ...r, author: 'consul' });
       return r;
     }
