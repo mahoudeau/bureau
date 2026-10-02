@@ -335,7 +335,8 @@ v0.3 is a draft. Its rules land in steps; until a step lands, the v0.2 rules sta
 | Rule | Enforced by |
 |---|---|
 | v0.2: schema, provenance, links, lineage, summaries, `## Now`, specs | `brain-lint`, today |
-| Mission ids and file-level `source:` as provenance | next: `brain-lint`, and the hub on every write to an authoritative compartment |
+| Mission ids and file-level `source:` as provenance | `brain-lint`, today |
+| A curated write that would fail lint is refused | the hub, on every write to a curated compartment, today |
 | Journal records through the hub | with typed capture |
 | Claim ids, ref existence, own sources on added claims | with claim ids, after typed capture |
 

@@ -30,7 +30,7 @@ trap cleanup EXIT INT TERM
 
 # start_hub <name> <port>: background hub on $DIR/<name>, 400ms backups, keep 3
 start_hub() {
-  env BUREAU_TOKEN=$TOKEN PORT="$2" HOST=127.0.0.1 BUREAU_DATA_DIR="$DIR/$1/data" BUREAU_BRAIN_DIR="$DIR/$1/brain" \
+  env BUREAU_TOKEN=$TOKEN PORT="$2" HOST=127.0.0.1 BUREAU_DATA_DIR="$DIR/$1/data" BUREAU_BRAIN_DIR="$DIR/$1/brain" BUREAU_WORK_DIR="$DIR/$1/work" \
     BUREAU_BACKUP_INTERVAL_MS=400 BUREAU_BACKUP_KEEP=3 BUREAU_DAILY_KEEP=7 \
     node hub/server.js >>"$DIR/$1.log" 2>&1 &
   LAST_PID=$!

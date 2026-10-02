@@ -517,7 +517,9 @@ check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent
 
 echo "12. curated compartments: knowledge/, recipes/, PROFILE.md and attic/ take only the boss, the librarian or a curator"
 code () { curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
-kw () { echo "{\"file\":\"$1\",\"content\":\"- [fact] the kettle hums (fake)\",\"author\":\"$2\",\"message\":\"acl probe\"}"; }
+# A well-formed note (frontmatter, a sourced observation), so a write the wall
+# lets through also passes write-time lint (section 12b covers lint itself)
+kw () { echo "{\"file\":\"$1\",\"content\":\"---\\ntitle: Kettle probe\\ncompartment: $(basename "$(dirname "$1")")\\npermalink: kettle-probe\\nversion: 1\\n---\\n\\n- [fact] the kettle hums (fake) (source: t-1)\\n\",\"author\":\"$2\",\"message\":\"acl probe\"}"; }
 mcpcall () { echo "{\"jsonrpc\":\"2.0\",\"id\":40,\"method\":\"tools/call\",\"params\":{\"name\":\"$1\",\"arguments\":$2}}"; }
 for f in knowledge/kettle.md recipes/kettle.md entities/acme/knowledge/kettle.md entities/acme/recipes/kettle.md entities/acme/PROFILE.md attic/knowledge/kettle.md; do
   B=$(kw "$f" menace)
@@ -562,7 +564,7 @@ check "registering with librarian says the tag grants nothing" "$(api POST /api/
 check "librarian and curator are settings roles" "$(api PATCH /api/settings '{"agents":{"shelver":{"roles":["librarian"]},"consul":{"roles":["critic","lead","curator"]}}}')" '"curator"'
 B=$(kw recipes/kettle-2.md shelver)
 check "the settings librarian writes recipes/" "$(api POST /api/knowledge "$B")" '"bytes"'
-MK2=$(mcpcall write_knowledge '{"file":"knowledge/mcp-kettle.md","content":"- x","message":"curated by consul"}')
+MK2=$(mcpcall write_knowledge '{"file":"knowledge/mcp-kettle.md","content":"---\ntitle: MCP kettle\ncompartment: knowledge\npermalink: mcp-kettle\nversion: 1\n---\n\n- [fact] written over MCP (source: t-1)\n","message":"curated by consul"}')
 check "consul as curator writes knowledge/ over MCP" "$(mcp "$MK2")" '"isError": false'
 check "the commit is consul's" "$(api GET /api/state)" '"author": "consul"'
 DG=$(tid "$(api POST /api/tasks '{"title":"shelver: nightly digest 2026-01-02","project":"ops","priority":3}')")
@@ -584,6 +586,33 @@ check "a curator writes but parks no digest" "$(api PATCH "/api/tasks/$DS" '{"ag
 api PATCH "/api/tasks/$DS" '{"agent":"scribe","status":"discarded","note":"probe"}' > /dev/null
 check "an unknown role is still refused" "$(api PATCH /api/settings '{"agents":{"scribe":{"roles":["janitor"]}}}')" 'lead, critic, librarian, curator'
 api PATCH /api/settings '{"agents":{"menace":null,"shelver":null,"consul":null,"scribe":null}}' > /dev/null
+
+echo "12b. write-time lint: a curated write that would fail brain-lint is refused, nothing written"
+# shelver holds the librarian tag and no roles are configured, so the wall lets it through
+check "a note sourced by its file and by a mission id is accepted" "$(api POST /api/knowledge '{"file":"knowledge/lint-ok.md","author":"shelver","content":"---\ntitle: Lint probe\ncompartment: knowledge\npermalink: lint-ok\nversion: 1\nsource: t-1\n---\n\n- [step] covered by the file source\n- [fact] its own mission source (source: t-2)\n"}')" '"bytes"'
+LB='{"file":"knowledge/lint-bad.md","author":"shelver","message":"lint probe bad","content":"---\ntitle: Lint bad\ncompartment: knowledge\npermalink: lint-bad\nversion: 1\n---\n\n- [fact] nobody knows where this came from\n"}'
+check "an unsourced observation is refused (422)" "$(code POST /api/knowledge "$LB")" '^422$'
+LR=$(api POST /api/knowledge "$LB")
+check "the refusal lists the lint error" "$LR" 'knowledge/lint-bad.md: unsourced observation'
+check "and says how to fix it" "$LR" 'needs a source'
+check "the refused write left no file" "$(code GET '/api/knowledge?file=knowledge/lint-bad.md')" '^404$'
+check "and no commit" "$(api GET /api/state | grep -c 'lint probe bad' || true)" '^0$'
+check "a malformed file-level source is refused" "$(api POST /api/knowledge '{"file":"knowledge/lint-ref.md","author":"shelver","content":"---\ntitle: Lint ref\ncompartment: knowledge\npermalink: lint-ref\nversion: 1\nsource: the boss said so\n---\n\n- [fact] covered by nothing\n"}')" 'malformed ref'
+api POST /api/knowledge '{"file":"knowledge/lint-strict.md","author":"shelver","content":"---\ntitle: Lint strict\ncompartment: knowledge\npermalink: lint-strict\nversion: 1\n---\n\n- [fact] sourced on its own line (source: t-3)\n"}' > /dev/null
+check "an append that would add an unsourced line is refused" "$(code POST /api/knowledge '{"file":"knowledge/lint-strict.md","author":"shelver","mode":"append","content":"- [fact] appended without a source"}')" '^422$'
+check "and the file is unchanged" "$(api GET '/api/knowledge?file=knowledge/lint-strict.md' | grep -c 'appended without' || true)" '^0$'
+LF='{"file":"knowledge/lint-bad.md","author":"shelver","force":true,"content":"---\ntitle: Lint bad\ncompartment: knowledge\npermalink: lint-bad\nversion: 1\n---\n\n- [fact] nobody knows where this came from\n"}'
+check "force from an agent changes nothing (422)" "$(code POST /api/knowledge "$LF")" '^422$'
+LH='{"file":"knowledge/lint-bad.md","author":"human","force":true,"content":"---\ntitle: Lint bad\ncompartment: knowledge\npermalink: lint-bad\nversion: 1\n---\n\n- [fact] nobody knows where this came from\n"}'
+check "the boss can force a write past lint" "$(api POST /api/knowledge "$LH")" '"forced"'
+check "and the override is logged" "$(api GET /api/state)" 'knowledge.forced'
+check "journal/ stays free text" "$(api POST /api/knowledge '{"file":"journal/2026-01-03.md","author":"menace","content":"- [lesson] anything goes here, no source needed"}')" '"bytes"'
+api PATCH /api/settings '{"agents":{"consul":{"roles":["curator"]}}}' > /dev/null
+ML=$(mcpcall write_knowledge '{"file":"knowledge/mcp-lint.md","content":"---\ntitle: MCP lint\ncompartment: knowledge\npermalink: mcp-lint\nversion: 1\n---\n\n- [fact] no source over MCP either\n"}')
+MLR=$(mcp "$ML")
+check "MCP write_knowledge meets the same lint" "$MLR" '"isError": true'
+check "with the lint error in the result" "$MLR" 'unsourced observation'
+api PATCH /api/settings '{"agents":{"consul":null}}' > /dev/null
 
 echo "13. the work store: a mission's evidence, plain files, gone when the mission closes"
 PNG_B64="iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="

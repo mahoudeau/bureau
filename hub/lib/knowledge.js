@@ -69,8 +69,31 @@ function curatedCompartment(rel) {
   return null;
 }
 
-function writeKnowledge({ file, content, mode, author, message, encoding }) {
+// Write-time validation: a markdown write to a curated compartment is linted
+// as the file would be after the write, against the whole brain, before
+// anything touches disk or git. A failing write throws E_LINT with the lint
+// messages. The boss (author human) may pass force: true to write anyway; the
+// result then carries what was overridden, so the route can log it. Hand edits
+// on disk never pass through here: the intake sweep commits them as they are.
+const brainLint = require('../tools/brain-lint');
+function checkWrite({ file, content, mode, author, encoding, force }) {
+  if (encoding === 'base64' || !/\.md$/i.test(file) || !curatedCompartment(file)) return null;
+  const abs = safePath(file);
+  const rel = path.relative(BRAIN_DIR, abs);
+  const before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+  const after = mode === 'append' ? before + (before.length ? '\n' : '') + content : String(content);
+  const { errors } = brainLint.lintFile(BRAIN_DIR, rel, after);
+  if (!errors.length) return null;
+  if (force === true && author === 'human') return { forced: errors };
+  const e = new Error(`lint: this write would leave ${rel} failing brain-lint (${errors.length} error${errors.length > 1 ? 's' : ''})`);
+  e.code = 'E_LINT';
+  e.lint = errors;
+  throw e;
+}
+
+function writeKnowledge({ file, content, mode, author, message, encoding, force }) {
   ensureRepo();
+  const checked = checkWrite({ file, content, mode, author, encoding, force });
   const abs = safePath(file);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   if (encoding === 'base64') {
@@ -91,7 +114,7 @@ function writeKnowledge({ file, content, mode, author, message, encoding }) {
     // "nothing to commit" (identical content) is fine
     if (!/nothing to commit/i.test(String(e.stdout || e.message))) throw e;
   }
-  return { file: rel, bytes: fs.statSync(abs).size };
+  return { file: rel, bytes: fs.statSync(abs).size, ...(checked ? { forced: checked.forced } : {}) };
 }
 
 function readKnowledge(file) {
