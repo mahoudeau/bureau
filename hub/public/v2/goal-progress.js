@@ -46,7 +46,7 @@
 
   ready(init);
 
-  var STATUS_ORDER = ['blocked', 'review', 'in_progress', 'claimed', 'queued', 'done', 'failed'];
+  var STATUS_ORDER = ['blocked', 'review', 'approved', 'in_progress', 'claimed', 'queued', 'done', 'failed'];
   var CYCLE_RE = /^cycle\s+\d+\s*:/i;
   var GOAL_TITLE_RE = /^goal:/i;
   var GOAL_BODY_RE = /goal:\s*(t-\d+)/i;

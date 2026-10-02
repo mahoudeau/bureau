@@ -58,6 +58,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 - RULE-KNOWLEDGE-20: `POST /api/knowledge` to a curated compartment is accepted only when `author` is `human`, or an agent holding the `librarian` or `curator` role (RULE-MISSIONS-16). A missing author counts as `agent` and is refused. (source: hub/server.js knowledgeWriteRefusal(), hub/lib/store.js canCurate())
 - RULE-KNOWLEDGE-21: A refused write answers 403 with the compartment and who may write it, and is checked before anything else: no file is written, nothing is committed or broadcast. (source: hub/server.js POST /api/knowledge route, knowledgeWriteRefusal())
 - RULE-KNOWLEDGE-22: MCP `write_knowledge` meets the same wall as consul: it writes a curated compartment only when consul holds `librarian` or `curator`; otherwise it returns an error result and writes nothing. No agent name is exempt. (source: hub/server.js mcpToolCall() write_knowledge)
+- RULE-KNOWLEDGE-31: The one door through the wall without a curating role is applying an approved item (RULE-MISSIONS-35): the boss approved that exact payload and the hub checks its hash before writing, so the write goes through `writeKnowledge` authored by the applying agent without the compartment check. (source: hub/server.js applyApproved())
 
 ### The work store
 

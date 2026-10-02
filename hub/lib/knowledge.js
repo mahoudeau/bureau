@@ -76,14 +76,21 @@ function curatedCompartment(rel) {
 // result then carries what was overridden, so the route can log it. Hand edits
 // on disk never pass through here: the intake sweep commits them as they are.
 const brainLint = require('../tools/brain-lint');
-function checkWrite({ file, content, mode, author, encoding, force }) {
-  if (encoding === 'base64' || !/\.md$/i.test(file) || !curatedCompartment(file)) return null;
+// The lint errors a write would leave in its file ([] when the write is not
+// checked or passes). Never throws on lint, so a proposal can be checked
+// before it is filed (store.js, review item payloads).
+function writeLintErrors({ file, content, mode, encoding }) {
+  if (encoding === 'base64' || !/\.md$/i.test(String(file)) || !curatedCompartment(file)) return [];
   const abs = safePath(file);
   const rel = path.relative(BRAIN_DIR, abs);
   const before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
   const after = mode === 'append' ? before + (before.length ? '\n' : '') + content : String(content);
-  const { errors } = brainLint.lintFile(BRAIN_DIR, rel, after);
+  return brainLint.lintFile(BRAIN_DIR, rel, after).errors;
+}
+function checkWrite({ file, content, mode, author, encoding, force }) {
+  const errors = writeLintErrors({ file, content, mode, encoding });
   if (!errors.length) return null;
+  const rel = path.relative(BRAIN_DIR, safePath(file));
   if (force === true && author === 'human') return { forced: errors };
   const e = new Error(`lint: this write would leave ${rel} failing brain-lint (${errors.length} error${errors.length > 1 ? 's' : ''})`);
   e.code = 'E_LINT';
@@ -198,6 +205,6 @@ function recentCommits(n = 20) {
 }
 
 module.exports = {
-  ensureRepo, writeKnowledge, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep,
+  ensureRepo, writeKnowledge, writeLintErrors, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep,
   curatedCompartment, BRAIN_DIR, BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME,
 };

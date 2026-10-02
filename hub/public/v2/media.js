@@ -110,7 +110,7 @@ import { icon } from './components.js';
     // status change or not — an artifact-only attach (no status field)
     // broadcasts as 'task.updated'; a status change broadcasts under the
     // matching named event instead. Subscribe to all of them.
-    ['task.updated', 'task.done', 'task.failed', 'task.review', 'task.blocked', 'task.requeued'].forEach(function (evt) {
+    ['task.updated', 'task.done', 'task.failed', 'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued'].forEach(function (evt) {
       V2.on(evt, function (payload) {
         if (!payload || payload.id !== currentId) return;
         currentArtifacts = payload.artifacts || [];

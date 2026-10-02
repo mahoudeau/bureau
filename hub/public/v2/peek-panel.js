@@ -58,6 +58,7 @@ import { icon, idBadge } from './components.js';
     in_progress: { label: 'working', glyph: 'circle-dot', colorVar: '--v2-color-status-at-risk' },
     blocked: { label: 'blocked', glyph: 'circle-alert', colorVar: '--v2-color-status-bug' },
     review: { label: 'review', glyph: 'clock', colorVar: '--v2-color-status-in-progress' },
+    approved: { label: 'approved, to apply', glyph: 'square-pen', colorVar: '--v2-color-status-done' },
     done: { label: 'done', glyph: 'circle-check', colorVar: '--v2-color-status-done' },
     failed: { label: 'failed', glyph: 'circle-x', colorVar: '--v2-color-status-bug' },
     discarded: { label: 'discarded', glyph: 'circle-x', colorVar: '--v2-color-text-muted' }
@@ -175,10 +176,24 @@ import { icon, idBadge } from './components.js';
       }).join('') || '<div class="v2-empty">No log yet.</div>';
     }
 
+    // M4: a payload shows as it will be written, the exact text the boss
+    // approves, with its hash and whether the holder applied it yet.
+    function payloadRows(it) {
+      if (!it.payload || !Array.isArray(it.payload.ops)) return '';
+      return it.payload.ops.map(function (o) {
+        return '<div class="v2-panel__ts">' + (o.op === 'append' ? 'appends to ' : 'writes ') + esc(o.file) + '</div>' +
+          '<pre class="v2-panel__item-body">' + esc(o.content) + '</pre>';
+      }).join('') +
+        '<div class="v2-panel__ts">sha256 ' + esc(String(it.payload_sha256 || '').slice(0, 12)) +
+        (it.applied_at ? ' · applied ' + esc(it.applied_at.slice(0, 16).replace('T', ' ')) + ' by ' + esc(it.applied_by)
+          : it.verdict === 'approved' ? ' · not applied yet' : '') + '</div>';
+    }
+
     function itemRow(it, idx, editable) {
       var head = '<div class="v2-panel__item" data-item-index="' + idx + '" data-item-id="' + esc(it.id) + '">' +
         '<b>' + esc(it.id) + ' · ' + esc(it.title) + '</b>' +
-        (it.body ? '<pre class="v2-panel__item-body">' + esc(it.body) + '</pre>' : '');
+        (it.body ? '<pre class="v2-panel__item-body">' + esc(it.body) + '</pre>' : '') +
+        payloadRows(it);
       if (!editable) {
         return head + '<span class="v2-panel__ts">' + esc(it.verdict) + (it.comment ? ': ' + esc(it.comment) : '') + '</span></div>';
       }
@@ -187,7 +202,7 @@ import { icon, idBadge } from './components.js';
         // finding #2's "itemized-verdict radio buttons (13x13px)" line.
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="approved"' + (it.verdict === 'approved' ? ' checked' : '') + '> Accept</label>' +
         '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="rejected"' + (it.verdict === 'rejected' ? ' checked' : '') + '> Reject</label>' +
-        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value=""' + (it.verdict === 'proposed' ? ' checked' : '') + '> Later</label>' +
+        '<label><input class="v2-hit44" type="radio" name="v_' + esc(it.id) + '" value="later"' + (it.verdict === 'later' ? ' checked' : '') + '> Later</label>' +
         '<input class="v2-panel__item-comment" id="c_' + esc(it.id) + '" placeholder="Comment (optional)" value="' + esc(it.comment || '') + '">' +
         '</div>';
     }
@@ -219,7 +234,14 @@ import { icon, idBadge } from './components.js';
       // lease expired before anyone parked it (t-289 did, 23 days), and the
       // boss could see the items but not rule on them.
       var terminal = t.status === 'done' || t.status === 'failed' || t.status === 'discarded';
-      var items = (t.items || []).map(function (it, i) { return itemRow(it, i, !terminal); }).join('');
+      // An approved mission was ruled on: its items read, they are not re-ruled.
+      var ruled = terminal || t.status === 'approved';
+      var items = (t.items || []).map(function (it, i) { return itemRow(it, i, !ruled); }).join('');
+      var returnNote = t.status === 'review' && t.after_approval === 'return'
+        ? '<div class="v2-panel__meta">Approving returns this mission to ' + esc(t.assignee || 'its agent') + ', who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</div>'
+        : t.status === 'approved'
+          ? '<div class="v2-panel__meta">Approved, back with ' + esc(t.assignee || 'its agent') + ' to apply the accepted items, then close it.</div>'
+          : '';
       var replacementId = t.status === 'discarded' ? findReplacement(t) : null;
 
       // t-115: .v2-hit44 on every .v2-panel__btn — closes finding #2's
@@ -251,7 +273,7 @@ import { icon, idBadge } from './components.js';
       // back are review-only and change the status, this one files the
       // verdicts and leaves the status alone. The blocked panel already
       // carries the error element, so it is not rendered twice there.
-      var verdictActions = (!terminal && t.status !== 'review' && (t.items || []).length) ? (
+      var verdictActions = (!ruled && t.status !== 'review' && (t.items || []).length) ? (
         (t.status === 'blocked' ? '' : '<p class="v2-panel__err" id="v2-pp-err" hidden></p>') +
         '<div class="v2-panel__actions"><button type="button" class="v2-panel__btn v2-is-positive v2-hit44" id="v2-pp-verdicts">✅ Save verdicts</button></div>'
       ) : '';
@@ -303,6 +325,7 @@ import { icon, idBadge } from './components.js';
         (replacementId ? '<div class="v2-panel__meta">🗄 discarded · ' +
           '<button type="button" class="v2-panel__link-btn" id="v2-pp-replacement">Replaced by ' + esc(replacementId) + ' →</button></div>' : '') +
         (t.body ? '<div class="v2-panel__body">' + esc(t.body) + '</div>' : '') +
+        returnNote +
         // t-93 round 4: section order now matches the sample exactly —
         // body -> Media -> Log -> Itemized review -> Artifacts. Media
         // renders via the registerSection('after-body') hook (media.js,

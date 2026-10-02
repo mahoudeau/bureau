@@ -15,7 +15,7 @@ Agents can also file tasks for each other (delegation shows up in the feed/offic
 Flow: agent finishes gated work → task parks in `review` → notification ping ("review needed: t-42") + office sprite waits at the boss's door → the boss judges from the task record, which carries the **full work log** and **artifacts** (PR links, files, brain entries).
 
 **Dashboard detail panel:** click a card → log + artifacts + two actions:
-- **Approve** → status `done` (office: card to shipping wall)
+- **Approve** → status `done` (office: card to shipping wall), or `approved` when the mission was parked with `after_approval: "return"` (below)
 - **Send back** → status `queued` with the boss's note attached; the agent reads the note as its correction on next claim (office: card back to whiteboard + red note)
 
 **Review from anywhere:** when `BUREAU_PUBLIC_URL` is set, the review ping carries two links, approve and send back. Each opens a small confirmation page served by the hub: approve is one tap; send back asks for the note, which stays required. Links are mission-scoped, single-use, and expire after 7 days.
@@ -26,6 +26,10 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 
 **Pair mode: approval in the session counts.** When the boss works live with consul and approves the result in the chat, consul closes the mission `done` itself, straight from `in_progress`, with his exact words in `approved_in_session` (where the project's approval policy is `in-session`, the hub logs the quote; where it isn't set, the note `approved by boss in session: "<his exact words>"` does the same job). No second approval in the dashboard. Consul does not park it in `review` first: a boss-gate mission in review closes only by the boss's hand, so parking it would force the double click. `review` stays for two cases: work finished while the boss is away, and irreversible steps (deploys, merges, external sends, purchases, credentials) he has not explicitly approved in the chat.
 
+**Items need a verdict before approval.** A mission with review items is approved only when every item is ruled: accepted, rejected, or deferred with Later. Later is a decision, and the librarian carries those items to its next digest. An item nobody ruled on starts with no choice selected, and an approve with such an item is refused, on the dashboards, the review link and MCP alike.
+
+**Approval pins the text.** An item that proposes a brain change carries the exact text in its `payload`, hashed when it is filed. The boss reads that text on the review page and approves those bytes. When the mission was parked with `after_approval: "return"`, approving does not close it: it goes to `approved`, back with its agent, its work folder intact. The agent applies each accepted item with `POST /api/tasks/:id/apply` (the hub checks the hash and writes the text itself, no retyping), then closes the mission `done`. The dashboards show these missions in their own group, "Approved, to apply", with each item's applied state.
+
 ## Statuses
 
-`queued → claimed → in_progress → review → done | failed`, plus auto-requeue on lease expiry and `blocked` for waiting-on-external or waiting-on-boss.
+`queued → claimed → in_progress → review → done | failed`, plus auto-requeue on lease expiry and `blocked` for waiting-on-external or waiting-on-boss. With `after_approval: "return"`: `review → approved → done`.

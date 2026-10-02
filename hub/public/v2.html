@@ -147,7 +147,8 @@
                                an unsubscribe function. `type` is either a
                                raw server SSE event name (task.created,
                                task.claimed, task.done, task.failed,
-                               task.review, task.blocked, task.requeued,
+                               task.review, task.approved, task.applied,
+                               task.blocked, task.requeued,
                                task.updated, agent.registered,
                                agent.heartbeat, message.posted,
                                knowledge.written, project.renamed,
@@ -945,7 +946,7 @@
     es.onopen = function () { setConn(true); };
     es.onerror = function () { setConn(false); }; // the 60s poll interval is unconditional, so state still arrives
     [
-      'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.blocked', 'task.requeued', 'task.updated',
+      'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued', 'task.updated',
       'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'project.renamed', 'project.created', 'project.deleted'
     ].forEach(function (type) {
       es.addEventListener(type, function (e) {

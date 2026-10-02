@@ -100,6 +100,36 @@ function knowledgeWriteRefusal(file, author) {
   return `curated compartment ${comp}: only the boss, the librarian or a curator writes here (settings roles librarian or curator; author was ${author || 'agent'}). File the change as a journal line or a proposal item for the librarian instead`;
 }
 
+// M4 apply: each op of an approved payload goes through the knowledge write
+// route's own function, authored by the caller. The curated-compartment wall
+// is not asked: the boss approved this exact payload, and the store checked
+// its hash just before. Same call for the REST route and MCP apply_item.
+function applyApproved(id, agent, item) {
+  const writeOp = (op, sha) => {
+    let r;
+    try {
+      r = knowledge.writeKnowledge({ file: op.file, content: op.content, mode: op.op === 'append' ? 'append' : 'replace', author: agent,
+        message: `${id} ${item}: apply the boss-approved ${op.op} to ${op.file} (sha256 ${sha.slice(0, 12)})` });
+    } catch (e) {
+      // Write-time lint still holds: the brain may have moved since the item
+      // was filed (and linted). A refusal is a 422 the agent can read.
+      if (e.code === 'E_LINT') { e.status = 422; e.message = `${e.message}: ${e.lint.join('; ')}`; }
+      throw e;
+    }
+    broadcast('knowledge.written', { ...r, author: agent });
+    return r;
+  };
+  const r = store.applyItem({ id, agent, item }, writeOp);
+  if (r.error) return r;
+  broadcast('task.applied', { ...r.task, by: agent, item: r.item.id, note: `applied ${r.item.id}: ${r.item.title}` }, { by: agent, prev_status: r.task.status });
+  return r;
+}
+
+// Which event a status change broadcasts: the status the mission landed on,
+// since an approval may land on approved instead of the done it asked for.
+const STATUS_EVENTS = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued', approved: 'task.approved' };
+function statusEvent(asked, task) { return (asked && STATUS_EVENTS[task.status]) || 'task.updated'; }
+
 // The work store takes evidence for open missions only: a closed mission's
 // folder is already gone, and a write to it would never be cleaned up.
 function workWriteRefusal(file) {
@@ -117,17 +147,24 @@ function reviewForm(task, action, token, err, kind) {
   const noteField = action === 'queued'
     ? `<p>${kind === 'answer' ? 'Your answer goes to the mission log; the next shift resumes with it.' : 'A note is required: the agent reads it as its correction.'}</p><textarea name="note" placeholder="${kind === 'answer' ? 'Your answer' : 'What should change?'}"></textarea>`
     : '';
-  // Itemized review: each proposal gets its own verdict. "Later" leaves it
-  // proposed, so a partial review never silently approves the rest.
+  // Itemized review: each proposal gets its own verdict. Later is a decision
+  // (deferred to the next digest); an item nobody ruled on starts with no
+  // choice selected, so an approval cannot defer or accept it by default.
+  // A payload is shown as it will be written: the exact text the boss approves.
+  const payloadBlock = it => it.payload ? it.payload.ops.map(o =>
+    `<p style="margin:8px 0 2px;font-size:13px">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre>${escHtml(o.content)}</pre>`).join('') +
+    `<p style="color:#666;font-size:12px;margin:2px 0">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
   const itemBlocks = (kind !== 'answer' && Array.isArray(task.items) && task.items.length)
-    ? task.items.map(it => `<fieldset><legend>${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre>${escHtml(it.body)}</pre>` : ''}${
+    ? task.items.map(it => `<fieldset><legend>${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre>${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
         it.verdict !== 'proposed' ? `<p style="color:#666">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
-      }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value=""${it.verdict === 'proposed' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
+      }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value="later"${it.verdict === 'later' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
   const evidence = evidenceFiles(task).map(({ file, label }) =>
     `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(label)}</figcaption></figure>`).join('');
-  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
+  const returns = action === 'done' && kind !== 'answer' && task.after_approval === 'return'
+    ? `<p style="color:#666">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
+  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${returns}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
 }
 
 // Constant-time comparison via digests: no timing oracle on the single secret,
@@ -268,17 +305,20 @@ const server = http.createServer(async (req, res) => {
         const note = (form.get('note') || '').trim();
         if (action === 'queued' && !note)
           return sendPage(res, 400, title, reviewForm(task, action, mReview[1], kind === 'answer' ? 'The answer is required.' : 'The note is required.', kind));
-        // Per-item verdicts ride along with the overall action ("" = Later, stays proposed)
+        // Per-item verdicts ride along with the overall action (no choice = still proposed)
         const verdicts = (task.items || []).map(it => {
           const v = form.get(`v_${it.id}`), c = (form.get(`c_${it.id}`) || '').trim();
-          return (v === 'approved' || v === 'rejected' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
+          return (v === 'approved' || v === 'rejected' || v === 'later' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
         }).filter(Boolean);
         const logKind = kind === 'sendback' ? 'send_back' : kind; // approve, send_back, answer
         const r = store.updateTask({ id: task.id, agent: 'human', kind: logKind, status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
-        if (r.error) return sendPage(res, 400, 'Something went wrong', `<p>${escHtml(r.error)}</p>`);
-        broadcast(action === 'done' ? 'task.done' : 'task.requeued', { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
+        // A refusal (an undecided item, say) shows the form again with the
+        // reason; the link stays live because nothing changed.
+        if (r.error) return sendPage(res, 400, title, reviewForm(task, action, mReview[1], r.error, kind));
+        broadcast(statusEvent(action, r.task), { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
+        const returned = r.task.status === 'approved';
         return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
-          `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
+          `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : returned ? `Back with ${escHtml(r.task.assignee || 'its agent')}, who applies the approved items exactly as filed, then closes it.` : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
       }
     }
 
@@ -471,9 +511,16 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const r = store.updateTask({ ...b, id: mTask[1] });
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
-      const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[b.status] || 'task.updated';
-      broadcast(evt, { ...r.task, note: b.note }, { by: r.by, prev_status: r.prev_status });
+      broadcast(statusEvent(b.status, r.task), { ...r.task, note: b.note }, { by: r.by, prev_status: r.prev_status });
       return send(res, 200, { task: r.task, prev_status: r.prev_status });
+    }
+    // M4: write an approved item's pinned payload into the brain
+    const mApply = p.match(/^\/api\/tasks\/(t-\d+)\/apply$/);
+    if (req.method === 'POST' && mApply) {
+      const b = await readBody(req);
+      const r = applyApproved(mApply[1], b.agent, b.item);
+      if (r.error) return send(res, r.code || 400, { error: r.error });
+      return send(res, 200, { item: r.item, task: { id: r.task.id, status: r.task.status } });
     }
 
     // ----- messages -----
@@ -575,10 +622,11 @@ function mcpToken() {
 const MCP_TOOLS = [
   { name: 'whoami', description: 'Identify this connector: who you are at the Bureau and what is on the board.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'list_projects', description: 'List Bureau projects (id, label, capacity, entity, repo, mission counts). Choose projects from this list; ids are never invented. A project\'s entity names its scope wall (entities/<slug>/ in the brain); its repo is where the code lives.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
-  { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, done, failed.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
+  { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, approved, done, failed, discarded. approved means the boss approved it and it is back with its holder to apply the approved items.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
   { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review. Need a project that does not exist? Never invent an id — file a proposal instead: a mission in general titled "Propose project: <label>", body carrying the proposed id, entity, repo and why, parked at the boss (status review if your capabilities allow it, otherwise blocked with a note starting "waiting on: boss approval"). The boss creates the project in the dashboard and closes the proposal; only then does the id exist.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. When the boss approved the work in this conversation, set done directly and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), close done with the note approved by boss in session: "<his exact words>" instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' } }, required: ['id'], additionalProperties: false } },
+  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. When the boss approved the work in this conversation, set done directly and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), close done with the note approved by boss in session: "<his exact words>" instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page; an item that changes the brain carries payload {ops: [{op: write|append, file, content}]}, the exact text, hashed when filed and never changed after. after_approval: "return", on the update that parks the mission in review, sends it back to you as approved instead of done when the boss approves; apply each approved item with apply_item, then close it done. Approval is refused while any item is still proposed. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, payload: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object', properties: { op: { type: 'string', enum: ['write', 'append'] }, file: { type: 'string' }, content: { type: 'string' } }, required: ['op', 'file', 'content'] } } }, required: ['ops'] } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' }, after_approval: { type: 'string', enum: ['return'] } }, required: ['id'], additionalProperties: false } },
+  { name: 'apply_item', description: 'Apply one approved item of an approved mission you hold: the hub checks the payload against the hash stored when it was filed and writes exactly that text to the brain as consul. The boss approved that exact text, so the curated compartments take it. Once every approved item is applied, close the mission done with update_mission.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, item: { type: 'string' } }, required: ['task', 'item'], additionalProperties: false } },
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
@@ -619,11 +667,15 @@ function mcpToolCall(name, a = {}) {
       return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until };
     }
     case 'update_mission': {
-      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session });
+      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session, after_approval: a.after_approval });
       if (r.error) throw new Error(r.error);
-      const evt = { done: 'task.done', failed: 'task.failed', review: 'task.review', blocked: 'task.blocked', queued: 'task.requeued' }[a.status] || 'task.updated';
-      broadcast(evt, { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
+      broadcast(statusEvent(a.status, r.task), { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
       return { id: r.task.id, status: r.task.status };
+    }
+    case 'apply_item': {
+      const r = applyApproved(a.task, 'consul', a.item);
+      if (r.error) throw new Error(r.error);
+      return { task: r.task.id, status: r.task.status, item: r.item };
     }
     case 'write_knowledge': {
       // The MCP wire writes as consul; the curated compartments take it only

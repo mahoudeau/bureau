@@ -69,6 +69,11 @@ jobs:
       - name: Notify (test/notify.test.js)
         run: node test/notify.test.js
 
+      # Approval pins the text: a payload edited in state.json after filing
+      # fails the hash. Self-contained: starts its own hub on port 8192.
+      - name: Apply (test/apply.test.js)
+        run: node test/apply.test.js
+
       # Self-contained: starts its own hubs on ports 4711 and 4712.
       - name: Storage (test/storage.sh)
         run: bash test/storage.sh

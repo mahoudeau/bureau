@@ -25,7 +25,7 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 - RULE-REVIEW-03: Any move out of `review` deletes its links, and any move out of `blocked` deletes its answer link. A link works once by construction. (source: hub/lib/store.js:748-753)
 - RULE-REVIEW-04: Opening a link (GET) renders a page and changes nothing, so a chat preview cannot act on it. Acting is a POST from that page. (source: hub/server.js:203-217)
 - RULE-REVIEW-05: A link whose mission has left the expected status (`review` for approve and send back, `blocked` for answer), or whose date has passed, gets a 410 page. (source: hub/server.js:208-213)
-- RULE-REVIEW-06: Approve moves the mission to `done`. Send back and answer move it to `queued`, and need a note: the correction or the answer. (source: hub/lib/store.js:797-800, hub/server.js:224-226)
+- RULE-REVIEW-06: Approve moves the mission to `done`, or to `approved` when it was parked with `after_approval: "return"` (RULE-MISSIONS-34). Send back and answer move it to `queued`, and need a note: the correction or the answer. (source: hub/lib/store.js:797-800, hub/server.js:224-226)
 - RULE-REVIEW-07: A link acts as `agent: "human"`, so it clears boss-gate missions. Its log entry carries `kind` `approve`, `send_back` or `answer`. (source: hub/server.js:232-233, hub/lib/store.js:772)
 - RULE-REVIEW-08: A send back or an answer returns the mission reserved for its previous assignee. (source: hub/lib/store.js:758-761)
 - RULE-REVIEW-09: The link page shows the brain images its mission's artifacts cite (png, jpg, jpeg, gif), fetched through `/r/<token>/img?file=`, never with the hub token. That route serves only the files the mission's artifacts cite, and only while the token exists and has not expired; anything else is a 404. (source: hub/server.js:60-67, hub/server.js:83-86, hub/server.js:187-201)
@@ -35,7 +35,9 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 
 - RULE-REVIEW-10: A PATCH with `items` appends proposals with server ids `i1`, `i2`, ..., verdict `proposed`. Titles are cut at 200 characters, bodies at 20000; an item with no title is skipped. (source: hub/lib/store.js:721-730)
 - RULE-REVIEW-11: A PATCH with `verdicts` sets `approved` or `rejected` per item id and saves a comment of up to 2000 characters. The verdicts land in the mission log as one line, with `kind: "verdict"` when the boss filed them. (source: hub/lib/store.js:731-742)
-- RULE-REVIEW-12: The link page offers Accept, Reject or Later per item. Later leaves the item `proposed`, so a partial review never approves the rest. (source: hub/server.js:75-81, hub/server.js:227-231)
+- RULE-REVIEW-12: The link page offers Accept, Reject or Later per item. Later stores the verdict `later`: a ruling, deferred on purpose. An item nobody ruled on stays `proposed` and starts with no choice selected, so a partial review never approves or defers the rest by default. (source: hub/server.js reviewForm(), hub/server.js review link POST)
+- RULE-REVIEW-20: Approving, from a link, the dashboards or MCP, is refused while any item would stay `proposed` (RULE-MISSIONS-33). The link page then shows the form again with the undecided ids, and the link stays live. (source: hub/lib/store.js updateTask(), hub/server.js review link POST)
+- RULE-REVIEW-21: The link page and the dashboards show each item's payload as it will be written (op, file, content) with its short hash, and say when approving returns the mission to its agent. (source: hub/server.js reviewForm(), hub/public/index.html openTask(), hub/public/v2/peek-panel.js payloadRows())
 
 ### Pings and records
 
@@ -53,7 +55,7 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 
 1. **Approve from the phone.** A critic-cleared mission parks in boss-gate review (RULE-REVIEW-01). Discord pings with approve, send back and View (RULE-REVIEW-13, RULE-REVIEW-15). The boss opens approve, reads, taps the button: the mission is `done` and both links die (RULE-REVIEW-06, RULE-REVIEW-03).
 2. **Send back with a correction.** The boss opens send back, writes what should change, submits. The mission is `queued` again, reserved for its builder (RULE-REVIEW-06, RULE-REVIEW-08), who reads the note on its next claim.
-3. **The librarian's digest.** The librarian files one item per proposed change (RULE-REVIEW-10) and parks the mission. The boss accepts some, rejects some with comments, leaves the rest for later (RULE-REVIEW-11, RULE-REVIEW-12). The next night applies what was approved.
+3. **The librarian's digest.** The librarian files one item per proposed change, each carrying its exact text as a payload (RULE-REVIEW-10, RULE-MISSIONS-31), and parks the mission with `after_approval: "return"`. The boss accepts some and rejects some with comments; every item needs a verdict before he can approve (RULE-REVIEW-20). The approval returns the digest to the librarian as `approved`, and the next night applies what was approved through the apply route (RULE-MISSIONS-35).
 4. **A blocked question.** A worker blocks on a question. The ping carries an answer link (RULE-REVIEW-02, RULE-REVIEW-14); the answer goes to the log and the mission returns to the worker (RULE-REVIEW-06, RULE-REVIEW-08).
 5. **A yes in the chat.** On an `in-session` project, the boss says "ship it" to consul. Consul closes the mission `done` with that quote; no link is used and the log shows who recorded it (RULE-REVIEW-18).
 
@@ -65,5 +67,5 @@ What happens once work waits on a judgment or an answer. Who may park and clear 
 - A mission re-enters review after a send back: fresh links are minted; the old ones are gone (RULE-REVIEW-01, RULE-REVIEW-03).
 - A live link asks for a brain image its mission does not cite: 404 (RULE-REVIEW-09).
 - A live link asks for another mission's work image, or the mission cites one: 404, and the page leaves it out (RULE-REVIEW-19).
-- The boss approves from a link: the mission is `done` and its work images are deleted with it (RULE-KNOWLEDGE-27).
+- The boss approves from a link: the mission is `done` and its work images are deleted with it (RULE-KNOWLEDGE-27). Parked with `after_approval: "return"`, it is `approved` instead and its work folder stays (RULE-MISSIONS-34).
 - Notify set to `blocked` on a project: its reviews reach the dashboard only, no ping (RULE-REVIEW-17).
