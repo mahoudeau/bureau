@@ -149,5 +149,17 @@ echo '{"schema_version":99,"tasks":[]}' > "$DIR/n/data/state.json"
 check "newer schema refused" "$(boot_refused n)" 'exit:1'
 check "refusal names both versions" "$(cat "$DIR/n.log")" 'schema_version 99'
 
+echo "11. the example token from .env.example is called out at boot"
+EXAMPLE_TOKEN=$(grep '^BUREAU_TOKEN=' hub/.env.example | cut -d= -f2)
+check ".env.example still ships a placeholder token" "$EXAMPLE_TOKEN" '.'
+TOKEN=$EXAMPLE_TOKEN
+start_hub x "$PORT_A"; HUB_A=$LAST_PID
+wait_up "$PORT_A"
+check "the example token is warned about" "$(cat "$DIR/x.log")" 'still the example token'
+check "the hub still boots with it" "$(curl -s "http://127.0.0.1:$PORT_A/health")" '"ok": true'
+kill $HUB_A; wait $HUB_A 2>/dev/null; HUB_A=
+TOKEN=storagetest
+check "a real token gets no such warning" "$(yes_if "$(grep 'example token' "$DIR/a.log")")" 'no'
+
 echo "passed $PASS, failed $FAIL"
 exit $FAIL
