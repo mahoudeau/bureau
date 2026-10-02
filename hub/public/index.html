@@ -272,7 +272,7 @@ function fmtEvt(e) {
   const what = e.title || e.file || e.body || e.note || '';
   const label = { 'task.created':'📥 task created','task.claimed':'🏃 claimed','task.done':'✅ done','task.failed':'❌ failed',
     'task.review':'👀 review','task.approved':'🖋 approved, to apply','task.applied':'🖋 applied','task.blocked':'⏸ blocked','task.requeued':'↩️ re-queued','task.updated':'✏️ update','agent.registered':'🤖 agent online','project.renamed':'🏷 project renamed','project.created':'🏷 project created','project.deleted':'🏷 project deleted',
-    'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','knowledge.written':'🧠 brain write' }[e.type] || e.type;
+    'agent.heartbeat':'💓 heartbeat','message.posted':'✉️ message','knowledge.written':'🧠 brain write','journal.captured':'📓 journal' }[e.type] || e.type;
   return `${label} · <b>${esc(who)}</b> ${esc(String(what).slice(0,120))}`;
 }
 

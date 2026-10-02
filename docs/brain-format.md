@@ -195,6 +195,7 @@ Long form:
 
 1. `- [kind] text ^id`. The id is required.
 2. Sub-lines `  - key: value`: two spaces of indent, one field each, keys from the field table, each key at most once. Readers accept any order; the hub writes the table's order.
+3. The first line's text is kept verbatim: in long form, tags come only from the `tags:` field and sources only from the `source:` field, so a `#word` or a `(source: ...)` in the text stays text.
 
 Text rules, both forms: one physical line in a `format: 0.3` file (no hard wrap); 2000 characters at most; never contains `^c-` or `^j-`. Lines that are not claims (headings, prose, relations) are allowed and the claim parser skips them.
 
@@ -260,7 +261,8 @@ The journal stays write-cheap, but agents no longer type it. They send a capture
 ```
 
 - **From the writer:** `kind`, `text`, `evidence` (required), `tags`, `confidence` (default `observed`).
-- **From the hub, refused if sent:** the id, `by`, `mission`, `at`.
+- **From the hub, refused if sent:** the id, `by`, `at`.
+- **`mission`** is stamped from the writer's lease. A writer holding several missions may name the one the record belongs to; naming a mission it does not hold is refused, and holding none writes no `mission` line.
 - A journal day written this way carries `format: 0.3` in its frontmatter. Journal days without it are v0.2 free text and stay readable as they are.
 
 ## The parsed form
@@ -337,7 +339,7 @@ v0.3 is a draft. Its rules land in steps; until a step lands, the v0.2 rules sta
 | v0.2: schema, provenance, links, lineage, summaries, `## Now`, specs | `brain-lint`, today |
 | Mission ids and file-level `source:` as provenance | `brain-lint`, today |
 | A curated write that would fail lint is refused | the hub, on every write to a curated compartment, today |
-| Journal records through the hub | with typed capture |
+| Journal records through the hub | the hub, on `POST /api/journal` and in a `format: 0.3` day, today; `brain-lint` warns on a record it cannot read |
 | Claim ids, ref existence, own sources on added claims | with claim ids, after typed capture |
 
 ## The linter

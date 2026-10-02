@@ -61,6 +61,17 @@ check "specs exit code 0" "exit:$SX" 'exit:0'
 check "specs are linted" "$SPECS" '^3 files'
 check "specs carry no warnings" "$SPECS" ' 0 warnings'
 
+echo "4. journal records (v0.3): lenient, but a broken record in a format 0.3 day is warned"
+JOURNAL_BRAIN=$(mktemp -d)
+mkdir -p "$JOURNAL_BRAIN/journal"
+cp test/fixtures/claims/valid/journal/2026-10-02.md test/fixtures/claims/invalid/journal/2026-10-03.md "$JOURNAL_BRAIN/journal/"
+printf -- '- [lesson] a v0.2 day, free text\n' > "$JOURNAL_BRAIN/journal/2026-10-01.md"
+JOURNAL=$(node hub/tools/brain-lint.js "$JOURNAL_BRAIN"); JX=$?
+rm -rf "$JOURNAL_BRAIN"
+check "a broken journal record still passes lint" "exit:$JX" 'exit:0'
+check "and is warned with its line and code" "$JOURNAL" 'warn: journal/2026-10-03.md: line 7: E_EVIDENCE'
+check "a well-formed day and a v0.2 day are not warned" "$JOURNAL" ' 1 warnings'
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ] && echo "BRAIN-LINT OK." || echo "BRAIN-LINT BROKEN."

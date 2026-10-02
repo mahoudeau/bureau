@@ -193,6 +193,22 @@ function renameProjectDir(from, to) {
   return { moved: true };
 }
 
+// Move one brain file with git mv, in a commit of its own, content untouched.
+// Used by the journal cutover (a v0.2 day moves aside before its first typed
+// capture). Refuses to overwrite: the caller checks the target first.
+function moveFile(from, to, { author, message } = {}) {
+  ensureRepo();
+  const src = safePath(from), dst = safePath(to);
+  if (!fs.existsSync(src)) throw new Error(`${from} does not exist`);
+  if (fs.existsSync(dst)) throw new Error(`${to} already exists`);
+  const relFrom = path.relative(BRAIN_DIR, src), relTo = path.relative(BRAIN_DIR, dst);
+  // A file the intake sweep has not committed yet is added first, so git mv knows it
+  git(['add', relFrom]);
+  git(['mv', relFrom, relTo]);
+  git(['commit', '-m', message || `move ${relFrom} to ${relTo}`, '--author', `${author || 'agent'} <${(author || 'agent').replace(/\s+/g, '.')}@bureau.local>`]);
+  return { from: relFrom, to: relTo };
+}
+
 function recentCommits(n = 20) {
   ensureRepo();
   try {
@@ -205,6 +221,6 @@ function recentCommits(n = 20) {
 }
 
 module.exports = {
-  ensureRepo, writeKnowledge, writeLintErrors, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, intakeSweep,
+  ensureRepo, writeKnowledge, writeLintErrors, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, moveFile, intakeSweep,
   curatedCompartment, BRAIN_DIR, BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME,
 };

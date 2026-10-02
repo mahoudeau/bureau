@@ -55,10 +55,15 @@ jobs:
       - name: Brain lint (test/brain-lint.sh)
         run: bash test/brain-lint.sh
 
-      # Brain Format v0.3 claims: fixtures with their expected parse. Reports
-      # the reader cases as pending until hub/lib/claims.js exists.
+      # Brain Format v0.3 claims: fixtures with their expected parse, read by
+      # hub/lib/claims.js and written back byte for byte.
       - name: Claims format (test/claims.test.js)
         run: node test/claims.test.js
+
+      # Journal records: generated records with awkward characters, written
+      # then read back unchanged.
+      - name: Journal round trip (test/journal.test.js)
+        run: node test/journal.test.js
 
       # Self-contained: starts its own hubs and sink on ports 8196 to 8199.
       - name: Pokes (test/pokes.sh)

@@ -860,6 +860,125 @@ B='{"agent":"menace","items":[{"title":"Free note","payload":{"ops":[{"op":"appe
 check "a payload outside the curated folders is not linted" "$(api PATCH "/api/tasks/$F1" "$B")" '"title": "Free note"'
 api PATCH "/api/tasks/$F1" '{"agent":"menace","status":"discarded","note":"probe"}' > /dev/null
 
+echo "15. typed capture: JSON in, one claim block in the journal day, JSON out"
+# Two checks read the stored Markdown with the hub's own reader (node, no hub
+# code beyond lib/claims.js); everything else is curl.
+CLAIMS_JS="$(cd "$(dirname "$0")/.." && pwd)/hub/lib/claims.js"
+parse_day () { # stdin: a day file -> "<format> <n> errors <n> claims"
+  node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const r=require(process.argv[1]).parseFile(s,{path:"journal/"+process.argv[2]+".md"});console.log(r.format+" "+r.errors.length+" errors "+r.claims.length+" claims")})' "$CLAIMS_JS" "$1"
+}
+same_record () { # same_record <sent json> <GET body>: "matches" when one record carries exactly what was sent
+  node -e 'const sent=JSON.parse(process.argv[1]),got=JSON.parse(process.argv[2]).records;const r=got.find(x=>x.text===sent.text);const same=r&&r.kind===sent.kind&&r.fields.evidence===sent.evidence&&JSON.stringify(r.tags)===JSON.stringify(sent.tags||[])&&r.fields.confidence===(sent.confidence||"observed")&&r.fields.by===sent.agent;console.log(same?"matches":"differs: "+JSON.stringify(r))' "$1" "$2"
+}
+TODAY=$(date -u +%Y-%m-%d)
+api POST /api/agents/register '{"name":"scrivener","kind":"dummy"}' > /dev/null
+# Cutover: today's day starts as v0.2 free text, then takes its first capture
+B="{\"file\":\"journal/$TODAY.md\",\"content\":\"- 09:00 [scrivener] a v0.2 line, free text (fake)\",\"mode\":\"append\",\"author\":\"scrivener\"}"
+api POST /api/knowledge "$B" > /dev/null
+V02_BEFORE=$(curl -s "$BUREAU_URL/api/knowledge?file=journal/$TODAY.md&raw=1" -H "$AUTH"; echo x)
+C0='{"agent":"scrivener","kind":"fact","text":"the kettle hums at 3am (fake)","evidence":"heard it on the night shift"}'
+C0R=$(api POST /api/journal "$C0")
+check "a capture is accepted and returned as a long-form record" "$C0R" '"form": "long"'
+check "stamped with a j- id" "$C0R" '"id": "j-[a-z0-9]\{8\}"'
+check "by the agent" "$C0R" '"by": "scrivener"'
+check "at, in UTC to the minute" "$C0R" "\"at\": \"${TODAY}T[0-9][0-9]:[0-9][0-9]Z\""
+check "confidence defaults to observed" "$C0R" '"confidence": "observed"'
+check "an agent holding no mission gets no mission line" "$(echo "$C0R" | grep -c '"mission"' || true)" '^0$'
+C0ID=$(echo "$C0R" | grep -o '"id": "j-[a-z0-9]*"' | head -1 | grep -o 'j-[a-z0-9]*')
+V02_AFTER=$(curl -s "$BUREAU_URL/api/knowledge?file=journal/$TODAY.v02.md&raw=1" -H "$AUTH"; echo x)
+check "cutover: the v0.2 day moved to .v02.md, byte for byte" "$([ "$V02_BEFORE" = "$V02_AFTER" ] && echo identical)" '^identical$'
+check "cutover: the move is a commit of its own" "$(api GET /api/state)" "moved to journal/$TODAY.v02.md before its first typed capture"
+DAY=$(api GET "/api/knowledge?file=journal/$TODAY.md")
+check "the new day file carries format 0.3" "$DAY" 'format: 0.3'
+check "and its title" "$DAY" "title: Journal $TODAY"
+check "and holds the record" "$DAY" "\\^$C0ID"
+check "and none of the v0.2 text" "$(echo "$DAY" | grep -c 'a v0.2 line' || true)" '^0$'
+check "the capture is an activity line" "$(api GET /api/state)" '"type": "journal.captured"'
+JM=$(tid "$(api POST /api/tasks '{"title":"Journal probe","project":"ops","priority":5,"gate":"critic"}')")
+B="{\"agent\":\"scrivener\",\"id\":\"$JM\"}"
+api POST /api/tasks/claim "$B" > /dev/null
+C1='{"agent":"scrivener","kind":"gotcha","text":"Quote \"smart\" and (parens), #hash, a URL https://example.com/a?b=1#c, café 🚀 `code: x`","evidence":"seen twice: once by hand (fake)","tags":["deploy","lftp"],"confidence":"stated"}'
+C1R=$(api POST /api/journal "$C1")
+check "the one mission the agent holds is stamped" "$C1R" "\"mission\": \"$JM\""
+check "confidence as sent" "$C1R" '"confidence": "stated"'
+JG=$(api GET "/api/journal?mission=$JM")
+check "GET returns the record, and its JSON matches what was sent" "$(same_record "$C1" "$JG")" '^matches$'
+check "GET filters by kind and author" "$(api GET "/api/journal?kind=fact&author=scrivener")" "\"id\": \"$C0ID\""
+check "a filter that matches nothing returns no records" "$(api GET "/api/journal?kind=fact&author=nobody" | tr -d ' \n')" '"records":\[\]'
+check "GET by day" "$(api GET "/api/journal?day=$TODAY")" "\"id\": \"$C0ID\""
+check "since in the future returns nothing" "$(api GET '/api/journal?since=2999-01-01' | tr -d ' \n')" '"records":\[\]'
+check "a bad day is refused (400)" "$(code GET '/api/journal?day=yesterday')" '^400$'
+check "GET never reads the .v02 file" "$(api GET "/api/journal?day=$TODAY" | grep -c 'a v0.2 line' || true)" '^0$'
+check "the day file reads with claims.parseFile, no errors" "$(curl -s "$BUREAU_URL/api/knowledge?file=journal/$TODAY.md&raw=1" -H "$AUTH" | parse_day "$TODAY")" '^0.3 0 errors 2 claims$'
+JM2=$(tid "$(api POST /api/tasks '{"title":"Journal probe 2","project":"ops","priority":5,"gate":"critic"}')")
+B="{\"agent\":\"scrivener\",\"id\":\"$JM2\"}"
+api POST /api/tasks/claim "$B" > /dev/null
+B="{\"agent\":\"scrivener\",\"kind\":\"step\",\"text\":\"pick the second desk (fake)\",\"evidence\":\"two missions held\",\"mission\":\"$JM2\"}"
+check "holding several, the body's mission picks one" "$(api POST /api/journal "$B")" "\"mission\": \"$JM2\""
+B='{"agent":"scrivener","kind":"step","text":"no pick among two (fake)","evidence":"two missions held"}'
+check "holding several without a pick: no mission line" "$(api POST /api/journal "$B" | grep -c '"mission"' || true)" '^0$'
+COUNT_BEFORE=$(api GET '/api/journal?author=scrivener' | grep -c '"id": "j-')
+refused () { # refused <label> <body> <code>
+  check "refused: $1 (400)" "$(code POST /api/journal "$2")" '^400$'
+  check "refused: $1 names $3" "$(api POST /api/journal "$2")" "\"code\": \"$3\""
+}
+refused "a kind outside the list" '{"agent":"scrivener","kind":"hunch","text":"x (fake)","evidence":"y"}' E_KIND
+refused "missing evidence" '{"agent":"scrivener","kind":"fact","text":"x (fake)"}' E_EVIDENCE
+refused "a line break in the text" '{"agent":"scrivener","kind":"fact","text":"one\ntwo (fake)","evidence":"y"}' E_WRAP
+refused "an id in the text" '{"agent":"scrivener","kind":"fact","text":"see ^j-1a2b3c4d (fake)","evidence":"y"}' E_ID
+LONG=$(printf 'x%.0s' $(seq 1 2001))
+B="{\"agent\":\"scrivener\",\"kind\":\"fact\",\"text\":\"$LONG\",\"evidence\":\"y\"}"
+refused "text over 2000 characters" "$B" E_TOO_LONG
+refused "an unknown key" '{"agent":"scrivener","kind":"fact","text":"x (fake)","evidence":"y","colour":"blue"}' E_FIELD
+for k in id by at; do
+  B="{\"agent\":\"scrivener\",\"kind\":\"fact\",\"text\":\"x (fake)\",\"evidence\":\"y\",\"$k\":\"forged\"}"
+  refused "$k sent by the writer" "$B" E_FIELD
+done
+check "the refusal says the hub stamps it" "$(api POST /api/journal '{"agent":"scrivener","kind":"fact","text":"x","evidence":"y","by":"someone"}')" 'stamped by the hub'
+B='{"agent":"scrivener","kind":"fact","text":"x (fake)","evidence":"y","mission":"t-1"}'
+refused "a mission the agent does not hold" "$B" E_MISSION
+refused "an agent not on the roster" '{"agent":"nobody-here","kind":"fact","text":"x (fake)","evidence":"y"}' E_AGENT
+check "refused captures wrote nothing" "$(api GET '/api/journal?author=scrivener' | grep -c '"id": "j-')" "^$COUNT_BEFORE$"
+# The free-text window: open by default, lines that are not claims only
+B="{\"file\":\"journal/$TODAY.md\",\"content\":\"  - colour: blue\",\"mode\":\"append\",\"author\":\"scrivener\"}"
+check "a line that would change the last record is refused" "$(code POST /api/knowledge "$B")" '^422$'
+B="{\"file\":\"journal/$TODAY.md\",\"content\":\"- 12:00 [scrivener] a free-text line in a 0.3 day (fake)\",\"mode\":\"append\",\"author\":\"scrivener\"}"
+check "window open: a free-text line is accepted in a 0.3 day" "$(api POST /api/knowledge "$B")" '"bytes"'
+B="{\"file\":\"journal/$TODAY.md\",\"content\":\"- [hunch] typed by hand (fake)\",\"mode\":\"append\",\"author\":\"scrivener\"}"
+check "an invalid claim line is refused (422)" "$(code POST /api/knowledge "$B")" '^422$'
+check "the refusal points to POST /api/journal" "$(api POST /api/knowledge "$B")" 'POST /api/journal'
+check "and neither reached the day" "$(api GET "/api/knowledge?file=journal/$TODAY.md" | grep -c 'typed by hand\|colour' || true)" '^0$'
+MW=$(mcpcall write_knowledge "{\"file\":\"journal/$TODAY.md\",\"content\":\"- [fact] typed over MCP (fake)\",\"mode\":\"append\"}")
+check "MCP write_knowledge meets the same rule" "$(mcp "$MW")" 'POST /api/journal'
+check "settings take journal_free_text" "$(api PATCH /api/settings '{"global":{"journal_free_text":false}}')" '"journal_free_text": false'
+check "journal_free_text is true or false" "$(api PATCH /api/settings '{"global":{"journal_free_text":"no"}}')" 'true or false'
+B='{"file":"journal/2026-01-05.md","content":"- 12:00 [scrivener] after the window (fake)","mode":"append","author":"scrivener"}'
+check "window closed: an agent's journal write is refused (403)" "$(code POST /api/knowledge "$B")" '^403$'
+check "with the pointer to POST /api/journal" "$(api POST /api/knowledge "$B")" 'POST /api/journal'
+B='{"file":"journal/2026-01-05.md","content":"- 12:00 [boss] the boss writes as he likes (fake)","mode":"append","author":"human"}'
+check "window closed: the boss still writes the journal" "$(api POST /api/knowledge "$B")" '"bytes"'
+check "window closed: capture still works" "$(api POST /api/journal '{"agent":"scrivener","kind":"fact","text":"captured after the window (fake)","evidence":"y"}')" '"by": "scrivener"'
+api PATCH /api/settings '{"global":{"journal_free_text":null}}' > /dev/null
+# A block nobody can read is listed, never dropped: the boss's hand plants one
+B="{\"file\":\"journal/$TODAY.md\",\"content\":\"- [hunch] planted by hand (fake)\",\"mode\":\"append\",\"author\":\"human\"}"
+api POST /api/knowledge "$B" > /dev/null
+JI=$(api GET "/api/journal?day=$TODAY")
+check "an invalid block is reported in invalid" "$JI" '"code": "E_KIND"'
+check "with its file" "$JI" "\"file\": \"journal/$TODAY.md\""
+check "and is not a record" "$(echo "$JI" | grep -c '"text": "planted by hand' || true)" '^0$'
+# MCP capture, as consul
+check "MCP lists capture" "$(mcp '{"jsonrpc":"2.0","id":60,"method":"tools/list"}')" '"name": "capture"'
+check "the MCP instructions point at capture" "$(mcp '{"jsonrpc":"2.0","id":61,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"conformance","version":"0"}}}')" 'record it with capture'
+MC=$(mcpcall capture '{"kind":"preference","text":"approve in the chat, not twice (fake)","evidence":"the boss, in session","confidence":"stated"}')
+MCR=$(mcp "$MC")
+check "MCP capture writes a record" "$MCR" '"isError": false'
+check "as consul" "$MCR" '\\"by\\": \\"consul\\"'
+check "and GET reads it back" "$(api GET '/api/journal?author=consul&kind=preference')" 'approve in the chat, not twice'
+MC=$(mcpcall capture '{"kind":"fact","text":"no evidence (fake)"}')
+check "MCP capture refuses what the route refuses" "$(mcp "$MC")" 'E_EVIDENCE'
+api PATCH "/api/tasks/$JM" '{"agent":"scrivener","status":"done","note":"probe"}' > /dev/null
+api PATCH "/api/tasks/$JM2" '{"agent":"scrivener","status":"done","note":"probe"}' > /dev/null
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ] && echo "CONFORMANT: the hub is fully drivable by curl." || echo "NOT CONFORMANT."

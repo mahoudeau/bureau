@@ -12,6 +12,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
+const claims = require('../lib/claims');
 
 const AUTHORITATIVE = ['knowledge', 'recipes'];
 const KNOWN_TOP = ['journal', 'meetings', 'import', 'knowledge', 'recipes', 'entities', 'projects', 'agents', 'daily', 'archive', 'attic'];
@@ -245,6 +246,13 @@ function lint(brainDir, overrides = {}) {
         warnings.push(`${f.rel}: belief is validated but no source found, in the body or the frontmatter`);
       if (f.front.volatility === 'volatile' && f.front.verified === undefined)
         warnings.push(`${f.rel}: volatile fact without a "verified" date`);
+    }
+
+    // Journal records (v0.3): the journal stays lenient, but a format 0.3 day
+    // the hub can no longer read back is drift worth seeing
+    if (f.compartment === 'journal' && f.front && String(f.front.format) === '0.3') {
+      for (const e of claims.parseFile(f.raw, { path: f.rel.split(path.sep).join('/') }).errors)
+        warnings.push(`${f.rel}: line ${e.line}: ${e.code} ${e.message}`);
     }
 
     // Unknown top-level folder: the layout is a contract too

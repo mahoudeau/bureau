@@ -244,7 +244,7 @@ import { icon, idBadge, statusGlyph } from './components.js';
       'task.blocked': 'blocked', 'task.updated': 'updated',
       'task.approved': 'got back, approved, to apply', 'task.applied': 'applied an approved item of',
       'agent.registered': 'clocked in', 'message.posted': 'messaged',
-      'knowledge.written': 'wrote', 'project.created': 'created project'
+      'knowledge.written': 'wrote', 'journal.captured': 'captured', 'project.created': 'created project'
     };
 
     function activityRow(ev) {
