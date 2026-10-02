@@ -1,0 +1,38 @@
+{
+  "format": "0.3",
+  "frontmatter": {
+    "title": "Journal 2026-10-02",
+    "compartment": "journal",
+    "format": "0.3"
+  },
+  "claims": [
+    {
+      "id": "j-4f2a91c0", "kind": "gotcha", "form": "long", "line": 7,
+      "text": "lftp --exclude-glob .git* skips .gitignore but not the .git directory",
+      "tags": ["deploy", "lftp"],
+      "sources": [],
+      "source_note": null,
+      "fields": {
+        "evidence": "deployed mews twice, the remote tree held the whole history",
+        "by": "consul",
+        "mission": "t-356",
+        "at": "2026-10-02T12:32Z",
+        "confidence": "observed"
+      }
+    },
+    {
+      "id": "j-0c3e9b71", "kind": "preference", "form": "long", "line": 14,
+      "text": "Approve in the chat, not twice in the dashboard",
+      "tags": [],
+      "sources": [],
+      "source_note": null,
+      "fields": {
+        "evidence": "the boss, in session",
+        "by": "consul",
+        "at": "2026-10-02T14:05Z",
+        "confidence": "stated"
+      }
+    }
+  ],
+  "errors": []
+}

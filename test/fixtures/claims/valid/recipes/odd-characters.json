@@ -1,0 +1,31 @@
+{
+  "format": "0.3",
+  "frontmatter": {
+    "title": "Odd characters",
+    "summary": "Fixture for text the parser must keep verbatim.",
+    "compartment": "recipe",
+    "scope": "global",
+    "permalink": "fixture-odd-characters",
+    "version": "3",
+    "format": "0.3"
+  },
+  "claims": [
+    {
+      "id": "c-q1w2e3", "kind": "gotcha", "form": "short", "line": 11,
+      "text": "Quote \"smart\" and 'plain', keep `code (with parens)` and (see source: the docs) as text #quoting",
+      "tags": ["quoting"],
+      "sources": [{ "ref": "t-7", "type": "mission" }],
+      "source_note": null,
+      "fields": {}
+    },
+    {
+      "id": "c-a4s5d6", "kind": "fact", "form": "short", "line": 12,
+      "text": "Accents and emoji survive: café, naïve, Zürich, 🚀, a URL https://example.com/page#section-2",
+      "tags": [],
+      "sources": [{ "ref": "journal/2026-08-11", "type": "wikilink" }],
+      "source_note": null,
+      "fields": {}
+    }
+  ],
+  "errors": []
+}

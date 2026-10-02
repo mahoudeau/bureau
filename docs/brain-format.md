@@ -1,4 +1,4 @@
-# Bureau Brain Format (v0.2, draft)
+# Bureau Brain Format (v0.3, draft)
 
 *This specification and the `brain-lint` validator are licensed Apache-2.0 (LICENSE-APACHE at the repo root); your brain and your tools owe nothing to the AGPL hub.*
 
@@ -123,6 +123,7 @@ compartment: recipe
 scope: global
 permalink: deploy-hub
 version: 2
+source: t-12
 ---
 
 - [step] Push to main; CI runs the conformance script #deploy
@@ -135,6 +136,7 @@ version: 2
 ```
 
 - Observation: `- [category] statement #tags (source: [[target]])`
+- `source:` in the frontmatter covers the observations that carry no source of their own; here the two `[step]` lines come from mission t-12 (see Claims, below)
 - Relation: `- relation_type [[Target]]`; bare wikilinks in prose are implicit relations
 - `permalink`: stable identifier that survives file moves; all lineage and source links prefer permalinks
 - `scope`: `global`, `entity:<slug>`, or `project:<slug>`; lets a copied file remember its walls
@@ -143,7 +145,7 @@ version: 2
 
 Extra frontmatter fields and grammar rules. In other tools they are inert custom metadata; in Bureau they are enforced.
 
-**Provenance (enforced in knowledge/ and recipes/, global and entity).** Every observation carries at least one `(source: [[...]])` link to journal material or a mission. An unsourced claim is a lint error, not a style issue. This is what keeps the authoritative layer free of hallucinated facts.
+**Provenance (enforced in knowledge/ and recipes/, global and entity).** Every observation has at least one source: its own `(source: ...)`, its own `source:` field (long form), or its file's `source:`. A source is a journal record (`j-` id), a mission (`t-` id), or a wikilink to journal material or another note (see Refs, below). An unsourced claim is a lint error, not a style issue. This is what keeps the authoritative layer free of hallucinated facts.
 
 **Summary (required on the files a scope load reads first).** `summary:` is one line, 200 characters or fewer, saying what the file holds. Required on `knowledge/` and `recipes/` notes (global and entity), `entities/<slug>/PROFILE.md`, and `projects/<slug>/STATE.md`. One exemption: `knowledge/INDEX.md` (global or entity), which is a map itself. It is what a map or a search result shows next to the file name, so an agent can decide what to open without opening everything. A `STATE.md` that has no frontmatter gets a minimal block (`title`, `summary`) above its `## Now`; appends land below. Missing is a lint warning, over length is an error.
 
@@ -157,7 +159,185 @@ Extra frontmatter fields and grammar rules. In other tools they are inert custom
 
 **Lineage.** Retirement moves a file to `attic/` preserving its path and stamps `retired:` (date), `retired_by:`, `retired_reason:`, `superseded_by: [[...]]`. The replacement carries `supersedes: [[...]]`. Both directions are lint-checked: no orphan retirements, no unexplained replacements.
 
-**Versioning.** `version:` on every structured note; the spec itself is versioned so conventions can migrate without breaking old files. Notes written under v0.1 (`version: 1`) remain valid; the `scope` field is required from `version: 2` on, in authoritative compartments only.
+**Versioning.** `version:` on every structured note; the spec itself is versioned so conventions can migrate without breaking old files. Notes written under v0.1 (`version: 1`) remain valid; the `scope` field is required from `version: 2` on, in authoritative compartments only. `version:` counts a note's own revisions; `format:` (from v0.3) names the grammar its claims are written in. They move independently (see Format versions, below).
+
+## Claims (v0.3)
+
+v0.2 called any list item starting with `[category]` an observation and let each tool read it its own way. v0.3 makes it a **claim**: one grammar, read the same way by the hub, the linter and the search index, and written by the hub itself when it captures for an agent. A claim has two forms.
+
+**Short form.** One line, the default in curated notes:
+
+```markdown
+- [gotcha] lftp --exclude-glob skips .gitignore but not the .git directory #deploy (source: j-4f2a91c0, t-356) ^c-8k2m1q
+```
+
+**Long form.** A first line, then one field per sub-line. For a claim that needs more than its file's defaults, and always for journal records:
+
+```markdown
+- [fact] A recreated alwaysdata site gets a new site id ^c-2p9x4d
+  - source: t-356, j-71b0c2aa
+  - volatility: volatile
+  - verified: 2026-09-22
+  - contradicts: c-5h1k0z
+```
+
+### Grammar
+
+Short form, left to right:
+
+1. `- [kind] ` at the start of a top-level list item.
+2. **The text.** One physical line. Tags are `#word` tokens after whitespace (`[a-z0-9][a-z0-9-]*`); they stay in the text and are also listed as the claim's tags.
+3. **The source group**, optional: the first parenthesized group that starts with `source:` and whose items, comma-separated, are all refs (below). A group holding anything else is text, not a source.
+4. **The source note**, optional: whatever follows the source group, kept verbatim. Example: `(source: [[journal/2026-08-16]]) (kassad entry)`.
+5. **The id**, optional in short form: ` ^c-xxxxxx` at the very end.
+
+Long form:
+
+1. `- [kind] text ^id`. The id is required.
+2. Sub-lines `  - key: value`: two spaces of indent, one field each, keys from the field table, each key at most once. Readers accept any order; the hub writes the table's order.
+
+Text rules, both forms: one physical line in a `format: 0.3` file (no hard wrap); 2000 characters at most; never contains `^c-` or `^j-`. Lines that are not claims (headings, prose, relations) are allowed and the claim parser skips them.
+
+### Kinds
+
+A closed list: `fact`, `gotcha`, `step`, `rule`, `why`, `decision`, `preference`, `correction`, `question`, `process`, `pattern`. Adding a kind is an additive format change.
+
+The list binds `format: 0.3` files only. v0.2 files keep whatever categories they grew (journals and project notes use `[stated]`, `[lesson]`, `[craft]`, agent names). A migration maps them: a category that says how the writer knows (`[stated]`) becomes the `confidence` field, one that names a kind of lesson (`[lesson]`, `[craft]`) becomes `pattern` or `rule`, an agent name becomes `by`.
+
+### Ids
+
+- `c-` and 6 characters `[a-z0-9]` for claims in notes; `j-` and 8 for journal records.
+- The hub assigns them when it writes. Unique across the brain, never reused, even after retirement: the attic keeps the id.
+- `^id` is an Obsidian block reference, so `[[recipes/deploy-hub#^c-8k2m1q]]` links one claim in any tool that knows block references.
+
+### Refs: what a source can be
+
+| Ref | Example | Points to |
+|---|---|---|
+| journal record | `j-4f2a91c0` | one captured record |
+| mission | `t-356` | a mission in the hub, with its log |
+| wikilink | `[[journal/2026-08-11]]`, `[[deploy-hub#^c-8k2m1q]]` | a file, a permalink, or one claim |
+
+A validator with access to the hub checks that `j-` and `t-` refs exist; offline, lint checks their syntax and resolves wikilinks.
+
+### Fields
+
+Every field has a reader. Numbers the index computes (truth, importance, reads, citations) are never fields: they live in the derived index, below.
+
+| Key | Where | Value | Read by |
+|---|---|---|---|
+| `source` | claim, file | refs, comma-separated | provenance checks, evidence counts |
+| `belief` | file, claim | `hypothesis`, `validated`, `superseded` | answers that quote the claim |
+| `volatility` | file, claim | `volatile`, `stable`, `durable` | freshness |
+| `verified` | file, claim | `yyyy-mm-dd` | freshness |
+| `pinned` | claim | `true` (owner only) | freshness: a pinned claim does not decay |
+| `contradicts` | claim | claim ids | contradiction review |
+| `supersedes` | claim | claim ids | lineage |
+| `believed-until` | claim | `yyyy-mm-dd` | lineage: when it stopped being believed |
+| `evidence` | journal record | one line | the record's proof |
+| `by` | journal record | an agent name | stamped by the hub |
+| `mission` | journal record | a `t-` id | stamped by the hub from the agent's lease |
+| `at` | journal record | ISO 8601, UTC | stamped by the hub |
+| `confidence` | journal record | `observed`, `stated`, `inferred` | how the writer knows: saw it, was told it, concluded it |
+| `tags` | journal record | `#tags`, space-separated | search, digests |
+
+### Inheritance
+
+A claim reads `belief`, `volatility` and `verified` from its own fields first, then from its file's frontmatter (`volatility` defaults to `stable`). A claim with no source of its own is covered by its file's `source:`. When the hub writes a note, a claim **added** by that write must bring its own source: the file-level source covers the claims that were already there, never new ones.
+
+## Journal records (v0.3)
+
+The journal stays write-cheap, but agents no longer type it. They send a capture to the hub (JSON: `kind`, `text`, `evidence`, optional `tags` and `confidence`); the hub validates it, stamps it, and appends a long-form claim to `journal/<yyyy-mm-dd>.md`:
+
+```markdown
+- [gotcha] lftp --exclude-glob .git* skips .gitignore but not the .git directory ^j-4f2a91c0
+  - evidence: deployed mews twice, the remote tree held the whole history
+  - by: consul
+  - mission: t-356
+  - at: 2026-10-02T12:32Z
+  - confidence: observed
+  - tags: #deploy #lftp
+```
+
+- **From the writer:** `kind`, `text`, `evidence` (required), `tags`, `confidence` (default `observed`).
+- **From the hub, refused if sent:** the id, `by`, `mission`, `at`.
+- A journal day written this way carries `format: 0.3` in its frontmatter. Journal days without it are v0.2 free text and stay readable as they are.
+
+## The parsed form
+
+What every reader returns, so the hub, lint and the index agree. Per file:
+
+```json
+{ "format": "0.3", "frontmatter": { "title": "..." }, "claims": [ ... ], "errors": [ ... ] }
+```
+
+Per claim:
+
+```json
+{
+  "id": "c-8k2m1q", "kind": "gotcha", "form": "short", "line": 12,
+  "text": "lftp --exclude-glob skips .gitignore but not the .git directory #deploy",
+  "tags": ["deploy"],
+  "sources": [{ "ref": "j-4f2a91c0", "type": "record" }, { "ref": "t-356", "type": "mission" }],
+  "source_note": null,
+  "fields": {}
+}
+```
+
+- `type` is `record`, `mission` or `wikilink`; a wikilink ref is stored without its brackets (`journal/2026-08-11`).
+- `sources` lists the claim's own sources only; a file-level `source:` stays in `frontmatter`.
+- `fields` holds every long-form field other than `source` and `tags`: values as written, `contradicts` and `supersedes` as arrays, `pinned` as a boolean.
+- Frontmatter values are read as strings (`format` is `"0.3"`, `version` is `"3"`), so no reader turns `0.3` into a number.
+- `line` is the claim's first line, counted from 1 at the top of the file, frontmatter included.
+
+An error is `{ "code", "line", "message" }`:
+
+| Code | Means |
+|---|---|
+| `E_KIND` | the kind is not in the list |
+| `E_ID` | an id is malformed, or appears inside the text |
+| `E_ID_DUP` | the same id twice in the brain |
+| `E_ID_MISSING` | a long-form claim has no id |
+| `E_FIELD` | a sub-line key is unknown, repeated, or malformed |
+| `E_REF` | a ref in a `source:` field (a claim's or the file's) is malformed. In a short-form line, a group whose items are not all refs is text, not a source |
+| `E_WRAP` | a claim's text continues on the next line in a `format: 0.3` file |
+| `E_TOO_LONG` | the text is over 2000 characters |
+| `E_UNSOURCED` | a claim in `knowledge/` or `recipes/` has no source, its own or its file's |
+| `E_EVIDENCE` | a journal record has no `evidence` |
+
+**Round trip.** For a claim written by the hub, parsing it and writing it back gives the same lines, byte for byte. That is a test, not a hope: the fixtures in `test/fixtures/claims/` hold each case with its expected parse.
+
+## Format versions and change rules
+
+- `format: 0.3` in the frontmatter says the file's claims follow this grammar. No `format:` means v0.2: read leniently (a hard-wrapped item is joined to its first line, ids may be missing), and never rewritten silently.
+- Moving a file to v0.3 is a migration: ids and `format: 0.3` added in one commit, checked by lint.
+- After v0.3, changes only add, and added fields are optional. A change that would break a reader bumps the format and ships with its migration. Readers keep reading every format they ever shipped.
+- A field enters the table when something reads it, not before.
+
+## The derived index
+
+The files are the brain; the index is a cache of them. The hub builds it in SQLite from the files and the git history and can drop and rebuild it at any time. Nothing in it is canonical.
+
+```
+files(path, compartment, scope, belief, volatility, verified, summary, format)
+claims(id, file, line, kind, text, belief, volatility, verified, pinned)
+claim_sources(claim_id, ref, ref_type)
+relations(from_id, type, to_id)        -- contradicts, supersedes, part_of
+journal(claim_id, author, mission, at, confidence, evidence)
+```
+
+Computed numbers (truth, importance, read and citation counts, search ranks) live only here.
+
+## What is enforced today
+
+v0.3 is a draft. Its rules land in steps; until a step lands, the v0.2 rules stand.
+
+| Rule | Enforced by |
+|---|---|
+| v0.2: schema, provenance, links, lineage, summaries, `## Now`, specs | `brain-lint`, today |
+| Mission ids and file-level `source:` as provenance | next: `brain-lint`, and the hub on every write to an authoritative compartment |
+| Journal records through the hub | with typed capture |
+| Claim ids, ref existence, own sources on added claims | with claim ids, after typed capture |
 
 ## The linter
 
