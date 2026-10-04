@@ -18,13 +18,19 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `hub/lib/claims.js`, the v0.3 reader and writer: `parseFile` returns the parsed form, `serializeClaim` writes a claim back byte for byte. `test/claims.test.js` runs every fixture against it, and `test/journal.test.js` round-trips generated records.
 - The setting `journal_free_text` (global, default open). While open, agents may still append free text to the journal through `POST /api/knowledge`, but in a `format: 0.3` day only lines that are not claims (422 otherwise). `false` refuses every agent journal write there; the boss's own writes always pass.
 - brain-lint warns about each record it cannot read in a `format: 0.3` journal day. The journal still never fails lint.
+- Memory health. `GET /api/memory/health` (MCP `memory_health`) returns a block the hub computes from the brain and the missions: lint errors and warnings, the week's captures by kind and author, unreadable journal blocks, approved items not applied yet and how long they have waited, curated claims past their freshness window (volatile 30 days, stable 180, durable never), contradictions, and provenance coverage. `status` is `attention`, with its reasons, when lint has errors, a journal block is unreadable, or an approved item has waited more than 48 hours. Cached for a minute; any brain write or mission change drops the cache. Read counts are not tracked yet and say so.
+- Both dashboards show the health as one line near the brain (ok or attention, with a glyph), refreshed on brain writes and mission changes; a click shows the reasons and the lists.
+- CI runs `test/memory-eval.sh`: recall@5 on the fixture brain must not drop below the recorded number.
 
 ### Changed
+- Sol's digest opens with the health block, and anything in `attention` becomes an item or a message to the boss.
+- `test/memory-eval.sh` checks recall@5 as a floor (at or above the recorded 0.875) instead of an exact match, so a better score passes.
 - **Cutover of a journal day.** The first capture on a day whose file is v0.2 free text moves that file to `journal/<yyyy-mm-dd>.v02.md` (git mv, its own commit, content untouched) and starts a `format: 0.3` file.
 - The claude-code and cowork charters, and Sol's, capture with `POST /api/journal` instead of appending journal lines; Sol's digest reads records with `GET /api/journal`.
 - **Curated compartments are hub-enforced.** `POST /api/knowledge` and MCP `write_knowledge` to `knowledge/`, `recipes/` (global and entity), `entities/<slug>/PROFILE.md` and `attic/` answer 403 unless the author is `human` or holds the `librarian` or `curator` role. Nothing is written or committed on a refusal. `journal/`, `daily/`, `projects/` and the rest stay open.
 - `librarian` is now a role like `lead` and `critic`: once any agent has roles in settings, it comes from settings only, for the digest carve-out too. **If your settings hold roles, add `librarian` to your librarian's entry (and `curator` to any agent that files knowledge with you) when you upgrade**, or the librarian can no longer park its digest or write `knowledge/`. With no roles in settings, the tags work as before.
 - Review evidence moves out of the brain: the docs now point screenshots at the work store instead of `deliverables/`.
+- **No approval with undecided items.** Approving a mission (to `done` or `approved`, or closing it with `approved_in_session`) is refused while any of its items is still `proposed`, on every door: dashboards, review links, MCP. Give every item a verdict first. Missions without items are unaffected.
 - The hub loads `hub/.env` itself (`hub/lib/env.js`), whatever folder it starts in, with the rules `start.sh` had: the host's environment wins, then the file. Values read the way `sh` read them when `start.sh` sourced the file: quotes over several lines, `\"` escapes, and `$NAME` from earlier lines (a `BUREAU_POKES` built from `POKE_*` lines keeps working). `node server.js` is the start command everywhere; `start.sh` now just runs it. `BUREAU_ENV_FILE` points the hub at another file.
 - A backslash in a brain path is a separator on every OS, and paths in answers, events and commit messages always use `/`.
 - Bad brain and work paths answer 400 instead of 500.
@@ -43,7 +49,6 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - The hub finds `git.exe` on the PATH, never in the brain folder, and says clearly at boot when git is missing.
 - The boot warnings lost their emoji and suggest a token command that works without openssl.
 - The repo has a `.gitattributes`, so a Windows clone keeps the scripts and fixtures with LF endings. `hub.sh` and `project-of.sh` read token files saved by Notepad.
-- **No approval with undecided items.** Approving a mission (to `done` or `approved`, or closing it with `approved_in_session`) is refused while any of its items is still `proposed`, on every door: dashboards, review links, MCP. Give every item a verdict first. Missions without items are unaffected.
 
 ## [0.2.0] - 2026-10-01
 

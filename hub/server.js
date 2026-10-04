@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
 const journal = require('./lib/journal');
+const health = require('./lib/health');
 const { KINDS } = require('./lib/claims');
 const work = require('./lib/work');
 const discord = require('./lib/discord');
@@ -26,7 +27,11 @@ else if (TOKEN === 'change-me-long-random-string') console.warn(`WARNING: BUREAU
 
 // ---------- SSE ----------
 const sseClients = new Set();
+// Events that change what the memory health block reads: a brain write or a
+// mission change drops its cache (lib/health.js).
+const HEALTH_EVENTS = /^(task|knowledge|journal|project)\./;
 function broadcast(type, data, extra) {
+  if (HEALTH_EVENTS.test(type)) health.invalidate();
   store.logEvent(type, summarize(type, data));
   // S2-f: notify from settings, the mission's project overriding global
   discord.mirror(type, data, store.effectiveSettings(store.load(), data && data.project).notify);
@@ -612,6 +617,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, r);
     }
 
+    // ----- memory health (M5): drift in the brain, measured; read-only -----
+    if (req.method === 'GET' && p === '/api/memory/health') return send(res, 200, health.get());
+
     // ----- work (a mission's evidence while it is open; plain files, no git) -----
     if (req.method === 'POST' && p === '/api/work') {
       const b = await readBody(req);
@@ -662,6 +670,7 @@ const MCP_TOOLS = [
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian, with capture. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'capture', description: 'Record one thing learned in the journal, as consul. kind is one of fact, gotcha, step, rule, why, decision, preference, correction, question, process, pattern; text is the claim, one line, 2000 characters at most; evidence is one line saying how you know; tags are words without #; confidence is observed (default), stated (you were told) or inferred (you concluded it). The hub stamps the id, by, the time and your mission (when you hold several, mission picks one of them), writes the record to journal/<yyyy-mm-dd>.md, and returns it.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: KINDS }, text: { type: 'string' }, evidence: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, confidence: { type: 'string', enum: ['observed', 'stated', 'inferred'] }, mission: { type: 'string' } }, required: ['kind', 'text', 'evidence'], additionalProperties: false } },
   { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
+  { name: 'memory_health', description: 'The memory health block, the same JSON as GET /api/memory/health: status (ok or attention) with its reasons, lint errors, unreadable journal blocks and capture volume, approved items not applied yet, stale claims, contradictions, and provenance coverage. Read-only.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
 ];
@@ -741,6 +750,7 @@ function mcpToolCall(name, a = {}) {
       }
       return { files: knowledge.listKnowledge(a.dir || '') };
     }
+    case 'memory_health': return health.get();
     case 'write_work': {
       const refusal = workWriteRefusal(a.file);
       if (refusal) throw new Error(refusal.error);

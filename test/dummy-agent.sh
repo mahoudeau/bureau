@@ -987,6 +987,87 @@ check "MCP capture refuses what the route refuses" "$(mcp "$MC")" 'E_EVIDENCE'
 api PATCH "/api/tasks/$JM" '{"agent":"scrivener","status":"done","note":"probe"}' > /dev/null
 api PATCH "/api/tasks/$JM2" '{"agent":"scrivener","status":"done","note":"probe"}' > /dev/null
 
+echo "16. memory health: drift measured by the hub, one JSON for the route and MCP"
+hv () { # hv <json> <dotted.path>: one value from a JSON body
+  node -e 'const o=JSON.parse(process.argv[1]);const v=process.argv[2].split(".").reduce((a,k)=>a==null?a:a[k],o);console.log(typeof v==="object"?JSON.stringify(v):v)' "$1" "$2"
+}
+MH=$(api GET /api/memory/health)
+for k in status reasons lint journal approved_unapplied stale contradictions provenance reads computed_at; do
+  check "the health block carries $k" "$MH" "\"$k\": "
+done
+check "reads are not tracked yet, and say so" "$(hv "$MH" reads)" '^{"tracked":false}$'
+# The boss's hand cleans what earlier sections left on purpose: the note
+# forced past lint (12b) and the block planted in today's journal (15).
+B='{"file":"knowledge/lint-bad.md","author":"human","content":"---\ntitle: Lint bad\ncompartment: knowledge\npermalink: lint-bad\nversion: 1\n---\n\n- [fact] now it has a source (source: t-1)\n"}'
+api POST /api/knowledge "$B" > /dev/null
+B=$(curl -s "$BUREAU_URL/api/knowledge?file=journal/$TODAY.md&raw=1" -H "$AUTH" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.stringify({file:process.argv[1],author:"human",content:s.split("\n").filter(l=>!l.includes("planted by hand")).join("\n")})))' "journal/$TODAY.md")
+api POST /api/knowledge "$B" > /dev/null
+MH=$(api GET /api/memory/health)
+check "a clean brain: status ok" "$(hv "$MH" status)" '^ok$'
+check "with no reasons" "$(hv "$MH" reasons)" '^\[\]$'
+check "and 0 lint errors" "$(hv "$MH" lint.errors)" '^0$'
+check "the week's captures are counted by kind" "$(hv "$MH" journal.by_kind.fact)" '^[1-9]'
+check "and by author" "$(hv "$MH" journal.by_author.scrivener)" '^[1-9]'
+# Provenance: a small hand-made set, counted as a difference
+P_OWN=$(hv "$MH" provenance.own); P_FILE=$(hv "$MH" provenance.file); P_NONE=$(hv "$MH" provenance.none)
+B='{"file":"knowledge/health-own.md","author":"human","content":"---\ntitle: Health own\ncompartment: knowledge\npermalink: health-own\nversion: 1\n---\n\n- [fact] the plant wants water on Mondays (fake) (source: t-1)\n- [fact] the plant dislikes the radiator (fake) (source: t-2)\n"}'
+api POST /api/knowledge "$B" > /dev/null
+B='{"file":"knowledge/health-file.md","author":"human","content":"---\ntitle: Health file\ncompartment: knowledge\npermalink: health-file\nversion: 1\nsource: t-1\n---\n\n- [fact] the lamp has its own source (fake) (source: t-3)\n- [fact] the lamp is covered by the file (fake)\n- [step] switch the lamp off at six (fake)\n"}'
+api POST /api/knowledge "$B" > /dev/null
+B='{"file":"knowledge/health-bad.md","author":"human","force":true,"content":"---\ntitle: Health bad\ncompartment: knowledge\npermalink: health-bad\nversion: 1\n---\n\n- [fact] nobody knows where this came from either (fake)\n"}'
+check "the boss forces an unsourced note past lint" "$(api POST /api/knowledge "$B")" '"forced"'
+MH=$(api GET /api/memory/health)
+check "a forced note that fails lint: status attention" "$(hv "$MH" status)" '^attention$'
+check "with the lint reason" "$(hv "$MH" reasons)" 'lint error'
+check "and its message" "$(hv "$MH" lint.messages)" 'knowledge/health-bad.md: unsourced observation'
+check "provenance: 3 more claims with their own source" "$(( $(hv "$MH" provenance.own) - P_OWN ))" '^3$'
+check "2 more covered only by the file's source" "$(( $(hv "$MH" provenance.file) - P_FILE ))" '^2$'
+check "1 more with none" "$(( $(hv "$MH" provenance.none) - P_NONE ))" '^1$'
+check "and a percentage with any source" "$(hv "$MH" provenance.sourced_pct)" '^[0-9.]*$'
+B='{"file":"knowledge/health-bad.md","author":"human","content":"---\ntitle: Health bad\ncompartment: knowledge\npermalink: health-bad\nversion: 1\n---\n\n- [fact] now the boss knows (fake) (source: t-4)\n"}'
+api POST /api/knowledge "$B" > /dev/null
+check "fixed, the write drops the cache: ok again" "$(hv "$(api GET /api/memory/health)" status)" '^ok$'
+# Freshness and contradictions: long-form claims with their own fields
+B='{"file":"knowledge/health-fresh.md","author":"human","content":"---\ntitle: Health fresh\ncompartment: knowledge\npermalink: health-fresh\nversion: 1\nsource: t-1\nformat: 0.3\n---\n\n- [fact] the kettle costs 30 coins (fake) ^c-hk0001\n  - volatility: volatile\n  - verified: 2020-01-01\n- [fact] the kettle costs 31 coins (fake) ^c-hk0002\n  - volatility: volatile\n  - verified: 2099-01-01\n  - contradicts: c-hk0001\n- [fact] water boils at 100 degrees here (fake) ^c-hk0003\n  - volatility: durable\n  - verified: 2000-01-01\n- [fact] the kettle is blue (fake) ^c-hk0004\n  - volatility: volatile\n"}'
+check "a 0.3 note with its own freshness fields is written" "$(api POST /api/knowledge "$B")" '"bytes"'
+MH=$(api GET /api/memory/health)
+STALE=$(hv "$MH" stale.claims)
+check "a volatile claim verified long ago is stale" "$STALE" '"id":"c-hk0001"'
+check "with its file and age" "$STALE" '"file":"knowledge/health-fresh.md","line":[0-9]*,"id":"c-hk0001","volatility":"volatile","verified":"2020-01-01","age_days":[0-9]'
+check "a durable claim never is" "$(echo "$STALE" | grep -c 'c-hk0003' || true)" '^0$'
+check "nor a fresh one" "$(echo "$STALE" | grep -c 'c-hk0002' || true)" '^0$'
+check "a volatile claim with no verified date is counted as undated" "$(hv "$MH" stale.undated)" '^[1-9]'
+check "a contradiction is listed with both ids" "$(hv "$MH" contradictions)" '"id":"c-hk0002","contradicts":"c-hk0001"'
+check "stale claims alone do not call for attention" "$(hv "$MH" status)" '^ok$'
+# An approved mission with a payload nobody applied yet
+H1=$(tid "$(api POST /api/tasks '{"title":"Health: unapplied payload","project":"ops","priority":5,"gate":"critic"}')")
+B="{\"agent\":\"menace\",\"id\":\"$H1\"}"
+api POST /api/tasks/claim "$B" > /dev/null
+api PATCH "/api/tasks/$H1" '{"agent":"menace","items":[{"title":"Log the plant","payload":{"ops":[{"op":"append","file":"projects/ops/health-log.md","content":"- plant watered (fake)"}]}}]}' > /dev/null
+api PATCH "/api/tasks/$H1" '{"agent":"menace","status":"review","after_approval":"return"}' > /dev/null
+check "approved, back with its holder" "$(api PATCH "/api/tasks/$H1" '{"agent":"human","status":"done","verdicts":[{"id":"i1","verdict":"approved"}]}')" '"status": "approved"'
+AU=$(hv "$(api GET /api/memory/health)" approved_unapplied)
+check "the approved mission shows under approved_unapplied" "$AU" "\"id\":\"$H1\""
+check "with its unapplied item and how long it has waited" "$AU" '"items":\["i1"\],"approved_at":"[^"]*","waiting_hours":[0-9]'
+check "a fresh wait is not overdue" "$AU" '"overdue":false'
+check "nor a reason for attention" "$(hv "$(api GET /api/memory/health)" status)" '^ok$'
+api POST "/api/tasks/$H1/apply" '{"agent":"menace","item":"i1"}' > /dev/null
+check "applied, it leaves the list" "$(hv "$(api GET /api/memory/health)" approved_unapplied)" '^\[\]$'
+api PATCH "/api/tasks/$H1" '{"agent":"menace","status":"done","note":"applied"}' > /dev/null
+# A v0.3 journal day with a block nobody can read, by the boss's hand
+B='{"file":"journal/2020-01-02.md","author":"human","content":"---\ntitle: Journal 2020-01-02\ncompartment: journal\nformat: 0.3\n---\n\n- [fact] a record without its evidence (fake) ^j-hlth0001\n  - by: human\n  - at: 2020-01-02T10:00Z\n"}'
+api POST /api/knowledge "$B" > /dev/null
+MH=$(api GET /api/memory/health)
+check "a broken journal block shows under invalid" "$(hv "$MH" journal.invalid)" '"file":"journal/2020-01-02.md","line":7'
+check "with its error" "$(hv "$MH" journal.invalid)" 'E_EVIDENCE'
+check "and makes status attention" "$(hv "$MH" status)" '^attention$'
+check "with the unreadable reason" "$(hv "$MH" reasons)" 'unreadable journal block'
+check "MCP lists memory_health" "$(mcp '{"jsonrpc":"2.0","id":70,"method":"tools/list"}')" '"name": "memory_health"'
+MHM=$(mcp "$(mcpcall memory_health '{}')")
+check "MCP memory_health answers" "$MHM" '"isError": false'
+check "with the same status as the route" "$MHM" "\\\\\"status\\\\\": \\\\\"$(hv "$MH" status)\\\\\""
+check "the route is behind the token" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/api/memory/health")" '^401$'
+
 echo
 echo "passed $PASS, failed $FAIL"
 [ "$FAIL" -eq 0 ] && echo "CONFORMANT: the hub is fully drivable by curl." || echo "NOT CONFORMANT."

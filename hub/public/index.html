@@ -124,6 +124,14 @@
   input { flex: 1; }
   button { cursor: pointer; background: var(--accent); color: #fff; border: none; font-weight: 600; }
   .empty { color: var(--muted); font-size: 13px; }
+  /* Memory health (M5): one quiet line; the glyph and the word carry the
+     status, the color only repeats it */
+  #memory { font-size: 12.5px; color: var(--ink2); padding: 4px 0 8px; cursor: pointer; border-bottom: 1px solid var(--hairline); margin-bottom: 4px; }
+  #memory:hover b { color: var(--accent); }
+  #memory .mglyph { display: inline-block; width: 14px; text-align: center; }
+  #memory.ok .mglyph { color: var(--good); }
+  #memory.attention .mglyph { color: var(--warning); }
+  #detail .mlist { margin: 4px 0 10px; padding-left: 18px; font-size: 12.5px; }
 </style>
 </head>
 <body>
@@ -138,6 +146,7 @@
     <h2 style="margin-top:22px">Projects <a href="#" onclick="addProject();return false" title="new project" style="color:var(--accent);text-decoration:none;font-size:14px">＋</a></h2>
     <div id="projects" class="empty">No projects yet.</div>
     <h2 style="margin-top:22px">Brain · recent commits</h2>
+    <div id="memory" role="button" tabindex="0" title="Memory health: click for the reasons and lists">Memory …</div>
     <div id="brain" class="empty">Nothing written yet.</div>
   </section>
   <section>
@@ -277,6 +286,50 @@ function fmtEvt(e) {
 }
 
 async function refresh() { state = await api('/api/state'); render(); }
+
+// Memory health (M5): one line under the brain, details on click. Refreshed
+// on brain writes and mission changes, at most once every few seconds.
+let memory = null, memTimer = null, memLast = 0;
+const MEM_EVERY_MS = 5000;
+const memWaiting = h => h.approved_unapplied.reduce((n, m) => n + m.items.length, 0);
+async function loadMemory() {
+  memLast = Date.now();
+  const h = await api('/api/memory/health');
+  if (!h || !h.status) return;
+  memory = h;
+  const el = document.getElementById('memory');
+  el.className = h.status;
+  el.innerHTML = `<span class="mglyph" aria-hidden="true">${h.status === 'ok' ? '✓' : '▲'}</span><b>Memory ${esc(h.status)}</b> · ${h.lint.errors} lint error${h.lint.errors === 1 ? '' : 's'} · ${h.journal.invalid.length} unreadable · ${memWaiting(h)} waiting to apply · ${h.stale.count} stale`;
+}
+function memorySoon() {
+  if (memTimer) return;
+  memTimer = setTimeout(() => { memTimer = null; loadMemory(); }, Math.max(0, MEM_EVERY_MS - (Date.now() - memLast)));
+}
+function openMemory() {
+  const h = memory;
+  if (!h) return;
+  const list = (rows, empty) => rows.length ? `<ul class="mlist">${rows.map(r => `<li>${r}</li>`).join('')}</ul>` : `<div class="meta">${empty}</div>`;
+  const kinds = Object.entries(h.journal.by_kind).map(([k, n]) => `${esc(k)} ${n}`).join(', ') || 'none';
+  const authors = Object.entries(h.journal.by_author).map(([k, n]) => `${esc(k)} ${n}`).join(', ') || 'none';
+  const p = h.provenance;
+  document.getElementById('detail').innerHTML = `
+    <h3>Memory ${esc(h.status)}</h3>
+    <div class="meta">computed ${esc(h.computed_at.slice(0, 16).replace('T', ' '))} UTC · cached for a minute, dropped on every brain write</div>
+    <h2>Reasons</h2>${list(h.reasons.map(esc), 'Nothing calls for attention.')}
+    <h2>Lint · ${h.lint.errors} errors, ${h.lint.warnings} warnings</h2>${list(h.lint.messages.map(esc), 'No errors.')}
+    <h2>Journal · last ${h.journal.days} days</h2>
+    <div class="meta">${h.journal.records} records · by kind: ${kinds} · by author: ${authors}</div>
+    ${list(h.journal.invalid.map(b => `${esc(b.file)}:${b.line} ${esc(b.errors.map(e => e.code).join(', '))}`), 'No unreadable blocks.')}
+    <h2>Approved, not applied</h2>${list(h.approved_unapplied.map(m => `<a href="#" onclick="openTask('${esc(m.id)}');return false">${esc(m.id)}</a> ${esc(m.title)} · ${esc(m.items.join(', '))} · waiting ${Math.floor(m.waiting_hours)}h${m.overdue ? ' (over 48h)' : ''}`), 'Nothing waiting.')}
+    <h2>Stale · ${h.stale.count} past their window, ${h.stale.undated} undated</h2>${list(h.stale.claims.map(c => `${esc(c.file)}:${c.line} ${esc(c.volatility)}, verified ${esc(c.verified)} (${c.age_days} days) · ${esc(c.text.slice(0, 80))}`), 'Nothing stale.')}
+    <h2>Contradictions</h2>${list(h.contradictions.map(c => `${esc(c.id || '(no id)')} contradicts ${esc(c.contradicts)} · ${esc(c.file)}:${c.line}`), 'None open.')}
+    <h2>Provenance</h2><div class="meta">${p.claims} curated claims · ${p.own} with their own source · ${p.file} covered by the file's source · ${p.none} with none${p.sourced_pct === null ? '' : ` · ${p.sourced_pct}% sourced`}</div>
+    <h2>Reads</h2><div class="meta">Not tracked yet.</div>`;
+  document.getElementById('overlay').classList.add('open');
+}
+document.getElementById('memory').addEventListener('click', openMemory);
+document.getElementById('memory').addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openMemory(); } });
+
 function connectSSE() {
   const es = new EventSource('/api/events?token=' + encodeURIComponent(TOKEN));
   es.onopen = () => { document.getElementById('conndot').classList.add('on'); document.getElementById('conntext').textContent = 'live'; };
@@ -285,6 +338,9 @@ function connectSSE() {
   ['task.created','task.claimed','task.done','task.failed','task.review','task.approved','task.applied','task.blocked','task.requeued','task.updated',
    'agent.registered','agent.heartbeat','message.posted','knowledge.written','project.renamed','project.created','project.deleted']
     .forEach(t => es.addEventListener(t, refresh));
+  ['task.created','task.claimed','task.done','task.failed','task.review','task.approved','task.applied','task.blocked','task.requeued','task.updated',
+   'knowledge.written','journal.captured','project.renamed','project.created','project.deleted']
+    .forEach(t => es.addEventListener(t, memorySoon));
 }
 // Task detail panel: full log and artifacts, review actions when parked in review.
 async function openTask(id) {
@@ -474,7 +530,7 @@ document.getElementById('newtask').addEventListener('submit', async e => {
   document.getElementById('nt-title').value = '';
   refresh();
 });
-refresh(); connectSSE(); setInterval(refresh, 60000);
+refresh(); loadMemory(); connectSSE(); setInterval(refresh, 60000); setInterval(memorySoon, 60000);
 </script>
 </body>
 </html>
