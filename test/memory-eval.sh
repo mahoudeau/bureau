@@ -26,6 +26,11 @@ if [ "${1:-}" = "run" ]; then
   exec node test/memory-eval/run.js "$@"
 fi
 
+# The recall@5 recorded for test/memory-eval/example.json on the fixture
+# brain (list method). A floor, not an exact match: CI fails when retrieval
+# scores below it, and a better score passes. Raise it when one lands.
+BASELINE=0.875
+
 PORT="${EVAL_PORT:-4742}"
 TMP="${EVAL_TMP:-$(mktemp -d)}"
 URL="http://127.0.0.1:$PORT"
@@ -51,11 +56,13 @@ if ! curl -s -o /dev/null --retry 20 --retry-connrefused --retry-delay 1 "$URL/h
 fi
 
 echo "1. the list baseline over the fake brain"
-OUT=$(node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list); X=$?
+OUT=$(node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list --min-recall "$BASELINE"); X=$?
 echo "$OUT" | sed 's/^/    /'
-check "runs clean" "exit:$X" 'exit:0'
-check "recall@5 is 0.875 (the paraphrase question misses)" "$OUT" 'recall@5 0.875'
-check "the paraphrase miss is named" "$OUT" 'MISS ex-08'
+check "recall@5 at or above the recorded $BASELINE" "exit:$X" 'exit:0'
+check "the score is printed" "$OUT" 'recall@5 [01]\.[0-9]*'
+# A question below full recall is named, so a regression says where it is
+if echo "$OUT" | grep -q 'recall@5 1\.000'; then PASS=$((PASS+1)); echo "  ok: nothing missed"
+else check "a miss is named" "$OUT" '^ *\(MISS\|part\) '; fi
 check "entities/ stays out of the ranking" "$OUT" 'exclude: entities/'
 if echo "$OUT" | grep -q 'entities/acme'; then FAIL=$((FAIL+1)); echo "  FAIL: an entity file was ranked"; else PASS=$((PASS+1)); echo "  ok: no entity file ranked"; fi
 
@@ -68,8 +75,8 @@ check "not available, cleanly" "$OUT" 'method api-search: not available'
 echo "3. --min-recall gates CI"
 node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list --min-recall 0.8 > /dev/null; X=$?
 check "passes at 0.8" "exit:$X" 'exit:0'
-node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list --min-recall 0.9 > /dev/null; X=$?
-check "fails at 0.9" "exit:$X" 'exit:1'
+node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list --min-recall 1.01 > /dev/null; X=$?
+check "fails above any possible score (1.01)" "exit:$X" 'exit:1'
 
 echo "4. tokens per clock-in"
 OUT=$(node test/memory-eval/run.js --url "$URL" --clockin knowledge/,recipes/,projects/demo/STATE.md); X=$?

@@ -55,6 +55,12 @@ jobs:
       - name: Brain lint (test/brain-lint.sh)
         run: bash test/brain-lint.sh
 
+      # Retrieval on the fixture brain: recall@5 on test/memory-eval/example.json
+      # must not drop below the number recorded in the script. Self-contained:
+      # starts its own hub on port 4742.
+      - name: Memory eval (test/memory-eval.sh)
+        run: bash test/memory-eval.sh
+
       # Brain Format v0.3 claims: fixtures with their expected parse, read by
       # hub/lib/claims.js and written back byte for byte.
       - name: Claims format (test/claims.test.js)

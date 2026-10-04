@@ -18,8 +18,13 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `hub/lib/claims.js`, the v0.3 reader and writer: `parseFile` returns the parsed form, `serializeClaim` writes a claim back byte for byte. `test/claims.test.js` runs every fixture against it, and `test/journal.test.js` round-trips generated records.
 - The setting `journal_free_text` (global, default open). While open, agents may still append free text to the journal through `POST /api/knowledge`, but in a `format: 0.3` day only lines that are not claims (422 otherwise). `false` refuses every agent journal write there; the boss's own writes always pass.
 - brain-lint warns about each record it cannot read in a `format: 0.3` journal day. The journal still never fails lint.
+- Memory health. `GET /api/memory/health` (MCP `memory_health`) returns a block the hub computes from the brain and the missions: lint errors and warnings, the week's captures by kind and author, unreadable journal blocks, approved items not applied yet and how long they have waited, curated claims past their freshness window (volatile 30 days, stable 180, durable never), contradictions, and provenance coverage. `status` is `attention`, with its reasons, when lint has errors, a journal block is unreadable, or an approved item has waited more than 48 hours. Cached for a minute; any brain write or mission change drops the cache. Read counts are not tracked yet and say so.
+- Both dashboards show the health as one line near the brain (ok or attention, with a glyph), refreshed on brain writes and mission changes; a click shows the reasons and the lists.
+- CI runs `test/memory-eval.sh`: recall@5 on the fixture brain must not drop below the recorded number.
 
 ### Changed
+- Sol's digest opens with the health block, and anything in `attention` becomes an item or a message to the boss.
+- `test/memory-eval.sh` checks recall@5 as a floor (at or above the recorded 0.875) instead of an exact match, so a better score passes.
 - **Cutover of a journal day.** The first capture on a day whose file is v0.2 free text moves that file to `journal/<yyyy-mm-dd>.v02.md` (git mv, its own commit, content untouched) and starts a `format: 0.3` file.
 - The claude-code and cowork charters, and Sol's, capture with `POST /api/journal` instead of appending journal lines; Sol's digest reads records with `GET /api/journal`.
 - **Curated compartments are hub-enforced.** `POST /api/knowledge` and MCP `write_knowledge` to `knowledge/`, `recipes/` (global and entity), `entities/<slug>/PROFILE.md` and `attic/` answer 403 unless the author is `human` or holds the `librarian` or `curator` role. Nothing is written or committed on a refusal. `journal/`, `daily/`, `projects/` and the rest stay open.
