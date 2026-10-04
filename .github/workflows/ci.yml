@@ -153,8 +153,9 @@ jobs:
       # Windows PowerShell 5.1: Set-Content -Encoding UTF8 writes CRLF lines
       # and a BOM, the worst case a Notepad user hands the hub. No BUREAU_TOKEN
       # in this step's environment: the 401 below proves it came from hub\.env.
-      # Start-Process gives the hub its own console, so it outlives this step.
-      - name: Start a scratch hub (node server.js, PowerShell .env)
+      # The runner ends a step's processes with the step on Windows, so this
+      # hub only proves the .env; the conformance step starts its own.
+      - name: node server.js reads a PowerShell .env
         shell: powershell
         run: |
           $dir = Join-Path $env:RUNNER_TEMP 'bureau'
@@ -169,8 +170,8 @@ jobs:
             "BUREAU_WORK_DIR=$dir\work",
             'BUREAU_RESERVATION_TTL_MIN=0.02'
           )
-          Start-Process -FilePath node -ArgumentList 'server.js' -WorkingDirectory (Resolve-Path hub).Path `
-            -RedirectStandardOutput "$dir\hub.log" -RedirectStandardError "$dir\hub.err.log"
+          $hub = Start-Process -FilePath node -ArgumentList 'server.js' -WorkingDirectory (Resolve-Path hub).Path -PassThru `
+            -RedirectStandardOutput "$dir\env-check.log" -RedirectStandardError "$dir\env-check.err.log"
           $up = $false
           for ($i = 0; $i -lt 60; $i++) {
             curl.exe -sf http://127.0.0.1:8100/health | Out-Null
@@ -179,27 +180,37 @@ jobs:
           }
           if (-not $up) {
             Write-Output 'hub never answered /health'
-            Get-Content "$dir\hub.log", "$dir\hub.err.log"
+            Get-Content "$dir\env-check.log", "$dir\env-check.err.log"
             exit 1
           }
           $code = curl.exe -s -o NUL -w '%{http_code}' http://127.0.0.1:8100/api/health
+          Stop-Process -Id $hub.Id -Force
           if ($code -ne '401') {
             Write-Output "the token in hub\.env is not in force: /api/health without it answered $code"
-            Get-Content "$dir\hub.log", "$dir\hub.err.log"
+            Get-Content "$dir\env-check.log", "$dir\env-check.err.log"
             exit 1
           }
+          Start-Sleep -Seconds 1
+          # the stop was a hard kill: the next hub takes over the lock
           exit 0
 
-      # Git Bash, curl only, against the hub above: it drives the hub's
-      # Windows runtime (paths, git.exe, the brain, the work store). Same
-      # options as the Linux conformance job; cygpath turns RUNNER_TEMP
-      # (D:\a\_temp) into a path Git Bash's own tools take.
+      # Git Bash, curl only, against a hub started in this same step (from
+      # the repo root, so hub\.env is found whatever the working directory):
+      # it drives the hub's Windows runtime (paths, git.exe, the brain, the
+      # work store). Same options as the Linux conformance job; cygpath turns
+      # RUNNER_TEMP (D:\a\_temp) into a path Git Bash's own tools take. A hub
+      # that never answers fails the step at once, not at the job's timeout.
       - name: Conformance (test/dummy-agent.sh)
         shell: bash
         env:
           BUREAU_URL: http://127.0.0.1:8100
           BUREAU_TOKEN: devtoken
-        run: CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$(cygpath -u "$RUNNER_TEMP")/bureau/brain" bash test/dummy-agent.sh
+        run: |
+          T="$(cygpath -u "$RUNNER_TEMP")/bureau"
+          node hub/server.js > "$T/hub.log" 2> "$T/hub.err.log" &
+          for i in $(seq 1 60); do curl -sf -m 2 "$BUREAU_URL/health" > /dev/null && break; sleep 0.5; done
+          curl -sf -m 2 "$BUREAU_URL/health" > /dev/null || { echo 'hub never answered /health'; cat "$T/hub.log" "$T/hub.err.log"; exit 1; }
+          CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$T/brain" bash test/dummy-agent.sh
 
       # The node tests start their own hubs on their own ports, and skip
       # hub\.env (BUREAU_ENV_FILE), except platform.test.js, which copies hub/.
@@ -222,7 +233,7 @@ jobs:
         run: node test/apply.test.js
 
       - name: Hub log
-        if: failure()
+        if: failure() || cancelled()
         shell: powershell
         run: Get-Content "$env:RUNNER_TEMP\bureau\hub.log", "$env:RUNNER_TEMP\bureau\hub.err.log" -ErrorAction SilentlyContinue
 
