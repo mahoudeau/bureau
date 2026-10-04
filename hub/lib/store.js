@@ -76,6 +76,10 @@ function migrate(s) {
 function load() {
   if (state) return state;
   const s = migrate(readState());
+  // A fresh hub writes its empty state now: the daily snapshot comes next,
+  // and backups with no state.json beside them refuse the next boot, so a
+  // hub stopped before its first change could never start again.
+  if (!fs.existsSync(STATE_FILE)) writeNow(s);
   state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.

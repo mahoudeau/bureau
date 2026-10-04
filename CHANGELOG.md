@@ -32,6 +32,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Fixed
 - **We no longer ignore 70% of the desktop market.** A few of you pointed out, with varying amounts of sarcasm, that `sh start.sh` is not a plan for Windows. Fair. The hub now reads its own `.env`, so `node server.js` starts it on Windows, macOS and Linux, and CI runs the conformance suite on Windows on every push. The quickstart turned out to be the small problem: on Windows the hub started with no token, Windows line endings broke the linter, and backslashes broke the links. All fixed, listed below. I don't own a Windows machine, so if it breaks on yours, tell me what you ran.
 - Without `sh`, the hub never read `.env`, so a plain `node server.js` started with no token and an open API.
+- A brand-new hub stopped before its first change could never start again: it had written its daily backup but no `state.json`, and backups without a state file refuse the boot. A fresh hub now writes its empty `state.json` at once. Found by the new Windows CI job, but true on every OS.
 - brain-lint reads files with Windows line endings or a BOM like any other; it used to report them as missing frontmatter and refuse every write to them (422).
 - brain-lint keyed files with `\` on Windows, so every path wikilink read as dangling and valid writes were refused.
 - A BOM at the top of a `format: 0.3` journal day no longer hides its format and triggers a false cutover.

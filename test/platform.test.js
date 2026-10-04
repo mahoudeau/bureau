@@ -2,7 +2,8 @@
 // Plain `node server.js` reads the .env beside it (CRLF, BOM, quotes, the host's
 // environment first); paths come out with '/'; CRLF and BOM files lint like
 // LF ones; names Windows cannot hold are refused on every OS; the brain keeps
-// approved bytes exactly; a stale lock with a recycled pid is taken over.
+// approved bytes exactly; a stale lock with a recycled pid is taken over; a
+// fresh hub stopped at once still starts again.
 // Runs on every OS in CI. Self-contained, zero deps, free ports, temp dirs.
 // Usage: node test/platform.test.js
 'use strict';
@@ -288,6 +289,20 @@ async function main() {
   check('the lock now names the new hub', fs.readFileSync(lockFile, 'utf8').trim() === String(taker.proc.pid));
   check('and was touched just now', Date.now() - fs.statSync(lockFile).mtimeMs < 60_000);
   await stop(taker);
+
+  console.log('10. a fresh hub stopped before its first change starts again');
+  const F = path.join(TMP, 'fresh');
+  const freshVars = p => ({ BUREAU_TOKEN: 'fresh', PORT: String(p), HOST: '127.0.0.1', BUREAU_DATA_DIR: path.join(F, 'data'), BUREAU_BRAIN_DIR: path.join(F, 'brain'), BUREAU_WORK_DIR: path.join(F, 'work') });
+  let port4 = await freePort();
+  const first = startHub({ vars: freshVars(port4) });
+  check('a fresh hub boots', await up(port4), first.log);
+  check('and writes its state.json at once', fs.existsSync(path.join(F, 'data', 'state.json')));
+  first.proc.kill('SIGKILL'); // the hardest stop: no exit handler, no flush
+  await first.exited;
+  port4 = await freePort();
+  const second = startHub({ vars: freshVars(port4) });
+  check('it boots again after a hard stop', await up(port4), second.log);
+  await stop(second);
 }
 
 main()
