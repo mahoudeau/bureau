@@ -15,6 +15,9 @@
 // unquoted value expands too and ends at a space, so " # note" is a comment
 // and "a#b" is not. $NAME is the file's own earlier value, else the
 // environment's, else empty. No command substitution, no arithmetic.
+// One break from sh, for Windows: an unquoted backslash escapes only
+// $ ` " ' \ # a space or a line end; before anything else it stays, so
+// BUREAU_DATA_DIR=C:\bureau\data means that folder.
 //
 // Then the listen address: the host's IP (set before the file is read) wins,
 // then HOST, then IP from the file, then :: (all interfaces).
@@ -66,7 +69,9 @@ function parse(text, env = process.env) {
           else val += s[i++];
         }
         i++; // the closing quote
-      } else if (c === '\\' && i + 1 < s.length) {
+      } else if (c === '\\' && i + 1 < s.length && '"\'\\$` \t#\n'.includes(s[i + 1])) {
+        // sh's escape, kept for the characters where it changes the reading;
+        // before any other, the backslash stays, so C:\bureau\data is a path
         if (s[i + 1] !== '\n') val += s[i + 1];
         i += 2;
       } else if (c === '$') {

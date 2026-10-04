@@ -139,6 +139,11 @@ async function main() {
   check('an unset name expands to nothing', sp.UNSET === '[]', sp.UNSET);
   check('a name the file lacks comes from the environment', sp.FROM_HOST === 'from-host!', sp.FROM_HOST);
   check('a lone $ stays', sp.LONELY === 'a $ sign', sp.LONELY);
+  // the one break from sh: an unquoted Windows path keeps its backslashes
+  const wp = env.parse('DIR=C:\\bureau\\data\r\nQ="D:\\a\\_temp\\brain"\r\nESC=a\\ b\\$c\r\n');
+  check('an unquoted Windows path keeps its backslashes', wp.DIR === 'C:\\bureau\\data', wp.DIR);
+  check('so does a double-quoted one', wp.Q === 'D:\\a\\_temp\\brain', wp.Q);
+  check('a backslash before a space or a $ still escapes it', wp.ESC === 'a b$c', wp.ESC);
   // The proof: sh itself sources the same file (not on Windows, no sh there).
   if (process.platform !== 'win32') {
     const shFile = path.join(TMP, 'sh-shaped.env');
