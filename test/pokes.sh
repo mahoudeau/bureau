@@ -8,6 +8,8 @@ HUB_PORT="${HUB_PORT:-8199}"
 SINK_PORT="${SINK_PORT:-8198}"
 TOKEN=poketest
 DIR="$(mktemp -d)"
+# The hubs below skip a local hub/.env (its webhook, its pokes): a missing file instead
+export BUREAU_ENV_FILE="$DIR/no.env"
 SINK_FILE="$DIR/sink.jsonl"
 PASS=0; FAIL=0
 

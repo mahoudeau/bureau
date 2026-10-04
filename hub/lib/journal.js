@@ -55,7 +55,7 @@ function journalFiles() {
   const out = [];
   for (const dir of ['journal', 'archive']) {
     if (!fs.existsSync(path.join(knowledge.BRAIN_DIR, dir))) continue;
-    for (const f of knowledge.listKnowledge(dir)) if (f.endsWith('.md')) out.push(f.split(path.sep).join('/'));
+    for (const f of knowledge.listKnowledge(dir)) if (f.endsWith('.md')) out.push(f);
   }
   return out;
 }
@@ -142,7 +142,7 @@ function list({ day, kind, mission, author, since } = {}) {
   if (since && Number.isNaN(sinceMs)) return refuse(400, 'E_FIELD', 'since is an ISO 8601 date or time');
   const records = [], invalid = [];
   const files = fs.existsSync(path.join(knowledge.BRAIN_DIR, 'journal'))
-    ? knowledge.listKnowledge('journal').map((f) => f.split(path.sep).join('/')).filter((f) => DAY_FILE_RE.test(f)).sort() : [];
+    ? knowledge.listKnowledge('journal').filter((f) => DAY_FILE_RE.test(f)).sort() : [];
   for (const file of files) {
     if (day && file !== `journal/${day}.md`) continue;
     const parsed = claims.parseFile(knowledge.readKnowledge(file), { path: file });
@@ -168,7 +168,8 @@ function list({ day, kind, mission, author, since } = {}) {
 // leave its records exactly as they were (no new, changed or broken claim).
 function freeTextRefusal({ file, content, mode, author, encoding }) {
   if (typeof file !== 'string' || author === 'human') return null;
-  const rel = path.normalize(file).replace(/^([/\\])+/, '').split(path.sep).join('/');
+  // the path the write lands on (a backslash is a separator here too)
+  const rel = knowledge.normRel(file);
   if (!/^journal\//i.test(rel)) return null;
   const s = store.load();
   if (store.settingsOf(s).global.journal_free_text === false)

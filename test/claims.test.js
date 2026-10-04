@@ -32,6 +32,13 @@ try { claims = require(path.join(__dirname, '..', 'hub', 'lib', 'claims.js')); }
   if (e.code !== 'MODULE_NOT_FOUND') throw e;
 }
 
+// Byte-for-byte write-back needs LF fixtures: .gitattributes keeps them LF in
+// every checkout, Windows included. A \r here means that guard is gone.
+console.log('0. the fixtures are checked out with LF line endings');
+const crlf = walk(ROOT).filter((f) => fs.readFileSync(f).includes(0x0d));
+if (crlf.length) bad('no \\r in any fixture', 'check .gitattributes (eol=lf): ' + crlf.map((f) => path.relative(ROOT, f)).join(', '));
+else ok('no \\r in any fixture');
+
 console.log('1. every fixture has a well-formed expectation');
 for (const f of valid) {
   const exp = f.replace(/\.md$/, '.json');

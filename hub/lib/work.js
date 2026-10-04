@@ -10,7 +10,7 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const { BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME } = require('./knowledge');
+const { BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME, pathError } = require('./knowledge');
 
 const WORK_DIR = process.env.BUREAU_WORK_DIR || path.join(__dirname, '..', 'work');
 const TASK_RE = /^t-\d+$/;
@@ -26,6 +26,8 @@ function parse(file) {
   if (parts[0] !== 'work' || !TASK_RE.test(parts[1] || '') || parts.length < 3)
     throw new Error('file must be work/<t-id>/<name>, e.g. work/t-12/home.png');
   const rel = parts.slice(2).join('/');
+  const bad = pathError(rel);
+  if (bad) throw new Error(bad);
   if (!FILE_RE.test(rel)) throw new Error(FILE_TYPES_ERROR);
   return { task: parts[1], rel, abs: path.join(WORK_DIR, parts[1], ...parts.slice(2)) };
 }
@@ -75,7 +77,8 @@ function removeMission(task) {
   if (typeof task !== 'string' || !TASK_RE.test(task)) return false;
   const dir = path.join(WORK_DIR, task);
   if (!fs.existsSync(dir)) return false;
-  fs.rmSync(dir, { recursive: true, force: true });
+  // retries: on Windows a file still open (a viewer, the indexer) fails the delete for a moment
+  fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
   return true;
 }
 

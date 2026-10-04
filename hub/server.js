@@ -1,6 +1,8 @@
 // Bureau: coordination hub for AI agents. Zero-dependency Node server.
 // API + SSE event stream + dashboard. Runs on minimal shared Node hosting.
 'use strict';
+// hub/.env first: lib/store.js and lib/knowledge.js read their dirs at load
+require('./lib/env').load();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -17,9 +19,10 @@ const { VERSION } = require('./version');
 const PORT = process.env.PORT || 8100;
 const HOST = process.env.HOST || '::';           // some shared hosts expect an IPv6 bind
 const TOKEN = process.env.BUREAU_TOKEN || '';
-if (!TOKEN) console.warn('⚠️  BUREAU_TOKEN not set: API is UNPROTECTED. Set it in production.');
+const TOKEN_HINT = `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`;
+if (!TOKEN) console.warn(`WARNING: BUREAU_TOKEN not set: API is UNPROTECTED. Set it in hub/.env, e.g. from ${TOKEN_HINT}`);
 // the placeholder in .env.example (test/storage.sh keeps the two in step)
-else if (TOKEN === 'change-me-long-random-string') console.warn('⚠️  BUREAU_TOKEN is still the example token from .env.example: anyone who has read the repo can use your API. Set your own, e.g. openssl rand -hex 32.');
+else if (TOKEN === 'change-me-long-random-string') console.warn(`WARNING: BUREAU_TOKEN is still the example token from .env.example: anyone who has read the repo can use your API. Set your own, e.g. from ${TOKEN_HINT}`);
 
 // ---------- SSE ----------
 const sseClients = new Set();
@@ -636,7 +639,8 @@ const server = http.createServer(async (req, res) => {
 
     return send(res, 404, { error: 'not found' });
   } catch (e) {
-    return send(res, 500, { error: e.message });
+    // a refused path (lib/knowledge.js pathError) is the caller's to fix
+    return send(res, e.code === 'E_PATH' ? 400 : 500, { error: e.message });
   }
 });
 
@@ -808,6 +812,8 @@ setInterval(() => {
   } catch (e) { console.error('[intake] sweep failed:', e.message); }
 }, 300_000);
 
+const noGit = knowledge.checkGit();
+if (noGit) { console.error(noGit); process.exit(1); }
 const lock = store.acquireLock();
 if (lock.error) { console.error(lock.error); process.exit(1); }
 try {

@@ -62,21 +62,34 @@ Vendor-neutral by construction: an agent is anything that can make HTTP calls, a
 
 ## Run it
 
-You need Node 18 or newer (production runs 22) and git. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
+You need Node 18 or newer (production runs 22) and git; on Windows, that's Node and Git for Windows. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
 
 ```
 git clone https://github.com/mahoudeau/bureau
 cd bureau/hub
-cp .env.example .env    # then set BUREAU_TOKEN, e.g. to the output of: openssl rand -hex 32
-sh start.sh             # loads .env, listens on PORT (8100 in the example)
+cp .env.example .env    # Windows: copy .env.example .env
+node server.js          # reads .env, listens on PORT (8100 in the example)
 ```
 
-Check it's up: `curl http://localhost:8100/health` answers `"ok": true`.
+Set `BUREAU_TOKEN` in `.env` before you start. Any long random string works, and this prints one on any OS: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+Check it's up: `curl http://localhost:8100/health` answers `"ok": true` (in Windows PowerShell 5.1, type `curl.exe`).
 
 - **The token** guards every `/api/` call, sent as `Authorization: Bearer <token>`. Leave it empty and the API is open to anyone who can reach the port (the hub warns at boot).
 - **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for the token once and keeps it in the browser.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
-- **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`.
+- **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`. `start.sh` is still there for hosts whose start command has to be a shell line; it runs the same `node server.js`.
+
+### On Windows
+
+Same steps, in PowerShell or cmd. CI starts the hub on Windows and runs the full conformance suite against it on every push. That's the extent of my testing: I don't own a Windows machine. If something breaks on yours, open an issue with what you ran and what it said.
+
+The curl examples below use bash quoting. In PowerShell, `Invoke-RestMethod` does the same job:
+
+```
+$h = @{ Authorization = "Bearer $env:TOKEN" }
+Invoke-RestMethod -Method Post -Uri http://localhost:8100/api/tasks -Headers $h -ContentType application/json -Body '{"title":"Say hello"}'
+```
 
 ### Settings
 
@@ -110,12 +123,12 @@ For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for
 
 ### Test it
 
-CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally. Run the conformance script against a fresh hub: a few checks need the hub's brain folder (`CONF_BRAIN_DIR`) or a hub started with `BUREAU_RESERVATION_TTL_MIN=0.02` plus `CONF_SHORT_TTL=1`, and say "skip" without them.
+CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter) and `test/pokes.sh` (outbound pokes, starts its own hubs). A Windows job runs the protocol suite and the node tests (`node test/*.test.js`) on every push. The shell scripts need bash: on Windows, Git Bash runs them. [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally. Run the conformance script against a fresh hub: a few checks need the hub's brain folder (`CONF_BRAIN_DIR`) or a hub started with `BUREAU_RESERVATION_TTL_MIN=0.02` plus `CONF_SHORT_TTL=1`, and say "skip" without them.
 
 ## Run it with Docker
 
 ```
-echo "BUREAU_TOKEN=$(openssl rand -hex 32)" > .env
+node -e "require('fs').writeFileSync('.env','BUREAU_TOKEN='+require('crypto').randomBytes(32).toString('hex')+'\n')"
 docker compose up -d    # builds the image, listens on 8100
 ```
 

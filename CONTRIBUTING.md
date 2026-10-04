@@ -8,15 +8,15 @@ You need Node and git. Nothing else: there is no `npm install`.
 
 ```
 cd hub
-cp .env.example .env    # set BUREAU_TOKEN to a long random string
-sh start.sh             # loads .env, listens on PORT or 8100
+cp .env.example .env    # Windows: copy. Then set BUREAU_TOKEN to a long random string
+node server.js          # reads .env, listens on PORT or 8100
 ```
 
 State goes to `hub/data/` and the brain (a git repo the hub commits to) to `hub/brain/`. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. The dashboard is at `/`, the office at `/office`.
 
 ## Run the tests
 
-Three scripts in `test/`, all plain shell and curl. Run them from the repo root.
+Three scripts in `test/`, all plain shell and curl, plus node tests (`node test/<name>.test.js`, no dependencies either). Run them from the repo root. On Windows, the node tests run as they are and the shell scripts run in Git Bash; `test/brain-lint.test.js` is the node twin of `test/brain-lint.sh`. `test/storage.sh` and `test/pokes.sh` need `lsof` and stay Linux and macOS only.
 
 **Conformance** (`test/dummy-agent.sh`) drives the whole protocol against a running hub. It creates missions, projects and brain files, so point it at a scratch hub, never at one you care about. The short reservation TTL and `CONF_BRAIN_DIR` let every section run instead of skipping or waiting 30 minutes:
 
@@ -59,7 +59,7 @@ A new hub feature comes with checks in `test/dummy-agent.sh`. If curl can't reac
 
 ## Pull requests
 
-- All three test scripts pass before you ask for review.
+- All three test scripts and the node tests pass before you ask for review. If you're on Windows and can't run `storage.sh` or `pokes.sh`, say so in the PR and CI runs them.
 - Keep PRs small. One change per PR; split a refactor from the feature that needs it.
 - Say what changed and why. The why matters more: the diff already shows the what.
 - Touching the protocol means updating `docs/protocol.md` in the same PR.

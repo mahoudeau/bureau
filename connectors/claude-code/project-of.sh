@@ -23,14 +23,14 @@ case "$CMD" in
   get)
     DIR=$(root_of "${2:-.}")
     if [ -f "$DIR/.bureau" ]; then
-      head -1 "$DIR/.bureau" | tr -d ' \n'
+      head -1 "$DIR/.bureau" | tr -d ' \r\n'
       exit 0
     fi
     if [ -f "$MAP" ]; then
       BEST=""; BEST_LEN=0
       while IFS='=' read -r prefix id; do
         prefix=$(echo "$prefix" | sed 's/[[:space:]]*$//;s/^[[:space:]]*//')
-        id=$(echo "$id" | tr -d ' ')
+        id=$(echo "$id" | tr -d ' \r') # \r: a map file saved on Windows
         [ -z "$prefix" ] && continue
         case "$DIR/" in
           "$prefix"/*|"$prefix")

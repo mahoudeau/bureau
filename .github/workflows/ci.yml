@@ -132,3 +132,123 @@ jobs:
       - name: Hub log
         if: always()
         run: cat "$RUNNER_TEMP/office/hub.log" || true
+
+  # Windows, the way a Windows user runs it: a .env saved by PowerShell (CRLF
+  # and a BOM), then plain `node server.js`, no shell wrapper. The checkout
+  # keeps the runner's default core.autocrlf=true on purpose: .gitattributes
+  # has to keep the scripts and fixtures LF, and the tests fail if it does not.
+  # Linux only, on purpose: storage.sh and pokes.sh need lsof, POSIX pids and
+  # signals (platform.test.js covers their Windows side: the lock and the
+  # state flush), and office-guard needs Playwright and Chromium.
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Windows PowerShell 5.1: Set-Content -Encoding UTF8 writes CRLF lines
+      # and a BOM, the worst case a Notepad user hands the hub. No BUREAU_TOKEN
+      # in this step's environment: the 401 below proves it came from hub\.env.
+      # Start-Process gives the hub its own console, so it outlives this step.
+      - name: Start a scratch hub (node server.js, PowerShell .env)
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP 'bureau'
+          New-Item -ItemType Directory -Force -Path $dir | Out-Null
+          Set-Content -Path hub\.env -Encoding UTF8 -Value @(
+            '# Bureau: environment, written by PowerShell',
+            'BUREAU_TOKEN=devtoken',
+            'PORT=8100',
+            'HOST=127.0.0.1',
+            "BUREAU_DATA_DIR=$dir\data",
+            "BUREAU_BRAIN_DIR=$dir\brain",
+            "BUREAU_WORK_DIR=$dir\work",
+            'BUREAU_RESERVATION_TTL_MIN=0.02'
+          )
+          Start-Process -FilePath node -ArgumentList 'server.js' -WorkingDirectory (Resolve-Path hub).Path `
+            -RedirectStandardOutput "$dir\hub.log" -RedirectStandardError "$dir\hub.err.log"
+          $up = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            curl.exe -sf http://127.0.0.1:8100/health | Out-Null
+            if ($LASTEXITCODE -eq 0) { $up = $true; break }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $up) {
+            Write-Output 'hub never answered /health'
+            Get-Content "$dir\hub.log", "$dir\hub.err.log"
+            exit 1
+          }
+          $code = curl.exe -s -o NUL -w '%{http_code}' http://127.0.0.1:8100/api/health
+          if ($code -ne '401') {
+            Write-Output "the token in hub\.env is not in force: /api/health without it answered $code"
+            Get-Content "$dir\hub.log", "$dir\hub.err.log"
+            exit 1
+          }
+          exit 0
+
+      # Git Bash, curl only, against the hub above: it drives the hub's
+      # Windows runtime (paths, git.exe, the brain, the work store). Same
+      # options as the Linux conformance job; cygpath turns RUNNER_TEMP
+      # (D:\a\_temp) into a path Git Bash's own tools take.
+      - name: Conformance (test/dummy-agent.sh)
+        shell: bash
+        env:
+          BUREAU_URL: http://127.0.0.1:8100
+          BUREAU_TOKEN: devtoken
+        run: CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$(cygpath -u "$RUNNER_TEMP")/bureau/brain" bash test/dummy-agent.sh
+
+      # The node tests start their own hubs on their own ports, and skip
+      # hub\.env (BUREAU_ENV_FILE), except platform.test.js, which copies hub/.
+      - name: Platform (test/platform.test.js)
+        run: node test/platform.test.js
+
+      - name: Brain lint (test/brain-lint.test.js, the node twin of brain-lint.sh)
+        run: node test/brain-lint.test.js
+
+      - name: Claims format (test/claims.test.js)
+        run: node test/claims.test.js
+
+      - name: Journal round trip (test/journal.test.js)
+        run: node test/journal.test.js
+
+      - name: Notify (test/notify.test.js)
+        run: node test/notify.test.js
+
+      - name: Apply (test/apply.test.js)
+        run: node test/apply.test.js
+
+      - name: Hub log
+        if: failure()
+        shell: powershell
+        run: Get-Content "$env:RUNNER_TEMP\bureau\hub.log", "$env:RUNNER_TEMP\bureau\hub.err.log" -ErrorAction SilentlyContinue
+
+  # platform.test.js on the other two OSes, and on Node 18, the oldest the
+  # README promises (global fetch, structuredClone).
+  platform:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            node: '22'
+          - os: ubuntu-latest
+            node: '18'
+    name: platform (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Platform (test/platform.test.js)
+        run: node test/platform.test.js
+
+      - name: Brain lint (test/brain-lint.test.js)
+        run: node test/brain-lint.test.js

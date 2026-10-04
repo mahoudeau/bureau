@@ -1,6 +1,6 @@
 # Installing Bureau (for AI assistants)
 
-Steps for an AI assistant setting up a Bureau hub for its user. Every command and output below was run on a fresh clone. Follow them in order and check each expected output before moving on.
+Steps for an AI assistant setting up a Bureau hub for its user. Every command and output below was run on a fresh clone on macOS and Linux. The Windows variants are checked by CI, not yet by hand: if one fails for you, say so in an issue. Follow them in order and check each expected output before moving on.
 
 ## 1. Prerequisites
 
@@ -9,6 +9,8 @@ node --version
 git --version
 curl --version
 ```
+
+On Windows, run the steps in PowerShell or cmd, and type `curl.exe` instead of `curl` in Windows PowerShell 5.1 (there `curl` is an alias for `Invoke-WebRequest`). The `-d '{...}'` examples below use bash quoting; in PowerShell, send the same JSON with `Invoke-RestMethod -Method Post -Uri <url> -Headers @{ Authorization = "Bearer $env:TOKEN" } -ContentType application/json -Body '<json>'`.
 
 - Node must be 18 or newer. The hub uses global `fetch` and `structuredClone`. Production runs Node 22; CI tests on 22.
 - git is required. The hub calls the `git` binary to keep the brain (its knowledge store) as a git repo, and exits at boot without it.
@@ -27,8 +29,10 @@ All later commands run from `bureau/hub` unless they say otherwise.
 
 ```
 cp .env.example .env
-openssl rand -hex 32
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
+
+On Windows, `copy .env.example .env` (cmd and PowerShell both take it).
 
 Edit `.env` and set `BUREAU_TOKEN` to the random string. Keep `PORT=8100` unless the user wants another port.
 
@@ -36,7 +40,7 @@ Edit `.env` and set `BUREAU_TOKEN` to the random string. Keep `PORT=8100` unless
 |---|---|---|
 | `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call. Empty means the API is open to anyone who can reach the port; the hub prints a warning at boot. Always set it. |
 | `PORT` | 8100 | Listen port. |
-| `IP` | `::` | Bind address, read by `start.sh` and passed to the hub as `HOST`. A `HOST` line in `.env` has no effect under `start.sh`. |
+| `IP` | `::` | Bind address, passed to the hub as `HOST`. An `IP` set by the host beats a `HOST` line in `.env`. |
 | `BUREAU_DATA_DIR` | `hub/data` | Where `state.json` (missions, roster, messages, log) lives. |
 | `BUREAU_BRAIN_DIR` | `hub/brain` | Where the brain's git repo lives. Created on first boot. |
 | `BUREAU_PUBLIC_URL` | unset | Public base URL. Used in review links and in the MCP connector URL. |
@@ -45,13 +49,15 @@ Edit `.env` and set `BUREAU_TOKEN` to the random string. Keep `PORT=8100` unless
 | `BUREAU_SWEEP_MS` | 60000 | Lease-expiry and standing-work sweep interval. |
 | `BUREAU_RESERVATION_TTL_MIN` | 30 | Minutes before a `cowork` agent's reservation lapses. Tests set 0.02. |
 
-`start.sh` loads `.env` only for variables the calling shell or host left unset: a variable already set in the environment wins. The listen address comes from `IP`, then `HOST`, then `::`.
+The hub loads `hub/.env` itself, from whatever folder it is started in, and only for variables the calling shell or host left unset: a variable already set in the environment wins. The listen address comes from `IP`, then `HOST`, then `::`.
 
 ## 4. Start
 
 ```
-sh start.sh
+node server.js
 ```
+
+`sh start.sh` does the same, for hosts whose start command has to be a shell line.
 
 Expected output, on one line:
 
@@ -59,7 +65,7 @@ Expected output, on one line:
 Bureau hub listening on [::]:8100
 ```
 
-It runs in the foreground. Stop it with Ctrl-C or `kill <pid>`. To run it in the background for the rest of the session, start it with `sh start.sh > hub.log 2>&1 &`.
+It runs in the foreground. Stop it with Ctrl-C or `kill <pid>`. To run it in the background for the rest of the session, start it with `node server.js > hub.log 2>&1 &`, or on Windows `Start-Process node -ArgumentList server.js -RedirectStandardOutput hub.log -RedirectStandardError hub.err`.
 
 On first boot git may print a `hint:` block about the default branch name, and every `/api/state` call logs `fatal: your current branch 'master' does not have any commits yet` until the brain's first commit. Both are harmless.
 
@@ -161,4 +167,4 @@ bash test/brain-lint.sh
 sh test/pokes.sh
 ```
 
-Each script ends with `passed N, failed 0` and exits with its failure count. `test/pokes.sh` starts its own hubs on ports 8196 to 8199 and kills whatever already listens there. On macOS, the stock `/bin/bash` 3.2 fails one `dummy-agent.sh` check ("it is now an independent roster agent") because of a quoting bug in that old bash; bash 5 passes. `.github/workflows/ci.yml` is the reference.
+Each script ends with `passed N, failed 0` and exits with its failure count. `test/pokes.sh` starts its own hubs on ports 8196 to 8199 and kills whatever already listens there. On Windows, run the shell scripts in Git Bash, or the node tests with `node test/<name>.test.js`; `test/pokes.sh` needs `lsof` and is Linux and macOS only. On macOS, the stock `/bin/bash` 3.2 fails one `dummy-agent.sh` check ("it is now an independent roster agent") because of a quoting bug in that old bash; bash 5 passes. `.github/workflows/ci.yml` is the reference.

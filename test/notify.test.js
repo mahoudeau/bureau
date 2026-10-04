@@ -39,7 +39,7 @@ async function main() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-notify-'));
   const hub = spawn(process.execPath, [path.join(__dirname, '..', 'hub', 'server.js')], {
     env: { ...process.env, PORT: String(HUB_PORT), BUREAU_TOKEN: TOKEN, BUREAU_DATA_DIR: path.join(dir, 'data'),
-      BUREAU_BRAIN_DIR: path.join(dir, 'brain'), DISCORD_WEBHOOK_URL: `http://127.0.0.1:${sink.address().port}/hook`, BUREAU_POKES: '' },
+      BUREAU_BRAIN_DIR: path.join(dir, 'brain'), DISCORD_WEBHOOK_URL: `http://127.0.0.1:${sink.address().port}/hook`, BUREAU_POKES: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') },
     stdio: 'ignore',
   });
   const api = async (method, p, body) => {
