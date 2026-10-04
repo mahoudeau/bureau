@@ -30,6 +30,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - **Curated compartments are hub-enforced.** `POST /api/knowledge` and MCP `write_knowledge` to `knowledge/`, `recipes/` (global and entity), `entities/<slug>/PROFILE.md` and `attic/` answer 403 unless the author is `human` or holds the `librarian` or `curator` role. Nothing is written or committed on a refusal. `journal/`, `daily/`, `projects/` and the rest stay open.
 - `librarian` is now a role like `lead` and `critic`: once any agent has roles in settings, it comes from settings only, for the digest carve-out too. **If your settings hold roles, add `librarian` to your librarian's entry (and `curator` to any agent that files knowledge with you) when you upgrade**, or the librarian can no longer park its digest or write `knowledge/`. With no roles in settings, the tags work as before.
 - Review evidence moves out of the brain: the docs now point screenshots at the work store instead of `deliverables/`.
+- **No approval with undecided items.** Approving a mission (to `done` or `approved`, or closing it with `approved_in_session`) is refused while any of its items is still `proposed`, on every door: dashboards, review links, MCP. Give every item a verdict first. Missions without items are unaffected.
 - The hub loads `hub/.env` itself (`hub/lib/env.js`), whatever folder it starts in, with the rules `start.sh` had: the host's environment wins, then the file. Values read the way `sh` read them when `start.sh` sourced the file: quotes over several lines, `\"` escapes, and `$NAME` from earlier lines (a `BUREAU_POKES` built from `POKE_*` lines keeps working). `node server.js` is the start command everywhere; `start.sh` now just runs it. `BUREAU_ENV_FILE` points the hub at another file.
 - A backslash in a brain path is a separator on every OS, and paths in answers, events and commit messages always use `/`.
 - Bad brain and work paths answer 400 instead of 500.
@@ -48,7 +49,6 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - The hub finds `git.exe` on the PATH, never in the brain folder, and says clearly at boot when git is missing.
 - The boot warnings lost their emoji and suggest a token command that works without openssl.
 - The repo has a `.gitattributes`, so a Windows clone keeps the scripts and fixtures with LF endings. `hub.sh` and `project-of.sh` read token files saved by Notepad.
-- **No approval with undecided items.** Approving a mission (to `done` or `approved`, or closing it with `approved_in_session`) is refused while any of its items is still `proposed`, on every door: dashboards, review links, MCP. Give every item a verdict first. Missions without items are unaffected.
 
 ## [0.2.0] - 2026-10-01
 
