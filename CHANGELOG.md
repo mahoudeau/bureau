@@ -25,6 +25,24 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - **Curated compartments are hub-enforced.** `POST /api/knowledge` and MCP `write_knowledge` to `knowledge/`, `recipes/` (global and entity), `entities/<slug>/PROFILE.md` and `attic/` answer 403 unless the author is `human` or holds the `librarian` or `curator` role. Nothing is written or committed on a refusal. `journal/`, `daily/`, `projects/` and the rest stay open.
 - `librarian` is now a role like `lead` and `critic`: once any agent has roles in settings, it comes from settings only, for the digest carve-out too. **If your settings hold roles, add `librarian` to your librarian's entry (and `curator` to any agent that files knowledge with you) when you upgrade**, or the librarian can no longer park its digest or write `knowledge/`. With no roles in settings, the tags work as before.
 - Review evidence moves out of the brain: the docs now point screenshots at the work store instead of `deliverables/`.
+- The hub loads `hub/.env` itself (`hub/lib/env.js`), whatever folder it starts in, with the rules `start.sh` had: the host's environment wins, then the file. `node server.js` is the start command everywhere; `start.sh` now just runs it. `BUREAU_ENV_FILE` points the hub at another file.
+- A backslash in a brain path is a separator on every OS, and paths in answers, events and commit messages always use `/`.
+- Bad brain and work paths answer 400 instead of 500.
+
+### Fixed
+- **We no longer ignore 70% of the desktop market.** A few of you pointed out, with varying amounts of sarcasm, that `sh start.sh` is not a plan for Windows. Fair. The hub now reads its own `.env`, so `node server.js` starts it on Windows, macOS and Linux, and CI runs the conformance suite on Windows on every push. The quickstart turned out to be the small problem: on Windows the hub started with no token, Windows line endings broke the linter, and backslashes broke the links. All fixed, listed below. I don't own a Windows machine, so if it breaks on yours, tell me what you ran.
+- Without `sh`, the hub never read `.env`, so a plain `node server.js` started with no token and an open API.
+- A brand-new hub stopped before its first change could never start again: it had written its daily backup but no `state.json`, and backups without a state file refuse the boot. A fresh hub now writes its empty `state.json` at once. Found by the new Windows CI job, but true on every OS.
+- brain-lint reads files with Windows line endings or a BOM like any other; it used to report them as missing frontmatter and refuse every write to them (422).
+- brain-lint keyed files with `\` on Windows, so every path wikilink read as dangling and valid writes were refused.
+- A BOM at the top of a `format: 0.3` journal day no longer hides its format and triggers a false cutover.
+- Names Windows cannot hold are refused in the brain, the work store and project ids, on every OS: `CON`, `NUL`, `COM1` and the rest, `: < > " | ? *`, a trailing dot or space, `~1`-style short names, and `.git` in any case. They used to be written, then refused by git, which left the intake sweep stuck.
+- The brain gets a `.gitattributes` (`* -text`, so git keeps the exact bytes the boss approved) and a `.gitignore` for OS clutter (`Thumbs.db`, `desktop.ini`, `.DS_Store`), committed once by the hub. `core.longpaths` is on.
+- A state save that Windows refuses for a moment (antivirus or an indexer holding the file) is retried instead of crashing the hub.
+- The startup lock is touched every 30 seconds, and a lock left untouched for 2 minutes is stale even if its pid now belongs to another process (Windows reuses pids). Closing the console window on Windows saves pending state.
+- The hub finds `git.exe` on the PATH, never in the brain folder, and says clearly at boot when git is missing.
+- The boot warnings lost their emoji and suggest a token command that works without openssl.
+- The repo has a `.gitattributes`, so a Windows clone keeps the scripts and fixtures with LF endings. `hub.sh` and `project-of.sh` read token files saved by Notepad.
 - **No approval with undecided items.** Approving a mission (to `done` or `approved`, or closing it with `approved_in_session`) is refused while any of its items is still `proposed`, on every door: dashboards, review links, MCP. Give every item a verdict first. Missions without items are unaffected.
 
 ## [0.2.0] - 2026-10-01

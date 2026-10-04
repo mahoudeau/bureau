@@ -17,7 +17,12 @@ check () { # check <label> <haystack> <needle>
   if printf '%s\n' "$2" | grep -q "$3"; then PASS=$((PASS+1)); echo "  ok: $1"
   else FAIL=$((FAIL+1)); echo "  FAIL: $1"; echo "    wanted: $3"; echo "    got: $(printf '%s\n' "$2" | head -c 300)"; fi
 }
-api () { curl -s -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
+# The body goes through stdin, not argv: on Windows, curl reads its arguments
+# in the ANSI code page, so "é" in -d arrives as a byte that is not UTF-8.
+api () {
+  if [ -n "${3-}" ]; then printf '%s' "$3" | curl -s -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" --data-binary @-
+  else curl -s -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON"; fi
+}
 
 echo "1. health and auth"
 check "health" "$(curl -s "$BUREAU_URL/health")" '"ok": true'
@@ -397,7 +402,7 @@ check "SSE delivers heartbeat" "$EVENTS" 'agent.heartbeat'
 
 echo "10. the MCP door: same bureau, no shell required"
 MURL=$(api GET /api/mcp | grep -o '"url": "[^"]*"' | cut -d'"' -f4)
-mcp () { curl -s -X POST "$MURL" -H "Content-Type: application/json" -d "$1"; }
+mcp () { printf '%s' "$1" | curl -s -X POST "$MURL" -H "Content-Type: application/json" --data-binary @-; } # stdin, as api
 check "connector url revealed to the token holder" "$MURL" '/mcp/'
 check "initialize negotiates" "$(mcp '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"conformance","version":"0"}}}')" '"protocolVersion"'
 check "initialized notification gets 202" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$MURL" -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"notifications/initialized"}')" '202'
@@ -516,7 +521,10 @@ check "cleared: an agent closes boss-gate work done again" "$(api PATCH "/api/ta
 check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
 
 echo "12. curated compartments: knowledge/, recipes/, PROFILE.md and attic/ take only the boss, the librarian or a curator"
-code () { curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" ${3:+-d "$3"}; }
+code () { # the status code only; the body through stdin, as api
+  if [ -n "${3-}" ]; then printf '%s' "$3" | curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON" --data-binary @-
+  else curl -s -o /dev/null -w '%{http_code}' -X "$1" "$BUREAU_URL$2" -H "$AUTH" -H "$JSON"; fi
+}
 # A well-formed note (frontmatter, a sourced observation), so a write the wall
 # lets through also passes write-time lint (section 12b covers lint itself)
 kw () { echo "{\"file\":\"$1\",\"content\":\"---\\ntitle: Kettle probe\\ncompartment: $(basename "$(dirname "$1")")\\npermalink: kettle-probe\\nversion: 1\\n---\\n\\n- [fact] the kettle hums (fake) (source: t-1)\\n\",\"author\":\"$2\",\"message\":\"acl probe\"}"; }

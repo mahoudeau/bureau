@@ -1,0 +1,16 @@
+# Text is LF in every checkout, Windows included (Git for Windows defaults to
+# autocrlf=true): the shell scripts break on \r, and the test fixtures are
+# compared byte for byte.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.ttf binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+*.mp4 binary

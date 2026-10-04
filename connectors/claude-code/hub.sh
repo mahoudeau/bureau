@@ -12,12 +12,13 @@
 set -e
 B="${BUREAU_URL:-}"
 U="${BUREAU_URL_FILE:-$HOME/.bureau-url}"
-[ -z "$B" ] && [ -f "$U" ] && B=$(head -n 1 "$U")
+# tr -d '\r': a file saved by Notepad ends its lines with \r\n
+[ -z "$B" ] && [ -f "$U" ] && B=$(head -n 1 "$U" | tr -d '\r')
 if [ -z "$B" ]; then
   echo "hub.sh: no hub address. Set BUREAU_URL, or put it in $U (e.g. http://localhost:8100)." >&2
   exit 1
 fi
-T=$(cat "${BUREAU_TOKEN_FILE:-$HOME/.bureau-token}")
+T=$(tr -d '\r' < "${BUREAU_TOKEN_FILE:-$HOME/.bureau-token}")
 M="$1"; P="$2"; D="${3:-}"
 if [ -n "$D" ]; then
   curl -s -m 15 -X "$M" "$B$P" -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d "$D"

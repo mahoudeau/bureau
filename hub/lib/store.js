@@ -76,6 +76,10 @@ function migrate(s) {
 function load() {
   if (state) return state;
   const s = migrate(readState());
+  // A fresh hub writes its empty state now: the daily snapshot comes next,
+  // and backups with no state.json beside them refuse the next boot, so a
+  // hub stopped before its first change could never start again.
+  if (!fs.existsSync(STATE_FILE)) writeNow(s);
   state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
@@ -96,22 +100,42 @@ function writeFileAtomic(file, text) {
   const tmp = file + '.tmp';
   const fd = fs.openSync(tmp, 'w');
   try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  fs.renameSync(tmp, file);
+  renameRetry(tmp, file);
 }
-function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); }
+// Windows: an antivirus scan or the search indexer holding the target fails
+// the rename for a moment (EPERM, EBUSY, EACCES). Three tries, a short wait
+// between, then the error is the caller's.
+const RENAME_BUSY = ['EPERM', 'EBUSY', 'EACCES'];
+function renameRetry(from, to) {
+  for (let i = 1; ; i++) {
+    try { return fs.renameSync(from, to); } catch (e) {
+      if (i >= 3 || !RENAME_BUSY.includes(e.code)) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50 * i);
+    }
+  }
+}
+function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); dirty = false; }
 
 let saveTimer = null;
+// A save that failed: the state is still unwritten, retried in a second and
+// by the exit flush. A failure is logged, never thrown from the timer (that
+// would take the hub down).
+let dirty = false;
 function save() {
   // Debounced: many mutations in one tick make one write.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    writeNow(state);
+    try { writeNow(state); } catch (e) {
+      dirty = true;
+      console.error(`[store] saving state failed, retrying: ${e.message}`);
+      setTimeout(() => { if (dirty) save(); }, 1000).unref();
+    }
   }, 100);
 }
 // Called on exit, so a SIGTERM inside the debounce window loses nothing.
 function flush() {
-  if (!saveTimer) return;
+  if (!saveTimer && !dirty) return;
   clearTimeout(saveTimer);
   saveTimer = null;
   if (state) writeNow(state);
@@ -185,7 +209,12 @@ function nowISO() { return new Date().toISOString(); }
 // ---- Startup lock ----
 // One process owns a data dir, ever. Two hubs sharing state.json would break
 // the single-writer guarantee silently; refusing to boot is the honest failure.
+// The owner touches the lock every 30s. A lock untouched for 2 minutes is
+// stale even when its pid answers: Windows reuses pids quickly, and a hub
+// killed without its exit handler (no SIGTERM there) leaves its lock behind.
 const LOCK_FILE = path.join(DATA_DIR, 'hub.lock');
+const LOCK_TOUCH_MS = 30_000;
+const LOCK_STALE_MS = 120_000;
 function acquireLock() {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   try {
@@ -193,14 +222,21 @@ function acquireLock() {
     if (pid && pid !== process.pid) {
       let alive = true;
       try { process.kill(pid, 0); } catch (e) { alive = e.code === 'EPERM'; } // EPERM: alive, another user's
-      if (alive) return { error: `data dir ${DATA_DIR} is owned by a live hub process (pid ${pid}, see ${LOCK_FILE}); refusing to boot` };
-      console.log(`[store] taking over stale lock from dead pid ${pid}`);
+      const age = Date.now() - fs.statSync(LOCK_FILE).mtimeMs;
+      if (alive && age < LOCK_STALE_MS) return { error: `data dir ${DATA_DIR} is owned by a live hub process (pid ${pid}, see ${LOCK_FILE}); refusing to boot` };
+      if (alive) console.log(`[store] taking over stale lock from pid ${pid}: untouched for ${Math.round(age / 1000)}s, so that pid is no hub`);
+      else console.log(`[store] taking over stale lock from dead pid ${pid}`);
     }
   } catch { /* no lock file yet */ }
   fs.writeFileSync(LOCK_FILE, String(process.pid));
-  const release = () => { try { if (parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid) fs.unlinkSync(LOCK_FILE); } catch { } };
+  const mine = () => parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid;
+  setInterval(() => { try { if (mine()) { const now = new Date(); fs.utimesSync(LOCK_FILE, now, now); } } catch { } }, LOCK_TOUCH_MS).unref();
+  const release = () => { try { if (mine()) fs.unlinkSync(LOCK_FILE); } catch { } };
   process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } release(); });
-  for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(0));
+  // SIGBREAK is Ctrl+Break, SIGHUP a closed console window: Windows only. On
+  // Unix SIGHUP keeps its default, so nohup still shields the hub.
+  const signals = process.platform === 'win32' ? ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] : ['SIGINT', 'SIGTERM'];
+  for (const sig of signals) { try { process.on(sig, () => process.exit(0)); } catch { } }
   return {};
 }
 
@@ -336,8 +372,10 @@ const TERMINAL_STATUSES = ['done', 'failed', 'discarded'];
 // Generic activity vocabulary (docs/protocol.md). The office animates these verbs.
 const ACTIVITIES = ['editing', 'reading', 'executing', 'thinking', 'waiting_input', 'waiting_permission', 'blocked', 'idle'];
 
-// Project names become brain paths (projects/<name>/...), so they stay path-safe.
-const PROJECT_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}$/;
+// Project names become brain paths (projects/<name>/...), so they stay path-safe,
+// on Windows too (knowledge.pathError: no CON, no trailing dot). Used as a regex.
+const ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,39}$/;
+const PROJECT_RE = { test: id => ID_RE.test(id) && !knowledge.pathError(String(id)) };
 
 // Free-text label to path-safe id: "Chasse aux Trésors" → "chasse-aux-tresors".
 function slugify(label) {
@@ -702,8 +740,9 @@ function payloadHash(ops) { return crypto.createHash('sha256').update(JSON.strin
 // content is a JSON string, and a binary would not survive the trip.
 function brainPathError(rel) {
   if (typeof rel !== 'string' || !rel.length) return 'path required';
-  const norm = path.normalize(rel).replace(/^([/\\])+/, '');
-  if (norm.split(/[/\\]/).includes('..') || norm.startsWith('.git')) return 'bad path';
+  const norm = knowledge.normRel(rel);
+  const bad = knowledge.pathError(norm);
+  if (bad) return bad;
   if (!knowledge.FILE_RE.test(norm)) return knowledge.FILE_TYPES_ERROR;
   if (knowledge.BINARY_RE.test(norm)) return 'text files only; attachments go through POST /api/knowledge';
   return null;

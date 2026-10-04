@@ -19,6 +19,9 @@ const KNOWN_TOP = ['journal', 'meetings', 'import', 'knowledge', 'recipes', 'ent
 const REQUIRED_FRONT = ['title', 'compartment', 'permalink', 'version'];
 const ATTIC_FRONT = ['retired', 'retired_by', 'retired_reason', 'superseded_by'];
 const SUMMARY_MAX = 200;
+// Brain paths are '/' paths on every OS: messages, keys and link targets
+// read the same on Windows, where a wikilink names projects/demo/STATE too.
+const toPosix = (p) => String(p).split(path.sep).join('/').replace(/\\/g, '/');
 const RULE_RE = /^\s*-\s*\**(RULE-[A-Z0-9]+-\d{2,})\b/;
 const RULE_SOURCE_RE = /\(source:\s*[^)\s][^)]*\)/;
 
@@ -53,7 +56,7 @@ function fileSource(front) {
 // `summary:` so a map of the brain can be built without opening every file.
 // The knowledge index (global or entity) is a map itself, so it is exempt.
 function needsSummary(f) {
-  const segs = f.rel.split(path.sep);
+  const segs = f.rel.split('/');
   if (f.compartment === 'knowledge' && segs[segs.length - 1] === 'INDEX.md' && segs[segs.length - 2] === 'knowledge') return false;
   if (AUTHORITATIVE.includes(f.compartment)) return true;
   if (segs[0] === 'entities' && segs.length === 3 && segs[2] === 'PROFILE.md') return true;
@@ -65,7 +68,7 @@ function needsSummary(f) {
 // step, rewritten in place, short enough to read first every time.
 const NOW_MAX = 30;
 function isProjectState(rel) {
-  const segs = rel.split(path.sep);
+  const segs = rel.split('/');
   return segs[0] === 'projects' && segs.length === 3 && segs[2] === 'STATE.md';
 }
 function nowSection(body) {
@@ -82,7 +85,7 @@ function nowSection(body) {
 
 // projects/<slug>/specs/<domain>.md: what the product does, as numbered rules.
 function isSpec(rel) {
-  const segs = rel.split(path.sep);
+  const segs = rel.split('/');
   return segs[0] === 'projects' && segs.length === 4 && segs[2] === 'specs';
 }
 
@@ -90,7 +93,7 @@ function isSpec(rel) {
 // is the knowledge compartment at entity scope, held to the same strictness as
 // the global one; everything else under entities/ (PROFILE.md) is lenient.
 function effective(rel) {
-  const segs = rel.split(path.sep);
+  const segs = rel.split('/');
   if (segs[0] === 'entities') {
     if (segs.length >= 4 && AUTHORITATIVE.includes(segs[2]))
       return { compartment: segs[2], scope: `entity:${segs[1]}` };
@@ -101,7 +104,10 @@ function effective(rel) {
 }
 
 // ---- minimal frontmatter parser: "key: value" lines, inline [a, b] lists ----
+// Lint judges content, not line endings: a BOM and \r\n (a file saved on
+// Windows) read as the same file saved with \n.
 function parseFrontmatter(text) {
+  text = String(text).replace(/^﻿/, '').replace(/\r\n/g, '\n');
   if (!text.startsWith('---\n')) return { front: null, body: text };
   const end = text.indexOf('\n---', 4);
   if (end === -1) return { front: null, body: text };
@@ -133,11 +139,12 @@ function walk(dir) {
 // those files written (new paths included), without touching the disk.
 function lint(brainDir, overrides = {}) {
   const errors = [], warnings = [];
-  const rels = new Set(walk(brainDir).map(abs => path.relative(brainDir, abs)));
-  for (const rel of Object.keys(overrides)) if (rel.endsWith('.md')) rels.add(rel);
+  const rels = new Set(walk(brainDir).map(abs => toPosix(path.relative(brainDir, abs))));
+  const over = new Map(Object.entries(overrides).map(([rel, content]) => [toPosix(rel), content]));
+  for (const rel of over.keys()) if (rel.endsWith('.md')) rels.add(rel);
   const files = [...rels].sort().map(rel => {
     const abs = path.join(brainDir, rel);
-    const raw = Object.prototype.hasOwnProperty.call(overrides, rel) ? overrides[rel] : fs.readFileSync(abs, 'utf8');
+    const raw = over.has(rel) ? over.get(rel) : fs.readFileSync(abs, 'utf8');
     const { front, body } = parseFrontmatter(raw);
     const eff = effective(rel);
     return { abs, rel, raw, front, body, compartment: eff.compartment, scope: eff.scope };
@@ -251,13 +258,13 @@ function lint(brainDir, overrides = {}) {
     // Journal records (v0.3): the journal stays lenient, but a format 0.3 day
     // the hub can no longer read back is drift worth seeing
     if (f.compartment === 'journal' && f.front && String(f.front.format) === '0.3') {
-      for (const e of claims.parseFile(f.raw, { path: f.rel.split(path.sep).join('/') }).errors)
+      for (const e of claims.parseFile(f.raw, { path: f.rel }).errors)
         warnings.push(`${f.rel}: line ${e.line}: ${e.code} ${e.message}`);
     }
 
     // Unknown top-level folder: the layout is a contract too
-    const top = f.rel.split(path.sep)[0];
-    if (f.rel.includes(path.sep) && !KNOWN_TOP.includes(top))
+    const top = f.rel.split('/')[0];
+    if (f.rel.includes('/') && !KNOWN_TOP.includes(top))
       warnings.push(`${f.rel}: unknown compartment folder "${top}"`);
   }
   return { errors, warnings, count: files.length };
@@ -266,7 +273,7 @@ function lint(brainDir, overrides = {}) {
 // One file as it would be after a write: only that file's errors and warnings.
 // Links resolve against the whole brain, so a dangling link is still caught.
 function lintFile(brainDir, rel, content) {
-  const norm = path.normalize(rel);
+  const norm = path.posix.normalize(toPosix(rel));
   const { errors, warnings } = lint(brainDir, { [norm]: content });
   const mine = (m) => m.startsWith(`${norm}: `);
   return { errors: errors.filter(mine), warnings: warnings.filter(mine) };

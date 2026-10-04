@@ -34,7 +34,7 @@ async function main() {
   console.log('2. end to end: tamper with state.json between filing and apply');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-apply-'));
   const env = { ...process.env, PORT: String(HUB_PORT), BUREAU_TOKEN: TOKEN, BUREAU_DATA_DIR: path.join(dir, 'data'),
-    BUREAU_BRAIN_DIR: path.join(dir, 'brain'), BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '' };
+    BUREAU_BRAIN_DIR: path.join(dir, 'brain'), BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
   const api = async (method, p, body) => {
     const r = await fetch(BASE + p, { method, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     return { code: r.status, body: await r.json() };
@@ -45,9 +45,17 @@ async function main() {
     for (let i = 0; i < 40; i++) { try { await fetch(`${BASE}/health`); return; } catch { await sleep(250); } }
     throw new Error('hub never answered /health');
   };
-  // SIGTERM flushes the debounced save, so state.json is whole when it exits.
+  // On Unix SIGTERM flushes the debounced save; Windows has no SIGTERM (kill
+  // ends the process outright), so the test waits for state.json itself first.
   const stop = () => new Promise(r => { hub.once('exit', r); hub.kill('SIGTERM'); });
   const stateFile = path.join(dir, 'data', 'state.json');
+  const flushed = async pred => {
+    for (let i = 0; i < 40; i++) {
+      try { if (pred(JSON.parse(fs.readFileSync(stateFile, 'utf8')))) return; } catch { }
+      await sleep(100);
+    }
+    throw new Error('state.json never caught up');
+  };
   const editPayload = content => {
     const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
     s.tasks.find(t => t.id === id).items[0].payload.ops[0].content = content;
@@ -65,6 +73,7 @@ async function main() {
     const ok = await api('PATCH', `/api/tasks/${id}`, { agent: 'human', status: 'done', verdicts: [{ id: 'i1', verdict: 'approved' }] });
     check('approved, back with its holder', ok.body.task && ok.body.task.status === 'approved', ok.body);
 
+    await flushed(s => s.tasks.some(t => t.id === id && t.status === 'approved'));
     await stop();
     editPayload(ops[0].content.replace('pinned (fake)', 'something the boss never saw'));
     await start();
@@ -76,6 +85,7 @@ async function main() {
     const t = (await api('GET', `/api/tasks/${id}`)).body.task;
     check('the item is not marked applied', !t.items[0].applied_at, t.items[0]);
 
+    await sleep(300); // past the 100ms debounce of anything the refusal logged
     await stop();
     editPayload(ops[0].content);
     await start();

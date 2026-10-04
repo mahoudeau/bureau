@@ -76,7 +76,8 @@ function readFrontmatter(lines) {
 // v0.2, read leniently (a hard-wrapped item is joined to its first line) and
 // never reports any.
 function parseFile(text, opts = {}) {
-  const lines = String(text).split('\n').map((l) => l.replace(/\r$/, ''));
+  // a UTF-8 BOM (Notepad) would hide the opening "---"; \r endings are read as \n
+  const lines = String(text).replace(/^﻿/, '').split('\n').map((l) => l.replace(/\r$/, ''));
   const { front, keyLine, bodyStart } = readFrontmatter(lines);
   const format = front.format !== undefined ? front.format : null;
   const strict = format === '0.3';

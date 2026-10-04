@@ -12,6 +12,8 @@ TOKEN=storagetest
 if [ -n "${STORAGE_TEST_DIR:-}" ]; then DIR="$STORAGE_TEST_DIR"; rm -rf "$DIR"; mkdir -p "$DIR"; KEEP=1
 else DIR="$(mktemp -d)"; KEEP=0; fi
 PASS=0; FAIL=0
+# The hubs below skip a local hub/.env (its token, its webhook): a missing file instead
+export BUREAU_ENV_FILE="$DIR/no.env"
 
 check() { # label haystack needle
   if printf '%s' "$2" | grep -q -- "$3"; then PASS=$((PASS+1)); echo "  ok: $1";
