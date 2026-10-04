@@ -106,6 +106,50 @@ async function main() {
   check('a relative dir in .env is read from its folder', r.env.BUREAU_DATA_DIR === path.join(r.dir, 'data'), r.env.BUREAU_DATA_DIR);
   check('an absolute one is kept', r.env.BUREAU_BRAIN_DIR === path.join(TMP, 'abs'), r.env.BUREAU_BRAIN_DIR);
 
+  console.log('1b. values read the way sh read them (start.sh sourced the file)');
+  // Shaped like a real hub/.env: a JSON BUREAU_POKES over several lines,
+  // escaped quotes, built from the POKE_* lines above it. Fake values.
+  const SH_ENV = [
+    'POKE_API=https://api.example.com/v1/routines',
+    'POKE_TRIG_MONETA=trig_123',
+    'POKE_TOKEN_MONETA=tok-abc',
+    "POKE_BETA='beta-2026'",
+    'SFX_MONETA="poke from the hub: $POKE_TRIG_MONETA"',
+    'BUREAU_POKES="[',
+    ' {\\"url\\":\\"$POKE_API/$POKE_TRIG_MONETA/fire\\",\\"suffix\\":\\"$SFX_MONETA\\",\\"events\\":[\\"task.review\\"],\\"headers\\":{\\"Authorization\\":\\"Bearer $POKE_TOKEN_MONETA\\",\\"anthropic-beta\\":\\"${POKE_BETA}\\"}},',
+    ' {\\"url\\":\\"$POKE_API/x/fire\\",\\"wrap\\":\\"text\\"}',
+    ']"',
+    "LITERAL='a $POKE_API \\\\ \"q\" stays'",
+    'UNQUOTED=$POKE_API/plain # a note',
+    'ESCAPED="cost: \\$5 and \\\\ and \\` and a \\n"',
+    'MIXED=pre"$POKE_TRIG_MONETA"\'$lit\'post',
+    'UNSET="[$NOT_SET_ANYWHERE]"',
+    'FROM_HOST="$HOST_ONLY_VAR!"',
+    'LONELY="a $ sign"',
+  ].join('\r\n') + '\r\n';
+  const sp = env.parse(SH_ENV, { HOST_ONLY_VAR: 'from-host' });
+  let pokes = null; try { pokes = JSON.parse(sp.BUREAU_POKES); } catch { }
+  check('a multi-line double-quoted value is read whole', Array.isArray(pokes) && pokes.length === 2, sp.BUREAU_POKES);
+  check('with $NAME and ${NAME} expanded from earlier lines', pokes && pokes[0].url === 'https://api.example.com/v1/routines/trig_123/fire' && pokes[0].headers.Authorization === 'Bearer tok-abc' && pokes[0].headers['anthropic-beta'] === 'beta-2026', pokes && pokes[0]);
+  check('an expanded value can itself come from an expansion', pokes && pokes[0].suffix === 'poke from the hub: trig_123', pokes && pokes[0].suffix);
+  check('single quotes stay literal', sp.LITERAL === 'a $POKE_API \\\\ "q" stays', sp.LITERAL);
+  check('an unquoted value expands and stops before the comment', sp.UNQUOTED === 'https://api.example.com/v1/routines/plain', sp.UNQUOTED);
+  check('\\$ \\\\ \\` are escapes in double quotes, \\n is not', sp.ESCAPED === 'cost: $5 and \\ and ` and a \\n', sp.ESCAPED);
+  check('quoted and unquoted pieces join into one word', sp.MIXED === 'pretrig_123$litpost', sp.MIXED);
+  check('an unset name expands to nothing', sp.UNSET === '[]', sp.UNSET);
+  check('a name the file lacks comes from the environment', sp.FROM_HOST === 'from-host!', sp.FROM_HOST);
+  check('a lone $ stays', sp.LONELY === 'a $ sign', sp.LONELY);
+  // The proof: sh itself sources the same file (not on Windows, no sh there).
+  if (process.platform !== 'win32') {
+    const shFile = path.join(TMP, 'sh-shaped.env');
+    fs.writeFileSync(shFile, SH_ENV.replace(/\r\n/g, '\n'));
+    const keys = Object.keys(sp);
+    const dump = `node -e 'const o={};for(const k of process.argv.slice(1))o[k]=process.env[k]??"";process.stdout.write(JSON.stringify(o))' ${keys.join(' ')}`;
+    const viaSh = JSON.parse(execFileSync('sh', ['-c', `set -a; . "$1"; set +a; ${dump}`, 'sh', shFile], { env: { ...CLEAN, HOST_ONLY_VAR: 'from-host', PATH: process.env.PATH } }).toString());
+    const differ = keys.filter(k => viaSh[k] !== sp[k]);
+    check('sh sourcing the same file gives the same values', differ.length === 0, differ.map(k => ({ k, sh: viaSh[k], ours: sp[k] })));
+  }
+
   console.log('2. path helpers, unit level');
   check('toPosix turns a Windows relative path into a brain path', knowledge.toPosix(path.win32.relative('C:\\hub\\brain', 'C:\\hub\\brain\\knowledge\\x.md')) === 'knowledge/x.md');
   check('normRel reads a backslash as a separator on every OS', knowledge.normRel('\\journal\\..\\knowledge\\x.md') === 'knowledge/x.md', knowledge.normRel('\\journal\\..\\knowledge\\x.md'));
