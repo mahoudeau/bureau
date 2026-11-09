@@ -7,7 +7,7 @@ Everything in `connectors/` is licensed Apache-2.0 (`../LICENSE-APACHE`): this c
 | Connector | What it does |
 |---|---|
 | [`cowork/`](cowork/) | scheduled cloud sessions work the queue in shifts: the autonomy engine |
-| [`claude-code/`](claude-code/) | local coding sessions work as the boss's envoy: project resolution today, hooks and skills later |
+| [`claude-code/`](claude-code/) | local coding sessions work as the boss's envoy: `hub.sh`, project resolution and a context hook today; a plugin, more hooks and skills planned |
 | [`chat/`](chat/) | conversations in any MCP chat app: a capability URL plus a preferences paragraph, no code |
 
 ## Tokens

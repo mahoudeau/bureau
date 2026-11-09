@@ -8,7 +8,7 @@ You need Node and git. Nothing else: there is no `npm install`.
 
 ```
 cd hub
-cp .env.example .env    # Windows: copy. Then set BUREAU_TOKEN to a long random string
+cp .env.example .env    # Windows: copy. Set BUREAU_TOKEN and uncomment BUREAU_BOSS_TOKEN, two different long random strings
 node server.js          # reads .env, listens on PORT or 8100
 ```
 
@@ -22,16 +22,16 @@ Three scripts in `test/`, all plain shell and curl, plus node tests (`node test/
 
 ```
 # terminal 1: a throwaway hub
-BUREAU_TOKEN=devtoken PORT=8150 BUREAU_RESERVATION_TTL_MIN=0.02 \
+BUREAU_ENV_FILE=/dev/null BUREAU_TOKEN=devtoken PORT=8150 BUREAU_RESERVATION_TTL_MIN=0.02 \
 BUREAU_DATA_DIR=/tmp/bureau-test/data BUREAU_BRAIN_DIR=/tmp/bureau-test/brain \
-node hub/server.js
+BUREAU_WORK_DIR=/tmp/bureau-test/work node hub/server.js
 
 # terminal 2
 BUREAU_URL=http://localhost:8150 BUREAU_TOKEN=devtoken \
 CONF_BRAIN_DIR=/tmp/bureau-test/brain ./test/dummy-agent.sh
 ```
 
-Delete `/tmp/bureau-test` between runs. It ends with `CONFORMANT` or `NOT CONFORMANT` and exits with the number of failed checks.
+`BUREAU_ENV_FILE=/dev/null` keeps this legacy-mode test hub off your strict `.env`. Delete `/tmp/bureau-test` between runs. It ends with `CONFORMANT` or `NOT CONFORMANT` and exits with the number of failed checks.
 
 **Pokes** (`test/pokes.sh`) starts its own hub and webhook sink on ports 8196 to 8199 and cleans up after itself:
 

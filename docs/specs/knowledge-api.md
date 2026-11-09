@@ -12,7 +12,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 ## Actors
 
 - **Agents**: anything holding the hub token, over `GET/POST /api/knowledge` and `GET/POST /api/work`.
-- **MCP sessions**: chat apps on the MCP wire, writing as consul.
+- **MCP sessions**: chat apps on the MCP wire, writing as the agent on their token.
 - **The boss**: `author: "human"` on the API, and his hands: files dropped over SFTP or edited on disk.
 - **The librarian and curators**: agents holding the `librarian` or `curator` role (`missions-and-gates.md`, RULE-MISSIONS-16), the only agents that write the curated compartments.
 - **The hub**: validates paths, checks who may write, commits, broadcasts, and deletes a closed mission's evidence.
@@ -24,7 +24,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 - RULE-KNOWLEDGE-01: The brain is a git repository at `BUREAU_BRAIN_DIR` (default `hub/brain`). The hub creates and initializes it on boot when missing. (source: hub/lib/knowledge.js:7, hub/lib/knowledge.js:18-25, hub/server.js:632)
 - RULE-KNOWLEDGE-02: A path is relative to the brain. Leading slashes are stripped; a `..` segment or anything under `.git` is refused. (source: hub/lib/knowledge.js:42-45, hub/lib/knowledge.js:124-128)
 - RULE-KNOWLEDGE-03: Only `.md .txt .json .csv .png .jpg .jpeg .gif .svg .pdf` files are accepted. (source: hub/lib/knowledge.js:46)
-- RULE-KNOWLEDGE-04: The hub does not validate content. Any text is accepted; the brain format is checked by `brain-lint`, a separate tool. (source: hub/lib/knowledge.js:50-73, docs/brain-format.md "The linter")
+- RULE-KNOWLEDGE-04: A markdown write to a curated compartment or a project file is linted before it touches disk, and refused with 422 if it would fail `brain-lint`. The boss may override with `force: true`. Any other path takes any text. (source: hub/lib/knowledge.js writeLintErrors(), checkWrite(), docs/protocol.md "Curated writes pass brain-lint first")
 
 ### Writing
 
@@ -33,7 +33,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 - RULE-KNOWLEDGE-07: With `encoding: "base64"` the content is decoded and written as bytes, replace only, 5MB at most after decoding. (source: hub/lib/knowledge.js:41, hub/lib/knowledge.js:54-58)
 - RULE-KNOWLEDGE-08: Every write is its own git commit, authored by the `author` given (default `agent`), with the `message` given (default `update <file>`). Writing identical content is not an error. (source: hub/lib/knowledge.js:64-71)
 - RULE-KNOWLEDGE-09: Every write is broadcast as `knowledge.written` with the file and the author. (source: hub/server.js:458-459)
-- RULE-KNOWLEDGE-10: On MCP, `write_knowledge` always commits as author `consul`. (source: hub/server.js:550-553)
+- RULE-KNOWLEDGE-10: On MCP, `write_knowledge` commits as the agent named by the credential. (source: hub/server.js mcpToolCall())
 
 ### Reading
 
@@ -85,7 +85,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 
 - A path with `..` or a `.exe` file: refused with an error, nothing written (RULE-KNOWLEDGE-02, RULE-KNOWLEDGE-03).
 - Appending in base64: refused (RULE-KNOWLEDGE-07).
-- A malformed note (no frontmatter, unsourced claims): accepted and committed. Only lint catches it (RULE-KNOWLEDGE-04).
+- A malformed note (no frontmatter, unsourced claims) sent to a curated compartment: 422, nothing written. Dropped by hand, it is committed by the sweep and only `brain-lint` catches it (RULE-KNOWLEDGE-04, RULE-KNOWLEDGE-15).
 - Reading a missing file: 404 on HTTP, an error result on MCP (RULE-KNOWLEDGE-11, hub/server.js:557-558).
 - An existing repo with no commits and files already staged: the root commit is empty and the staged files wait for the next commit (RULE-KNOWLEDGE-18).
 - `journal/../knowledge/x.md` or `Knowledge/x.md` from a plain agent: 403, judged as `knowledge/` (RULE-KNOWLEDGE-19, RULE-KNOWLEDGE-21).
