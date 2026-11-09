@@ -298,6 +298,35 @@ function fileInfo(rel, scope) {
   const f = files.get(rel);
   return f && visible(f, scope) ? f : null;
 }
+// One claim and its evidence, each source resolved: "where does this come
+// from" in one call. Its own sources, or the file's when it has none.
+function claimDetail(id) {
+  ensure();
+  let c = null;
+  for (const x of chunks.values()) if (x.claim === id) { c = x; break; }
+  if (!c) return null;
+  const front = claims.parseFile(knowledge.readKnowledge(c.file) || '', { path: c.file }).frontmatter;
+  const own = (c.sources || []).filter((s) => s !== id);
+  const inherited = own.length ? [] : String(front.source || '').replace(/^\[(?!\[)|(?<!\])\]$/g, '').split(',').map((s) => s.trim().replace(/^\[\[|\]\]$/g, '')).filter(Boolean);
+  const refs = own.length ? own : inherited;
+  const tasks = store.load().tasks;
+  const records = refs.some((r) => /^j-/.test(r)) ? require('./journal').list().records : [];
+  const resolve = (ref) => {
+    if (/^t-\d+$/.test(ref)) {
+      const t = tasks.find((x) => x.id === ref);
+      return t ? { ref, type: 'mission', found: true, title: t.title, status: t.status, project: t.project } : { ref, type: 'mission', found: false };
+    }
+    if (/^j-/.test(ref)) {
+      const r = records.find((x) => x.id === ref);
+      return r ? { ref, type: 'record', found: true, text: r.text, evidence: r.fields.evidence, by: r.fields.by, at: r.fields.at } : { ref, type: 'record', found: false };
+    }
+    const target = ref.split('#')[0];
+    return { ref, type: 'wikilink', found: knowledge.readKnowledge(/\.md$/.test(target) ? target : `${target}.md`) !== null || [...files.values()].some((f) => f.title === target) };
+  };
+  return { id, file: c.file, section: c.section, line: c.line, text: c.text, compartment: c.compartment, verified: c.verified, belief: c.belief, volatility: c.volatility,
+    evidence: own.length ? 'own' : inherited.length ? 'file' : 'none', sources: refs.map(resolve) };
+}
+
 function findClaim(id, scope) {
   ensure();
   for (const c of chunks.values()) if (c.claim === id) return visible(c, scope) && !superseded.has(id) ? c : null;
@@ -396,4 +425,4 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, standingOf, stamp };
+module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp };

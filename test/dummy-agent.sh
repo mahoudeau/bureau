@@ -1028,7 +1028,7 @@ B='{"file":"knowledge/health-bad.md","author":"human","content":"---\ntitle: Hea
 api POST /api/knowledge "$B" > /dev/null
 check "fixed, the write drops the cache: ok again" "$(hv "$(api GET /api/memory/health)" status)" '^ok$'
 # Freshness and contradictions: long-form claims with their own fields
-B='{"file":"knowledge/health-fresh.md","author":"human","content":"---\ntitle: Health fresh\ncompartment: knowledge\npermalink: health-fresh\nversion: 1\nsource: t-1\nformat: 0.3\n---\n\n- [fact] the kettle costs 30 coins (fake) ^c-hk0001\n  - volatility: volatile\n  - verified: 2020-01-01\n- [fact] the kettle costs 31 coins (fake) ^c-hk0002\n  - volatility: volatile\n  - verified: 2099-01-01\n  - contradicts: c-hk0001\n- [fact] water boils at 100 degrees here (fake) ^c-hk0003\n  - volatility: durable\n  - verified: 2000-01-01\n- [fact] the kettle is blue (fake) ^c-hk0004\n  - volatility: volatile\n"}'
+B='{"file":"knowledge/health-fresh.md","author":"human","force":true,"content":"---\ntitle: Health fresh\ncompartment: knowledge\npermalink: health-fresh\nversion: 1\nsource: t-1\nformat: 0.3\n---\n\n- [fact] the kettle costs 30 coins (fake) ^c-hk0001\n  - volatility: volatile\n  - verified: 2020-01-01\n- [fact] the kettle costs 31 coins (fake) ^c-hk0002\n  - volatility: volatile\n  - verified: 2099-01-01\n  - contradicts: c-hk0001\n- [fact] water boils at 100 degrees here (fake) ^c-hk0003\n  - volatility: durable\n  - verified: 2000-01-01\n- [fact] the kettle is blue (fake) ^c-hk0004\n  - volatility: volatile\n"}'
 check "a 0.3 note with its own freshness fields is written" "$(api POST /api/knowledge "$B")" '"bytes"'
 MH=$(api GET /api/memory/health)
 STALE=$(hv "$MH" stale.claims)

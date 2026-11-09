@@ -168,9 +168,27 @@ function lint(brainDir, overrides = {}) {
     if (f.front && f.front.supersedes) bySupersedes.set(String(f.front.supersedes).replace(/\[\[|\]\]/g, ''), f.rel);
   }
 
+  // Claim ids are unique across the brain, so every file holding a repeat hears about it
+  const idFiles = new Map();
+  const noteClaims = (f) => (AUTHORITATIVE.includes(f.compartment) && f.front && String(f.front.format) === '0.3' ? claims.parseFile(f.raw, { path: f.rel }) : null);
+  for (const f of files) {
+    const p = noteClaims(f);
+    if (p) for (const c of p.claims) if (c.id) idFiles.set(c.id, (idFiles.get(c.id) || new Set()).add(f.rel));
+  }
+
   for (const f of files) {
     const authoritative = AUTHORITATIVE.includes(f.compartment);
     const inAttic = f.compartment === 'attic';
+
+    // Format 0.3 notes are read strictly
+    const parsedNote = noteClaims(f);
+    if (parsedNote) {
+      for (const e of parsedNote.errors) errors.push(`${f.rel}: line ${e.line}: ${e.code} ${e.message}`);
+      for (const c of parsedNote.claims) {
+        if (!c.id) warnings.push(`${f.rel}: line ${c.line}: claim has no id`);
+        else if (idFiles.get(c.id).size > 1) errors.push(`${f.rel}: line ${c.line}: id ${c.id} is also used in ${[...idFiles.get(c.id)].filter((r) => r !== f.rel).join(', ')}`);
+      }
+    }
 
     // Frontmatter schema (strict in authoritative compartments and the attic)
     if (authoritative || inAttic) {
