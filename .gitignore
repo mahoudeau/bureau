@@ -9,3 +9,6 @@ bureau-internal/
 # the site moved to the private repo mahoudeau/getbureau-site (2026-10-01);
 # a leftover local copy must never come back in here
 site/
+# local Claude Code state: agent worktrees hold full copies of the repo, kept
+# out of git status and editor searches
+.claude/
