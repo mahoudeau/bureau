@@ -7,15 +7,18 @@
 // The scope is decided here, not by the caller's manners: a project sees global
 // knowledge, its entity's and its own, and nothing from another project.
 'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const claims = require('./claims');
 const knowledge = require('./knowledge');
 const store = require('./store');
 const GLOSSARY = require('./glossary');
 
-// LAB FLAGS (removed in the frozen commit): BUREAU_LAB=a,b,...
-const LAB = new Set((process.env.BUREAU_LAB || '').split(',').filter(Boolean));
 const K1 = 1.2, B = 0.75;
+// The brain size the context call's floors were set on. Below it, a brain is
+// young: scores run lower and most words are simply not in it yet.
+const CALIBRATED_ON = 620;
 const WEIGHT = { curated: 1.5, project: 1.3, state: 1.0, journal: 0.8 };
 const DEFAULT_K = 5, MAX_K = 50, PER_FILE = 3;
 const PROSE_MIN = 40; // shorter leftovers beside a section's claims are noise
@@ -63,7 +66,6 @@ function tokens(text) {
 function classify(rel) {
   if (!/\.md$/i.test(rel) || rel === 'knowledge/INDEX.md') return null;
   let m;
-  if (LAB.has('f') && (m = rel.match(/^archive\/projects\/([^/]+)\/.+\.md$/))) return { scope: 'project', project: m[1], kind: 'archive', compartment: 'archive', weight: WEIGHT.state, archived: true };
   if ((m = rel.match(/^(knowledge|recipes)\//))) return { kind: 'curated', compartment: m[1], scope: 'global', weight: WEIGHT.curated };
   if ((m = rel.match(/^entities\/([^/]+)\/(?:(knowledge|recipes)\/|PROFILE\.md$)/i))) return { kind: 'curated', compartment: m[2] || 'profile', scope: 'entity', entity: m[1], weight: WEIGHT.curated };
   if ((m = rel.match(/^projects\/([^/]+)\/(.+)$/))) {
@@ -139,7 +141,7 @@ function chunkFile(rel, content, info) {
   const parsed = claims.parseFile(content, { path: rel });
   const front = parsed.frontmatter;
   const title = front.title || '';
-  const named = `${path.posix.basename(rel, '.md').replace(/[-_]/g, ' ')} ${title}${LAB.has('h') && front.summary ? ` ${front.summary}` : ''}`;
+  const named = `${path.posix.basename(rel, '.md').replace(/[-_]/g, ' ')} ${title}`;
   const fileMeta = { verified: front.verified, belief: front.belief, volatility: front.volatility };
   const claimsAt = new Map(parsed.claims.map((c) => [c.line, c]));
   const out = [];
@@ -193,23 +195,22 @@ let postings = new Map();    // term -> Map(id -> term frequency)
 let files = new Map();       // file -> one line about it, for the map
 let totalLen = 0, nextId = 1, built = false, builtAt = null, commit = undefined;
 let superseded = new Set();
-let gramIndex = null;        // LAB g2
-let scopeCache = new Map();  // LAB a
-let shadow = new Map();      // LAB g1: chunk hash -> French index text
-let archiveChunks = [];      // LAB f
 
-function chunkHash(text) { return require('crypto').createHash('sha256').update(text).digest('hex').slice(0, 16); }
+// French search terms per chunk, keyed by a hash of its text: a derived file in
+// the brain, tracked by git and written by hub/tools/shadow-fr.js. Added to what
+// is searched and never to what is served. An edited chunk has a new hash, so
+// its terms lapse. No file, no change.
+const SHADOW_FILE = '.index/shadow-fr.json';
+let shadow = new Map();
+const chunkHash = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
 function loadShadow() {
   shadow = new Map();
-  if (!LAB.has('g1')) return;
-  try { for (const [k, v] of Object.entries(JSON.parse(require('fs').readFileSync(path.join(knowledge.BRAIN_DIR, '.index', 'shadow-fr.json'), 'utf8')))) shadow.set(k, v); }
-  catch (e) { console.error('[index] no shadow:', e.message); }
+  try { shadow = new Map(Object.entries(JSON.parse(fs.readFileSync(path.join(knowledge.BRAIN_DIR, SHADOW_FILE), 'utf8')))); }
+  catch (e) { if (e.code !== 'ENOENT') console.error('[index] French shadow unreadable:', e.message); }
 }
 
 function removeFile(rel) {
   files.delete(rel);
-  gramIndex = null; scopeCache = new Map();
-  archiveChunks = archiveChunks.filter((c) => c.file !== rel);
   for (const id of byFile.get(rel) || []) {
     const c = chunks.get(id);
     for (const t of c.tf.keys()) {
@@ -237,15 +238,14 @@ function addFile(rel) {
       compartment: info.compartment, scope: info.scope, project: info.project, entity: info.entity, verified: front.verified || null, belief: front.belief || null });
   }
   for (const c of made) {
-    const sh = LAB.has('g1') ? shadow.get(chunkHash(c.text)) : null;
-    const toks = tokens(sh ? `${c.index} ${sh}` : c.index);
+    const fr = shadow.get(chunkHash(c.text));
+    const toks = tokens(fr ? `${c.index} ${fr}` : c.index);
     delete c.index;
     if (!toks.length) continue;
     const tf = new Map();
     for (const t of toks) tf.set(t, (tf.get(t) || 0) + 1);
     c.tf = tf;
     c.len = toks.length;
-    if (info.kind === 'archive') { archiveChunks.push(c); continue; }
     const id = nextId++;
     chunks.set(id, c);
     ids.push(id);
@@ -269,7 +269,7 @@ function refreshSuperseded() {
 
 function build() {
   const t0 = Date.now();
-  chunks = new Map(); byFile = new Map(); postings = new Map(); files = new Map(); totalLen = 0; nextId = 1; gramIndex = null; scopeCache = new Map(); archiveChunks = [];
+  chunks = new Map(); byFile = new Map(); postings = new Map(); files = new Map(); totalLen = 0; nextId = 1;
   loadShadow();
   for (const f of knowledge.listKnowledge('')) addFile(f.split(path.sep).join('/'));
   refreshSuperseded();
@@ -286,56 +286,13 @@ function invalidate() { built = false; }
 function touch(field) {
   if (!built) return;
   const written = String(field || '').split(/\s*(?:->|,)\s*/).map((x) => x.trim()).filter(Boolean);
-  if (!written.length) return invalidate();
+  if (!written.length || written.includes(SHADOW_FILE)) return invalidate();
   try {
     for (const f of written) { removeFile(f); addFile(f); }
     refreshSuperseded();
     commit = undefined;
-    gramIndex = null;
   } catch { invalidate(); }
 }
-
-// LAB a: statistics of what this scope can see.
-function scopeStats(scope) {
-  const key = scope.chain.join('|');
-  let st = scopeCache.get(key);
-  if (!st) {
-    st = { n: 0, len: 0 };
-    for (const c of chunks.values()) if (visible(c, scope)) { st.n++; st.len += c.len; }
-    scopeCache.set(key, st);
-  }
-  return st;
-}
-function scopedDf(t, scope) {
-  const p = postings.get(t);
-  if (!p) return 0;
-  let n = 0;
-  for (const id of p.keys()) if (visible(chunks.get(id), scope)) n++;
-  return n;
-}
-
-// LAB g2: a query word with no postings, matched to vocabulary by 4-gram Dice.
-function grams(t) { const out = new Set(); for (let i = 0; i + 4 <= t.length; i++) out.add(t.slice(i, i + 4)); return out; }
-function cognates(t) {
-  if (!LAB.has('g2') || t.length < 5 || /\d/.test(t) || postings.has(t)) return [];
-  if (!gramIndex) {
-    gramIndex = new Map();
-    for (const term of postings.keys()) {
-      if (term.length < 5 || !/^\p{L}+$/u.test(term)) continue;
-      for (const g of grams(term)) { if (!gramIndex.has(g)) gramIndex.set(g, []); gramIndex.get(g).push(term); }
-    }
-  }
-  const gs = grams(t), count = new Map();
-  for (const g of gs) for (const term of gramIndex.get(g) || []) count.set(term, (count.get(term) || 0) + 1);
-  const scored = [];
-  for (const [term, shared] of count) {
-    if (shared < 2) continue;
-    const dice = 2 * shared / (gs.size + grams(term).size);
-    if (dice >= COGNATE_DICE) scored.push({ term, dice });
-  }
-  return scored.sort((a, b) => b.dice - a.dice || (a.term < b.term ? -1 : 1)).slice(0, COGNATE_MAX).map((x) => x.term);
-}
-const COGNATE_DICE = 0.6, COGNATE_MAX = 3;
 
 // What the index was built from, for the answer's footer. One git call per
 // brain change, not per request.
@@ -405,7 +362,7 @@ for (const [fr, en] of GLOSSARY) {
   else WORDS.set(stem(plainText(fr)), en);
 }
 function queryGroups(q) {
-  const groups = [...new Set(tokens(q))].map((t) => (WORDS.has(t) ? [...new Set([t, ...tokens(WORDS.get(t))])] : [t, ...cognates(t)]));
+  const groups = [...new Set(tokens(q))].map((t) => (WORDS.has(t) ? [...new Set([t, ...tokens(WORDS.get(t))])] : [t]));
   const plain = ` ${plainText(q)} `;
   for (const [fr, en] of PHRASES) if (plain.includes(fr)) groups.push([...new Set(tokens(en))]);
   return groups.filter((g) => g.length);
@@ -418,15 +375,13 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
   const groups = queryGroups(q);
   const terms = [...new Set(groups.flat())];
   if (!terms.length) return { scope, results: [], skipped: 'no terms', size: chunks.size };
-  const st = LAB.has('a') || LAB.has('a2') ? scopeStats(scope) : null;
-  const N = (st ? st.n : chunks.size) || 1, avg = (st ? st.len : totalLen) / N || 1;
+  const N = chunks.size || 1, avg = totalLen / N || 1;
   const scores = new Map(), matched = new Map(), weights = {};
   for (const t of terms) {
     const p = postings.get(t);
-    const df = st ? scopedDf(t, scope) : (p ? p.size : 0);
     // A word the brain has never seen weighs the most: it is why a question
     // about something absent covers so little of itself.
-    weights[t] = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+    weights[t] = Math.log(1 + (N - (p ? p.size : 0) + 0.5) / ((p ? p.size : 0) + 0.5));
     if (!p) continue;
     const idf = weights[t];
     for (const [id, tf] of p) {
@@ -439,68 +394,30 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
       matched.get(id).push(t);
     }
   }
-  const dropUnknown = LAB.has('b') || (LAB.has('bf') && isFrench(q));
   const ranked = [...scores].map(([id, s]) => ({ id, score: s * (chunks.get(id).weight || 1) })).sort((a, b) => b.score - a.score || a.id - b.id);
   // Three hits per file at most: one recipe must not crowd out everything else
   const perFile = new Map(), results = [];
   for (const { id, score } of ranked) {
     const c = chunks.get(id);
     const n = perFile.get(c.file) || 0;
-    if (n >= (LAB.has('j') && c.kind === 'state' ? 6 : PER_FILE)) continue;
+    if (n >= PER_FILE) continue;
     perFile.set(c.file, n + 1);
     // A group weighs what its rarest term the brain knows weighs. A French
     // word that appears nowhere must not outweigh its English translation.
     const groupWeight = (g, among) => Math.max(0, ...g.filter(among).map((t) => weights[t]));
     const hit = new Set(matched.get(id));
-    // LAB c: an unknown word weighs at most what the query's rarest known word weighs.
+    // In a young brain most words are unknown for no reason worth reading, so
+    // one weighs at most what the question's rarest known word weighs.
     const knownMax = Math.max(0, ...groups.map((g) => groupWeight(g, (t) => postings.has(t))));
-    const drain = (g) => (dropUnknown ? 0 : LAB.has('c') && N < 620 ? Math.min(groupWeight(g, () => true), knownMax) : groupWeight(g, () => true));
-    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || drain(g)), 0) || 1;
+    const unknown = (g) => (N < CALIBRATED_ON ? Math.min(groupWeight(g, () => true), knownMax) : groupWeight(g, () => true));
+    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || unknown(g)), 0) || 1;
     const covered = groups.reduce((a, g) => a + groupWeight(g, (t) => hit.has(t)), 0);
     results.push({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: c.compartment, kind: c.kind, score: Math.round(score * 100) / 100,
       coverage: Math.round(covered / total * 1000) / 1000, matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief,
       volatility: c.volatility, contradicts: c.contradicts, standing: c.standing });
     if (results.length >= limit) break;
   }
-  return { scope, results, skipped: null, size: st && !LAB.has('a2') ? st.n : chunks.size, groups };
-}
-
-// LAB f: past notes, only after a miss. A separate small BM25 over archive/.
-function searchArchive(q, { project, k = 3 } = {}) {
-  ensure();
-  if (!LAB.has('f')) return null;
-  const scope = scopeOf(project);
-  const pool = archiveChunks.filter((c) => visible(c, scope));
-  if (!pool.length) return { results: [], size: 0 };
-  const groups = queryGroups(q);
-  const terms = [...new Set(groups.flat())];
-  const N = pool.length, avg = pool.reduce((a, c) => a + c.len, 0) / N || 1;
-  const df = (t) => pool.filter((c) => c.tf.has(t)).length;
-  const scored = [];
-  for (const c of pool) {
-    let s = 0;
-    const matched = [];
-    for (const t of terms) {
-      const tf = c.tf.get(t);
-      if (!tf) continue;
-      const d = df(t);
-      s += Math.log(1 + (N - d + 0.5) / (d + 0.5)) * (tf * (K1 + 1)) / (tf + K1 * (1 - B + B * c.len / avg));
-      matched.push(t);
-    }
-    if (s) scored.push({ c, s: s * (c.weight || 1), matched });
-  }
-  scored.sort((a, b) => b.s - a.s || a.c.file.localeCompare(b.c.file));
-  const total = groups.length || 1;
-  const hitGroups = (m) => groups.filter((g) => g.some((t) => m.includes(t))).length;
-  return { size: N, results: scored.slice(0, k).map(({ c, s, matched }) => ({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: 'archive', kind: 'archive', archived: true, score: Math.round(s * 100) / 100,
-    coverage: Math.round(hitGroups(matched) / total * 1000) / 1000, matched, text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief, volatility: c.volatility, contradicts: [], standing: false })) };
-}
-
-// LAB b variant: a query that reads as French by its function words.
-const FR_MARK = new Set('le la les des du est je tu ca quoi pour avec dans qui quel quelle pas mon ma mes une cette sur comment pourquoi vous nous etre peut peux faire au aux en sa son ses leur quand ou'.split(' '));
-function isFrench(q) {
-  const ws = plainText(q).split(' ');
-  return ws.some((w) => FR_MARK.has(w));
+  return { scope, results, skipped: null, size: chunks.size, groups };
 }
 
 // The project's ## Now, whatever the question. Null when it has none.
@@ -532,6 +449,12 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-function chunkDump() { ensure(); const seen = new Map(); for (const c of chunks.values()) if (c.kind !== 'map-only') seen.set(chunkHash(c.text), { hash: chunkHash(c.text), file: c.file, section: c.section, text: c.text }); return [...seen.values()]; }
+// Every searchable passage once, for the tool that writes the French shadow.
+function chunkTexts() {
+  ensure();
+  const seen = new Map();
+  for (const c of chunks.values()) if (c.kind !== 'map-only') seen.set(chunkHash(c.text), { hash: chunkHash(c.text), text: c.text });
+  return [...seen.values()];
+}
 
-module.exports = { _cognates: (t) => { ensure(); return cognates(t); }, chunkDump, searchArchive, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp };
+module.exports = { CALIBRATED_ON, SHADOW_FILE, chunkTexts, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp };

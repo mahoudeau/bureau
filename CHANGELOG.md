@@ -12,6 +12,12 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `GET /api/knowledge?claim=<id>` and `claim` on MCP `read_knowledge`: one claim and its evidence, each source resolved to its mission, record or file.
 - brain-lint reads `format: 0.3` notes strictly and refuses an id used in two notes. The health block counts claims with ids.
 - `reads.mcp` in the memory health block: the MCP sessions that did work without calling `get_context`. The MCP door has no session id, so a session is one agent's calls with no gap over 60 minutes. The log gains the tool's name for each work call, and nothing it was given.
+- The context call answers in three states: `state` is `none`, `adjacent` or `answered`, with `uncovered` for the query terms no passage covers. A direct call or MCP is told "nothing on this" in one line. The Claude Code hook and mission briefings stay silent.
+- A French shadow: `hub/tools/shadow-fr.js <brain>` writes `.index/shadow-fr.json`, French search terms per passage keyed by a hash of its text. Commit it with the brain. The hub searches these terms and never serves them. No file means no change.
+
+### Fixed
+- A young brain answers short questions. Below the 620 chunks the floors were set on, they now shrink with what a rare word can score there, and an unknown word no longer outweighs the known ones. A long question sharing one word with a note still gets nothing.
+- `miss` is no longer true when every relevant passage was held back as already sent in the session, so the memory health block stops counting repeats as misses.
 
 ### Changed
 - `context-hook.js` also runs on `SessionStart` with the `compact` matcher and clears the hub's no-repeat memory for that session, so passages lost to a compaction can be served again. **Add the `SessionStart` entry from `connectors/claude-code/README.md` to your settings.** Other `SessionStart` sources are ignored.
