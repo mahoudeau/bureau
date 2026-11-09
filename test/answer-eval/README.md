@@ -9,6 +9,7 @@ It runs the same model on the same questions under five conditions:
 - C: the passages returned by `POST /api/context` at the default budget.
 - D: no injected context, but read-only tools (Read, Grep, Glob) over a copy of what the project may see.
 - E: the oracle, only the expected section of the brain, as a ceiling. On unanswerable questions E gets nothing.
+- F: the passages and map from C, plus the tools from D, with D's system prompt. Real sessions have both. Run it with `--conditions F`. A set of results kept beside the others joins the report with `--also PREFIX`.
 
 ## What you need
 
