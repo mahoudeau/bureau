@@ -93,6 +93,30 @@ async function main() {
     check('restored to the approved bytes, it applies', good.code === 200 && good.body.item.applied_by === 'worker-1', good);
     const back = await api('GET', '/api/knowledge?file=knowledge/pinned.md');
     check('and the file holds exactly those bytes', back.body.content === ops[0].content, back.body);
+
+    console.log('3. an approval cannot overwrite what was written since it was filed');
+    const stateFileName = 'projects/general/STATE.md';
+    await api('POST', '/api/knowledge', { file: stateFileName, content: 'the state when the item was filed\n', author: 'worker-1' });
+    const approveWrite = async content => {
+      const tid = (await api('POST', '/api/tasks', { title: 'a compaction', project: 'general' })).body.task.id;
+      await api('POST', '/api/tasks/claim', { agent: 'worker-1', id: tid });
+      await api('PATCH', `/api/tasks/${tid}`, { agent: 'worker-1', items: [{ title: 'compact it', payload: { ops: [{ op: 'write', file: stateFileName, content }] } }] });
+      await api('PATCH', `/api/tasks/${tid}`, { agent: 'lead-1', status: 'review', after_approval: 'return' });
+      await api('PATCH', `/api/tasks/${tid}`, { agent: 'human', status: 'done', verdicts: [{ id: 'i1', verdict: 'approved' }] });
+      return tid;
+    };
+    const unchanged = await approveWrite('compacted, nothing moved\n');
+    const applied = await api('POST', `/api/tasks/${unchanged}/apply`, { agent: 'worker-1', item: 'i1' });
+    check('an unchanged target applies', applied.code === 200, applied);
+
+    const moved = await approveWrite('compacted from an old copy\n');
+    await api('POST', '/api/knowledge', { file: stateFileName, content: 'a debrief written after the filing\n', author: 'worker-1', mode: 'append' });
+    const refused = await api('POST', `/api/tasks/${moved}/apply`, { agent: 'worker-1', item: 'i1' });
+    check('a target that moved is refused with 409', refused.code === 409, refused);
+    check('the refusal names the file', (refused.body.error || '').includes(stateFileName), refused.body);
+    const kept = await api('GET', `/api/knowledge?file=${stateFileName}`);
+    check('the newer text survives', kept.body.content.includes('a debrief written after the filing'), kept.body);
+    check('the old payload was not written', !kept.body.content.includes('from an old copy'), kept.body);
   } finally {
     if (hub && hub.exitCode === null && hub.signalCode === null) await stop();
     fs.rmSync(dir, { recursive: true, force: true });

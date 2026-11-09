@@ -766,6 +766,42 @@ function payloadError(payload) {
   if (bytes > knowledge.MAX_ATTACHMENT) return 'payload too large (5MB cap, as for the knowledge API)';
   return null;
 }
+// What the files a payload replaces held when it was filed: path to SHA-256,
+// null when the file did not exist. The payload hash proves the text is what
+// the boss approved; this proves the file is still the one he was looking at,
+// so an approval left for weeks cannot erase what was written since. Judged on
+// the first op touching a file: only a write replaces, an append adds to
+// whatever is there, and later ops in the payload build on the earlier ones.
+function fileHash(rel) {
+  const content = knowledge.readKnowledge(rel);
+  return content === null ? null : crypto.createHash('sha256').update(content).digest('hex');
+}
+function payloadBase(ops) {
+  const base = {}, seen = new Set();
+  for (const o of ops) {
+    const f = knowledge.normRel(o.file);
+    if (seen.has(f)) continue;
+    seen.add(f);
+    if (o.op === 'write') base[f] = fileHash(o.file);
+  }
+  return base;
+}
+// The files that moved since filing. Ops already written by an earlier attempt
+// are skipped, so a retry can resume. Items filed before this check have no
+// base and pass.
+function staleTargets(it) {
+  if (!it.payload_base) return [];
+  const from = it.applied_ops || 0, seen = new Set(), stale = [];
+  it.payload.ops.forEach((o, i) => {
+    const f = knowledge.normRel(o.file);
+    if (seen.has(f)) return;
+    seen.add(f);
+    if (i < from || !(f in it.payload_base)) return;
+    if (fileHash(o.file) !== it.payload_base[f]) stale.push(f);
+  });
+  return stale;
+}
+
 // Approved items with a payload that the holder has not applied yet.
 function unappliedItems(t) {
   return (t.items || []).filter(it => it.verdict === 'approved' && it.payload && !it.applied_at).map(it => it.id);
@@ -919,6 +955,7 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
       if (it.payload !== undefined) {
         rec.payload = { ops: canonicalOps(it.payload.ops) };
         rec.payload_sha256 = payloadHash(rec.payload.ops);
+        rec.payload_base = payloadBase(rec.payload.ops);
       }
       t.items.push(rec);
       added++;
@@ -1008,6 +1045,8 @@ function applyCheck({ id, agent, item }) {
   if (it.applied_at) return { code: 409, error: `apply: ${it.id} was applied at ${it.applied_at} by ${it.applied_by}` };
   const sha = payloadHash(it.payload.ops);
   if (sha !== it.payload_sha256) return { code: 409, error: `apply: ${it.id}'s payload does not match the hash stored when it was filed (${it.payload_sha256}); nothing written` };
+  const stale = staleTargets(it);
+  if (stale.length) return { code: 409, error: `apply: ${it.id} would overwrite ${stale.join(', ')}, changed since the item was filed; nothing written. File a new item against the current text` };
   return { task: t, item: it, sha };
 }
 
