@@ -151,6 +151,7 @@
                                task.blocked, task.requeued,
                                task.updated, agent.registered,
                                agent.heartbeat, message.posted,
+                               journal.captured,
                                knowledge.written, project.renamed,
                                project.created, project.deleted — detail is
                                the event payload) or a synthetic v2:-
@@ -947,7 +948,7 @@
     es.onerror = function () { setConn(false); }; // the 60s poll interval is unconditional, so state still arrives
     [
       'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued', 'task.updated',
-      'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'project.renamed', 'project.created', 'project.deleted'
+      'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'journal.captured', 'project.renamed', 'project.created', 'project.deleted'
     ].forEach(function (type) {
       es.addEventListener(type, function (e) {
         let payload = null;
@@ -1135,5 +1136,6 @@
 <script type="module" src="v2/board.js"></script>
 <script type="module" src="v2/peek-panel.js"></script>
 <script type="module" src="v2/awaiting-merge.js"></script>
+<script type="module" src="v2/memory-health.js"></script>
 </body>
 </html>
