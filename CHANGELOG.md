@@ -18,6 +18,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `hub/lib/claims.js`, the v0.3 reader and writer: `parseFile` returns the parsed form, `serializeClaim` writes a claim back byte for byte. `test/claims.test.js` runs every fixture against it, and `test/journal.test.js` round-trips generated records.
 - The setting `journal_free_text` (global, default open). While open, agents may still append free text to the journal through `POST /api/knowledge`, but in a `format: 0.3` day only lines that are not claims (422 otherwise). `false` refuses every agent journal write there; the boss's own writes always pass.
 - brain-lint warns about each record it cannot read in a `format: 0.3` journal day. The journal still never fails lint.
+- Apply refuses to overwrite newer text. A `write` op records the hash of the file it replaces when the item is filed, and applying answers 409, writing nothing, if that file has changed since. An approval left for weeks could otherwise erase everything added in the meantime. Items filed before this version carry no record and apply as before.
 
 ### Changed
 - **Cutover of a journal day.** The first capture on a day whose file is v0.2 free text moves that file to `journal/<yyyy-mm-dd>.v02.md` (git mv, its own commit, content untouched) and starts a `format: 0.3` file.
