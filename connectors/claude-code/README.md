@@ -47,10 +47,17 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command", "command": "node /path/to/bureau/connectors/claude-code/context-hook.js", "timeout": 3 }] }
+    ],
+    "SessionStart": [
+      { "matcher": "compact", "hooks": [{ "type": "command", "command": "node /path/to/bureau/connectors/claude-code/context-hook.js", "timeout": 3 }] }
     ]
   }
 }
 ```
+
+The hub sends a passage once per session. A compaction drops those passages from the model's context, so the `SessionStart` entry tells the hub to forget what it sent, and the next prompt can get them again. Claude Code reports a compaction, manual or automatic, as `SessionStart` with `source: "compact"` and the same `session_id`. The hook ignores the other sources: a resumed session still holds its passages, and `/clear` starts under a new session id. Without this entry nothing breaks, but a passage already sent stays held back for 12 hours.
+
+**Headless.** Both hooks run under `claude -p` (checked on 2.1.285), so a scripted run gets the same context as a terminal session, as long as it loads the settings that hold them. `--bare` and `--safe-mode` skip hooks, and `--setting-sources` without `user` skips hooks in `~/.claude/settings.json`. A local command such as `/compact` is not a prompt and does not fire `UserPromptSubmit`.
 
 Failures go to `~/.bureau-context-hook.log`.
 

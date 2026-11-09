@@ -49,6 +49,34 @@ function pruneLog(now = Date.now()) {
 // An agent fetched something the map offered: the minimum set was too small.
 function logRead(id, file, section) { appendLog({ type: 'read', ctx: id, file, section: section || null }); }
 
+// The MCP tools that do work. Read-only tools say nothing about whether an
+// agent started from what Bureau knows.
+const MCP_WORK = new Set(['create_mission', 'start_mission', 'update_mission', 'apply_item', 'write_knowledge', 'capture', 'write_work']);
+// The tool's name and nothing it was given.
+function logMcp(agent, tool) { if (MCP_WORK.has(tool)) appendLog({ type: 'mcp', agent, tool }); }
+
+// The MCP door is stateless and hands out no session id, so a session here is
+// one agent's run of calls with no gap over an hour. Two chats open at once
+// count as one, and a long pause inside a chat counts as two.
+const MCP_GAP_MS = 3600_000, MCP_SKIPPED_ROWS = 20;
+function mcpSessions(week) {
+  const events = week.filter((e) => e.type === 'mcp' || (e.type === 'call' && e.surface === 'mcp')).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
+  const open = new Map(), sessions = [];
+  for (const e of events) {
+    const agent = e.agent || 'unknown', at = Date.parse(e.ts);
+    let s = open.get(agent);
+    if (!s || at - s.last > MCP_GAP_MS) { s = { agent, started: e.ts, last: at, ended: e.ts, work: [], context: 0 }; open.set(agent, s); sessions.push(s); }
+    s.last = at;
+    s.ended = e.ts;
+    if (e.type === 'mcp') s.work.push(e.tool); else s.context++;
+  }
+  const worked = sessions.filter((s) => s.work.length);
+  // start_mission hands back the mission's context, so that session was briefed
+  // without asking. It still never called get_context.
+  const skipped = worked.filter((s) => !s.context).map((s) => ({ agent: s.agent, started: s.started, ended: s.ended, work_calls: s.work.length, tools: [...new Set(s.work)], briefed: s.work.includes('start_mission') }));
+  return { session_rule: 'agent, gap over 60 minutes', work_sessions_7d: worked.length, skipped_7d: skipped.length, skipped_unbriefed_7d: skipped.filter((s) => !s.briefed).length, skipped: skipped.slice(-MCP_SKIPPED_ROWS) };
+}
+
 // For the memory health block.
 function usage(now = Date.now()) {
   const all = readLog();
@@ -61,7 +89,7 @@ function usage(now = Date.now()) {
     if (e.type === 'read' && e.file) served.add(e.file);
     if (e.type === 'call') for (const f of e.served || []) served.add(f);
   }
-  return { tracked: true, since: all.length ? all[0].ts : null, calls_7d: calls.length, misses_7d: calls.filter((c) => c.miss).length, map_reads_7d: week.filter((e) => e.type === 'read').length, by_surface: bySurface, served };
+  return { tracked: true, since: all.length ? all[0].ts : null, calls_7d: calls.length, misses_7d: calls.filter((c) => c.miss).length, map_reads_7d: week.filter((e) => e.type === 'read').length, by_surface: bySurface, mcp: mcpSessions(week), served };
 }
 
 const DEFAULT_BUDGET = 1500, MAX_BUDGET = 6000, MAP_TOKENS = 400, MAP_LINES = 12;
@@ -144,6 +172,11 @@ function render(id, scope, context, map, maxChars) {
 
 function build(b) {
   const out = assemble(b);
+  // A compaction's reset carries no request. It is not a call anyone made.
+  if (b.reset && !b.request.trim()) {
+    appendLog({ type: 'reset', agent: b.agent || null, surface: b.surface || null, session: b.session ? hash(String(b.session)) : null });
+    return out;
+  }
   appendLog({ type: 'call', id: out.id, agent: b.agent || null, project: out.scope.project, surface: b.surface || null, session: b.session ? hash(String(b.session)) : null,
     served: [...new Set(out.context.map((c) => c.ref.file))], offered: out.map.length, tokens: out.tokens.context + out.tokens.map, ms: out.ms, miss: out.miss });
   keepPrompt(out.id, b, out.scope.project);
@@ -239,4 +272,4 @@ function assemble(b) {
     rendered: miss ? '' : out.rendered, index: brainIndex.stamp(), ms: Date.now() - t0 };
 }
 
-module.exports = { build, validate, FLOOR, logRead, usage, pruneLog };
+module.exports = { build, validate, FLOOR, logRead, logMcp, usage, pruneLog };

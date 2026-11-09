@@ -11,6 +11,11 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - In a `format: 0.3` note the hub assigns ids as it writes, and refuses a new claim that has no source of its own or cites a mission or journal record that does not exist. Claims already there keep their file-level source. An approved payload is still written byte for byte.
 - `GET /api/knowledge?claim=<id>` and `claim` on MCP `read_knowledge`: one claim and its evidence, each source resolved to its mission, record or file.
 - brain-lint reads `format: 0.3` notes strictly and refuses an id used in two notes. The health block counts claims with ids.
+- `reads.mcp` in the memory health block: the MCP sessions that did work without calling `get_context`. The MCP door has no session id, so a session is one agent's calls with no gap over 60 minutes. The log gains the tool's name for each work call, and nothing it was given.
+
+### Changed
+- `context-hook.js` also runs on `SessionStart` with the `compact` matcher and clears the hub's no-repeat memory for that session, so passages lost to a compaction can be served again. **Add the `SessionStart` entry from `connectors/claude-code/README.md` to your settings.** Other `SessionStart` sources are ignored.
+- A `POST /api/context` with `reset: true` and an empty `request` is logged as a reset and no longer counts as a call.
 
 ## [0.3.0] - 2026-11-09
 

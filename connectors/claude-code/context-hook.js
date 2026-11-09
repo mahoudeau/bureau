@@ -2,6 +2,9 @@
 // context-hook.js: every prompt in Claude Code starts from what Bureau knows.
 // A UserPromptSubmit hook: it asks the hub for the passages this prompt needs
 // and hands them to the model as added context.
+// Also a SessionStart hook on the compact matcher: a compaction drops the
+// passages from the model's context, so the hub's no-repeat memory for this
+// session is cleared and they can be served again.
 // Licensed Apache-2.0 (LICENSE-APACHE at the repo root).
 //
 // It never gets in the way. No hub, a slow hub, a bad token: it exits 0 with no
@@ -58,7 +61,11 @@ async function main() {
   const base = (process.env.BUREAU_URL || readFirst(path.join(HOME, '.bureau-url'))).replace(/\/$/, '');
   const token = process.env.BUREAU_TOKEN || readFirst(process.env.BUREAU_TOKEN_FILE || path.join(HOME, '.bureau-token'));
   if (!base || !token) return note('no hub address or token');
-  const compacted = input.hook_event_name === 'SessionStart';
+  // Only a compaction loses the passages. A startup has nothing to forget, a
+  // resume still holds them, and /clear starts under a new session id.
+  const starting = input.hook_event_name === 'SessionStart';
+  const compacted = starting && input.source === 'compact';
+  if (starting && !compacted) return;
   const body = { request: input.prompt || '', project: projectOf(input.cwd || process.cwd()), session: input.session_id, surface: 'claude-code', agent: 'consul', max_chars: MAX_CHARS, ...(compacted ? { reset: true } : {}) };
   if (!body.project) delete body.project;
   if (!body.session) delete body.session;

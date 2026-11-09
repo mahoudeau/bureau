@@ -864,6 +864,7 @@ async function mcpHandle(msg) {
       case 'tools/call': {
         try {
           const r = mcpToolCall(msg.params && msg.params.name, (msg.params && msg.params.arguments) || {});
+          contextCall.logMcp('consul', msg.params.name);
           return ok({ content: [{ type: 'text', text: JSON.stringify(r, null, 1) }], isError: false });
         } catch (e) {
           return ok({ content: [{ type: 'text', text: String(e.message || e) }], isError: true });
