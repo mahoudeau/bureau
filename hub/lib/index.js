@@ -11,6 +11,7 @@ const path = require('path');
 const claims = require('./claims');
 const knowledge = require('./knowledge');
 const store = require('./store');
+const GLOSSARY = require('./glossary');
 
 const K1 = 1.2, B = 0.75;
 const WEIGHT = { curated: 1.5, project: 1.3, state: 1.0, journal: 0.8 };
@@ -303,11 +304,27 @@ function findClaim(id, scope) {
   return null;
 }
 
+// The question as groups of terms: a word and its translations are one group,
+// so a translated word counts once toward how much of the question was covered.
+const plainText = (s) => String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+const WORDS = new Map(), PHRASES = [];
+for (const [fr, en] of GLOSSARY) {
+  if (fr.includes(' ')) PHRASES.push([` ${plainText(fr)} `, en]);
+  else WORDS.set(stem(plainText(fr)), en);
+}
+function queryGroups(q) {
+  const groups = [...new Set(tokens(q))].map((t) => (WORDS.has(t) ? [...new Set([t, ...tokens(WORDS.get(t))])] : [t]));
+  const plain = ` ${plainText(q)} `;
+  for (const [fr, en] of PHRASES) if (plain.includes(fr)) groups.push([...new Set(tokens(en))]);
+  return groups.filter((g) => g.length);
+}
+
 function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
   ensure();
   const scope = scopeOf(project);
   const limit = Math.min(Math.max(1, Number(k) || DEFAULT_K), MAX_K);
-  const terms = [...new Set(tokens(q))];
+  const groups = queryGroups(q);
+  const terms = [...new Set(groups.flat())];
   if (!terms.length) return { scope, results: [], skipped: 'no terms', size: chunks.size };
   const N = chunks.size || 1, avg = totalLen / N || 1;
   const scores = new Map(), matched = new Map(), weights = {};
@@ -336,8 +353,12 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
     const n = perFile.get(c.file) || 0;
     if (n >= PER_FILE) continue;
     perFile.set(c.file, n + 1);
-    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
-    const covered = matched.get(id).reduce((a, t) => a + weights[t], 0);
+    // A group weighs what its rarest term the brain knows weighs. A French
+    // word that appears nowhere must not outweigh its English translation.
+    const groupWeight = (g, among) => Math.max(0, ...g.filter(among).map((t) => weights[t]));
+    const hit = new Set(matched.get(id));
+    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || groupWeight(g, () => true)), 0) || 1;
+    const covered = groups.reduce((a, g) => a + groupWeight(g, (t) => hit.has(t)), 0);
     results.push({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: c.compartment, kind: c.kind, score: Math.round(score * 100) / 100,
       coverage: Math.round(covered / total * 1000) / 1000, matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief,
       volatility: c.volatility, contradicts: c.contradicts, standing: c.standing });

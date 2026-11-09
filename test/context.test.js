@@ -147,6 +147,17 @@ async function main() {
     h = run('this is not json');
     check('bad input: exit 0, no output', h.status === 0 && h.stdout === '', h);
 
+    console.log('10b. keeping the text of requests');
+    const promptFile = path.join(dir, 'data', 'context-prompts.jsonl');
+    check('off by default: no file', !fs.existsSync(promptFile));
+    r = await api('PATCH', '/api/settings', { global: { store_prompts_days: 'forever' } });
+    check('a bad value is refused', r.code !== 200, r);
+    await api('PATCH', '/api/settings', { global: { store_prompts_days: 30 } });
+    await ctx({ request: 'the private wombat question', project: 'alpha' });
+    check('on: the text is kept, in its own file', /private wombat question/.test(fs.readFileSync(promptFile, 'utf8')));
+    check('and still not in the usage log', !/private wombat/.test(fs.readFileSync(path.join(dir, 'data', 'context-log.jsonl'), 'utf8')));
+    await api('PATCH', '/api/settings', { global: { store_prompts_days: 0 } });
+
     console.log('11. capture before closing');
     await api('POST', '/api/agents/register', { name: 'closer', kind: 'dummy' });
     const claimOne = async () => { const id = (await api('POST', '/api/tasks', { title: 'a job', project: 'alpha' })).body.task.id; await api('POST', '/api/tasks/claim', { agent: 'closer', id }); return id; };

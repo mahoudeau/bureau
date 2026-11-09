@@ -899,6 +899,7 @@ try {
 knowledge.ensureRepo();
 try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
 contextCall.pruneLog();
+setInterval(() => contextCall.pruneLog(), 3600_000);
 try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
