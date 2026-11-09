@@ -46,7 +46,8 @@ mkdir -p "$TMP/data"
 cp -R test/fixtures/brain-eval "$TMP/brain"
 
 # BUREAU_ENV_FILE: a missing file, so a local hub/.env (and its token) stays out
-env -u BUREAU_TOKEN PORT="$PORT" HOST=127.0.0.1 BUREAU_DATA_DIR="$TMP/data" BUREAU_BRAIN_DIR="$TMP/brain" BUREAU_ENV_FILE="$TMP/no.env" \
+# The eval runs without a token: the local-demo opt-in, loopback only.
+env -u BUREAU_TOKEN BUREAU_ALLOW_INSECURE_LOCAL=1 PORT="$PORT" HOST=127.0.0.1 BUREAU_DATA_DIR="$TMP/data" BUREAU_BRAIN_DIR="$TMP/brain" BUREAU_ENV_FILE="$TMP/no.env" \
   node hub/server.js > "$TMP/hub.log" 2>&1 &
 HUB=$!
 trap 'kill $HUB 2>/dev/null' EXIT

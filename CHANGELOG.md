@@ -16,6 +16,18 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Changed
 - `context-hook.js` also runs on `SessionStart` with the `compact` matcher and clears the hub's no-repeat memory for that session, so passages lost to a compaction can be served again. **Add the `SessionStart` entry from `connectors/claude-code/README.md` to your settings.** Other `SessionStart` sources are ignored.
 - A `POST /api/context` with `reset: true` and an empty `request` is logged as a reset and no longer counts as a call.
+- **The hub refuses to start with no `BUREAU_TOKEN` or a placeholder one.** `BUREAU_ALLOW_INSECURE_LOCAL=1` is the opt-in for a demo on loopback. The default bind is `127.0.0.1`. See UPGRADING.md.
+- **The token is no longer accepted in the query string.** `POST /api/events/ticket` issues a one-use, 60-second ticket for the event stream, and the dashboards fetch images with the header.
+- CORS is same-origin by default, with `BUREAU_ALLOWED_ORIGINS` for the rest. A cross-origin request to `/api/` is refused before the token is read.
+- The `rendered` context block has a random boundary per response and quotes brain text with `> `, so a note cannot close it or forge a label.
+- A 500 answers `internal error`; the detail goes to the server log.
+- `state.json`, its backups and the prompt log are `0600` in a `0700` folder, existing files included, on POSIX.
+
+### Security
+- A malformed request target (`GET // HTTP/1.1`) took the process down. It answers 400 now, and an unhandled rejection or exception is logged instead of ending the hub.
+- The v2 brain browser rendered note markdown without escaping it. It escapes first, links are http(s) or brain paths only, and every dashboard page carries a Content-Security-Policy with a per-response nonce.
+- The pattern that found headings was quadratic, and a note could stall boot for most of a minute. The same class is gone from claims parsing, brain-lint and the id migration, and headings are capped at 2,000 characters.
+- `git add` and `git mv` take paths after `--`, `.git` is refused in every path segment, and the intake sweep leaves out what the path guard refuses.
 
 ## [0.3.0] - 2026-11-09
 

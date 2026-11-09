@@ -101,7 +101,7 @@ async function main() {
   r = envProbe('IP=file-ip\n', { HOST: 'host-host' });
   check("the host's HOST beats IP from .env", r.env.HOST === 'host-host', r.env.HOST);
   r = envProbe('PORT=1\n');
-  check('then :: (all interfaces)', r.env.HOST === '::', r.env.HOST);
+  check('then loopback', r.env.HOST === '127.0.0.1', r.env.HOST);
   r = envProbe('BUREAU_DATA_DIR=./data\nBUREAU_BRAIN_DIR=' + path.join(TMP, 'abs') + '\n');
   check('a relative dir in .env is read from its folder', r.env.BUREAU_DATA_DIR === path.join(r.dir, 'data'), r.env.BUREAU_DATA_DIR);
   check('an absolute one is kept', r.env.BUREAU_BRAIN_DIR === path.join(TMP, 'abs'), r.env.BUREAU_BRAIN_DIR);

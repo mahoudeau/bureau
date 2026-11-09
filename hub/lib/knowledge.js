@@ -108,14 +108,17 @@ const RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]|conin\$|conout\$)(\.|$)
 const BAD_CHAR_RE = /[:<>"|?*\x00-\x1f]/;
 function pathError(norm) {
   const segs = String(norm).split('/');
-  if (segs.includes('..') || /^\.git/i.test(segs[0])) return 'bad path';
+  if (segs.includes('..')) return 'bad path';
   for (const s of segs) {
     if (s === '' || s === '.') continue;
+    if (/^\.git/i.test(s)) return 'bad path';
     if (RESERVED_RE.test(s) || BAD_CHAR_RE.test(s) || /[. ]$/.test(s) || /~\d/.test(s))
       return `bad path: "${s.replace(/[\x00-\x1f]/g, '?')}" cannot exist on Windows (a reserved name like CON or COM1, one of : < > " | ? * or a control character, a trailing dot or space, or a ~1 short name)`;
   }
   return null;
 }
+// E_PATH: refused because of what the caller sent. The router answers 400 with
+// this message; every other error stays in the server log.
 const pathRefused = msg => Object.assign(new Error(msg), { code: 'E_PATH' });
 
 function safePath(rel) {
@@ -229,9 +232,9 @@ function writeKnowledge({ file, content: raw, mode, author, message, encoding, f
   const abs = safePath(file);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   if (encoding === 'base64') {
-    if (mode === 'append') throw new Error('base64 writes are replace-only');
+    if (mode === 'append') throw pathRefused('base64 writes are replace-only');
     const buf = Buffer.from(String(content), 'base64');
-    if (buf.length > MAX_ATTACHMENT) throw new Error('attachment too large (5MB cap)');
+    if (buf.length > MAX_ATTACHMENT) throw pathRefused('attachment too large (5MB cap)');
     fs.writeFileSync(abs, buf);
   } else if (mode === 'append') {
     fs.appendFileSync(abs, (fs.existsSync(abs) && fs.statSync(abs).size ? '\n' : '') + content);
@@ -239,7 +242,7 @@ function writeKnowledge({ file, content: raw, mode, author, message, encoding, f
     fs.writeFileSync(abs, content);
   }
   const rel = toPosix(path.relative(BRAIN_DIR, abs));
-  git(['add', rel]);
+  git(['add', '--', rel]);
   try {
     git(['commit', '-m', message || `update ${rel}`, '--author', `${author || 'agent'} <${(author || 'agent').replace(/\s+/g, '.')}@bureau.local>`]);
   } catch (e) {
@@ -261,17 +264,36 @@ function readKnowledge(file) {
 // API-only by design; this door is the owner's own.
 function intakeSweep() {
   ensureRepo();
-  const status = git(['status', '--porcelain']).trim();
-  if (!status) return { committed: 0, files: [] };
-  const files = status.split('\n').map(l => l.slice(3).trim()).filter(Boolean);
-  git(['add', '-A']);
+  const { files, refused } = sweepCandidates();
+  // Names the API would refuse never enter history by this door either. They
+  // stay on disk, named once in the log, for the owner to rename.
+  for (const f of refused) if (!sweepWarned.has(f)) { sweepWarned.add(f); console.error(`[intake] not committing ${JSON.stringify(f)}: the path guard refuses that name`); }
+  if (!files.length) return { committed: 0, files: [], ...(refused.length ? { refused } : {}) };
+  // --literal-pathspecs: a file named *.md is that file, not a pattern
+  for (let i = 0; i < files.length; i += 200) git(['--literal-pathspecs', 'add', '-A', '--', ...files.slice(i, i + 200)]);
   try {
     git(['commit', '-m', 'intake: files dropped or edited by hand', '--author', 'human <human@bureau.local>']);
   } catch (e) {
     if (!/nothing to commit/i.test(String(e.stdout || e.message))) throw e;
-    return { committed: 0, files: [] };
+    return { committed: 0, files: [], ...(refused.length ? { refused } : {}) };
   }
-  return { committed: files.length, files };
+  return { committed: files.length, files, ...(refused.length ? { refused } : {}) };
+}
+const sweepWarned = new Set();
+// What changed on disk, each path as git spells it. -z: no quoting and no
+// " -> " to pick apart, whatever the name holds. The hygiene files are ours,
+// and an owner editing them by hand is fine.
+function sweepCandidates() {
+  const parts = git(['status', '--porcelain', '-z', '--untracked-files=all']).split('\0').filter(Boolean);
+  const names = [];
+  for (let i = 0; i < parts.length; i++) {
+    names.push(parts[i].slice(3));
+    // a staged rename or copy names its origin in the next field
+    if (/^[RC]/.test(parts[i]) || /^.[RC]/.test(parts[i])) names.push(parts[++i]);
+  }
+  const files = [], refused = [];
+  for (const f of names) (Object.keys(HYGIENE).includes(f) || !pathError(f) ? files : refused).push(f);
+  return { files, refused };
 }
 
 // Raw bytes + content-type, for attachments (and raw-mode reads of any file).
@@ -286,13 +308,16 @@ function readKnowledgeRaw(file) {
 function listKnowledge(dir) {
   ensureRepo();
   const base = dir ? safeDir(dir) : BRAIN_DIR;
+  if (!fs.existsSync(base)) return [];
   const out = [];
   (function walk(d) {
     for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-      // .git itself, and the hygiene files beside it (.gitattributes, .gitignore)
+      // .git itself, the hygiene files beside it (.gitattributes, .gitignore),
+      // and anything else the path guard refuses: readers could not open it.
       if (e.name === '.git') continue;
       const p = path.join(d, e.name);
       const rel = toPosix(path.relative(BRAIN_DIR, p));
+      if (pathError(rel)) continue;
       if (e.isDirectory()) walk(p);
       else if (!Object.keys(HYGIENE).includes(rel)) out.push(rel);
     }
@@ -331,8 +356,8 @@ function moveFile(from, to, { author, message } = {}) {
   if (fs.existsSync(dst)) throw new Error(`${to} already exists`);
   const relFrom = toPosix(path.relative(BRAIN_DIR, src)), relTo = toPosix(path.relative(BRAIN_DIR, dst));
   // A file the intake sweep has not committed yet is added first, so git mv knows it
-  git(['add', relFrom]);
-  git(['mv', relFrom, relTo]);
+  git(['add', '--', relFrom]);
+  git(['mv', '--', relFrom, relTo]);
   git(['commit', '-m', message || `move ${relFrom} to ${relTo}`, '--author', `${author || 'agent'} <${(author || 'agent').replace(/\s+/g, '.')}@bureau.local>`]);
   return { from: relFrom, to: relTo };
 }

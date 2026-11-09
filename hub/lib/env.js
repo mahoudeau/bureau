@@ -20,7 +20,8 @@
 // BUREAU_DATA_DIR=C:\bureau\data means that folder.
 //
 // Then the listen address: the host's IP (set before the file is read) wins,
-// then HOST, then IP from the file, then :: (all interfaces).
+// then HOST, then IP from the file, then 127.0.0.1. A hub reachable from other
+// machines is a choice the owner writes down (HOST=:: or 0.0.0.0).
 //
 // BUREAU_ENV_FILE names another file to load instead (the tests use it, a
 // missing file loads nothing).
@@ -98,7 +99,7 @@ function load(file = process.env.BUREAU_ENV_FILE || path.join(__dirname, '..', '
     loaded.push(k);
   }
   if (hostIp) process.env.HOST = hostIp;
-  else if (!process.env.HOST) process.env.HOST = process.env.IP || '::';
+  else if (!process.env.HOST) process.env.HOST = process.env.IP || '127.0.0.1';
   return { file, loaded };
 }
 

@@ -171,9 +171,9 @@
     }
 
     function artImg(a) {
-      var m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+      var m = String(a.url || a.label || '').slice(0, 2048).match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
       if (m && !/^https?:/i.test(m[1])) return m[1];
-      var m2 = String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
+      var m2 = String(a.url || '').slice(0, 2048).match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
       return m2 && m2[1];
     }
 
@@ -188,9 +188,9 @@
       var imgs = (task.artifacts || []).map(artImg).filter(Boolean);
       if (!imgs.length) return '<div class="v2-empty">No evidence attached.</div>';
       return '<div class="v2-media__grid">' + imgs.map(function (img) {
-        var src = '/api/' + (/^work\//.test(decodeURIComponent(img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
-        return '<a class="v2-media__thumb" href="' + src + '" target="_blank" rel="noopener">' +
-          '<img src="' + src + '" alt="" loading="lazy"></a>';
+        var src = BureauHub.imageUrl(img).replace(/&/g, '&amp;');
+        return '<a class="v2-media__thumb" data-secure-href="' + src + '" target="_blank" rel="noopener">' +
+          '<img data-secure-src="' + src + '" alt="" loading="lazy"></a>';
       }).join('') + '</div>';
     }
 

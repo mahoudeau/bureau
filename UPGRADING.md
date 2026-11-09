@@ -22,6 +22,17 @@ The brain has its own history in git. The state file is what the steps below pro
 
 No `npm install`, ever. The hub has no dependencies.
 
+## The security release: what to check first
+
+These change what a running hub accepts. Check them before you restart.
+
+1. **A real `BUREAU_TOKEN` is required.** With none set, or the placeholder from `.env.example`, the hub prints why and exits. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. For a demo on one machine only, `BUREAU_ALLOW_INSECURE_LOCAL=1` starts it anyway, and it refuses any bind that is not loopback.
+2. **The default bind is `127.0.0.1`**, not all interfaces. A host that injects `IP` is unaffected, and so is the Docker image, which sets `HOST=0.0.0.0`. Anything else that reaches the hub from another machine needs `HOST=0.0.0.0` (or `HOST=::`) in `hub/.env`.
+3. **CORS is no longer `*`.** Same-origin pages work as before. A page on another origin needs `BUREAU_ALLOWED_ORIGINS=https://that.example`, comma-separated. Behind a reverse proxy that rewrites `Host`, set `BUREAU_PUBLIC_URL` so the hub knows its own name, or dashboard writes answer 403.
+4. **`?token=` is gone.** Any script calling the API with it must send `Authorization: Bearer <token>` instead. Dashboard links that carried the token use the fragment now: `/#token=...`, `/v2#token=...`.
+5. **The data folder is private.** At every boot the hub sets it to `0700` and the files in it to `0600` (POSIX only). A backup job reading it as another user needs to run as the hub's user.
+6. **The intake sweep leaves out names the path guard refuses** (a `.git` segment at any depth, Windows-reserved names). They stay on disk, named once in the log, until you rename them.
+
 ## What happens on boot
 
 The hub checks `state.json` before it listens.

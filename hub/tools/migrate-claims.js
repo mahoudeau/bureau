@@ -43,7 +43,7 @@ function stampIds(text, rel, taken) {
   let added = 0;
   for (let i = bodyStart(lines); i < lines.length; i++) {
     if (!CLAIM_RE.test(lines[i]) || HAS_ID_RE.test(lines[i])) continue;
-    const line = lines[i].replace(/\s+$/, '');
+    const line = lines[i].trimEnd();
     lines[i] = `${line} ^${newId(rel, line, taken)}`;
     added++;
   }
@@ -56,7 +56,7 @@ function unwrap(lines, from) {
   for (let i = from; i < lines.length; i++) {
     let line = lines[i];
     if (CLAIM_RE.test(line)) {
-      while (i + 1 < lines.length && /^[ \t]+\S/.test(lines[i + 1]) && !FIELD_RE.test(lines[i + 1]) && !/^\s*-(\s|$)/.test(lines[i + 1])) line = `${line.replace(/\s+$/, '')} ${lines[++i].trim()}`;
+      while (i + 1 < lines.length && /^[ \t]+\S/.test(lines[i + 1]) && !FIELD_RE.test(lines[i + 1]) && !/^\s*-(\s|$)/.test(lines[i + 1])) line = `${line.trimEnd()} ${lines[++i].trim()}`;
     }
     out.push(line);
   }

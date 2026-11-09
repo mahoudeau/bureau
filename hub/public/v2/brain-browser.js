@@ -155,10 +155,10 @@
     }
 
     // ---- hand-rolled markdown: headings, lists, bold, links only. ----
-    // Escapes HTML first, then applies markdown patterns on the escaped
-    // text — never the reverse — so brain content can never inject markup.
-    // Anything not recognized here is left as an ordinary paragraph line
-    // (degrades to plain text, never throws).
+    // Every line goes through inline(), which escapes it first and applies
+    // the markdown patterns to the escaped text, so brain content can never
+    // inject markup. Anything not recognized here is left as an ordinary
+    // paragraph line (degrades to plain text, never throws).
     function renderMarkdown(raw) {
       var body = raw;
       var meta = null;
@@ -190,19 +190,44 @@
       flushList();
       return (meta ? '<div class="v2-brain-meta">' + meta + '</div>' : '') + html.join('');
     }
-    // Inline transforms run on already-HTML-escaped text: bold (**x** or
-    // __x__) and links ([text](url)). A relative .md path becomes an
-    // in-browser jump (data-brain-link); an absolute http(s) URL becomes
-    // a normal new-tab link — never an auto-fetch, only a user click.
-    function inline(escapedLine) {
-      var s = escapedLine;
-      s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, function (m, text, url) {
-        if (/^https?:\/\//i.test(url)) return '<a href="' + url + '" target="_blank" rel="noopener">' + text + '</a>';
-        if (/\.md$/i.test(url)) return '<a href="#" data-brain-link="' + url.replace(/^\.?\//, '') + '">' + text + '</a>';
-        return text; // unrecognized link target: degrade to plain text, per the bar
+    // Bold (**x** or __x__) and links ([text](url)), on a line escaped here
+    // first. A relative .md path becomes an in-browser jump (data-brain-link);
+    // an absolute http(s) URL becomes a normal new-tab link, never an
+    // auto-fetch. Any other target (javascript:, data:) stays plain text.
+    function inline(line) {
+      var links = [];
+      var bold = function (t) { return t.replace(/(\*\*|__)(.+?)\1/g, '<strong>$2</strong>'); };
+      // Links are set aside while bold runs, so a __ inside a URL stays in the URL
+      var s = replaceLinks(esc(String(line).replace(/\u0000/g, '')), function (text, url) {
+        var a;
+        if (/^https?:\/\//i.test(url)) a = '<a href="' + url + '" target="_blank" rel="noopener">' + bold(text) + '</a>';
+        else if (/\.md$/i.test(url)) a = '<a href="#" data-brain-link="' + url.replace(/^\.?\//, '') + '">' + bold(text) + '</a>';
+        else return text; // unrecognized link target: degrade to plain text, per the bar
+        links.push(a);
+        return '\u0000' + (links.length - 1) + '\u0000';
       });
-      s = s.replace(/(\*\*|__)(.+?)\1/g, '<strong>$2</strong>');
-      return s;
+      s = bold(s);
+      return s.replace(/\u0000(\d+)\u0000/g, function (m, i) { return links[+i]; });
+    }
+    // [text](url), with neither part empty. A scan, not a regex: a long run
+    // of [ with one distant ] would make a regex retry from every bracket.
+    function replaceLinks(s, make) {
+      var out = '', at = 0, close = -1;
+      for (;;) {
+        var open = s.indexOf('[', at);
+        if (open === -1) break;
+        if (close <= open) close = s.indexOf(']', open + 1);
+        if (close === -1) break;
+        var end = s[close + 1] === '(' ? s.indexOf(')', close + 2) : -1;
+        if (close === open + 1 || end === -1 || end === close + 2) {
+          out += s.slice(at, open + 1);
+          at = open + 1;
+          continue;
+        }
+        out += s.slice(at, open) + make(s.slice(open + 1, close), s.slice(close + 2, end));
+        at = end + 1;
+      }
+      return out + s.slice(at);
     }
   }
 })();

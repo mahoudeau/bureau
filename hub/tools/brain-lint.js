@@ -23,7 +23,27 @@ const SUMMARY_MAX = 200;
 // read the same on Windows, where a wikilink names projects/demo/STATE too.
 const toPosix = (p) => String(p).split(path.sep).join('/').replace(/\\/g, '/');
 const RULE_RE = /^\s*-\s*\**(RULE-[A-Z0-9]+-\d{2,})\b/;
-const RULE_SOURCE_RE = /\(source:\s*[^)\s][^)]*\)/;
+const hasRuleSource = (line) => claims.sourceGroups(line).some((g) => g.body.length > 0);
+
+// The target of each [[wikilink]], [[target#section]] or [[target|label]] in
+// order. A scan: the pattern this replaces backtracks quadratically on a run
+// of [[ with no closing bracket, over the whole file.
+function wikilinkTargets(raw) {
+  const out = [];
+  let at = 0, close = -1;
+  for (;;) {
+    const open = raw.indexOf('[[', at);
+    if (open === -1) return out;
+    if (close < open + 2) close = raw.indexOf(']', open + 2);
+    if (close === -1) return out;
+    if (raw[close + 1] !== ']') { at = close + 1; continue; }
+    let end = close;
+    for (let i = open + 2; i < close; i++) if (raw[i] === '#' || raw[i] === '|') { end = i; break; }
+    if (end === open + 2) { at = open + 1; continue; }
+    out.push(raw.slice(open + 2, end));
+    at = close + 2;
+  }
+}
 
 // What a source may name (Brain Format v0.3, "Refs"): a journal record, a
 // mission, or a wikilink.
@@ -35,10 +55,10 @@ const refsOf = (list) => list.split(',').map(s => s.trim()).filter(Boolean);
 // reported as prose so the writer can move the words out of it.
 function ownSource(line) {
   let prose = null;
-  for (const m of line.matchAll(/\(source:\s*([^)]*)\)/g)) {
-    const items = refsOf(m[1]);
+  for (const g of claims.sourceGroups(line)) {
+    const items = refsOf(g.body);
     if (items.length && items.every(r => REF_RE.test(r))) return { refs: items, prose: null };
-    if (!prose) prose = m[0];
+    if (!prose) prose = line.slice(g.start, g.end);
   }
   return { refs: null, prose };
 }
@@ -221,9 +241,9 @@ function lint(brainDir, overrides = {}) {
 
     // Dangling wikilinks in authoritative compartments
     if (authoritative || inAttic) {
-      for (const m of f.raw.matchAll(/\[\[([^\]#|]+)(?:[#|][^\]]*)?\]\]/g)) {
-        if (!resolves(m[1].trim()))
-          errors.push(`${f.rel}: dangling wikilink [[${m[1].trim()}]]`);
+      for (const target of wikilinkTargets(f.raw)) {
+        if (!resolves(target.trim()))
+          errors.push(`${f.rel}: dangling wikilink [[${target.trim()}]]`);
       }
     }
 
@@ -261,7 +281,7 @@ function lint(brainDir, overrides = {}) {
         if (!m) return;
         if (seen.has(m[1])) errors.push(`${f.rel}: duplicate rule id ${m[1]}`);
         seen.set(m[1], true);
-        if (!RULE_SOURCE_RE.test(line)) errors.push(`${f.rel}: rule ${m[1]} has no source`);
+        if (!hasRuleSource(line)) errors.push(`${f.rel}: rule ${m[1]} has no source`);
       });
     }
 
