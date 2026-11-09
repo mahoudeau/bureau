@@ -7,6 +7,8 @@
 // The scope is decided here, not by the caller's manners: a project sees global
 // knowledge, its entity's and its own, and nothing from another project.
 'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const claims = require('./claims');
 const knowledge = require('./knowledge');
@@ -14,6 +16,9 @@ const store = require('./store');
 const GLOSSARY = require('./glossary');
 
 const K1 = 1.2, B = 0.75;
+// The brain size the context call's floors were set on. Below it, a brain is
+// young: scores run lower and most words are simply not in it yet.
+const CALIBRATED_ON = 620;
 const WEIGHT = { curated: 1.5, project: 1.3, state: 1.0, journal: 0.8 };
 const DEFAULT_K = 5, MAX_K = 50, PER_FILE = 3;
 const PROSE_MIN = 40; // shorter leftovers beside a section's claims are noise
@@ -218,6 +223,19 @@ let files = new Map();       // file -> one line about it, for the map
 let totalLen = 0, nextId = 1, built = false, builtAt = null, commit = undefined;
 let superseded = new Set();
 
+// French search terms per chunk, keyed by a hash of its text: a derived file in
+// the brain, tracked by git and written by hub/tools/shadow-fr.js. Added to what
+// is searched and never to what is served. An edited chunk has a new hash, so
+// its terms lapse. No file, no change.
+const SHADOW_FILE = '.index/shadow-fr.json';
+let shadow = new Map();
+const chunkHash = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+function loadShadow() {
+  shadow = new Map();
+  try { shadow = new Map(Object.entries(JSON.parse(fs.readFileSync(path.join(knowledge.BRAIN_DIR, SHADOW_FILE), 'utf8')))); }
+  catch (e) { if (e.code !== 'ENOENT') console.error('[index] French shadow unreadable:', e.message); }
+}
+
 function removeFile(rel) {
   files.delete(rel);
   for (const id of byFile.get(rel) || []) {
@@ -247,7 +265,8 @@ function addFile(rel) {
       compartment: info.compartment, scope: info.scope, project: info.project, entity: info.entity, verified: front.verified || null, belief: front.belief || null });
   }
   for (const c of made) {
-    const toks = tokens(c.index);
+    const fr = shadow.get(chunkHash(c.text));
+    const toks = tokens(fr ? `${c.index} ${fr}` : c.index);
     delete c.index;
     if (!toks.length) continue;
     const tf = new Map();
@@ -278,6 +297,7 @@ function refreshSuperseded() {
 function build() {
   const t0 = Date.now();
   chunks = new Map(); byFile = new Map(); postings = new Map(); files = new Map(); totalLen = 0; nextId = 1;
+  loadShadow();
   for (const f of knowledge.listKnowledge('')) addFile(f.split(path.sep).join('/'));
   refreshSuperseded();
   built = true;
@@ -293,7 +313,7 @@ function invalidate() { built = false; }
 function touch(field) {
   if (!built) return;
   const written = String(field || '').split(/\s*(?:->|,)\s*/).map((x) => x.trim()).filter(Boolean);
-  if (!written.length) return invalidate();
+  if (!written.length || written.includes(SHADOW_FILE)) return invalidate();
   try {
     for (const f of written) { removeFile(f); addFile(f); }
     refreshSuperseded();
@@ -419,14 +439,18 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
     // word that appears nowhere must not outweigh its English translation.
     const groupWeight = (g, among) => Math.max(0, ...g.filter(among).map((t) => weights[t]));
     const hit = new Set(matched.get(id));
-    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || groupWeight(g, () => true)), 0) || 1;
+    // In a young brain most words are unknown for no reason worth reading, so
+    // one weighs at most what the question's rarest known word weighs.
+    const knownMax = Math.max(0, ...groups.map((g) => groupWeight(g, (t) => postings.has(t))));
+    const unknown = (g) => (N < CALIBRATED_ON ? Math.min(groupWeight(g, () => true), knownMax) : groupWeight(g, () => true));
+    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || unknown(g)), 0) || 1;
     const covered = groups.reduce((a, g) => a + groupWeight(g, (t) => hit.has(t)), 0);
     results.push({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: c.compartment, kind: c.kind, score: Math.round(score * 100) / 100,
       coverage: Math.round(covered / total * 1000) / 1000, matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief,
       volatility: c.volatility, contradicts: c.contradicts, standing: c.standing });
     if (results.length >= limit) break;
   }
-  return { scope, results, skipped: null, size: chunks.size };
+  return { scope, results, skipped: null, size: chunks.size, groups };
 }
 
 // The project's ## Now, whatever the question. Null when it has none.
@@ -458,4 +482,12 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { parseHeading, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };
+// Every searchable passage once, for the tool that writes the French shadow.
+function chunkTexts() {
+  ensure();
+  const seen = new Map();
+  for (const c of chunks.values()) if (c.kind !== 'map-only') seen.set(chunkHash(c.text), { hash: chunkHash(c.text), text: c.text });
+  return [...seen.values()];
+}
+
+module.exports = { CALIBRATED_ON, SHADOW_FILE, chunkTexts, parseHeading, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };

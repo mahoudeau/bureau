@@ -2,6 +2,7 @@
 // project never sees another project's files. Self-contained, zero deps, all
 // data fake. Usage: node test/index.test.js
 'use strict';
+const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -28,6 +29,10 @@ async function main() {
   check('French and English stopwords go', tokens('le the et and comment how').length === 0);
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-index-'));
+  // The French shadow: terms for one passage, keyed by the hash of its text.
+  const shadowed = 'The gibbon ledger closes on Fridays';
+  fs.mkdirSync(path.join(dir, 'brain', '.index'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'brain', '.index', 'shadow-fr.json'), JSON.stringify({ [crypto.createHash('sha256').update(shadowed).digest('hex').slice(0, 16)]: 'registre comptable du singe, cloture hebdomadaire' }));
   const env = { ...process.env, PORT: String(HUB_PORT), HOST: '127.0.0.1', BUREAU_TOKEN: TOKEN, BUREAU_DATA_DIR: path.join(dir, 'data'), BUREAU_BRAIN_DIR: path.join(dir, 'brain'),
     BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
   const hub = spawn(process.execPath, [path.join(__dirname, '..', 'hub', 'server.js')], { env, stdio: 'ignore' });
@@ -128,6 +133,15 @@ async function main() {
     r = await search('le serveur du kumquat');
     check('a word does too', files(r)[0] === 'knowledge/lockbox.md' && r.body.results[0].matched.some(t => t.startsWith('serv')), r.body);
     check('a translated word counts once toward coverage', r.body.results[0].coverage === 1, r.body.results[0]);
+
+    console.log('5c. the French shadow');
+    await put('knowledge/gibbon.md', NOTE('Gibbon', `- [fact] ${shadowed} (source: t-4)`));
+    r = await search('cloture du registre comptable');
+    check('a word only in the shadow finds the passage', files(r)[0] === 'knowledge/gibbon.md', r.body);
+    check('and the shadow is never served', r.body.results[0].text === shadowed, r.body.results[0]);
+    await put('knowledge/gibbon.md', NOTE('Gibbon', '- [fact] The gibbon ledger closes on Mondays (source: t-4)'));
+    r = await search('cloture du registre comptable');
+    check('an edited passage loses its terms', !files(r).includes('knowledge/gibbon.md'), r.body);
 
     console.log('6. section reads');
     r = await api('GET', '/api/knowledge?file=projects/alpha/STATE.md&section=Now');
