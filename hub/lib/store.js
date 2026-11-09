@@ -96,11 +96,23 @@ function load() {
 
 // Atomic write: tmp file, fsync, rename. A crash leaves the old file or the new one.
 function writeFileAtomic(file, text) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
   const tmp = file + '.tmp';
-  const fd = fs.openSync(tmp, 'w');
-  try { fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  // state.json holds the MCP capability and every review and view link. 0600
+  // from birth, and fchmod too, in case a stale tmp file kept its old mode.
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try { if (process.platform !== 'win32') fs.fchmodSync(fd, 0o600); fs.writeSync(fd, text); fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
   renameRetry(tmp, file);
+}
+// Older hubs wrote 0644 files in a 0755 folder. Brought in line at every boot,
+// so a file restored from a backup gets it too. POSIX only: Windows has no
+// such bits, and chmod there only toggles read-only. Never fatal: a data dir
+// the hub cannot chmod (a mounted volume, say) still serves.
+function hardenDataDir() {
+  if (process.platform === 'win32') return;
+  const tighten = (p, mode) => { try { if ((fs.statSync(p).mode & 0o777) !== mode) fs.chmodSync(p, mode); } catch (e) { console.error(`[store] cannot restrict ${p}: ${e.message}`); } };
+  tighten(DATA_DIR, 0o700);
+  for (const e of fs.readdirSync(DATA_DIR, { withFileTypes: true })) if (e.isFile()) tighten(path.join(DATA_DIR, e.name), 0o600);
 }
 // Windows: an antivirus scan or the search indexer holding the target fails
 // the rename for a moment (EPERM, EBUSY, EACCES). Three tries, a short wait
@@ -185,6 +197,7 @@ function backupTick() {
 // snapshot if missing, then start the rolling backups.
 function init() {
   load();
+  try { hardenDataDir(); } catch (e) { console.error('[store] could not restrict the data dir:', e.message); }
   try { dailySnapshot(); } catch (e) { console.error('[store] daily snapshot failed:', e.message); }
   // Work folders of missions that closed while the removal failed, or that
   // no mission owns: gone at boot, like they would have been at the close.
@@ -266,7 +279,7 @@ const LOCK_FILE = path.join(DATA_DIR, 'hub.lock');
 const LOCK_TOUCH_MS = 30_000;
 const LOCK_STALE_MS = 120_000;
 function acquireLock() {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
   try {
     const pid = parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10);
     if (pid && pid !== process.pid) {
@@ -429,7 +442,8 @@ const PROJECT_RE = { test: id => ID_RE.test(id) && !knowledge.pathError(String(i
 
 // Free-text label to path-safe id: "Chasse aux Trésors" → "chasse-aux-tresors".
 function slugify(label) {
-  return String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+  // Bounded first: the id keeps 40 characters, and [-.]+$ below is quadratic on a long run
+  return String(label || '').slice(0, 400).normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     .toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^[-.]+|[-.]+$/g, '').slice(0, 40);
 }
 

@@ -139,6 +139,7 @@
   <button id="gate-go">CLOCK IN</button>
 </div>
 <script src="/office/assets.js"></script>
+<script src="/v2/hub-auth.js"></script>
 <script>
 'use strict';
 (function () {
@@ -971,18 +972,21 @@
     }).catch(function () {});
   }
   function connectSSE() {
-    var es = new EventSource('/api/events?token=' + encodeURIComponent(token));
     var conn = document.getElementById('conn');
-    es.onopen = function () { conn.textContent = 'LIVE'; conn.classList.add('live'); };
-    es.onerror = function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); };
-    ['agent.registered', 'agent.heartbeat', 'agent.removed',
-     'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
-     'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued',
-     'message.posted', 'knowledge.written', 'journal.captured'].forEach(function (type) {
-      es.addEventListener(type, function (ev) {
-        var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
-        try { onEvent(type, d); } catch (e) {}
-      });
+    BureauHub.events({
+      up: function () { conn.textContent = 'LIVE'; conn.classList.add('live'); },
+      down: function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); },
+      wire: function (es) {
+        ['agent.registered', 'agent.heartbeat', 'agent.removed',
+         'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
+         'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued',
+         'message.posted', 'knowledge.written', 'journal.captured'].forEach(function (type) {
+          es.addEventListener(type, function (ev) {
+            var d = {}; try { d = JSON.parse(ev.data); } catch (e) {}
+            try { onEvent(type, d); } catch (e) {}
+          });
+        });
+      }
     });
   }
 

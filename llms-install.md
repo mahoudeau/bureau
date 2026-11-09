@@ -38,10 +38,10 @@ Edit `.env`: set `BUREAU_TOKEN` to the random string, and `BUREAU_BOSS_TOKEN` to
 
 | Variable | Default | What it does |
 |---|---|---|
-| `BUREAU_BOSS_TOKEN` | empty | The boss's credential; setting it turns strict mode on. Only it can act as human, change settings and mint agent tokens. Set it on a new install. |
-| `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call in legacy mode; in strict mode it acts only as an agent. Empty with no boss token means the API is open to anyone who can reach the port; the hub prints a warning at boot. |
+| `BUREAU_BOSS_TOKEN` | empty | The boss's credential; setting it turns strict mode on. Only it can act as human, change settings and mint agent tokens. Set it on a new install. Must differ from `BUREAU_TOKEN`. |
+| `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call in legacy mode; in strict mode it acts only as an agent. One of the two is required: with neither set, or a placeholder from `.env.example` in either, the hub refuses to start. `BUREAU_ALLOW_INSECURE_LOCAL=1` is the opt-in for a demo on loopback. |
 | `PORT` | 8100 | Listen port. |
-| `IP` | `::` | Bind address, passed to the hub as `HOST`. An `IP` set by the host beats a `HOST` line in `.env`. |
+| `IP` | `127.0.0.1` | Bind address, passed to the hub as `HOST`. An `IP` set by the host beats a `HOST` line in `.env`. |
 | `BUREAU_DATA_DIR` | `hub/data` | Where `state.json` (missions, roster, messages, log) lives. |
 | `BUREAU_BRAIN_DIR` | `hub/brain` | Where the brain's git repo lives. Created on first boot. |
 | `BUREAU_PUBLIC_URL` | unset | Public base URL. Used in review links and in the MCP connector URL. |
@@ -50,7 +50,7 @@ Edit `.env`: set `BUREAU_TOKEN` to the random string, and `BUREAU_BOSS_TOKEN` to
 | `BUREAU_SWEEP_MS` | 60000 | Lease-expiry and standing-work sweep interval. |
 | `BUREAU_RESERVATION_TTL_MIN` | 30 | Minutes before a `cowork` agent's reservation lapses. Tests set 0.02. |
 
-The hub loads `hub/.env` itself, from whatever folder it is started in, and only for variables the calling shell or host left unset: a variable already set in the environment wins. The listen address comes from `IP`, then `HOST`, then `::`.
+The hub loads `hub/.env` itself, from whatever folder it is started in, and only for variables the calling shell or host left unset: a variable already set in the environment wins. The listen address comes from `IP`, then `HOST`, then `127.0.0.1`.
 
 ## 4. Start
 

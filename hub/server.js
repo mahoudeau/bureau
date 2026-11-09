@@ -20,20 +20,19 @@ const poke = require('./lib/poke');
 const auth = require('./lib/auth');
 const { VERSION } = require('./version');
 
+const security = require('./lib/security');
+
 const PORT = process.env.PORT || 8100;
-const HOST = process.env.HOST || '::';           // some shared hosts expect an IPv6 bind
+const HOST = process.env.HOST || '127.0.0.1';    // loopback unless the owner says otherwise (lib/env.js)
 const TOKEN = process.env.BUREAU_TOKEN || '';
 const BOSS_TOKEN = process.env.BUREAU_BOSS_TOKEN || '';
-const TOKEN_HINT = `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`;
-if (BOSS_TOKEN && BOSS_TOKEN === TOKEN) {
-  console.error('BUREAU_BOSS_TOKEN and BUREAU_TOKEN are the same value: the boss credential would be the one every agent holds. Refusing to boot. Give the boss a token of his own.');
-  process.exit(1);
-}
-if (!TOKEN && !BOSS_TOKEN) console.warn(`WARNING: BUREAU_TOKEN not set: API is UNPROTECTED. Set it in hub/.env, e.g. from ${TOKEN_HINT}`);
-// the placeholder in .env.example (test/storage.sh keeps the two in step)
-else if (TOKEN === 'change-me-long-random-string') console.warn(`WARNING: BUREAU_TOKEN is still the example token from .env.example: anyone who has read the repo can use your API. Set your own, e.g. from ${TOKEN_HINT}`);
+const bootRefused = security.bootRefusal({ token: TOKEN, bossToken: BOSS_TOKEN, host: HOST });
+if (bootRefused) { console.error(bootRefused); process.exit(1); }
+const DEMO_HUB = security.insecureCredentials({ token: TOKEN, bossToken: BOSS_TOKEN });
+if (DEMO_HUB) console.warn(`WARNING: ${security.DEMO_VAR}=1: local demo, no real token. Never expose this hub.`);
 if (store.authMode() === 'legacy') console.warn('WARNING: auth mode legacy: every agent shares BUREAU_TOKEN and can declare itself the boss. Set BUREAU_BOSS_TOKEN for strict mode, see UPGRADING.md.');
 console.log(`Auth mode: ${store.authMode()}`);
+const ORIGINS = security.originPolicy();
 
 // ---------- SSE ----------
 // Each client is kept with its principal, so what it receives can be cut to
@@ -76,31 +75,45 @@ function summarize(type, d) {
 function send(res, code, obj) {
   const body = JSON.stringify(obj, null, 1);
   // no-store on everything: agents must always see fresh state, whatever proxy sits between
-  res.writeHead(code, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'cache-control': 'no-store' });
+  res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' });
   res.end(body);
 }
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
-    req.on('data', c => { data += c; if (data.length > 8e6) { reject(new Error('body too large')); req.destroy(); } });
-    req.on('end', () => { try { resolve(data ? JSON.parse(data) : {}); } catch { reject(new Error('invalid JSON')); } });
+    req.on('data', c => { data += c; if (data.length > 8e6) { reject(security.requestError(413, 'body too large')); req.destroy(); } });
+    req.on('end', () => {
+      let parsed;
+      try { parsed = data ? JSON.parse(data) : {}; } catch { return reject(security.requestError(400, 'invalid JSON')); }
+      if (parsed === null || typeof parsed !== 'object') return reject(security.requestError(400, 'send a JSON object'));
+      resolve(parsed);
+    });
     req.on('error', reject);
   });
+}
+// A dashboard shell, with the Content-Security-Policy that goes with it.
+function servePage(res, name, ...parts) {
+  const page = security.dashboardPage(fs.readFileSync(path.join(__dirname, 'public', name, ...parts), 'utf8'));
+  res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': page.csp, 'referrer-policy': 'no-referrer' });
+  res.end(page.html);
 }
 function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function sendPage(res, code, title, bodyHtml) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bureau · review</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:560px;margin:8vh auto;padding:0 20px;color:#111}h1{font-size:18px}textarea{width:100%;min-height:90px;font:inherit;padding:8px;box-sizing:border-box}button{font:inherit;font-weight:600;padding:10px 18px;border:none;border-radius:8px;background:#2a78d6;color:#fff;cursor:pointer;margin-top:12px}p.err{color:#c22}fieldset{border:1px solid #ddd;border-radius:8px;margin:12px 0;padding:10px}legend{font-weight:600;padding:0 6px}fieldset label{margin-right:14px}fieldset input[type=text]{width:100%;font:inherit;padding:6px;box-sizing:border-box;margin-top:8px}pre{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;font-size:13px;overflow-x:auto}</style></head><body><h1>${title}</h1>${bodyHtml}</body></html>`;
-  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
+  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
   res.end(html);
 }
 // Review evidence: artifacts that point at brain images render inline, served
 // through the link's own capability (never the hub token). The image route
 // serves only these files, so a link can't reach the rest of the brain.
 const imgOf = a => {
-  const m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+  // Bounded: an agent wrote this, and the pattern backtracks on a long run
+  const m = String(a.url || a.label || '').slice(0, 2048).match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
   return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
 };
-const citedImages = task => new Set((task.artifacts || []).map(imgOf).filter(Boolean).map(f => decodeURIComponent(f)));
+// A malformed %-escape in an artifact is that artifact's problem, not the page's.
+const decodeLoose = s => { try { return decodeURIComponent(s); } catch { return s; } };
+const citedImages = task => new Set((task.artifacts || []).map(imgOf).filter(Boolean).map(decodeLoose));
 // The work store joins the rule: a link may also show the images in its own
 // mission's work/<t-id>/ folder, cited or not, and never another mission's.
 // A brain path still has to be cited.
@@ -114,7 +127,7 @@ function evidenceFiles(task) {
   const out = [];
   for (const a of task.artifacts || []) {
     const raw = imgOf(a);
-    const f = raw && decodeURIComponent(raw);
+    const f = raw && decodeLoose(raw);
     if (f && evidenceAllowed(task, f) && !out.some(x => x.file === f)) out.push({ file: f, label: a.label || f });
   }
   let own = [];
@@ -257,12 +270,15 @@ function reviewForm(task, action, token, err, kind) {
   return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${returns}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
 }
 
-// The principal behind a request, or null. The query token is for SSE and
-// browsers (EventSource cannot set headers).
-function principalOf(req, url) {
+// The principal behind a request, or null. Credentials travel in the
+// Authorization header only: a URL ends up in logs and histories.
+function principalOf(req) {
   const h = req.headers['authorization'] || '';
-  if (h.startsWith('Bearer ')) { const p = auth.fromBearer(h.slice(7)); if (p) return p; }
-  return auth.fromBearer(url.searchParams.get('token'));
+  return auth.fromBearer(h.startsWith('Bearer ') ? h.slice(7) : null);
+}
+function ticketHolder(ticket) {
+  const p = security.takeTicket(ticket);
+  return p && auth.stillCurrent(p) ? p : null;
 }
 // A review item's payload lands in the brain once approved, so it has to stay
 // inside the credential's walls when it is filed. Null when fine.
@@ -285,24 +301,31 @@ function taskActor(who, declared, task) {
 
 // ---------- routing ----------
 const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, 'http://x');
-  const p = url.pathname;
+  let url, p;
+  // A target no URL parser accepts (GET // HTTP/1.1) is the caller's to fix.
+  try { url = new URL(req.url, 'http://x'); p = url.pathname; }
+  catch { return send(res, 400, { error: 'bad request' }); }
 
   try {
-    // Static dashboard (no token needed to load the shell; API calls need it)
-    if (req.method === 'GET' && (p === '/' || p === '/index.html')) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'index.html')));
+    res.setHeader('x-content-type-options', 'nosniff');
+    // Cross-origin browsers: only the origins the owner listed get an answer
+    // they can read. Same-origin pages need no header at all.
+    const origin = req.headers.origin;
+    if (origin && ORIGINS.allowed(origin)) { res.setHeader('access-control-allow-origin', origin); res.setHeader('vary', 'origin'); }
+    if (req.method === 'OPTIONS' && origin && /^\/(api|mcp)\//.test(p)) {
+      if (!ORIGINS.allowed(origin)) return send(res, 403, { error: 'origin not allowed' });
+      res.writeHead(204, { 'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS', 'access-control-allow-headers': 'authorization, content-type', 'access-control-max-age': '600' });
+      return res.end();
     }
+
+    // Static dashboard (no token needed to load the shell; API calls need it)
+    if (req.method === 'GET' && (p === '/' || p === '/index.html')) return servePage(res, 'index.html');
 
     // Dashboard v2 (in-progress rebuild, t-53): its own shell + static assets,
     // fully separate from / and index.html above until the boss flips the
     // switch. hub/public/v2.html is the shell; hub/public/v2/*.css|*.js are
     // the sibling modules built by the rest of this tranche.
-    if (req.method === 'GET' && p === '/v2') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2.html')));
-    }
+    if (req.method === 'GET' && p === '/v2') return servePage(res, 'v2.html');
     // t-139 (goal: t-134): the living style guide — same static-serve pattern
     // as /v2 just above, its own shell (hub/public/v2/styleguide.html) plus
     // the sibling v2/styleguide.js already covered by the mV2Asset route
@@ -313,16 +336,10 @@ const server = http.createServer(async (req, res) => {
     // served at /office per docs/office.md. Same static-serve pattern as
     // /v2: the shell is public (no data; it asks for the token), the API
     // calls it makes are Bearer-gated like everything else.
-    if (req.method === 'GET' && p === '/office') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office.html')));
-    }
+    if (req.method === 'GET' && p === '/office') return servePage(res, 'office.html');
     // t-278 GB era: the sprite gallery/approval page and the shared asset
     // module both pages load. Fixed paths, no user segments.
-    if (req.method === 'GET' && p === '/office/assets') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.html')));
-    }
+    if (req.method === 'GET' && p === '/office/assets') return servePage(res, 'office-assets.html');
     if (req.method === 'GET' && p === '/office/assets.js') {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.js')));
@@ -333,10 +350,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'font/ttf', 'cache-control': 'public, max-age=86400' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-font.ttf')));
     }
-    if (req.method === 'GET' && p === '/v2/styleguide') {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-      return res.end(fs.readFileSync(path.join(__dirname, 'public', 'v2', 'styleguide.html')));
-    }
+    if (req.method === 'GET' && p === '/v2/styleguide') return servePage(res, 'v2', 'styleguide.html');
     // t-92: components.css's vendored @font-face (fonts/Inter-Variable.woff2)
     // 404'd here even once the CSS layer itself was wired in — this route
     // only ever matched a single flat segment directly under v2/, so any
@@ -397,7 +411,7 @@ const server = http.createServer(async (req, res) => {
         return sendPage(res, 200, title, reviewForm(task, action, mReview[1], null, kind));
       if (req.method === 'POST') {
         const raw = await new Promise((resolve, reject) => {
-          let d = ''; req.on('data', c => { d += c; if (d.length > 1e5) req.destroy(); });
+          let d = ''; req.on('data', c => { d += c; if (d.length > 1e5) { reject(security.requestError(413, 'body too large')); req.destroy(); } });
           req.on('end', () => resolve(d)); req.on('error', reject);
         });
         const form = new URLSearchParams(raw);
@@ -452,7 +466,13 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
-    const who = principalOf(req, url);
+    // Judged before the token: a tokenless demo hub has nothing else in the way,
+    // and a text/plain POST from any website reaches this line without a preflight.
+    if (!ORIGINS.permits(req)) return send(res, 403, { error: 'origin not allowed: add it to BUREAU_ALLOWED_ORIGINS' });
+    if (DEMO_HUB && !security.loopbackRequest(req)) return send(res, 403, { error: 'this hub has no real token and answers loopback only' });
+    // The one route a browser cannot reach with a header. A ticket opens only
+    // this, as the credential that minted it, and only while that one stands.
+    const who = principalOf(req) || (req.method === 'GET' && p === '/api/events' ? ticketHolder(url.searchParams.get('ticket')) : null);
     if (!who) return send(res, 401, { error: 'unauthorized' });
     // Every route answers to the table in lib/auth.js. No rule, no route.
     const rule = auth.ruleFor(req.method, p);
@@ -463,8 +483,9 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime() });
 
     // ----- SSE stream -----
+    if (req.method === 'POST' && p === '/api/events/ticket') return send(res, 200, security.issueTicket(who));
     if (req.method === 'GET' && p === '/api/events') {
-      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive', 'access-control-allow-origin': '*' });
+      res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-store', connection: 'keep-alive' });
       res.write('retry: 3000\n\n');
       sseClients.set(res, who);
       req.on('close', () => sseClients.delete(res));
@@ -600,6 +621,8 @@ const server = http.createServer(async (req, res) => {
       const r = store.revokeToken(mToken[1]);
       if (r.error) return send(res, 404, r);
       store.logEvent('token.revoked', { agent: r.record.agent, note: r.record.id });
+      // A stream outlives the request that opened it: end the revoked ones.
+      for (const [stream, holder] of sseClients) if (holder.tokenId === r.record.id) { sseClients.delete(stream); stream.end(); }
       return send(res, 200, r.record);
     }
 
@@ -855,7 +878,7 @@ const server = http.createServer(async (req, res) => {
       if (!workAllowed(who, work.taskOf(b.file))) return send(res, 403, { error: `${b.file} belongs to a mission outside this credential's projects` });
       const refusal = workWriteRefusal(b.file);
       if (refusal) return send(res, refusal.code, { error: refusal.error });
-      try { return send(res, 200, work.writeWork(b)); } catch (e) { return send(res, 400, { error: e.message }); }
+      try { return send(res, 200, work.writeWork(b)); } catch (e) { return sendCaught(res, 400, e, req); }
     }
     if (req.method === 'GET' && p === '/api/work') {
       const file = url.searchParams.get('file');
@@ -868,7 +891,7 @@ const server = http.createServer(async (req, res) => {
         }
         if (!workAllowed(who, work.taskOf(file))) return send(res, 403, { error: `${file} belongs to a mission outside this credential's projects` });
         r = work.readWorkRaw(file);
-      } catch (e) { return send(res, 400, { error: e.message }); }
+      } catch (e) { return sendCaught(res, 400, e, req); }
       if (r === null) return send(res, 404, { error: 'not found' });
       if (url.searchParams.get('raw') === '1') {
         res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
@@ -881,10 +904,23 @@ const server = http.createServer(async (req, res) => {
 
     return send(res, 404, { error: 'not found' });
   } catch (e) {
-    // a refused path (lib/knowledge.js pathError) is the caller's to fix
-    return send(res, e.code === 'E_PATH' ? 400 : 500, { error: e.message });
+    // Past the headers there is no answer left to give: drop the connection.
+    if (res.headersSent) { console.error(`[hub] ${req.method} ${p}: ${e.stack || e}`); return res.destroy(); }
+    // a refused path (lib/knowledge.js pathError) and a bad request are the caller's to fix
+    if (e.code === 'E_PATH') return send(res, 400, { error: e.message });
+    if (e.expose) return send(res, e.status, { error: e.message });
+    if (e instanceof URIError) return send(res, 400, { error: 'bad request' });
+    console.error(`[hub] ${req.method} ${p}: ${e.stack || e}`);
+    return send(res, 500, { error: 'internal error' });
   }
 });
+// A work store error: the message if it was written for the caller, otherwise
+// a plain refusal, with the detail in the log.
+function sendCaught(res, code, e, req) {
+  const message = security.publicMessage(e);
+  if (message === 'internal error') console.error(`[hub] ${req.method} ${req.url}: ${e.stack || e}`);
+  return send(res, message === 'internal error' ? 500 : code, { error: message });
+}
 
 // ---------- MCP engine (zero-dep JSON-RPC over Streamable HTTP, stateless) ----------
 function mcpToken() {
@@ -1090,7 +1126,9 @@ async function mcpHandle(msg, who) {
           contextCall.logMcp(who.name, msg.params.name);
           return ok({ content: [{ type: 'text', text: JSON.stringify(r, null, 1) }], isError: false });
         } catch (e) {
-          return ok({ content: [{ type: 'text', text: String(e.message || e) }], isError: true });
+          const text = security.publicMessage(e);
+          if (text === 'internal error') console.error(`[mcp] ${msg.params && msg.params.name}: ${e.stack || e}`);
+          return ok({ content: [{ type: 'text', text }], isError: true });
         }
       }
       case 'resources/list': return ok({ resources: [] });
@@ -1098,7 +1136,8 @@ async function mcpHandle(msg, who) {
       default: return { jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: `method not found: ${msg.method}` } };
     }
   } catch (e) {
-    return { jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: String(e.message || e) } };
+    console.error(`[mcp] ${msg.method}: ${e.stack || e}`);
+    return { jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'internal error' } };
   }
 }
 
@@ -1140,6 +1179,10 @@ server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
     console.log('IPv6 unavailable, falling back to 0.0.0.0');
     server.listen(PORT, '0.0.0.0', () => console.log(`Bureau hub listening on 0.0.0.0:${PORT}`));
-  } else { throw e; }
+  } else { console.error(`cannot listen on [${HOST}]:${PORT}: ${e.message}`); process.exit(1); }
 });
+// Past this point nothing a request does may end the process. A bug still
+// reaches the log, and the requests around it keep being served.
+process.on('unhandledRejection', (e) => console.error(`[hub] unhandled rejection: ${(e && e.stack) || e}`));
+process.on('uncaughtException', (e) => console.error(`[hub] uncaught exception: ${(e && e.stack) || e}`));
 server.listen(PORT, HOST, () => console.log(`Bureau hub listening on [${HOST}]:${PORT}`));

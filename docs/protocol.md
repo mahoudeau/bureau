@@ -19,14 +19,16 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew (and `POST /api/tasks/:id/apply` to write an approved item, below) |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
 | `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed); `?section=<heading>` reads one section |
-| `POST /api/context` | `{request, project?, task?, session?, budget?, max_chars?, reset?, agent?, surface?}`: the passages this request needs, inside the budget (default 1,500 tokens, 6,000 at most), and a map of what was left out. `rendered` is the same thing as one block to inject. Empty when nothing is relevant; `task` decides the project; the request text is kept only if the owner sets `store_prompts_days`. `reset: true` clears what this `session` has been sent, for a client whose model has lost it (a compaction); with an empty `request` it does only that and is logged as a reset, not a call. A claim's response carries the mission's own as `context` |
+| `POST /api/context` | `{request, project?, task?, session?, budget?, max_chars?, reset?, agent?, surface?}`: the passages this request needs, inside the budget (default 1,500 tokens, 6,000 at most), and a map of what was left out. `rendered` is the same thing as one block to inject, framed so a note cannot end it or pass for the hub: a random `boundary` per response on the opening and closing tags, a label line starting `[<boundary>]` before each passage, and every line of brain text quoted with `> `. Empty when nothing is relevant; `task` decides the project; the request text is kept only if the owner sets `store_prompts_days`. `reset: true` clears what this `session` has been sent, for a client whose model has lost it (a compaction); with an empty `request` it does only that and is logged as a reset, not a call. A claim's response carries the mission's own as `context` |
 | `GET /api/knowledge/map` | `?project=`: one line per file the caller can see |
 | `GET /api/knowledge/search` | `?q=&project=&k=`: passages from the caller's scope, best first. A project sees global knowledge, its entity's and its own, never another project's. Without a known project, global only |
 | `GET/POST /api/journal` | capture one thing learned as a typed journal record, and read records back (below) |
 | `GET/POST /api/work` | read/write an open mission's evidence (plain files under `work/<t-id>/`, deleted when it closes) |
 | `GET /api/memory/health` | the memory's health, computed by the hub: lint, unreadable records, unapplied approvals, stale claims (below) |
 
-Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office, mirrors). Auth: see **Who can do what** below. All responses `Cache-Control: no-store`.
+Plus `GET /api/events` (SSE) for anything that wants to *watch* (dashboards, office, mirrors). Auth: see **Who can do what** below; the credential goes in the `Authorization` header and never in a URL. A browser's `EventSource` cannot set a header, so `POST /api/events/ticket` (a credential that may open the stream) returns `{ticket, expires_in}`: good once, for 60 seconds, on `GET /api/events?ticket=...` and nothing else. The ticket carries the identity and scope of the credential that minted it, never more. All responses `Cache-Control: no-store`.
+
+Browsers: `/api/` answers same-origin pages. Another origin is refused with a 403, before the token is looked at, unless it is listed in `BUREAU_ALLOWED_ORIGINS`. A client with no `Origin` header (curl, an agent) is judged by its token alone. Errors the caller can act on keep their message; anything else answers `{"error": "internal error"}` and the detail goes to the server log.
 
 ## Who can do what
 
@@ -34,7 +36,7 @@ The hub runs in one of three auth modes, reported as `auth` in `GET /api/health`
 
 - **`strict`**: `BUREAU_BOSS_TOKEN` is set. Identity comes from the credential.
 - **`legacy`**: only `BUREAU_TOKEN` is set. One shared token; `agent`, `author` and `from` are strings the client declares. The hub warns at boot. The gate rules below still hold, but anyone holding the token can declare `agent: "human"`, so legacy mode does not protect the gate from a dishonest agent.
-- **`open`**: no token at all. As legacy, with no authentication.
+- **`open`**: no token at all. As legacy, with no authentication. The hub refuses to start this way unless `BUREAU_ALLOW_INSECURE_LOCAL=1` and it binds loopback, for a local demo.
 
 Fresh installs use strict. `UPGRADING.md` has the steps from legacy.
 
@@ -58,7 +60,7 @@ Roles (`lead`, `critic`, `librarian`, `curator`) come from `settings.agents` onl
 | Route | boss | agent token | shared (strict) | legacy bearer |
 |---|---|---|---|---|
 | `GET /api/health` | yes | yes | yes | yes |
-| `GET /api/events` | yes | only with `["*"]`, no capability links | yes, no capability links | yes |
+| `GET /api/events`, `POST /api/events/ticket` | yes | only with `["*"]`, no capability links | yes, no capability links | yes |
 | `GET/POST /api/state` | yes | scoped, no capability links, no activity from other projects | yes, no capability links | yes |
 | `POST /api/agents/register`, `/heartbeat` | no: not an agent | own name | any name but human | yes |
 | `DELETE /api/agents/:name` | yes | own name | no | yes |

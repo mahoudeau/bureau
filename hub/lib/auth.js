@@ -50,6 +50,12 @@ function fromMcpToken(candidate, legacyUrlToken) {
   return null;
 }
 
+// A principal carried over from an earlier request (an SSE ticket). A token
+// revoked in between has no standing.
+function stillCurrent(p) {
+  return p.kind !== 'agent' || store.listTokens().some((t) => t.id === p.tokenId && !t.revoked_at);
+}
+
 // Names no credential but the boss may wear. 'system' writes lease expiries.
 const RESERVED_NAME = /^\s*(human|system)\s*$/i;
 
@@ -127,7 +133,7 @@ function taskView(p, t) {
 // legacy). A route missing here is not served: forgetting a rule closes it.
 const RULES = [
   ['GET', /^\/api\/health$/, 'any'],
-  ['GET', /^\/api\/events$/, 'all'],
+  ['GET', /^\/api\/events$/, 'all'], ['POST', /^\/api\/events\/ticket$/, 'all'],
   ['GET', /^\/api\/state$/, 'any'], ['POST', /^\/api\/state$/, 'any'],
   ['POST', /^\/api\/agents\/register$/, 'any'],
   ['POST', /^\/api\/agents\/heartbeat$/, 'any'],
@@ -175,5 +181,5 @@ const MCP_RULES = {
 };
 
 module.exports = {
-  secretEqual, fromBearer, fromMcpToken, actor, projectAllowed, seesTask, seesAll, canRead, canWrite, viewer, taskView, ruleFor, checkRule, RULES, MCP_RULES, sharedLastUsed: () => sharedLastUsed,
+  secretEqual, fromBearer, fromMcpToken, stillCurrent, actor, projectAllowed, seesTask, seesAll, canRead, canWrite, viewer, taskView, ruleFor, checkRule, RULES, MCP_RULES, sharedLastUsed: () => sharedLastUsed,
 };

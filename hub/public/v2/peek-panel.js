@@ -152,9 +152,9 @@ import { icon, idBadge } from './components.js';
     }
 
     function artImg(a) {
-      var m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+      var m = String(a.url || a.label || '').slice(0, 2048).match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
       if (m && !/^https?:/i.test(m[1])) return m[1];
-      var m2 = String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
+      var m2 = String(a.url || '').slice(0, 2048).match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
       return m2 && m2[1];
     }
 
@@ -162,7 +162,7 @@ import { icon, idBadge } from './components.js';
       return (t.artifacts || []).map(function (a) {
         var img = artImg(a);
         if (img) {
-          return '<figure class="v2-panel__artifact"><img src="/api/' + (/^work\//.test(decodeURIComponent(img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(img)) + '&raw=1&token=' + encodeURIComponent(V2.token) + '" alt="' + esc(a.label || img) + '" loading="lazy">' +
+          return '<figure class="v2-panel__artifact"><img data-secure-src="' + esc(BureauHub.imageUrl(img)) + '" alt="' + esc(a.label || img) + '" loading="lazy">' +
             '<figcaption>📎 ' + esc(a.label || img) + ' · by ' + esc(a.by) + '</figcaption></figure>';
         }
         var linkable = a.url && /^https?:\/\//i.test(a.url);

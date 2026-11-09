@@ -398,7 +398,7 @@ api POST /api/tasks/claim "{\"agent\":\"lead-x\",\"id\":\"$GOALID\"}" > /dev/nul
 check "a held goal does not occupy the desk" "$(api POST /api/tasks/claim '{"agent":"worker-d"}')" "\"id\": \"$GKIDID\""
 
 echo "9. the event stream speaks"
-EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
+EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
 check "SSE delivers heartbeat" "$EVENTS" 'agent.heartbeat'
 
 echo "10. the MCP door: same bureau, no shell required"

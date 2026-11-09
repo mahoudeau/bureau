@@ -104,7 +104,34 @@ function journalProject(c) {
 }
 
 // ---- Cutting a file into chunks ----
-const HEADING_RE = /^(#{1,3}) +(.+?)\s*#*\s*$/;
+// Beyond this a line is not a heading anyone wrote. One pathological line
+// should not cost the whole index a pass over megabytes.
+const MAX_HEADING_LINE = 2000;
+const isSpace = (c) => /\s/.test(c);
+// A heading is 1 to 3 #, spaces, then text with any closing # and whitespace
+// trimmed off the end. A scan from each end, because a regex over the same
+// shape backtracks quadratically on a long run of spaces.
+function parseHeading(line) {
+  if (line.length > MAX_HEADING_LINE) return null;
+  let n = 0;
+  while (n < line.length && line[n] === '#') n++;
+  if (n < 1 || n > 3 || line[n] !== ' ') return null;
+  let start = n;
+  while (line[start] === ' ') start++;
+  let end = line.length;
+  while (end > start && isSpace(line[end - 1])) end--;
+  while (end > start && line[end - 1] === '#') end--;
+  while (end > start && isSpace(line[end - 1])) end--;
+  // a heading is one line: no line break inside its text
+  const breaks = (c) => c === '\r' || c === '\n' || c.charCodeAt(0) === 0x2028 || c.charCodeAt(0) === 0x2029;
+  if (end > start) {
+    for (let i = start; i < end; i++) if (breaks(line[i])) return null;
+    return { level: n, text: line.slice(start, end) };
+  }
+  // Nothing but # and spaces after the marker: the first character is the text
+  if (start < line.length && !breaks(line[start])) return { level: n, text: line[start] };
+  return start - n >= 2 ? { level: n, text: ' ' } : null;
+}
 const FOOTER_RE = /^_.*_$/;
 const CLAIM_LINE_RE = /^- \[[A-Za-z0-9_-]+\] /;
 
@@ -116,8 +143,8 @@ function sectionsOf(content) {
   let cur = { heading: null, level: 0, line: i + 1, body: [] }, fence = false;
   for (; i < lines.length; i++) {
     if (/^\s*(```|~~~)/.test(lines[i])) fence = !fence;
-    const m = !fence && lines[i].match(HEADING_RE);
-    if (m) { out.push(cur); cur = { heading: m[2], level: m[1].length, line: i + 1, body: [] }; }
+    const m = !fence && parseHeading(lines[i]);
+    if (m) { out.push(cur); cur = { heading: m.text, level: m.level, line: i + 1, body: [] }; }
     else cur.body.push({ n: i + 1, text: lines[i] });
   }
   out.push(cur);
@@ -431,4 +458,4 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };
+module.exports = { parseHeading, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };
