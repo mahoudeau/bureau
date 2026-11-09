@@ -101,6 +101,47 @@ jobs:
         if: always()
         run: cat "$RUNNER_TEMP/bureau/hub.log" || true
 
+  # The same conformance suite with the state in SQLite, then the import and
+  # the way back. Node 22, since node:sqlite needs it.
+  sqlite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      BUREAU_URL: http://127.0.0.1:8100
+      BUREAU_TOKEN: devtoken
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Start a scratch hub on SQLite
+        run: |
+          mkdir -p "$RUNNER_TEMP/bureau"
+          PORT=8100 BUREAU_STORE=sqlite \
+          BUREAU_DATA_DIR="$RUNNER_TEMP/bureau/data" \
+          BUREAU_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" \
+          BUREAU_WORK_DIR="$RUNNER_TEMP/bureau/work" \
+          BUREAU_RESERVATION_TTL_MIN=0.02 \
+            nohup node hub/server.js > "$RUNNER_TEMP/bureau/hub.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf "$BUREAU_URL/health" > /dev/null && exit 0
+            sleep 0.5
+          done
+          cat "$RUNNER_TEMP/bureau/hub.log"
+          exit 1
+
+      - name: Conformance on SQLite (test/dummy-agent.sh)
+        run: CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" bash test/dummy-agent.sh
+
+      - name: Import and export (test/sqlite-store.test.js)
+        run: node test/sqlite-store.test.js
+
+      - name: Hub log
+        if: always()
+        run: cat "$RUNNER_TEMP/bureau/hub.log" || true
+
   # The office regression guard: every draw stays on the 384x216 canvas and
   # every pixel is one of the palette's 4 shades, at every phase and view.
   # Playwright and Chromium are installed in CI only; the hub itself keeps

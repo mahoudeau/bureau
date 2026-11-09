@@ -6,6 +6,10 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Added
+- SQLite as an optional store. `BUREAU_STORE=sqlite` keeps the state in `data/bureau.db` through Node's built-in `node:sqlite`, so still no dependency. The first boot imports `state.json` and keeps the original. Off by default; it needs Node 22.13 or newer. `hub/tools/state-export.js` writes the state back out to go home. See UPGRADING.md.
+- `GET /api/export` returns the whole state as JSON. `GET /api/health` says which store is in use.
+
 ## [0.3.0] - 2026-11-09
 
 ### Added

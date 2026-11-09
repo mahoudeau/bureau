@@ -38,6 +38,16 @@ The hub checks `state.json` before it listens.
 |---|---|---|
 | 0 to 1 | 0.2.0 | Adds `schema_version` to the file and fills in top-level lists older files may lack (`agents`, `messages`, `log`). Nothing is removed or renamed. |
 
+## Moving to SQLite (optional)
+
+By default the state lives in `state.json`. Set `BUREAU_STORE=sqlite` in `hub/.env` and it lives in `data/bureau.db` instead. It needs Node 22.13 or newer; the file store still runs on Node 18.
+
+1. Stop the hub and copy the data dir somewhere safe.
+2. Set `BUREAU_STORE=sqlite` and start the hub. The first boot imports `state.json` and keeps the original as `state.json.imported-<timestamp>`.
+3. `GET /api/health` now says `"store": "sqlite"`. The hourly and daily JSON backups below carry on as before.
+
+To go back: stop the hub, run `node hub/tools/state-export.js hub/data` to write a `state.json`, remove the setting, and start the hub. `GET /api/export` also returns the whole state as JSON at any time.
+
 ## Backups the hub keeps
 
 In the data dir, next to `state.json`:

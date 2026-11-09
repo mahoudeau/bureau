@@ -392,7 +392,9 @@ const server = http.createServer(async (req, res) => {
     if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
     if (!authed(req, url)) return send(res, 401, { error: 'unauthorized' });
     if (p === '/api/health')
-      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, uptime: process.uptime() });
+      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, store: store.STORE_KIND, uptime: process.uptime() });
+    // The whole state as JSON, readable without any SQLite tool
+    if (req.method === 'GET' && p === '/api/export') return send(res, 200, store.load());
 
     // ----- SSE stream -----
     if (req.method === 'GET' && p === '/api/events') {
