@@ -119,9 +119,9 @@ import { icon } from './components.js';
     });
 
     function artImg(a) {
-      var m = String(a.url || a.label || '').match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
+      var m = String(a.url || a.label || '').slice(0, 2048).match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
       if (m && !/^https?:/i.test(m[1])) return m[1];
-      var m2 = String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
+      var m2 = String(a.url || '').slice(0, 2048).match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i);
       return m2 && m2[1];
     }
 
@@ -154,10 +154,10 @@ import { icon } from './components.js';
     }
 
     function thumb(it) {
-      var src = '/api/' + (/^work\//.test(decodeURIComponent(it.img)) ? 'work' : 'knowledge') + '?file=' + encodeURIComponent(decodeURIComponent(it.img)) + '&raw=1&token=' + encodeURIComponent(V2.token);
+      var src = esc(BureauHub.imageUrl(it.img));
       var when = it.a.ts ? esc(it.a.ts.slice(5, 16).replace('T', ' ')) : '';
-      return '<a class="v2-media__thumb" href="' + src + '" target="_blank" rel="noopener" title="' + esc(it.a.label || it.img) + '">' +
-        '<img src="' + src + '" alt="' + esc(it.a.label || it.img) + '" loading="lazy">' +
+      return '<a class="v2-media__thumb" data-secure-href="' + src + '" target="_blank" rel="noopener" title="' + esc(it.a.label || it.img) + '">' +
+        '<img data-secure-src="' + src + '" alt="' + esc(it.a.label || it.img) + '" loading="lazy">' +
         '<span class="v2-media__cap">' + esc(it.a.label || it.img) + (when ? ' · ' + when : '') + '</span>' +
         '</a>';
     }

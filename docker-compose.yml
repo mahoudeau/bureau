@@ -1,5 +1,7 @@
-# Bureau hub, one service. Put BUREAU_TOKEN in a .env file next to this one,
-# then: docker compose up -d
+# Bureau hub, one service. Put BUREAU_TOKEN and BUREAU_BOSS_TOKEN in a .env
+# file next to this one, then: docker compose up -d
+# BUREAU_BOSS_TOKEN turns strict mode on (see UPGRADING.md); without it the hub
+# runs in legacy mode and warns at boot.
 # Optional in the same .env: BUREAU_PORT (host port), BUREAU_PUBLIC_URL,
 # DISCORD_WEBHOOK_URL, BUREAU_POKES, BUREAU_SWEEP_MS. See hub/.env.example.
 # Paths, HOST and PORT are fixed by the image on purpose.
@@ -11,6 +13,7 @@ services:
       - "${BUREAU_PORT:-8100}:8100"
     environment:
       BUREAU_TOKEN: ${BUREAU_TOKEN:?set BUREAU_TOKEN in .env}
+      BUREAU_BOSS_TOKEN: ${BUREAU_BOSS_TOKEN:-}
       BUREAU_PUBLIC_URL: ${BUREAU_PUBLIC_URL:-}
       DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
       BUREAU_POKES: ${BUREAU_POKES:-}

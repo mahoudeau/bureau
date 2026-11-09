@@ -23,7 +23,7 @@ Three laws govern scope:
 
 - **File at the scope where the fact is true.** "No em dashes" is global. "Acme never names competitors" is entity. "This repo uses tabs" is project. A learning filed one level too high is a future leak or a future wrong answer.
 - **Precedence: nearest scope wins.** An agent working a mission loads the chain top-down: global, then the project's entity, then the project. More specific overrides more general. Conflicts across scopes are resolved by the cascade; conflicts at the same scope are real contradictions and go to the human.
-- **Walls: reads go down the chain only.** An agent working an Acme mission reads global, `entities/acme/`, and its project. It never reads another entity's tree, ever. Cross-pollination happens only through promotion (below). In v0.2 the wall is law enforced by standing prompts; hub-enforced scoped reads are a planned refinement.
+- **Walls: reads go down the chain only.** An agent working an Acme mission reads global, `entities/acme/`, and its project. It never reads another entity's tree, ever. Cross-pollination happens only through promotion (below). In strict mode the hub enforces it for any token with a project list (`docs/protocol.md`, "The walls"); in legacy mode only standing prompts ask for it.
 
 **Promotion and demotion.** The librarian may propose lifting a lesson to a wider scope (the same fact learned independently under three entities, generalized and stripped of anything entity-identifying) or scoping a general rule down (one entity contradicts it, so it becomes their exception). Both are review-gated: a human signs every scope change.
 
@@ -94,7 +94,7 @@ Every completed mission appends a debrief to its project's `STATE.md`, below `##
 - **What was learned**: anything reusable; name the scope if it is not the project's own.
 - **Next step**: what a cold-started successor should do first.
 
-Optionally `earned_by:` the mission id. This shape is what the librarian digests and what lint will eventually check; free-form prose around it is welcome, the three parts are not optional.
+Optionally `earned_by:` the mission id. This shape is what the librarian digests. Lint doesn't check it yet (planned); free-form prose around it is welcome, the three parts are not optional.
 
 ## Specs: what the product does
 
@@ -136,7 +136,7 @@ source: t-12
 ```
 
 - Observation: `- [category] statement #tags (source: [[target]])`
-- `source:` in the frontmatter covers the observations that carry no source of their own; here the two `[step]` lines come from mission t-12 (see Claims, below)
+- `source:` in the frontmatter covers the observations that carry no source of their own; here the two `[step]` lines come from mission t-12. This note has no `format: 0.3`, so that holds for every line; in a `format: 0.3` note it stops at the claims already there (see Inheritance, below)
 - Relation: `- relation_type [[Target]]`; bare wikilinks in prose are implicit relations
 - `permalink`: stable identifier that survives file moves; all lineage and source links prefer permalinks
 - `scope`: `global`, `entity:<slug>`, or `project:<slug>`; lets a copied file remember its walls
@@ -145,7 +145,11 @@ source: t-12
 
 Extra frontmatter fields and grammar rules. In other tools they are inert custom metadata; in Bureau they are enforced.
 
-**Provenance (enforced in knowledge/ and recipes/, global and entity).** Every observation has at least one source: its own `(source: ...)`, its own `source:` field (long form), or its file's `source:`. A source is a journal record (`j-` id), a mission (`t-` id), or a wikilink to journal material or another note (see Refs, below). An unsourced claim is a lint error, not a style issue. This is what keeps the authoritative layer free of hallucinated facts.
+**Provenance (enforced in knowledge/ and recipes/, global and entity).** Every observation has at least one source: its own `(source: ...)`, its own `source:` field (long form), or its file's `source:`. A source is a journal record (`j-` id), a mission (`t-` id), or a wikilink to journal material or another note (see Refs, below). An unsourced claim is a lint error, not a style issue.
+
+What lint checks is that a source is there and well formed, and that a wikilink resolves. It doesn't check that the source supports the claim, so a sourced claim can still be wrong. Offline, `source: t-1` passes before mission t-1 exists. The hub checks existence only when it writes a `format: 0.3` note in `knowledge/` or `recipes/`: there, a `t-` or `j-` ref on a claim the write adds must exist.
+
+**What a human cites for a first fact.** There's no ref for "I said so", so make something to point at. Open a mission (`POST /api/tasks`, any title) and cite its `t-` id. Or write the fact to the day's journal file (`POST /api/knowledge` to `journal/<yyyy-mm-dd>.md`, open to any author) and cite `[[journal/<yyyy-mm-dd>]]`. A typed record (`POST /api/journal`) needs an agent on the roster, so the boss credential can't capture one itself: `human` is refused with `E_AGENT`, and an agent has to capture it. The boss can also send `force: true`, which writes past lint and logs the override.
 
 **Summary (required on the files a scope load reads first).** `summary:` is one line, 200 characters or fewer, saying what the file holds. Required on `knowledge/` and `recipes/` notes (global and entity), `entities/<slug>/PROFILE.md`, and `projects/<slug>/STATE.md`. One exemption: `knowledge/INDEX.md` (global or entity), which is a map itself. It is what a map or a search result shows next to the file name, so an agent can decide what to open without opening everything. A `STATE.md` that has no frontmatter gets a minimal block (`title`, `summary`) above its `## Now`; appends land below. Missing is a lint warning, over length is an error.
 
@@ -155,7 +159,7 @@ Extra frontmatter fields and grammar rules. In other tools they are inert custom
 
 **Earned-by.** `earned_by: [[missions/t-42]]` links a note to the reviewed work that produced it. Optional but valued: it is the difference between remembered and earned.
 
-**Freshness.** `volatility: volatile | stable | durable` (defaults stable). Volatile facts (prices, versions, contacts) get `verified:` dates; a stale volatile fact is a lint warning and, in Bureau, a re-verification mission.
+**Freshness.** `volatility: volatile | stable | durable` (defaults stable). Volatile facts (prices, versions, contacts) get `verified:` dates; in Bureau a stale claim is listed by `GET /api/memory/health`. Filing a re-verification mission from it is planned, not built.
 
 **Lineage.** Retirement moves a file to `attic/` preserving its path and stamps `retired:` (date), `retired_by:`, `retired_reason:`, `superseded_by: [[...]]`. The replacement carries `supersedes: [[...]]`. Both directions are lint-checked: no orphan retirements, no unexplained replacements.
 
@@ -219,7 +223,7 @@ The list binds `format: 0.3` files only. v0.2 files keep whatever categories the
 | mission | `t-356` | a mission in the hub, with its log |
 | wikilink | `[[journal/2026-08-11]]`, `[[deploy-hub#^c-8k2m1q]]` | a file, a permalink, or one claim |
 
-A validator with access to the hub checks that `j-` and `t-` refs exist; offline, lint checks their syntax and resolves wikilinks.
+`brain-lint` checks the syntax of `j-` and `t-` refs and resolves wikilinks. It never checks that a `j-` or `t-` ref exists. The hub does, for claims added by a write to a `format: 0.3` note in `knowledge/` or `recipes/`.
 
 ### Fields
 
@@ -244,7 +248,9 @@ Every field has a reader. Numbers the index computes (truth, importance, reads, 
 
 ### Inheritance
 
-A claim reads `belief`, `volatility` and `verified` from its own fields first, then from its file's frontmatter (`volatility` defaults to `stable`). A claim with no source of its own is covered by its file's `source:`. When the hub writes a note, a claim **added** by that write must bring its own source: the file-level source covers the claims that were already there, never new ones.
+A claim reads `belief`, `volatility` and `verified` from its own fields first, then from its file's frontmatter (`volatility` defaults to `stable`). A claim with no source of its own is covered by its file's `source:`, and that is all `brain-lint` asks, in every format.
+
+The hub adds one rule at write time, for `format: 0.3` notes in `knowledge/` and `recipes/` only: a claim **added** by that write must bring its own source, and the file-level source covers only the claims already there. A note without `format: 0.3` doesn't have this rule, so its file-level source covers new claims too. Three writes skip it: an approved item applied with its pinned payload, a boss write with `force: true`, and a hand edit swept in from disk.
 
 ## Journal records (v0.3)
 
@@ -318,7 +324,9 @@ An error is `{ "code", "line", "message" }`:
 
 ## The derived index
 
-The files are the brain; the index is a cache of them. The hub builds it in SQLite from the files and the git history and can drop and rebuild it at any time. Nothing in it is canonical.
+The files are the brain; the index is a cache of them. Today it is in memory (`hub/lib/index.js`): rebuilt from the files at boot, kept current as the hub writes, and used for search and the context call. Nothing in it is canonical.
+
+Planned, not built: a SQLite index with this schema, holding computed numbers as well.
 
 ```
 files(path, compartment, scope, belief, volatility, verified, summary, format)
@@ -328,7 +336,7 @@ relations(from_id, type, to_id)        -- contradicts, supersedes, part_of
 journal(claim_id, author, mission, at, confidence, evidence)
 ```
 
-Computed numbers (truth, importance, read and citation counts, search ranks) live only here.
+Computed numbers (truth, importance, read and citation counts, search ranks) would live only here.
 
 ## What is enforced today
 
@@ -345,8 +353,8 @@ v0.3 is approved. Its rules land in steps; until a step lands, the v0.2 rules st
 
 ## The linter
 
-`brain-lint` ships with the hub: `node hub/tools/brain-lint.js <brain-dir>`, zero dependencies, Apache-2.0, exit 1 on errors. It enforces the frontmatter schema, provenance, dangling links, and attic lineage in authoritative compartments (global and entity `knowledge/` and `recipes/`); belief-status and freshness are warnings; a missing `summary` is a warning and one over 200 characters an error, on the summary-bearing files listed above; a project `STATE.md` without `## Now`, or with one over 30 lines, is a warning; in `projects/<slug>/specs/`, a duplicate rule id or a rule without a source is an error; episodic and working compartments (`journal/`, `meetings/`, `import/`, `projects/`, `agents/`, `daily/`) are deliberately lenient, because write-cheap is the law there. The full contract it grows into: schema per compartment · provenance coverage · link integrity · lineage completeness · belief-status transitions · debrief-grammar checks on STATE.md · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
+`brain-lint` ships with the hub: `node hub/tools/brain-lint.js <brain-dir>`, zero dependencies, Apache-2.0, exit 1 on errors. It enforces the frontmatter schema, provenance, dangling links, and attic lineage in authoritative compartments (global and entity `knowledge/` and `recipes/`); belief-status and freshness are warnings; a missing `summary` is a warning and one over 200 characters an error, on the summary-bearing files listed above; a project `STATE.md` without `## Now`, or with one over 30 lines, is a warning; in `projects/<slug>/specs/`, a duplicate rule id or a rule without a source is an error; episodic and working compartments (`journal/`, `meetings/`, `import/`, `projects/`, `agents/`, `daily/`) are deliberately lenient, because write-cheap is the law there. The full contract it could grow into (planned, the parts not listed above aren't built): schema per compartment · provenance coverage · link integrity · lineage completeness · belief-status transitions · debrief-grammar checks on STATE.md · freshness warnings. Lint status is part of a brain's health, next to the librarian's reports.
 
 ## Interoperability
 
-Two-way, by design. Outbound: a Bureau brain is readable by any markdown tool, and tools that index observation/relation grammar (including Basic Memory) can index it directly; Bureau's extra fields degrade to inert metadata. Inbound: notes from other tools import into `import/` (or straight into `journal/` for small drops) as unsourced material with `belief: hypothesis`, which is precisely what an unreviewed note is; the librarian promotes what earns it. A converter ships both ways because the ownership promise requires the exit door to work.
+Two-way, by design. Outbound: a Bureau brain is readable by any markdown tool, and tools that index observation/relation grammar (including Basic Memory) can index it directly; Bureau's extra fields degrade to inert metadata. Inbound: notes from other tools import into `import/` (or straight into `journal/` for small drops) as unsourced material with `belief: hypothesis`, which is precisely what an unreviewed note is; the librarian promotes what earns it. A converter in both directions is planned, not built; today the exit door is that the files are plain markdown.

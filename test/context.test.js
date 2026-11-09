@@ -76,7 +76,21 @@ async function main() {
     r = await ctx({ request: 'ok, yes', project: 'alpha' });
     check('stopwords are skipped and cost nothing', r.body.skipped === 'no terms' && r.body.rendered === '' && !r.body.context.length, r.body);
     r = await ctx({ request: 'what is the capybara mortgage rate in Lisbon', project: 'alpha' });
-    check('nothing relevant: an empty answer and a miss', r.body.miss === true && r.body.rendered === '', r.body);
+    check('nothing relevant: a miss, and no passages', r.body.miss === true && !r.body.context.length && !r.body.map.length, r.body);
+    check('asked directly, it says it has nothing', r.body.state === 'none' && /has nothing on this/.test(r.body.rendered), r.body);
+    check('and names what it could not cover', r.body.uncovered.length > 0, r.body.uncovered);
+    r = await ctx({ request: 'what is the capybara mortgage rate in Lisbon', project: 'alpha', surface: 'claude-code' });
+    check('a hook call stays silent on nothing', r.body.state === 'none' && r.body.rendered === '', r.body);
+    r = await ctx({ request: 'what is the capybara mortgage rate in Lisbon', project: 'alpha', surface: 'claim' });
+    check('so does a mission briefing', r.body.rendered === '', r.body);
+    r = await ctx({ request: 'how do I flash the toaster firmware?', project: 'alpha' });
+    check('a covered question is answered', r.body.state === 'answered' && !/has nothing/.test(r.body.rendered), r.body);
+    // Only a map-only file matches and the project has no Now: something near it, nothing to serve.
+    await api('POST', '/api/projects', { id: 'gamma', label: 'gamma' });
+    await put('projects/gamma/references/orbit.md', '---\ntitle: Orbit\n---\n\nThe orbital plumbing schedule for the station lists every valve inspection.\n');
+    r = await ctx({ request: 'orbital plumbing schedule valve inspection', project: 'gamma' });
+    check('nearby material is called adjacent', r.body.state === 'adjacent' && r.body.map.length > 0 && !r.body.context.length, r.body);
+    check('and says so inside the framed block', /Nearby material only\. Not covered: /.test(r.body.rendered) && /Nearby material only[^]*<\/bureau-context boundary="[0-9a-f]+">$/.test(r.body.rendered), r.body.rendered);
 
     console.log('5. the budget');
     r = await ctx({ request: 'penguin ledger audit reconciliation rule', project: 'alpha', budget: 200 });
@@ -92,6 +106,8 @@ async function main() {
     const a = await ctx({ request: 'flash the toaster firmware', ...s });
     const b = await ctx({ request: 'flash the toaster firmware', ...s });
     check('a passage is not sent twice in a session', a.body.context.length > 0 && b.body.context.length === 0, b.body.context);
+    check('all held back as repeats is not a miss', b.body.miss === false && b.body.held_back > 0 && b.body.state !== 'none', b.body);
+    check('and renders nothing', b.body.rendered === '', b.body.rendered);
     const c = await ctx({ request: 'flash the toaster firmware', ...s, reset: true });
     check('reset forgets', c.body.context.length === a.body.context.length, c.body.context);
     const d = await ctx({ request: 'flash the toaster firmware', project: 'alpha', session: 'session-2' });
@@ -141,6 +157,24 @@ async function main() {
     check('stays under the hook output cap', added.additionalContext.length < 10000);
     h = run(prompt('ok', 'hook-1'));
     check('nothing to add: no output', h.status === 0 && h.stdout === '', h.stdout);
+    h = run(prompt('what is the capybara mortgage rate in Lisbon', 'hook-1'));
+    check('nothing in the brain: no output, no empty block', h.status === 0 && h.stdout === '', h.stdout);
+    const start = (source, sid) => JSON.stringify({ session_id: sid, cwd: repo, hook_event_name: 'SessionStart', source });
+    const flash = /Flash the toaster firmware/;
+    check('the same prompt again: the passage is held back', !flash.test(run(prompt('flash the toaster firmware', 'hook-1')).stdout));
+    for (const source of ['startup', 'resume', 'clear']) {
+      h = run(start(source, 'hook-1'));
+      check(`SessionStart ${source}: exit 0, no output`, h.status === 0 && h.stdout === '', h);
+    }
+    check('and no reset: the model still holds the passage', !flash.test(run(prompt('flash the toaster firmware', 'hook-1')).stdout));
+    const logPath = path.join(dir, 'data', 'context-log.jsonl');
+    const logRows = () => fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+    const callsBefore = logRows().filter(e => e.type === 'call').length;
+    h = run(start('compact', 'hook-1'));
+    check('SessionStart compact: exit 0, no output', h.status === 0 && h.stdout === '', h);
+    check('a reset is not counted as a call', logRows().filter(e => e.type === 'call').length === callsBefore && logRows().some(e => e.type === 'reset'), logRows().slice(-2));
+    h = run(prompt('flash the toaster firmware', 'hook-1'));
+    check('after a compaction the passage is served again', flash.test(h.stdout), h.stdout);
     h = run(prompt('flash the toaster firmware', 'hook-2'), { BUREAU_URL: 'http://127.0.0.1:1' });
     check('no hub: exit 0, no output', h.status === 0 && h.stdout === '', h);
     check('and one line in its log', /failed/.test(fs.readFileSync(path.join(dir, 'hook.log'), 'utf8')));
@@ -160,7 +194,7 @@ async function main() {
 
     console.log('11. capture before closing');
     await api('POST', '/api/agents/register', { name: 'closer', kind: 'dummy' });
-    const claimOne = async () => { const id = (await api('POST', '/api/tasks', { title: 'a job', project: 'alpha' })).body.task.id; await api('POST', '/api/tasks/claim', { agent: 'closer', id }); return id; };
+    const claimOne = async () => { const id = (await api('POST', '/api/tasks', { title: 'a job', project: 'alpha', gate: 'critic' })).body.task.id; await api('POST', '/api/tasks/claim', { agent: 'closer', id }); return id; };
     let id = await claimOne();
     r = await api('PATCH', `/api/tasks/${id}`, { agent: 'closer', status: 'done' });
     check('off by default', r.code === 200 && r.body.task.status === 'done', r);
@@ -179,10 +213,76 @@ async function main() {
     id = await claimOne();
     r = await api('PATCH', `/api/tasks/${id}`, { agent: 'human', status: 'done' });
     check('the boss closes anything', r.code === 200, r);
+
+    console.log('12. MCP sessions that worked without the context call');
+    const mcpPath = new URL((await api('GET', '/api/mcp')).body.url).pathname;
+    const mcp = async (name, args = {}) => (await (await fetch(BASE + mcpPath, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: args } }) })).json()).result;
+    let bump = 0;
+    const mcpBlock = async () => { await put('recipes/bump.md', note('Bump', [`- [fact] Cache bump number ${++bump} (source: t-1)`])); return (await api('GET', '/api/memory/health')).body.reads.mcp; };
+    const logFile = path.join(dir, 'data', 'context-log.jsonl');
+    const ago = hours => new Date(Date.now() - hours * 3600_000).toISOString();
+    const addLine = o => fs.appendFileSync(logFile, `${JSON.stringify(o)}\n`);
+    let u = await mcpBlock();
+    check('no MCP work yet: nothing counted', u.work_sessions_7d === 0 && u.skipped_7d === 0, u);
+    check('the block says what a session is', /60 minutes/.test(u.session_rule), u);
+    await mcp('whoami');
+    await mcp('read_knowledge', { dir: 'recipes' });
+    u = await mcpBlock();
+    check('read-only tools are not work', u.work_sessions_7d === 0, u);
+    r = await mcp('capture', { kind: 'fact', text: 'The secret badger lives at number nine', evidence: 'saw it' });
+    check('the work call succeeded', r.isError === false, r);
+    u = await mcpBlock();
+    check('work with no get_context is a skip', u.work_sessions_7d === 1 && u.skipped_7d === 1 && u.skipped_unbriefed_7d === 1, u);
+    check('it names the agent and the tools', u.skipped[0].agent === 'consul' && u.skipped[0].tools.join() === 'capture' && u.skipped[0].work_calls === 1, u.skipped);
+    const mcpLine = fs.readFileSync(logFile, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)).find(e => e.type === 'mcp');
+    check('the log holds the tool name and nothing it was given', Object.keys(mcpLine).sort().join() === 'agent,tool,ts,type', mcpLine);
+    check('so the text is not in it', !/secret badger/.test(fs.readFileSync(logFile, 'utf8')));
+    await mcp('capture', { kind: 'nonsense', text: 'x', evidence: 'y' });
+    u = await mcpBlock();
+    check('a refused call is not counted', u.skipped[0].work_calls === 1, u.skipped);
+    await mcp('get_context', { request: 'flash the toaster firmware', project: 'alpha' });
+    u = await mcpBlock();
+    check('a get_context in the same window clears it', u.work_sessions_7d === 1 && u.skipped_7d === 0, u);
+    addLine({ ts: ago(3), type: 'mcp', agent: 'consul', tool: 'write_knowledge' });
+    addLine({ ts: ago(5), type: 'mcp', agent: 'consul', tool: 'start_mission' });
+    addLine({ ts: ago(5), type: 'mcp', agent: 'consul', tool: 'update_mission' });
+    addLine({ ts: ago(8 * 24), type: 'mcp', agent: 'consul', tool: 'capture' });
+    u = await mcpBlock();
+    check('a gap over the window starts another session', u.work_sessions_7d === 3 && u.skipped_7d === 2, u);
+    check('a session that claimed a mission was briefed', u.skipped_unbriefed_7d === 1 && u.skipped.find(x => x.briefed).tools.join() === 'start_mission,update_mission', u.skipped);
+    check('oldest first, past the week left out', u.skipped[0].tools.join() === 'start_mission,update_mission' && u.skipped.length === 2, u.skipped);
+    addLine({ ts: ago(1), type: 'call', surface: 'claude-code', agent: 'consul', served: [] });
+    addLine({ ts: ago(1), type: 'mcp', agent: 'scout', tool: 'write_work' });
+    u = await mcpBlock();
+    check('agents are told apart, and a hook call is not get_context', u.work_sessions_7d === 4 && u.skipped.some(x => x.agent === 'scout'), u);
   } finally {
     hub.kill('SIGTERM');
     await sleep(300);
     fs.rmSync(dir, { recursive: true, force: true });
+  }
+
+  console.log('13. a young brain answers short questions');
+  const smallDir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-context-small-'));
+  const smallPort = HUB_PORT + 1, SMALL = `http://127.0.0.1:${smallPort}`;
+  const small = spawn(process.execPath, [path.join(__dirname, '..', 'hub', 'server.js')], { env: { ...env, PORT: String(smallPort), BUREAU_DATA_DIR: path.join(smallDir, 'data'), BUREAU_BRAIN_DIR: path.join(smallDir, 'brain'), BUREAU_WORK_DIR: path.join(smallDir, 'work') }, stdio: 'ignore' });
+  try {
+    for (let i = 0; i < 40; i++) { try { await fetch(`${SMALL}/health`); break; } catch { await sleep(250); } }
+    const post = async (p, body) => (await fetch(SMALL + p, { method: 'POST', headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: JSON.stringify(body) })).json();
+    await post('/api/knowledge', { file: 'knowledge/refunds.md', author: 'human', force: true, content: note('Refund policy', ['- [fact] Refunds over 500 euros must be approved by the finance lead before the money leaves the account (source: t-1)', '- [gotcha] Partial refund requests also go through the finance lead queue (source: t-1)']) });
+    await post('/api/knowledge', { file: 'knowledge/shipping.md', author: 'human', force: true, content: note('Shipping', ['- [fact] Parcels leave the warehouse on Tuesdays and Fridays (source: t-1)', '- [fact] Returned parcels get a refund label from support (source: t-1)']) });
+    await post('/api/knowledge', { file: 'knowledge/onboarding.md', author: 'human', force: true, content: note('Onboarding', ['- [fact] New hires get their laptop on the first Monday (source: t-1)', '- [fact] Payroll closes on the 25th of each month (source: t-1)']) });
+    for (const q of ['who has to approve a large refund?', 'Who approves refunds?', 'refund']) {
+      const x = await post('/api/context', { request: q });
+      check(`found: "${q}"`, x.miss === false && x.context.some(c => /finance lead/.test(c.text)), x);
+    }
+    let x = await post('/api/context', { request: 'capybara mortgage rate' });
+    check('still silent on what is not there', x.miss === true && x.state === 'none', x);
+    x = await post('/api/context', { request: 'refund capybara mortgage rate in Lisbon' });
+    check('one shared word in a long question is not enough', x.miss === true && !x.context.length, x);
+  } finally {
+    small.kill('SIGTERM');
+    await sleep(300);
+    fs.rmSync(smallDir, { recursive: true, force: true });
   }
   console.log(`\npassed ${PASS}, failed ${FAIL}`);
   process.exit(FAIL ? 1 : 0);

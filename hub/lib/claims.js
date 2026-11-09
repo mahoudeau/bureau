@@ -34,6 +34,21 @@ const toRef = (r) => ({ ref: r.startsWith('[[') ? r.slice(2, -2) : r, type: refT
 const refText = (s) => s.type === 'wikilink' ? `[[${s.ref}]]` : s.ref;
 const splitList = (v) => v.split(',').map((x) => x.trim()).filter(Boolean);
 
+// Every "(source: ...)" group in a line, in order: body is what follows the
+// colon and any whitespace. indexOf rather than /\(source:\s*([^)]*)\)/g,
+// which is quadratic on a line of unclosed groups.
+function sourceGroups(line) {
+  const out = [];
+  for (let at = 0; ;) {
+    const open = line.indexOf('(source:', at);
+    if (open === -1) return out;
+    const close = line.indexOf(')', open);
+    if (close === -1) return out; // no group after this one can close either
+    out.push({ start: open, end: close + 1, body: line.slice(open + 8, close).trimStart() });
+    at = close + 1;
+  }
+}
+
 function tagsIn(text) {
   const out = [];
   for (const m of text.matchAll(TAG_RE)) if (!out.includes(m[1])) out.push(m[1]);
@@ -164,14 +179,14 @@ function parseFile(text, opts = {}) {
 
     // Short form: the first "(source: ...)" group whose items are all refs.
     // Long form: the text is verbatim; sources come from the source field.
-    let textOut = rest.replace(/\s+$/, ''), note = null;
+    let textOut = rest.trimEnd(), note = null;
     if (!long) {
-      for (const g of rest.matchAll(/\(source:\s*([^)]*)\)/g)) {
-        const refs = splitList(g[1]);
+      for (const g of sourceGroups(rest)) {
+        const refs = splitList(g.body);
         if (!refs.length || !refs.every((r) => REF_RE.test(r))) continue;
         sources = refs.map(toRef);
-        textOut = rest.slice(0, g.index).replace(/\s+$/, '');
-        note = rest.slice(g.index + g[0].length).trim() || null;
+        textOut = rest.slice(0, g.start).trimEnd();
+        note = rest.slice(g.end).trim() || null;
         break;
       }
     }
@@ -219,4 +234,4 @@ function serializeClaim(c) {
   return line;
 }
 
-module.exports = { parseFile, serializeClaim, tagsIn, KINDS, FIELDS, TEXT_MAX, REF_RE };
+module.exports = { parseFile, serializeClaim, tagsIn, sourceGroups, KINDS, FIELDS, TEXT_MAX, REF_RE };

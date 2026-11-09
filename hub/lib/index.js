@@ -7,6 +7,8 @@
 // The scope is decided here, not by the caller's manners: a project sees global
 // knowledge, its entity's and its own, and nothing from another project.
 'use strict';
+const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
 const claims = require('./claims');
 const knowledge = require('./knowledge');
@@ -14,6 +16,9 @@ const store = require('./store');
 const GLOSSARY = require('./glossary');
 
 const K1 = 1.2, B = 0.75;
+// The brain size the context call's floors were set on. Below it, a brain is
+// young: scores run lower and most words are simply not in it yet.
+const CALIBRATED_ON = 620;
 const WEIGHT = { curated: 1.5, project: 1.3, state: 1.0, journal: 0.8 };
 const DEFAULT_K = 5, MAX_K = 50, PER_FILE = 3;
 const PROSE_MIN = 40; // shorter leftovers beside a section's claims are noise
@@ -104,7 +109,34 @@ function journalProject(c) {
 }
 
 // ---- Cutting a file into chunks ----
-const HEADING_RE = /^(#{1,3}) +(.+?)\s*#*\s*$/;
+// Beyond this a line is not a heading anyone wrote. One pathological line
+// should not cost the whole index a pass over megabytes.
+const MAX_HEADING_LINE = 2000;
+const isSpace = (c) => /\s/.test(c);
+// A heading is 1 to 3 #, spaces, then text with any closing # and whitespace
+// trimmed off the end. A scan from each end, because a regex over the same
+// shape backtracks quadratically on a long run of spaces.
+function parseHeading(line) {
+  if (line.length > MAX_HEADING_LINE) return null;
+  let n = 0;
+  while (n < line.length && line[n] === '#') n++;
+  if (n < 1 || n > 3 || line[n] !== ' ') return null;
+  let start = n;
+  while (line[start] === ' ') start++;
+  let end = line.length;
+  while (end > start && isSpace(line[end - 1])) end--;
+  while (end > start && line[end - 1] === '#') end--;
+  while (end > start && isSpace(line[end - 1])) end--;
+  // a heading is one line: no line break inside its text
+  const breaks = (c) => c === '\r' || c === '\n' || c.charCodeAt(0) === 0x2028 || c.charCodeAt(0) === 0x2029;
+  if (end > start) {
+    for (let i = start; i < end; i++) if (breaks(line[i])) return null;
+    return { level: n, text: line.slice(start, end) };
+  }
+  // Nothing but # and spaces after the marker: the first character is the text
+  if (start < line.length && !breaks(line[start])) return { level: n, text: line[start] };
+  return start - n >= 2 ? { level: n, text: ' ' } : null;
+}
 const FOOTER_RE = /^_.*_$/;
 const CLAIM_LINE_RE = /^- \[[A-Za-z0-9_-]+\] /;
 
@@ -116,8 +148,8 @@ function sectionsOf(content) {
   let cur = { heading: null, level: 0, line: i + 1, body: [] }, fence = false;
   for (; i < lines.length; i++) {
     if (/^\s*(```|~~~)/.test(lines[i])) fence = !fence;
-    const m = !fence && lines[i].match(HEADING_RE);
-    if (m) { out.push(cur); cur = { heading: m[2], level: m[1].length, line: i + 1, body: [] }; }
+    const m = !fence && parseHeading(lines[i]);
+    if (m) { out.push(cur); cur = { heading: m.text, level: m.level, line: i + 1, body: [] }; }
     else cur.body.push({ n: i + 1, text: lines[i] });
   }
   out.push(cur);
@@ -191,6 +223,19 @@ let files = new Map();       // file -> one line about it, for the map
 let totalLen = 0, nextId = 1, built = false, builtAt = null, commit = undefined;
 let superseded = new Set();
 
+// French search terms per chunk, keyed by a hash of its text: a derived file in
+// the brain, tracked by git and written by hub/tools/shadow-fr.js. Added to what
+// is searched and never to what is served. An edited chunk has a new hash, so
+// its terms lapse. No file, no change.
+const SHADOW_FILE = '.index/shadow-fr.json';
+let shadow = new Map();
+const chunkHash = (text) => crypto.createHash('sha256').update(text).digest('hex').slice(0, 16);
+function loadShadow() {
+  shadow = new Map();
+  try { shadow = new Map(Object.entries(JSON.parse(fs.readFileSync(path.join(knowledge.BRAIN_DIR, SHADOW_FILE), 'utf8')))); }
+  catch (e) { if (e.code !== 'ENOENT') console.error('[index] French shadow unreadable:', e.message); }
+}
+
 function removeFile(rel) {
   files.delete(rel);
   for (const id of byFile.get(rel) || []) {
@@ -220,7 +265,8 @@ function addFile(rel) {
       compartment: info.compartment, scope: info.scope, project: info.project, entity: info.entity, verified: front.verified || null, belief: front.belief || null });
   }
   for (const c of made) {
-    const toks = tokens(c.index);
+    const fr = shadow.get(chunkHash(c.text));
+    const toks = tokens(fr ? `${c.index} ${fr}` : c.index);
     delete c.index;
     if (!toks.length) continue;
     const tf = new Map();
@@ -251,6 +297,7 @@ function refreshSuperseded() {
 function build() {
   const t0 = Date.now();
   chunks = new Map(); byFile = new Map(); postings = new Map(); files = new Map(); totalLen = 0; nextId = 1;
+  loadShadow();
   for (const f of knowledge.listKnowledge('')) addFile(f.split(path.sep).join('/'));
   refreshSuperseded();
   built = true;
@@ -266,7 +313,7 @@ function invalidate() { built = false; }
 function touch(field) {
   if (!built) return;
   const written = String(field || '').split(/\s*(?:->|,)\s*/).map((x) => x.trim()).filter(Boolean);
-  if (!written.length) return invalidate();
+  if (!written.length || written.includes(SHADOW_FILE)) return invalidate();
   try {
     for (const f of written) { removeFile(f); addFile(f); }
     refreshSuperseded();
@@ -300,11 +347,14 @@ function fileInfo(rel, scope) {
 }
 // One claim and its evidence, each source resolved: "where does this come
 // from" in one call. Its own sources, or the file's when it has none.
-function claimDetail(id) {
+// viewer (lib/auth.js viewer) keeps the answer inside a credential's walls: a
+// claim it cannot reach is not found, and neither is any of its evidence.
+function claimDetail(id, viewer) {
   ensure();
   let c = null;
   for (const x of chunks.values()) if (x.claim === id) { c = x; break; }
   if (!c) return null;
+  if (viewer && !viewer.canRead(c.file) && !(c.project && viewer.seesProject(c.project))) return null;
   const front = claims.parseFile(knowledge.readKnowledge(c.file) || '', { path: c.file }).frontmatter;
   const own = (c.sources || []).filter((s) => s !== id);
   const inherited = own.length ? [] : String(front.source || '').replace(/^\[(?!\[)|(?<!\])\]$/g, '').split(',').map((s) => s.trim().replace(/^\[\[|\]\]$/g, '')).filter(Boolean);
@@ -314,14 +364,17 @@ function claimDetail(id) {
   const resolve = (ref) => {
     if (/^t-\d+$/.test(ref)) {
       const t = tasks.find((x) => x.id === ref);
-      return t ? { ref, type: 'mission', found: true, title: t.title, status: t.status, project: t.project } : { ref, type: 'mission', found: false };
+      return t && (!viewer || viewer.seesProject(t.project)) ? { ref, type: 'mission', found: true, title: t.title, status: t.status, project: t.project } : { ref, type: 'mission', found: false };
     }
     if (/^j-/.test(ref)) {
       const r = records.find((x) => x.id === ref);
-      return r ? { ref, type: 'record', found: true, text: r.text, evidence: r.fields.evidence, by: r.fields.by, at: r.fields.at } : { ref, type: 'record', found: false };
+      const reachable = r && (!viewer || (journalProject(r) && viewer.seesProject(journalProject(r))));
+      return reachable ? { ref, type: 'record', found: true, text: r.text, evidence: r.fields.evidence, by: r.fields.by, at: r.fields.at } : { ref, type: 'record', found: false };
     }
     const target = ref.split('#')[0];
-    return { ref, type: 'wikilink', found: knowledge.readKnowledge(/\.md$/.test(target) ? target : `${target}.md`) !== null || [...files.values()].some((f) => f.title === target) };
+    const named = /\.md$/.test(target) ? target : `${target}.md`;
+    if (viewer && !viewer.canRead(named)) return { ref, type: 'wikilink', found: false };
+    return { ref, type: 'wikilink', found: knowledge.readKnowledge(named) !== null || [...files.values()].some((f) => f.title === target) };
   };
   return { id, file: c.file, section: c.section, line: c.line, text: c.text, compartment: c.compartment, verified: c.verified, belief: c.belief, volatility: c.volatility,
     evidence: own.length ? 'own' : inherited.length ? 'file' : 'none', sources: refs.map(resolve) };
@@ -386,14 +439,18 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
     // word that appears nowhere must not outweigh its English translation.
     const groupWeight = (g, among) => Math.max(0, ...g.filter(among).map((t) => weights[t]));
     const hit = new Set(matched.get(id));
-    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || groupWeight(g, () => true)), 0) || 1;
+    // In a young brain most words are unknown for no reason worth reading, so
+    // one weighs at most what the question's rarest known word weighs.
+    const knownMax = Math.max(0, ...groups.map((g) => groupWeight(g, (t) => postings.has(t))));
+    const unknown = (g) => (N < CALIBRATED_ON ? Math.min(groupWeight(g, () => true), knownMax) : groupWeight(g, () => true));
+    const total = groups.reduce((a, g) => a + (groupWeight(g, (t) => postings.has(t)) || unknown(g)), 0) || 1;
     const covered = groups.reduce((a, g) => a + groupWeight(g, (t) => hit.has(t)), 0);
     results.push({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: c.compartment, kind: c.kind, score: Math.round(score * 100) / 100,
       coverage: Math.round(covered / total * 1000) / 1000, matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief,
       volatility: c.volatility, contradicts: c.contradicts, standing: c.standing });
     if (results.length >= limit) break;
   }
-  return { scope, results, skipped: null, size: chunks.size };
+  return { scope, results, skipped: null, size: chunks.size, groups };
 }
 
 // The project's ## Now, whatever the question. Null when it has none.
@@ -425,4 +482,12 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp };
+// Every searchable passage once, for the tool that writes the French shadow.
+function chunkTexts() {
+  ensure();
+  const seen = new Map();
+  for (const c of chunks.values()) if (c.kind !== 'map-only') seen.set(chunkHash(c.text), { hash: chunkHash(c.text), text: c.text });
+  return [...seen.values()];
+}
+
+module.exports = { CALIBRATED_ON, SHADOW_FILE, chunkTexts, parseHeading, build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };

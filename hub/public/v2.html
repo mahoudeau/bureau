@@ -123,12 +123,12 @@
                                time you need it; it is REASSIGNED (not
                                mutated) on every refresh, so do not cache a
                                reference across an `await`.
-    BureauV2.token             Getter, current Bearer token string. Use it
-                               to build authenticated asset URLs (e.g.
-                               brain image src) the same way index.html
-                               does today (`&token=...`); never persist it
-                               yourself, it already lives in localStorage
-                               under 'bureau_token'.
+    BureauV2.token             Getter, current Bearer token string. Never
+                               put it in a URL: images go through
+                               BureauHub.imageUrl and data-secure-src
+                               (v2/hub-auth.js). Never persist it yourself,
+                               it already lives in localStorage under
+                               'bureau_token'.
     BureauV2.live               Getter, boolean — true while the SSE stream
                                is open, false while running on the 60s poll
                                fallback. Read it, don't cache it stale.
@@ -222,8 +222,8 @@
   ---------------------------------------------------------------------------
   4. SSE PLUMBING
   ---------------------------------------------------------------------------
-  Connects to GET /api/events (same endpoint, same query-string token auth
-  EventSource requires, same event-type list as index.html today). The 60s
+  Connects to GET /api/events with a one-use ticket (BureauHub.events in
+  hub-auth.js, same event-type list as index.html today). The 60s
   poll (`setInterval(refresh, 60000)`) is NOT conditional — it is the
   existing always-on backstop, unchanged, and doubles as the "fall back to
   poll on stream drop" behavior the mission asks for: when SSE is down,
@@ -873,13 +873,14 @@
 <div class="v2-batch-bar" id="v2-batch-bar" hidden aria-label="Batch verdicts"></div>
 <div class="v2-toasts" id="v2-toasts" aria-live="polite"></div>
 
+<script src="/v2/hub-auth.js"></script>
 <script>
 (function () {
   'use strict';
 
   // ---- §3 token gate: same localStorage key + 401-reprompt as index.html,
   // zero window.prompt() (t-53 mechanical floor bans prompt()/confirm()/alert()) ----
-  let TOKEN = new URLSearchParams(location.search).get('token') || localStorage.getItem('bureau_token') || '';
+  let TOKEN = BureauHub.takeUrlToken() || localStorage.getItem('bureau_token') || '';
   const gate = document.getElementById('v2-gate');
   const gateForm = document.getElementById('v2-gate-form');
   const gateInput = document.getElementById('v2-gate-input');
@@ -941,21 +942,23 @@
   }
 
   function connectSSE() {
-    let es;
-    try { es = new EventSource('/api/events?token=' + encodeURIComponent(TOKEN)); }
-    catch (err) { setConn(false); return; } // constructor throw (e.g. no EventSource) — 60s poll below still covers state
-    es.onopen = function () { setConn(true); };
-    es.onerror = function () { setConn(false); }; // the 60s poll interval is unconditional, so state still arrives
-    [
-      'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued', 'task.updated',
-      'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'journal.captured', 'project.renamed', 'project.created', 'project.deleted'
-    ].forEach(function (type) {
-      es.addEventListener(type, function (e) {
-        let payload = null;
-        try { payload = JSON.parse(e.data); } catch (err) { /* malformed payload: still trigger a refresh below */ }
-        emit(type, payload);
-        refresh();
-      });
+    // A dropped stream shows as polling: the 60s poll is unconditional, so state still arrives
+    BureauHub.events({
+      up: function () { setConn(true); },
+      down: function () { setConn(false); },
+      wire: function (es) {
+        [
+          'task.created', 'task.claimed', 'task.done', 'task.failed', 'task.review', 'task.approved', 'task.applied', 'task.blocked', 'task.requeued', 'task.updated',
+          'agent.registered', 'agent.heartbeat', 'message.posted', 'knowledge.written', 'journal.captured', 'project.renamed', 'project.created', 'project.deleted'
+        ].forEach(function (type) {
+          es.addEventListener(type, function (e) {
+            let payload = null;
+            try { payload = JSON.parse(e.data); } catch (err) { /* malformed payload: still trigger a refresh below */ }
+            emit(type, payload);
+            refresh();
+          });
+        });
+      }
     });
   }
 

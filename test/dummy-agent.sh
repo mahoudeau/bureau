@@ -82,7 +82,7 @@ check "fleet label matching a real registered agent name stays inert data" "$(ag
 check "a fleet-only label is absent from the roster before ever registering" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
 api POST /api/agents/heartbeat '{"name":"menace","sub_agents":[{"label":"phantom-crew-1"}]}' > /dev/null
 check "still absent from the roster after being reported as a sub-agent label" "$(agents_section | grep -c '"name": "phantom-crew-1"')" '^0$'
-GHOST=$(api POST /api/tasks '{"title":"Ghost errand","priority":5}')
+GHOST=$(api POST /api/tasks '{"title":"Ghost errand","priority":5,"gate":"critic"}')
 GHOSTID=$(echo "$GHOST" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 # Body in a variable: macOS bash 3.2 mangles escaped quotes inside "$(...)"
 GHOSTCLAIM="{\"agent\":\"phantom-crew-1\",\"id\":\"$GHOSTID\"}"
@@ -92,7 +92,7 @@ api PATCH "/api/tasks/$GHOSTID" '{"agent":"phantom-crew-1","status":"done","note
 
 echo "3c. roster curation: DELETE /api/agents/:name removes, never a ban"
 check "register a throwaway probe" "$(api POST /api/agents/register '{"name":"probe-1","kind":"dummy"}')" '"name": "probe-1"'
-PROBE_TASK=$(api POST /api/tasks '{"title":"Probe leaves a mark","priority":5}')
+PROBE_TASK=$(api POST /api/tasks '{"title":"Probe leaves a mark","priority":5,"gate":"critic"}')
 PROBE_TID=$(echo "$PROBE_TASK" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"probe-1\",\"id\":\"$PROBE_TID\"}" > /dev/null
 check "removal refused while a live lease is held" "$(curl -s -o /dev/null -w '%{http_code}' -X DELETE "$BUREAU_URL/api/agents/probe-1" -H "$AUTH")" '409'
@@ -228,7 +228,7 @@ TU_HUMAN='{"agent":"human","status":"discarded","note":"probe not needed"}'
 check "a human edit outside review carries kind edit" "$(api PATCH "/api/tasks/$TUID" "$TU_HUMAN" | grep -A3 '"note": "probe not needed"')" '"kind": "edit"'
 
 echo "8. lease expiry re-queues abandoned work"
-T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3}')
+T2=$(api POST /api/tasks '{"title":"Water the plastic plant","priority":3,"gate":"critic"}')
 T2ID=$(echo "$T2" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$T2ID\",\"lease_minutes\":0.03}" > /dev/null
 sleep 3
@@ -240,7 +240,7 @@ check "a lease expiry records from and to" "$(api GET "/api/tasks/$T2ID" | grep 
 # (0.02 = 1.2s) and CONF_SHORT_TTL=1 here, as CI does; against a default hub it
 # would wait 30 minutes, so without the flag it is skipped, not failed.
 api POST /api/agents/register '{"name":"shifty","kind":"cowork"}' > /dev/null
-T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":1}')
+T3=$(api POST /api/tasks '{"title":"Straighten the office plants","priority":1,"gate":"critic"}')
 T3ID=$(echo "$T3" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"shifty\",\"id\":\"$T3ID\",\"lease_minutes\":0.03}" > /dev/null
 sleep 3
@@ -284,8 +284,9 @@ check "critic-capability agent parks a boss-gate review" "$(api PATCH "/api/task
 check "agent cannot close a boss-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done"}')" 'boss-gate'
 check "agent cannot set critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"menace","gate":"critic"}')" 'only the boss or the lead'
 api POST /api/agents/register '{"name":"consul","kind":"claude-code","capabilities":["code","lead"]}' > /dev/null
-check "lead-capability agent sets critic gate" "$(api PATCH "/api/tasks/$TGID" '{"agent":"consul","gate":"critic"}')" '"gate": "critic"'
-check "critic closes a critic-gate review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"done","note":"passes the bar"}')" '"done"'
+check "a lead cannot lower a boss gate while the mission is in review" "$(api PATCH "/api/tasks/$TGID" '{"agent":"consul","gate":"critic"}')" 'stays boss-gate'
+check "an agent moving a boss-gate review back is refused too" "$(api PATCH "/api/tasks/$TGID" '{"agent":"moneta","status":"in_progress"}')" 'boss-gate'
+check "human closes it" "$(api PATCH "/api/tasks/$TGID" '{"agent":"human","status":"done","note":"passes the bar"}')" '"done"'
 
 TL=$(api POST /api/tasks '{"title":"Gate check mission 2 (lead parks)","project":"ops","priority":2}')
 TLID=$(echo "$TL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
@@ -312,12 +313,12 @@ TN=$(api POST /api/tasks '{"title":"menace: looks like a digest","project":"ops"
 TNID=$(echo "$TN" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TNID\"}" > /dev/null
 check "title prefix alone grants a non-librarian nothing" "$(api PATCH "/api/tasks/$TNID" '{"agent":"menace","status":"review","note":"parked"}')" 'boss-gate'
-api PATCH "/api/tasks/$TNID" '{"agent":"menace","status":"done","note":"closed"}' > /dev/null
+api PATCH "/api/tasks/$TNID" '{"agent":"human","status":"done","note":"closed"}' > /dev/null
 TO=$(api POST /api/tasks '{"title":"Not the archivist digest","project":"ops","priority":3}')
 TOID=$(echo "$TO" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"archivist\",\"id\":\"$TOID\"}" > /dev/null
 check "librarian tag alone grants nothing on a mission not titled with its name" "$(api PATCH "/api/tasks/$TOID" '{"agent":"archivist","status":"review","note":"parked"}')" 'boss-gate'
-api PATCH "/api/tasks/$TOID" '{"agent":"archivist","status":"done","note":"closed"}' > /dev/null
+api PATCH "/api/tasks/$TOID" '{"agent":"human","status":"done","note":"closed"}' > /dev/null
 
 # t-356: re-registration replaces capabilities on purpose, but never with an
 # empty array, and every change is logged with before and after.
@@ -391,13 +392,13 @@ GOAL=$(api POST /api/tasks '{"title":"goal: tidy the corner","project":"busy-cor
 GOALID=$(echo "$GOAL" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 GKID=$(api POST /api/tasks '{"title":"Sweep under the goal","project":"busy-corner","priority":1}')
 GKIDID=$(echo "$GKID" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
-api PATCH "/api/tasks/$BAID" '{"agent":"worker-a","status":"done","note":"sign polished"}' > /dev/null
-api PATCH "/api/tasks/$BBID" '{"agent":"worker-c","status":"done","note":"floor waxed"}' > /dev/null
+api PATCH "/api/tasks/$BAID" '{"agent":"human","status":"done","note":"sign polished"}' > /dev/null
+api PATCH "/api/tasks/$BBID" '{"agent":"human","status":"done","note":"floor waxed"}' > /dev/null
 api POST /api/tasks/claim "{\"agent\":\"lead-x\",\"id\":\"$GOALID\"}" > /dev/null
 check "a held goal does not occupy the desk" "$(api POST /api/tasks/claim '{"agent":"worker-d"}')" "\"id\": \"$GKIDID\""
 
 echo "9. the event stream speaks"
-EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events?token=$BUREAU_TOKEN" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
+EVENTS=$(curl -s -N -m 3 "$BUREAU_URL/api/events" -H "$AUTH" & sleep 1; api POST /api/agents/heartbeat '{"name":"menace","activity":"idle"}' > /dev/null; wait)
 check "SSE delivers heartbeat" "$EVENTS" 'agent.heartbeat'
 
 echo "10. the MCP door: same bureau, no shell required"
@@ -409,7 +410,7 @@ check "initialized notification gets 202" "$(curl -s -o /dev/null -w '%{http_cod
 check "tools listed" "$(mcp '{"jsonrpc":"2.0","id":2,"method":"tools/list"}')" 'create_mission'
 check "whoami answers as consul" "$(mcp '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"whoami","arguments":{}}}')" 'consul'
 check "unknown project refused over MCP" "$(mcp '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"x","project":"nonexistent"}}}')" 'unknown project'
-MC=$(mcp '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"Check the MCP door hinges","project":"general","priority":3}}}')
+MC=$(mcp '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"Check the MCP door hinges","project":"general","priority":3,"gate":"critic"}}}')
 check "mission created over MCP" "$MC" 'Check the MCP door hinges'
 MID=$(echo "$MC" | grep -o 't-[0-9]*' | head -1)
 check "mission started over MCP" "$(mcp "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"start_mission\",\"arguments\":{\"id\":\"$MID\",\"note\":\"testing hinges\"}}}")" 'in_progress'
@@ -432,7 +433,9 @@ new_claimed () { # new_claimed <title> <agent>: a boss-gate mission in ops, clai
 }
 check "no settings by default" "$(api GET /api/settings)" '"global": {}'
 S1=$(new_claimed "Settings: no policy" menace)
-check "no settings: an agent still closes its own boss-gate mission done" "$(api PATCH "/api/tasks/$S1" '{"agent":"menace","status":"done","note":"closed as always"}')" '"status": "done"'
+check "no settings: an agent cannot close its own boss-gate mission done" "$(api PATCH "/api/tasks/$S1" '{"agent":"menace","status":"done","note":"closed as always"}')" 'approval policy'
+check "no settings: the refused close left it claimed" "$(api GET "/api/tasks/$S1")" '"status": "claimed"'
+api PATCH "/api/tasks/$S1" '{"agent":"human","status":"done","note":"closed by the boss"}' > /dev/null
 
 check "bad approval enum refused" "$(curl -s -o /dev/null -w '%{http_code}' -X PATCH "$BUREAU_URL/api/settings" -H "$AUTH" -H "$JSON" -d '{"global":{"approval":"maybe"}}')" '400'
 check "refusal names the allowed values" "$(api PATCH /api/settings '{"global":{"approval":"maybe"}}')" 'dashboard, in-session, critic'
@@ -517,7 +520,7 @@ check "cleared: moneta's capability counts again" "$(api PATCH "/api/tasks/$S6" 
 S7=$(new_claimed "Settings: cleared" menace)
 check "cleared: a self-registered lead counts again" "$(api PATCH "/api/tasks/$S7" '{"agent":"upstart","gate":"critic"}')" '"gate": "critic"'
 api PATCH "/api/tasks/$S7" '{"agent":"menace","gate":"boss"}' > /dev/null
-check "cleared: an agent closes boss-gate work done again" "$(api PATCH "/api/tasks/$S7" '{"agent":"menace","status":"done"}')" '"status": "done"'
+check "cleared: with no policy an agent still cannot close boss-gate work done" "$(api PATCH "/api/tasks/$S7" '{"agent":"menace","status":"done"}')" 'approval policy'
 check "cleared: a quote is refused again" "$(api PATCH "/api/tasks/$S5" '{"agent":"menace","status":"done","approved_in_session":"x"}')" 'does not accept chat approvals'
 
 echo "12. curated compartments: knowledge/, recipes/, PROFILE.md and attic/ take only the boss, the librarian or a curator"
@@ -693,7 +696,7 @@ check "blocked keeps the evidence" "$(code GET "/api/work?file=work/$WB/log.txt"
 api PATCH "/api/tasks/$WB" '{"agent":"human","status":"discarded","note":"probe"}' > /dev/null
 check "the boss's discard removes it" "$(code GET "/api/work?file=work/$WB/log.txt")" '^404$'
 check "tools listed include the work store" "$(mcp '{"jsonrpc":"2.0","id":41,"method":"tools/list"}')" 'write_work'
-WM=$(mcp '{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"MCP evidence probe","project":"ops"}}}')
+WM=$(mcp '{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"create_mission","arguments":{"title":"MCP evidence probe","project":"ops","gate":"critic"}}}')
 WMID=$(echo "$WM" | grep -o 't-[0-9]*' | head -1)
 WMS=$(mcpcall start_mission "{\"id\":\"$WMID\"}")
 mcp "$WMS" > /dev/null
