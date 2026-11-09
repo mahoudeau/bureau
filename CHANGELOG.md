@@ -9,6 +9,10 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Added
 - SQLite as an optional store. `BUREAU_STORE=sqlite` keeps the state in `data/bureau.db` through Node's built-in `node:sqlite`, so still no dependency. The first boot imports `state.json` and keeps the original. Off by default; it needs Node 22.13 or newer. `hub/tools/state-export.js` writes the state back out to go home. See UPGRADING.md.
 - `GET /api/export` returns the whole state as JSON. `GET /api/health` says which store is in use.
+- Claim ids (Brain Format v0.3). `hub/tools/migrate-claims.js <brain> [--write]` moves curated notes to `format: 0.3`: every claim on one line, every claim with a `^c-` id, its text unchanged. It is safe to run twice.
+- In a `format: 0.3` note the hub assigns ids as it writes, and refuses a new claim that has no source of its own or cites a mission or journal record that does not exist. Claims already there keep their file-level source. An approved payload is still written byte for byte.
+- `GET /api/knowledge?claim=<id>` and `claim` on MCP `read_knowledge`: one claim and its evidence, each source resolved to its mission, record or file.
+- brain-lint reads `format: 0.3` notes strictly and refuses an id used in two notes. The health block counts claims with ids.
 
 ## [0.3.0] - 2026-11-09
 
