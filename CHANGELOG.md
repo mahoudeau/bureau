@@ -6,7 +6,10 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-09
+
 ### Added
+- Lint on write reaches project files. A write under `projects/` that would leave an error there (an over-long summary, a duplicate spec rule) answers 422, as curated writes already did. Project files stay as lenient as they were about everything else.
 - The work store: `GET` and `POST /api/work`, a mission's evidence under `work/<t-id>/` in `BUREAU_WORK_DIR` (default `hub/work/`). Same file types, base64 rule and 5MB cap as the brain, but plain files: no git, no lint. Writes need an open mission. The folder is deleted when the mission closes `done`, `failed` or `discarded`, whichever door closed it, and leftovers go at boot. MCP gains `write_work` and `read_work`. Review links and the dashboards show a mission's work images.
 - Settings roles `librarian` and `curator`, next to `lead` and `critic`. `curator` lets an agent write the curated compartments and nothing else.
 - The hub warns at boot when `BUREAU_TOKEN` is still the placeholder from `.env.example`. It still boots; anyone who has read the repo knows that token.
@@ -128,6 +131,7 @@ The baseline: what Bureau was when versioning started. Everything here predates 
 - `brain-lint` (`hub/tools/brain-lint.js`) and its acceptance test `test/brain-lint.sh`.
 - `test/dummy-agent.sh`, the curl-only conformance script, and `test/pokes.sh`.
 
-[Unreleased]: https://github.com/mahoudeau/bureau/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/mahoudeau/bureau/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/mahoudeau/bureau/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mahoudeau/bureau/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mahoudeau/bureau/releases/tag/v0.1.0

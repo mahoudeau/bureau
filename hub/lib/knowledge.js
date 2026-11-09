@@ -155,7 +155,10 @@ const brainLint = require('../tools/brain-lint');
 // checked or passes). Never throws on lint, so a proposal can be checked
 // before it is filed (store.js, review item payloads).
 function writeLintErrors({ file, content, mode, encoding }) {
-  if (encoding === 'base64' || !/\.md$/i.test(String(file)) || !curatedCompartment(file)) return [];
+  // Project files too: lint is lenient there, but an over-long summary or a
+  // duplicate spec rule is an error, and one of those once got in unnoticed.
+  if (encoding === 'base64' || !/\.md$/i.test(String(file))) return [];
+  if (!curatedCompartment(file) && !/^projects\//i.test(normRel(file))) return [];
   const abs = safePath(file);
   const rel = toPosix(path.relative(BRAIN_DIR, abs));
   const before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
