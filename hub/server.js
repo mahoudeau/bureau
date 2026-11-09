@@ -11,6 +11,8 @@ const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
 const journal = require('./lib/journal');
 const health = require('./lib/health');
+const brainIndex = require('./lib/index');
+const contextCall = require('./lib/context');
 const { KINDS } = require('./lib/claims');
 const work = require('./lib/work');
 const discord = require('./lib/discord');
@@ -32,6 +34,10 @@ const sseClients = new Set();
 const HEALTH_EVENTS = /^(task|knowledge|journal|project)\./;
 function broadcast(type, data, extra) {
   if (HEALTH_EVENTS.test(type)) health.invalidate();
+  // The search index follows every brain write. A project change can move the
+  // walls, so that one rebuilds.
+  if (type === 'knowledge.written' || type === 'journal.captured') brainIndex.touch(data && data.file);
+  else if (/^project\./.test(type)) brainIndex.invalidate();
   store.logEvent(type, summarize(type, data));
   // S2-f: notify from settings, the mission's project overriding global
   discord.mirror(type, data, store.effectiveSettings(store.load(), data && data.project).notify);
@@ -133,6 +139,18 @@ function applyApproved(id, agent, item) {
   if (r.error) return r;
   broadcast('task.applied', { ...r.task, by: agent, item: r.item.id, note: `applied ${r.item.id}: ${r.item.title}` }, { by: agent, prev_status: r.task.status });
   return r;
+}
+
+// A claimed mission arrives with its context, on any runtime, whether or not
+// the agent would have asked. Never in the way: a failure here is no context.
+function briefingFor(task) {
+  try {
+    const c = contextCall.build({ request: '', task: task.id, agent: task.assignee, surface: 'claim' });
+    return { id: c.id, rendered: c.rendered, miss: c.miss, tokens: c.tokens };
+  } catch (e) {
+    console.error('[context] briefing failed:', e.message);
+    return null;
+  }
 }
 
 // Typed capture, one function for the REST route and MCP capture. A cutover
@@ -520,7 +538,7 @@ const server = http.createServer(async (req, res) => {
       if (r.error) return send(res, 409, r);
       store.upsertAgent({ name: b.agent });
       broadcast('task.claimed', r.task);
-      return send(res, 200, r);
+      return send(res, 200, r.task ? { ...r, context: briefingFor(r.task) } : r);
     }
     const mTask = p.match(/^\/api\/tasks\/(t-\d+)$/);
     if (req.method === 'GET' && mTask) {
@@ -585,6 +603,21 @@ const server = http.createServer(async (req, res) => {
       if (r.committed) broadcast('knowledge.written', { file: r.files.join(', '), author: 'human' });
       return send(res, 200, r);
     }
+    // ----- the context call: what this request needs, and what else exists -----
+    if (req.method === 'POST' && p === '/api/context') {
+      const b = await readBody(req);
+      const bad = contextCall.validate(b);
+      if (bad) return send(res, 400, { error: bad });
+      return send(res, 200, contextCall.build(b));
+    }
+    if (req.method === 'GET' && p === '/api/knowledge/map') {
+      return send(res, 200, brainIndex.map(url.searchParams.get('project') || undefined));
+    }
+    if (req.method === 'GET' && p === '/api/knowledge/search') {
+      const q = url.searchParams.get('q');
+      if (!q) return send(res, 400, { error: 'q required' });
+      return send(res, 200, brainIndex.search(q, { project: url.searchParams.get('project') || undefined, k: url.searchParams.get('k') || undefined }));
+    }
     if (req.method === 'GET' && p === '/api/knowledge') {
       const file = url.searchParams.get('file');
       if (file) {
@@ -595,6 +628,16 @@ const server = http.createServer(async (req, res) => {
         if (url.searchParams.get('raw') === '1') {
           res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
           return res.end(r.buf);
+        }
+        // ctx=<id>: this read followed a context call's map
+        if (url.searchParams.get('ctx')) contextCall.logRead(url.searchParams.get('ctx'), file, url.searchParams.get('section'));
+        // section=<heading>: that slice and the frontmatter, not the whole file
+        const heading = url.searchParams.get('section');
+        if (heading && !r.binary) {
+          const text = r.buf.toString('utf8');
+          const s = brainIndex.section(text, heading);
+          if (!s) return send(res, 404, { error: `no section matching "${heading}" in ${file}`, sections: brainIndex.headingsOf(text) });
+          return send(res, 200, { file, section: s.heading, frontmatter: s.frontmatter, content: s.content });
         }
         return r.binary
           ? send(res, 200, { file, content_base64: r.buf.toString('base64') })
@@ -665,11 +708,14 @@ const MCP_TOOLS = [
   { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, approved, done, failed, discarded. Omit status, or pass all, for every mission. approved means the boss approved it and it is back with its holder to apply the approved items.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
   { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review. Need a project that does not exist? Never invent an id: file a proposal instead, a mission in general titled "Propose project: <label>", body carrying the proposed id, entity, repo and why, parked at the boss (status review if your capabilities allow it, otherwise blocked with a note starting "waiting on: boss approval"). The boss creates the project in the dashboard and closes the proposal; only then does the id exist.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. When the boss approved the work in this conversation, set done directly and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), close done with the note approved by boss in session: "<his exact words>" instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page; an item that changes the brain carries payload {ops: [{op: write|append, file, content}]}, the exact text, hashed when filed and never changed after. after_approval: "return", on the update that parks the mission in review, sends it back to you as approved instead of done when the boss approves; apply each approved item with apply_item, then close it done. Approval is refused while any item is still proposed. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, payload: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object', properties: { op: { type: 'string', enum: ['write', 'append'] }, file: { type: 'string' }, content: { type: 'string' } }, required: ['op', 'file', 'content'] } } }, required: ['ops'] } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' }, after_approval: { type: 'string', enum: ['return'] } }, required: ['id'], additionalProperties: false } },
+  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. When the boss approved the work in this conversation, set done directly and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), close done with the note approved by boss in session: "<his exact words>" instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page; an item that changes the brain carries payload {ops: [{op: write|append, file, content}]}, the exact text, hashed when filed and never changed after. after_approval: "return", on the update that parks the mission in review, sends it back to you as approved instead of done when the boss approves; apply each approved item with apply_item, then close it done. Approval is refused while any item is still proposed. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, payload: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object', properties: { op: { type: 'string', enum: ['write', 'append'] }, file: { type: 'string' }, content: { type: 'string' } }, required: ['op', 'file', 'content'] } } }, required: ['ops'] } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' }, after_approval: { type: 'string', enum: ['return'] }, nothing_learned: { type: 'boolean' } }, required: ['id'], additionalProperties: false } },
   { name: 'apply_item', description: 'Apply one approved item of an approved mission you hold: the hub checks the payload against the hash stored when it was filed and writes exactly that text to the brain as consul. The boss approved that exact text, so the curated compartments take it. Once every approved item is applied, close the mission done with update_mission.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, item: { type: 'string' } }, required: ['task', 'item'], additionalProperties: false } },
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian, with capture. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'capture', description: 'Record one thing learned in the journal, as consul. kind is one of fact, gotcha, step, rule, why, decision, preference, correction, question, process, pattern; text is the claim, one line, 2000 characters at most; evidence is one line saying how you know; tags are words without #; confidence is observed (default), stated (you were told) or inferred (you concluded it). The hub stamps the id, by, the time and your mission (when you hold several, mission picks one of them), writes the record to journal/<yyyy-mm-dd>.md, and returns it.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: KINDS }, text: { type: 'string' }, evidence: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, confidence: { type: 'string', enum: ['observed', 'stated', 'inferred'] }, mission: { type: 'string' } }, required: ['kind', 'text', 'evidence'], additionalProperties: false } },
-  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
+  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}. section (a heading, or part of one) returns just that section and the frontmatter.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' }, section: { type: 'string' } }, additionalProperties: false } },
+  { name: 'get_context', description: 'Call this first on any request. Returns the passages from the Bureau brain this request needs, inside a token budget, and a map of related knowledge you can read with read_knowledge. Pass the request text, and the project if you know it.', inputSchema: { type: 'object', properties: { request: { type: 'string' }, project: { type: 'string' }, task: { type: 'string' }, session: { type: 'string' }, budget: { type: 'number' } }, required: ['request'], additionalProperties: false } },
+  { name: 'brain_map', description: 'One line per brain file this project can see: path, title, summary, size in tokens. Without project, global knowledge and recipes only.', inputSchema: { type: 'object', properties: { project: { type: 'string' } }, additionalProperties: false } },
+  { name: 'search_knowledge', description: 'Search the brain. Returns passages with their file and section, best first. Give project to include that project\'s files; without it, only global knowledge and recipes are searched.', inputSchema: { type: 'object', properties: { q: { type: 'string' }, project: { type: 'string' }, k: { type: 'number' } }, required: ['q'], additionalProperties: false } },
   { name: 'memory_health', description: 'The memory health block, the same JSON as GET /api/memory/health: status (ok or attention) with its reasons, lint errors, unreadable journal blocks and capture volume, approved items not applied yet, stale claims, contradictions, and provenance coverage. Read-only.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
@@ -709,10 +755,10 @@ function mcpToolCall(name, a = {}) {
       broadcast('task.claimed', r.task);
       const u = store.updateTask({ id: a.id, agent: 'consul', status: 'in_progress', note: a.note || 'starting' });
       broadcast('task.updated', { ...u.task, note: a.note || 'starting' });
-      return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until };
+      return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until, context: briefingFor(u.task) };
     }
     case 'update_mission': {
-      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session, after_approval: a.after_approval });
+      const r = store.updateTask({ id: a.id, agent: 'consul', status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session, after_approval: a.after_approval, nothing_learned: a.nothing_learned });
       if (r.error) throw new Error(r.error);
       broadcast(statusEvent(a.status, r.task), { ...r.task, note: a.note }, { by: 'consul', prev_status: r.prev_status });
       return { id: r.task.id, status: r.task.status };
@@ -749,9 +795,23 @@ function mcpToolCall(name, a = {}) {
       if (a.file) {
         const content = knowledge.readKnowledge(a.file);
         if (content === null) throw new Error('not found');
+        if (a.section) {
+          const s = brainIndex.section(content, a.section);
+          if (!s) throw new Error(`no section matching "${a.section}" in ${a.file}. Sections: ${brainIndex.headingsOf(content).join(', ')}`);
+          return { file: a.file, section: s.heading, frontmatter: s.frontmatter, content: s.content };
+        }
         return { file: a.file, content };
       }
       return { files: knowledge.listKnowledge(a.dir || '') };
+    }
+    case 'search_knowledge': return brainIndex.search(a.q, { project: a.project, k: a.k });
+    case 'brain_map': return brainIndex.map(a.project);
+    case 'get_context': {
+      const b = { request: a.request, project: a.project, task: a.task, session: a.session, budget: a.budget, agent: 'consul', surface: 'mcp' };
+      for (const k of Object.keys(b)) if (b[k] === undefined) delete b[k];
+      const bad = contextCall.validate(b);
+      if (bad) throw new Error(bad);
+      return contextCall.build(b);
     }
     case 'memory_health': return health.get();
     case 'write_work': {
@@ -838,6 +898,8 @@ try {
 }
 knowledge.ensureRepo();
 try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
+contextCall.pruneLog();
+try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
