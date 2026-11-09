@@ -47,11 +47,11 @@ It passes the registry's own validators (`ValidateServerJSON`, schema plus seman
 
 ### Why no package entry yet
 
-A package with `streamable-http` transport needs a URL, and every `{name}` in that URL must be one of the package's environment variables or arguments. The hub makes up its capability token on first boot and keeps it in `state.json`, so there's no variable to point at. The validator fails that shape: `template variables in URL http://localhost:8100/mcp/{capability_token} reference undefined variables`.
+A package with `streamable-http` transport needs a URL, and every `{name}` in that URL must be one of the package's environment variables or arguments. A capability token is minted on the running hub and only its hash is kept, so there's no variable to point at. The validator fails that shape: `template variables in URL http://localhost:8100/mcp/{capability_token} reference undefined variables`.
 
 Two ways out:
 
-1. **Let the hub take its capability token from the environment.** Add a `BUREAU_MCP_TOKEN` setting, and use it when it's set instead of the generated one. The package entry then validates:
+1. **Let the hub take its capability token from the environment.** Not built. Add a `BUREAU_MCP_TOKEN` setting, and use it when it's set instead of the generated one. The package entry then validates:
 
    ```json
    {
@@ -73,7 +73,7 @@ Recommendation: option 2, remote only.
 
 ## Open points
 
-- **Version.** `server.json` says `0.2.0`, the first release with an image. The hub's MCP `serverInfo` still says `0.1.0`. Bump them together when tagging. Each registry publish needs a new version.
+- **Version.** `server.json` and the hub's MCP `serverInfo` both say `0.3.0`, and the newest git tag is `v0.2.0`. Tag before publishing. Each registry publish needs a new version.
 - **Icons.** None yet.
 - **Glama checks.** Whether Glama can be told the server is remote-only, or will just mark it as failing.
 - **A demo hub.** Smithery and Glama scoring both want something they can call. A public hub with fake data, reset nightly, would unlock both. It's also a thing to run and watch.

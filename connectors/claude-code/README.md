@@ -6,6 +6,11 @@ Glue for local coding sessions (Claude Code or any agent with a shell) working t
 
 - **`hub.sh`**: one authenticated hub call: `sh hub.sh METHOD PATH [JSON]`. Reads the hub URL from `BUREAU_URL` or `~/.bureau-url` (no default: it refuses to guess where to send your token) and the token from `BUREAU_TOKEN_FILE` (default `~/.bureau-token`). The point of routing every call through one script is the permission model below.
 - **`project-of.sh`**: resolves which Bureau project a directory belongs to. Resolution order: a `.bureau` marker file at the git root (its content is the project id), then a map file (`~/.bureau-projects`, lines of `path prefix = project id`, longest prefix wins), then `unresolved`, at which point the agent decides once against the hub's registry and records the decision with `project-of.sh set <dir> <id>`. Decisions are stored, announced in the mission's first note, and corrected by editing one line.
+- **`context-hook.js`**: a Claude Code hook that makes the context call on each prompt (below).
+
+## Prerequisites
+
+`sh`, `curl` and `jq` for the scripts and the convention below (`jq` parses the hub's answers without a permission prompt), Node 18 or newer for `context-hook.js`, and git for `project-of.sh`.
 
 ## Install, promptless
 
@@ -40,7 +45,7 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
 
 ## The context call on every prompt
 
-`context-hook.js` asks the hub for what each prompt needs and hands it to the model. It finds the project the way `project-of.sh` does and reads the hub's address and token from the same files. If the hub is slow or absent, the prompt goes through without it. Add this to `~/.claude/settings.json`, with your path:
+`context-hook.js` asks the hub for passages that match each prompt and hands them to the model. It finds the project the way `project-of.sh` does and reads the hub's address and token from the same files. If the hub is slow or absent, the prompt goes through without it. Add this to `~/.claude/settings.json`, with your path:
 
 ```json
 {
@@ -63,4 +68,4 @@ Failures go to `~/.bureau-context-hook.log`.
 
 ## Planned
 
-The packaged form of all of this: a Claude Code plugin with a one-command installer, hooks (register on session start, heartbeats with activity verbs, a debrief nudge before context compaction), and skills for clock-in and debrief. The manual setup above is the plugin's specification in the meantime.
+Not built yet: a Claude Code plugin with a one-command installer, more hooks (register on session start, heartbeats with activity verbs, a debrief nudge before context compaction), and skills for clock-in and debrief. The context hook above is the only hook that ships today.

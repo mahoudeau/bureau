@@ -31,4 +31,4 @@ Builder, lead, and critic together form the gauntlet loop (goal in, judged work 
 
 ## What a shift produces
 
-Progress notes on the mission log, heartbeats with activity verbs (the office animates these), a debrief appended to the project's STATE.md in the brain, and either `done` or a mission parked in `review` at the boss's door. Anything irreversible always parks in review.
+Progress notes on the mission log, heartbeats with activity verbs (the office animates these), a debrief appended to the project's STATE.md in the brain, and either `done` or a mission parked in `review` at the boss's door. The standing prompts tell a worker to park anything irreversible in review. That's a prompt, not a wall: the hub gates the mission's status and can't stop a worker holding deploy credentials.

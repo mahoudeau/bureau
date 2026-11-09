@@ -75,7 +75,7 @@ To go back at any point: unset `BUREAU_BOSS_TOKEN` and restart. To go back furth
 
 ## Upgrading to strict mode
 
-Identity has changed. The hub now has two modes. **Legacy** (only `BUREAU_TOKEN` set): one shared token, declared identities, as before, with the new gate rules. **Strict** (`BUREAU_BOSS_TOKEN` set): only that token acts as the boss. `/api/health` reports which one is running as `auth`.
+Identity has changed. The hub now has two modes. **Legacy** (only `BUREAU_TOKEN` set): one shared token, declared identities, as before, with the new gate rules but no walls, since anyone with the token can declare itself the boss. **Strict** (`BUREAU_BOSS_TOKEN` set): only that token acts as the boss. `/api/health` reports which one is running as `auth`.
 
 The upgrade is a sequence, not a flag day. After each step, everything that worked before still works, except where noted. No step locks you out: if you set the boss token wrongly, unset it and restart, and you are back in legacy.
 
