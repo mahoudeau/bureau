@@ -83,7 +83,7 @@ function runClaude({ prompt, system, tools = [], model, effort, cwd, env, flags,
     const t0 = Date.now();
     const child = spawn('claude', args, { cwd, env, stdio: ['pipe', 'pipe', 'pipe'] });
     let buf = '', stderr = '', timedOut = false;
-    const parsed = { init: null, result: null, hookEvents: 0, rateLimit: null, toolUses: 0 };
+    const parsed = { init: null, result: null, hookEvents: 0, rateLimit: null, toolUses: 0, reads: [] };
     const eat = (line) => {
       if (!line.trim()) return;
       let m;
@@ -92,7 +92,7 @@ function runClaude({ prompt, system, tools = [], model, effort, cwd, env, flags,
       else if (m.type === 'result') parsed.result = m;
       else if (m.type === 'rate_limit_event') parsed.rateLimit = m.rate_limit_info;
       else if (/hook/i.test(`${m.type} ${m.subtype || ''}`)) parsed.hookEvents++;
-      else if (m.type === 'assistant') for (const b of (m.message && m.message.content) || []) if (b.type === 'tool_use') parsed.toolUses++;
+      else if (m.type === 'assistant') for (const b of (m.message && m.message.content) || []) if (b.type === 'tool_use') { parsed.toolUses++; if (b.name === 'Read' && b.input && b.input.file_path) parsed.reads.push(b.input.file_path); }
     };
     child.stdout.on('data', (d) => {
       buf += d;

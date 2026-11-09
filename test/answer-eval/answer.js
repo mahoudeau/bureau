@@ -14,7 +14,7 @@ function promptFor(item, condition, out) {
   const ask = `Project: ${item.project}\n\nQuestion: ${item.question}`;
   let ref = '';
   if (condition === 'B') ref = fs.readFileSync(path.join(out, 'dumps', `${item.project}.txt`), 'utf8');
-  if (condition === 'C') ref = item.context.rendered;
+  if (condition === 'C' || condition === 'F') ref = item.context.rendered;
   if (condition === 'E' && item.oracle) ref = item.oracle;
   return ref ? `Reference material:\n\n${ref}\n\n---\n\n${ask}` : ask;
 }
@@ -47,7 +47,7 @@ async function main() {
   const t0 = Date.now();
   const reason = await pool(order, concurrency, async (job, stop) => {
     const { item, condition, rep, key } = job;
-    const usesTools = condition === 'D';
+    const usesTools = condition === 'D' || condition === 'F';
     const cwd = usesTools ? path.join(out, 'trees', item.project) : blank;
     const req = { prompt: promptFor(item, condition, out), system: usesTools ? SYSTEM_TOOLS : SYSTEM, tools: usesTools ? TOOLS : [], restricted: usesTools, model, effort, cwd, env, flags };
     let r = null;
@@ -68,7 +68,7 @@ async function main() {
     const rec = { key, id: item.id, condition, rep, model: r.init ? r.init.model : null,
       answer: r.result ? r.result.result : null, error: !r.result ? (r.timedOut ? 'timeout' : `no result, exit ${r.code}: ${r.stderr}`) : (r.result.is_error ? String(r.result.result).slice(0, 300) : null),
       input_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0), output_tokens: u.output_tokens || 0,
-      turns: r.result ? r.result.num_turns : null, tool_uses: r.toolUses, latency_ms: r.latencyMs, api_ms: r.result ? r.result.duration_api_ms : null, cost_usd: r.result ? r.result.total_cost_usd : null,
+      turns: r.result ? r.result.num_turns : null, tool_uses: r.toolUses, reads: r.reads, latency_ms: r.latencyMs, api_ms: r.result ? r.result.duration_api_ms : null, cost_usd: r.result ? r.result.total_cost_usd : null,
       hook_events: r.hookEvents, isolated, seven_day: r.rateLimit && r.rateLimit.unifiedWindows && r.rateLimit.unifiedWindows.seven_day ? r.rateLimit.unifiedWindows.seven_day.utilization : null };
     appendJsonl(file, rec);
     finished++;
