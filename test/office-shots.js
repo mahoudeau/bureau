@@ -62,6 +62,7 @@ const patch = (id, body) => api('PATCH', '/api/tasks/' + id, body);
 
 async function seed() {
   await api('POST', '/api/projects', { label: 'Office Shots', id: PROJECT });
+  await api('PATCH', '/api/settings', { projects: { [PROJECT]: { approval: 'in-session' } } });
   for (const a of AGENTS) {
     await api('POST', '/api/agents/register', a);
     await sleep(30); // distinct last_seen, so the roster order is known
@@ -77,7 +78,7 @@ async function seed() {
   await patch(ids.clips, { agent: 'otto', status: 'in_progress', note: 'opened the archive boxes' });
   await claim('juniper', ids.fern);
   await claim('basil', ids.stapler);
-  await patch(ids.stapler, { agent: 'basil', status: 'done', note: 'forty-two staplers, all accounted for' });
+  await patch(ids.stapler, { agent: 'basil', status: 'done', note: 'forty-two staplers, all accounted for', approved_in_session: 'count them and close it' });
   await claim('wren', ids.picnic);
   for (const a of AGENTS) { await beat(a.name, 'editing'); await sleep(30); }
   return ids;
