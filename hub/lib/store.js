@@ -626,6 +626,8 @@ function checkPolicyKeys(obj, where, isGlobal) {
     else if (k === 'journal_free_text' && isGlobal) { if (typeof v !== 'boolean') return `${where}.journal_free_text: true or false`; }
     // true: an agent closing a mission done must have captured something under it, or say it learned nothing
     else if (k === 'require_capture' && isGlobal) { if (typeof v !== 'boolean') return `${where}.require_capture: true or false`; }
+    // Days the hub keeps the text of context calls. Unset or 0: it keeps none.
+    else if (k === 'store_prompts_days' && isGlobal) { if (!Number.isInteger(v) || v < 0 || v > 365) return `${where}.store_prompts_days: an integer from 0 to 365`; }
     else if (k === 'librarian' && isGlobal) {
       if (typeof v !== 'object' || Array.isArray(v)) return `${where}.librarian must be an object`;
       for (const [lk, lv] of Object.entries(v)) {

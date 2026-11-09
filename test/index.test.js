@@ -112,6 +112,14 @@ async function main() {
     r = await search('tapir protocol');
     check('and adds the new ones', files(r)[0] === 'knowledge/brand-new.md', r.body);
 
+    console.log('5b. French questions, English notes');
+    await put('knowledge/lockbox.md', NOTE('Lockbox', '- [fact] Rotate the password on the kumquat server every month (source: t-3)'));
+    r = await search('quand changer le mot de passe du kumquat ?');
+    check('a phrase finds its English equivalent', files(r)[0] === 'knowledge/lockbox.md', r.body);
+    r = await search('le serveur du kumquat');
+    check('a word does too', files(r)[0] === 'knowledge/lockbox.md' && r.body.results[0].matched.some(t => t.startsWith('serv')), r.body);
+    check('a translated word counts once toward coverage', r.body.results[0].coverage === 1, r.body.results[0]);
+
     console.log('6. section reads');
     r = await api('GET', '/api/knowledge?file=projects/alpha/STATE.md&section=Now');
     check('returns that section', r.code === 200 && /half done/.test(r.body.content) && !/penguin/.test(r.body.content), r.body);

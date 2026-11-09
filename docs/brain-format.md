@@ -1,4 +1,4 @@
-# Bureau Brain Format (v0.3, draft)
+# Bureau Brain Format (v0.3)
 
 *This specification and the `brain-lint` validator are licensed Apache-2.0 (LICENSE-APACHE at the repo root); your brain and your tools owe nothing to the AGPL hub.*
 
@@ -332,7 +332,7 @@ Computed numbers (truth, importance, read and citation counts, search ranks) liv
 
 ## What is enforced today
 
-v0.3 is a draft. Its rules land in steps; until a step lands, the v0.2 rules stand.
+v0.3 is approved. Its rules land in steps; until a step lands, the v0.2 rules stand.
 
 | Rule | Enforced by |
 |---|---|

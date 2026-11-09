@@ -9,10 +9,27 @@ const brainIndex = require('./index');
 const store = require('./store');
 
 // One line per call, next to state.json: outside the brain, outside git. What
-// was served, never what was asked: whether to keep prompt text is the boss's
-// open decision (doc 27 §9).
-const LOG_FILE = path.join(process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data'), 'context-log.jsonl');
+// was served, not what was asked. The text of requests goes to its own file,
+// only when the owner sets store_prompts_days, and is deleted past that window.
+const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
+const LOG_FILE = path.join(DATA_DIR, 'context-log.jsonl');
+const PROMPT_FILE = path.join(DATA_DIR, 'context-prompts.jsonl');
 const LOG_DAYS = 90, DAY_MS = 86400_000;
+const promptDays = () => store.settingsOf(store.load()).global.store_prompts_days || 0;
+function keepPrompt(id, b, project) {
+  if (!promptDays() || !b.request) return;
+  try { fs.appendFileSync(PROMPT_FILE, `${JSON.stringify({ ts: new Date().toISOString(), id, agent: b.agent || null, project, surface: b.surface || null, request: b.request.slice(0, REQUEST_CHARS) })}\n`); }
+  catch (e) { console.error('[context] prompt log failed:', e.message); }
+}
+function prunePrompts(now = Date.now()) {
+  if (!fs.existsSync(PROMPT_FILE)) return;
+  try {
+    const days = promptDays();
+    if (!days) return fs.rmSync(PROMPT_FILE, { force: true });
+    const keep = fs.readFileSync(PROMPT_FILE, 'utf8').split('\n').filter(Boolean).filter((l) => { try { return now - Date.parse(JSON.parse(l).ts) <= days * DAY_MS; } catch { return false; } });
+    fs.writeFileSync(PROMPT_FILE, keep.join('\n') + (keep.length ? '\n' : ''));
+  } catch (e) { console.error('[context] prompt prune failed:', e.message); }
+}
 function appendLog(entry) {
   try { fs.appendFileSync(LOG_FILE, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`); }
   catch (e) { console.error('[context] log failed:', e.message); }
@@ -22,8 +39,9 @@ function readLog() {
   try { text = fs.readFileSync(LOG_FILE, 'utf8'); } catch { return []; }
   return text.split('\n').filter(Boolean).flatMap((l) => { try { return [JSON.parse(l)]; } catch { return []; } });
 }
-// At boot: entries past the window go.
+// At boot and every hour: entries past their window go.
 function pruneLog(now = Date.now()) {
+  prunePrompts(now);
   const keep = readLog().filter((e) => now - Date.parse(e.ts) <= LOG_DAYS * DAY_MS);
   try { if (fs.existsSync(LOG_FILE)) fs.writeFileSync(LOG_FILE, keep.map((e) => JSON.stringify(e)).join('\n') + (keep.length ? '\n' : '')); }
   catch (e) { console.error('[context] prune failed:', e.message); }
@@ -128,6 +146,7 @@ function build(b) {
   const out = assemble(b);
   appendLog({ type: 'call', id: out.id, agent: b.agent || null, project: out.scope.project, surface: b.surface || null, session: b.session ? hash(String(b.session)) : null,
     served: [...new Set(out.context.map((c) => c.ref.file))], offered: out.map.length, tokens: out.tokens.context + out.tokens.map, ms: out.ms, miss: out.miss });
+  keepPrompt(out.id, b, out.scope.project);
   return out;
 }
 
