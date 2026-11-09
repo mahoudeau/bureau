@@ -340,6 +340,7 @@ v0.3 is a draft. Its rules land in steps; until a step lands, the v0.2 rules sta
 | Mission ids and file-level `source:` as provenance | `brain-lint`, today |
 | A curated write that would fail lint is refused | the hub, on every write to a curated compartment, today |
 | Journal records through the hub | the hub, on `POST /api/journal` and in a `format: 0.3` day, today; `brain-lint` warns on a record it cannot read |
+| Drift measured: lint errors, unreadable records, approved text not applied, stale claims, contradictions, provenance coverage | the hub, `GET /api/memory/health`, today (measured and shown, not refused); CI runs lint and the memory eval on the fixture brains |
 | Claim ids, ref existence, own sources on added claims | with claim ids, after typed capture |
 
 ## The linter
