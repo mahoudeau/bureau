@@ -66,11 +66,12 @@ else check "a miss is named" "$OUT" '^ *\(MISS\|part\) '; fi
 check "entities/ stays out of the ranking" "$OUT" 'exclude: entities/'
 if echo "$OUT" | grep -q 'entities/acme'; then FAIL=$((FAIL+1)); echo "  FAIL: an entity file was ranked"; else PASS=$((PASS+1)); echo "  ok: no entity file ranked"; fi
 
-echo "2. api-search reports itself unavailable until R4 ships it"
+echo "2. the hub's own search"
 OUT=$(node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method api-search); X=$?
 echo "$OUT" | sed 's/^/    /'
 check "runs clean" "exit:$X" 'exit:0'
-check "not available, cleanly" "$OUT" 'method api-search: not available'
+check "the method is available" "$OUT" 'method api-search: hub search endpoint'
+check "the score is printed" "$OUT" 'recall@5 [01]\.[0-9]*'
 
 echo "3. --min-recall gates CI"
 node test/memory-eval/run.js --questions test/memory-eval/example.json --url "$URL" --method list --min-recall 0.8 > /dev/null; X=$?

@@ -21,6 +21,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - Memory health. `GET /api/memory/health` (MCP `memory_health`) returns a block the hub computes from the brain and the missions: lint errors and warnings, the week's captures by kind and author, unreadable journal blocks, approved items not applied yet and how long they have waited, curated claims past their freshness window (volatile 30 days, stable 180, durable never), contradictions, and provenance coverage. `status` is `attention`, with its reasons, when lint has errors, a journal block is unreadable, or an approved item has waited more than 48 hours. Cached for a minute; any brain write or mission change drops the cache. Read counts are not tracked yet and say so.
 - Both dashboards show the health as one line near the brain (ok or attention, with a glyph), refreshed on brain writes and mission changes; a click shows the reasons and the lists.
 - CI runs `test/memory-eval.sh`: recall@5 on the fixture brain must not drop below the recorded number.
+- Brain search. `GET /api/knowledge/search?q=&project=&k=` (MCP `search_knowledge`) returns passages with their file, section and sources, best first: BM25 over sections, claims and journal records, in memory, rebuilt at boot and kept current on every write. English and French, accents ignored. A project sees global knowledge, its entity's files and its own, never another project's. `attic/`, `archive/` and free-text journal lines are not searched.
+- Section reads. `GET /api/knowledge?file=&section=` and `section` on MCP `read_knowledge` return one section and the frontmatter.
 
 ### Changed
 - Sol's digest opens with the health block, and anything in `attention` becomes an item or a message to the boss.

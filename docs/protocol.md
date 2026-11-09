@@ -18,7 +18,8 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 | `POST /api/tasks/claim` | claim by id, or highest-priority queued from a project with free capacity; returns lease |
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew (and `POST /api/tasks/:id/apply` to write an approved item, below) |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
-| `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed) |
+| `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed); `?section=<heading>` reads one section |
+| `GET /api/knowledge/search` | `?q=&project=&k=`: passages from the caller's scope, best first. A project sees global knowledge, its entity's and its own, never another project's. Without a known project, global only |
 | `GET/POST /api/journal` | capture one thing learned as a typed journal record, and read records back (below) |
 | `GET/POST /api/work` | read/write an open mission's evidence (plain files under `work/<t-id>/`, deleted when it closes) |
 | `GET /api/memory/health` | the memory's health, computed by the hub: lint, unreadable records, unapplied approvals, stale claims (below) |

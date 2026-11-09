@@ -11,6 +11,7 @@ const store = require('./lib/store');
 const knowledge = require('./lib/knowledge');
 const journal = require('./lib/journal');
 const health = require('./lib/health');
+const brainIndex = require('./lib/index');
 const { KINDS } = require('./lib/claims');
 const work = require('./lib/work');
 const discord = require('./lib/discord');
@@ -32,6 +33,10 @@ const sseClients = new Set();
 const HEALTH_EVENTS = /^(task|knowledge|journal|project)\./;
 function broadcast(type, data, extra) {
   if (HEALTH_EVENTS.test(type)) health.invalidate();
+  // The search index follows every brain write. A project change can move the
+  // walls, so that one rebuilds.
+  if (type === 'knowledge.written' || type === 'journal.captured') brainIndex.touch(data && data.file);
+  else if (/^project\./.test(type)) brainIndex.invalidate();
   store.logEvent(type, summarize(type, data));
   // S2-f: notify from settings, the mission's project overriding global
   discord.mirror(type, data, store.effectiveSettings(store.load(), data && data.project).notify);
@@ -585,6 +590,11 @@ const server = http.createServer(async (req, res) => {
       if (r.committed) broadcast('knowledge.written', { file: r.files.join(', '), author: 'human' });
       return send(res, 200, r);
     }
+    if (req.method === 'GET' && p === '/api/knowledge/search') {
+      const q = url.searchParams.get('q');
+      if (!q) return send(res, 400, { error: 'q required' });
+      return send(res, 200, brainIndex.search(q, { project: url.searchParams.get('project') || undefined, k: url.searchParams.get('k') || undefined }));
+    }
     if (req.method === 'GET' && p === '/api/knowledge') {
       const file = url.searchParams.get('file');
       if (file) {
@@ -595,6 +605,14 @@ const server = http.createServer(async (req, res) => {
         if (url.searchParams.get('raw') === '1') {
           res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
           return res.end(r.buf);
+        }
+        // section=<heading>: that slice and the frontmatter, not the whole file
+        const heading = url.searchParams.get('section');
+        if (heading && !r.binary) {
+          const text = r.buf.toString('utf8');
+          const s = brainIndex.section(text, heading);
+          if (!s) return send(res, 404, { error: `no section matching "${heading}" in ${file}`, sections: brainIndex.headingsOf(text) });
+          return send(res, 200, { file, section: s.heading, frontmatter: s.frontmatter, content: s.content });
         }
         return r.binary
           ? send(res, 200, { file, content_base64: r.buf.toString('base64') })
@@ -669,7 +687,8 @@ const MCP_TOOLS = [
   { name: 'apply_item', description: 'Apply one approved item of an approved mission you hold: the hub checks the payload against the hash stored when it was filed and writes exactly that text to the brain as consul. The boss approved that exact text, so the curated compartments take it. Once every approved item is applied, close the mission done with update_mission.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, item: { type: 'string' } }, required: ['task', 'item'], additionalProperties: false } },
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian, with capture. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'capture', description: 'Record one thing learned in the journal, as consul. kind is one of fact, gotcha, step, rule, why, decision, preference, correction, question, process, pattern; text is the claim, one line, 2000 characters at most; evidence is one line saying how you know; tags are words without #; confidence is observed (default), stated (you were told) or inferred (you concluded it). The hub stamps the id, by, the time and your mission (when you hold several, mission picks one of them), writes the record to journal/<yyyy-mm-dd>.md, and returns it.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: KINDS }, text: { type: 'string' }, evidence: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, confidence: { type: 'string', enum: ['observed', 'stated', 'inferred'] }, mission: { type: 'string' } }, required: ['kind', 'text', 'evidence'], additionalProperties: false } },
-  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' } }, additionalProperties: false } },
+  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}. section (a heading, or part of one) returns just that section and the frontmatter.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' }, section: { type: 'string' } }, additionalProperties: false } },
+  { name: 'search_knowledge', description: 'Search the brain. Returns passages with their file and section, best first. Give project to include that project\'s files; without it, only global knowledge and recipes are searched.', inputSchema: { type: 'object', properties: { q: { type: 'string' }, project: { type: 'string' }, k: { type: 'number' } }, required: ['q'], additionalProperties: false } },
   { name: 'memory_health', description: 'The memory health block, the same JSON as GET /api/memory/health: status (ok or attention) with its reasons, lint errors, unreadable journal blocks and capture volume, approved items not applied yet, stale claims, contradictions, and provenance coverage. Read-only.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
@@ -749,10 +768,16 @@ function mcpToolCall(name, a = {}) {
       if (a.file) {
         const content = knowledge.readKnowledge(a.file);
         if (content === null) throw new Error('not found');
+        if (a.section) {
+          const s = brainIndex.section(content, a.section);
+          if (!s) throw new Error(`no section matching "${a.section}" in ${a.file}. Sections: ${brainIndex.headingsOf(content).join(', ')}`);
+          return { file: a.file, section: s.heading, frontmatter: s.frontmatter, content: s.content };
+        }
         return { file: a.file, content };
       }
       return { files: knowledge.listKnowledge(a.dir || '') };
     }
+    case 'search_knowledge': return brainIndex.search(a.q, { project: a.project, k: a.k });
     case 'memory_health': return health.get();
     case 'write_work': {
       const refusal = workWriteRefusal(a.file);
@@ -838,6 +863,7 @@ try {
 }
 knowledge.ensureRepo();
 try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
+try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {

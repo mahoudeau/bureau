@@ -191,7 +191,8 @@ const METHODS = {
       note: 'hub search endpoint',
       async prepare(questions) {
         for (const q of questions) {
-          const r = await hub.get(`/api/knowledge/search?q=${encodeURIComponent(q.question)}&k=${o.k}`);
+          const scope = q.project ? `&project=${encodeURIComponent(q.project)}` : '';
+          const r = await hub.get(`/api/knowledge/search?q=${encodeURIComponent(q.question)}&k=${o.k}${scope}`);
           const rows = Array.isArray(r.body) ? r.body : (r.body.results || r.body.hits || []);
           results[q.id] = rows.slice(0, o.k).map(x => ({ file: x.file, section: x.section, score: x.score }));
         }
