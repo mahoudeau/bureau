@@ -36,7 +36,7 @@ The hub checks `state.json` before it listens.
 
 | Schema | Release | What it does |
 |---|---|---|
-| 0 to 1 | Unreleased | Adds `schema_version` to the file and fills in top-level lists older files may lack (`agents`, `messages`, `log`). Nothing is removed or renamed. |
+| 0 to 1 | 0.2.0 | Adds `schema_version` to the file and fills in top-level lists older files may lack (`agents`, `messages`, `log`). Nothing is removed or renamed. |
 
 ## Backups the hub keeps
 

@@ -112,6 +112,15 @@ async function main() {
     r = await search('tapir protocol');
     check('and adds the new ones', files(r)[0] === 'knowledge/brand-new.md', r.body);
 
+    console.log('5a. lint on write reaches project files');
+    const longSummary = `---\ntitle: Too long\nsummary: "${'x'.repeat(250)}"\n---\n\n## Now\n\nStatus.\n`;
+    r = await api('POST', '/api/knowledge', { file: 'projects/alpha/STATE.md', content: longSummary, author: 'scribe' });
+    check('an over-long summary in a project STATE is refused', r.code === 422, r);
+    r = await search('walrus migration', 'alpha');
+    check('and the file is untouched', files(r).includes('projects/alpha/STATE.md'), r.body);
+    r = await api('POST', '/api/knowledge', { file: 'projects/alpha/STATE.md', content: '\n## 2026-02-02 a note\n\nNo frontmatter of its own, and that is fine.\n', author: 'scribe', mode: 'append' });
+    check('a normal debrief still lands', r.code === 200, r);
+
     console.log('5b. French questions, English notes');
     await put('knowledge/lockbox.md', NOTE('Lockbox', '- [fact] Rotate the password on the kumquat server every month (source: t-3)'));
     r = await search('quand changer le mot de passe du kumquat ?');
