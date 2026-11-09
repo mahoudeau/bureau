@@ -34,11 +34,12 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 On Windows, `copy .env.example .env` (cmd and PowerShell both take it).
 
-Edit `.env` and set `BUREAU_TOKEN` to the random string. Keep `PORT=8100` unless the user wants another port.
+Edit `.env`: set `BUREAU_TOKEN` to the random string, and `BUREAU_BOSS_TOKEN` to a second, different random string (strict mode: the boss's own credential). Keep `PORT=8100` unless the user wants another port.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call. Empty means the API is open to anyone who can reach the port; the hub prints a warning at boot. Always set it. |
+| `BUREAU_BOSS_TOKEN` | empty | The boss's credential; setting it turns strict mode on. Only it can act as human, change settings and mint agent tokens. Set it on a new install. |
+| `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call in legacy mode; in strict mode it acts only as an agent. Empty with no boss token means the API is open to anyone who can reach the port; the hub prints a warning at boot. |
 | `PORT` | 8100 | Listen port. |
 | `IP` | `::` | Bind address, passed to the hub as `HOST`. An `IP` set by the host beats a `HOST` line in `.env`. |
 | `BUREAU_DATA_DIR` | `hub/data` | Where `state.json` (missions, roster, messages, log) lives. |
@@ -143,7 +144,7 @@ curl -s -X POST http://localhost:8100/api/knowledge -H "Authorization: Bearer $T
 
 - Dashboard: http://localhost:8100/ . It prompts for the token once and stores it in the browser.
 - Pixel office: http://localhost:8100/office . Same token, same storage. It's empty until an agent registers.
-- MCP connector URL for chat apps: `curl -s http://localhost:8100/api/mcp -H "Authorization: Bearer $TOKEN"` returns `{"url": "http://localhost:8100/mcp/<48 hex chars>"}`. The URL itself is the credential; treat it like the token. It uses `BUREAU_PUBLIC_URL` as its base when that's set. Setup steps are in `connectors/chat/README.md`.
+- MCP connector URL for chat apps: `node hub/tools/token.js mint <agent> <project,...>` prints the agent's token and its `MCP URL`. The URL itself is the credential; treat it like the token. It uses `BUREAU_PUBLIC_URL` as its base when that's set. Setup steps are in `connectors/chat/README.md`.
 - Scheduled workers: `connectors/cowork/README.md`.
 - Tell the user where their data is: `hub/data/state.json` and `hub/brain/`, both gitignored.
 

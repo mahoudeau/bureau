@@ -2,7 +2,7 @@
 
 **Your agents get better with every task: Bureau briefs them and keeps what they learn.**
 
-Bring the agents you already use: Claude Code, Codex, or a script. Their memory is plain markdown in a git repo you own, and nothing irreversible ships without your approval: the hub enforces it, not a prompt. Self-hosted and open source, the AI OS for your agents.
+Bring the agents you already use: Claude Code, Codex, or a script. Their memory is plain markdown in a git repo you own, and a boss-gate mission closes only by your hand, your quoted words in the chat, or a policy you set: the hub enforces that on the mission's status, not a prompt ([what that covers and what it does not](#what-the-gate-covers)). Self-hosted and open source, the AI OS for your agents.
 
 ![The Bureau office: a builder takes a mission, the critic sends it back with a note, the builder fixes it, the boss approves, and the librarian files what was learned](docs/media/office.gif)
 
@@ -27,7 +27,7 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 
 *The dashboard at `/`, with demo data: agents and their roles, missions by status, and what's waiting on you.*
 
-- **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for anything irreversible.
+- **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for missions marked boss-gate.
 
   <img src="docs/media/mission.jpg" alt="A mission opened in the side panel: status working, owner pixel, project Northwind Shop, boss gate, the goal, and a log of what the agent did.">
 
@@ -48,7 +48,7 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 
   # commit 3f2a9c1, author: sol
   ```
-- **Goals, a lead and a critic.** File a `goal:` with a concrete bar (reference URLs, images, examples). A lead agent splits it into missions small enough to build and judge one by one, and a critic agent with fresh context checks each delivery against its acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. The roles can be separate agents on a schedule, or one agent you work with live. Either way, everything irreversible (deploys, merges, sends) waits at your gate, which the hub enforces.
+- **Goals, a lead and a critic.** File a `goal:` with a concrete bar (reference URLs, images, examples). A lead agent splits it into missions small enough to build and judge one by one, and a critic agent with fresh context checks each delivery against its acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. The roles can be separate agents on a schedule, or one agent you work with live. Either way, a boss-gate mission waits at your gate, and the hub holds that gate on the mission's status.
 
   <img src="docs/media/review.jpg" width="320" alt="The waiting-on-you panel: two decisions, each with a note field, an Approve button and a Send back button.">
 
@@ -71,12 +71,15 @@ cp .env.example .env    # Windows: copy .env.example .env
 node server.js          # reads .env, listens on PORT (8100 in the example)
 ```
 
-Set `BUREAU_TOKEN` in `.env` before you start. Any long random string works, and this prints one on any OS: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+Set both tokens in `.env` before you start: `BUREAU_BOSS_TOKEN`, which is yours, and `BUREAU_TOKEN`. Any long random string works, and this prints one on any OS: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Run it twice: the two must differ.
 
 Check it's up: `curl http://localhost:8100/health` answers `"ok": true` (in Windows PowerShell 5.1, type `curl.exe`).
 
-- **The token** guards every `/api/` call, sent as `Authorization: Bearer <token>`. Leave it empty and the API is open to anyone who can reach the port (the hub warns at boot).
-- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for the token once and keeps it in the browser.
+- **The boss token** turns strict mode on: only it can act as you (`agent: "human"`), rule on items, change settings and roles, see review links, and mint tokens. Sign the dashboard in with it.
+- **Agent tokens**: each agent gets its own, bound to its name and a list of projects: `node hub/tools/token.js mint consul bureau,general`. The hub keeps only the hash, and revokes one with `token.js revoke <id>`. An agent token is refused anything outside its projects, on the REST routes and the MCP door alike.
+- **The shared `BUREAU_TOKEN`** in strict mode acts only as an agent, never as you, and sees every project. It's a bridge for upgrades. Give every agent its own token, then remove it.
+- With only `BUREAU_TOKEN` set the hub runs in legacy mode (warned at boot): any agent can declare itself the boss, so nothing identifies you. With no token at all the API is open to anyone who can reach the port. See [docs/protocol.md](docs/protocol.md) ("Who can do what"), and [UPGRADING.md](UPGRADING.md) to move from legacy.
+- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for a token once and keeps it in the browser: paste the boss token.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
 - **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `::`. `start.sh` is still there for hosts whose start command has to be a shell line; it runs the same `node server.js`.
 
@@ -96,20 +99,26 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8100/api/tasks -Headers $h 
 How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. A screen in the dashboard is next; for now it's one call:
 
 ```
-curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $BOSS_TOKEN" -H "Content-Type: application/json" \
   -d '{"global":{"approval":"in-session"},"agents":{"consul":{"roles":["critic","lead"]},"sol":{"roles":["librarian"]}}}'
 ```
 
-- **`approval`**, global or per project: `dashboard` (only you close boss-gate work), `in-session` (an agent closes it with your quoted words, pair mode) or `critic` (a critic or lead closes it).
-- **`roles`**, per agent: `lead`, `critic`, `librarian`, `curator`. Once any agent has roles here, settings are the only source of roles.
+- **`approval`**, global or per project: `dashboard` (only you close boss-gate work; the default when unset), `in-session` (an agent closes it with your quoted words, pair mode) or `critic` (a critic or lead closes it, but not out of `review`).
+- **`roles`**, per agent: `lead`, `critic`, `librarian`, `curator`. In strict mode, settings are the only source of roles. In legacy mode, self-registered tags still count until roles are set here.
 - **`notify`**: which events ping Discord (`all`, `review`, `blocked`, `none`).
 - **`default_gate`**: `boss` or `critic` for missions created without one.
 
-With no settings, the hub behaves as it always did: every rule is opt-in. Every change is logged with its before and after. The full rules are in [docs/protocol.md](docs/protocol.md).
+Only the boss token changes these, and every change is logged with its before and after. The full rules are in [docs/protocol.md](docs/protocol.md).
+
+### What the gate covers
+
+The gate is on the mission's status. With no settings at all, an agent cannot close a `gate: boss` mission `done` and cannot move it out of `review`. It closes only by you (the dashboard, or a review link on your phone), by your quoted words under the `in-session` policy, or through the `critic` policy. Only you rule on items.
+
+What it does not cover: the gate holds the mission, not the world. An agent holding deploy credentials can still deploy, whatever its mission says. Bureau does not hold those credentials for you, so keep them from agents you haven't decided to trust with them.
 
 ### Your first agent
 
-An agent is anything that can make HTTP calls. With curl, and `TOKEN` set to your token:
+An agent is anything that can make HTTP calls. Mint it a token (`node hub/tools/token.js mint first general`). With curl, and `TOKEN` set to that token:
 
 ```
 curl -s -X POST http://localhost:8100/api/agents/register -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"name":"first","kind":"curl"}'
@@ -117,9 +126,9 @@ curl -s -X POST http://localhost:8100/api/tasks -H "Authorization: Bearer $TOKEN
 curl -s -X POST http://localhost:8100/api/tasks/claim -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d '{"agent":"first"}'
 ```
 
-The claim hands back the mission with a two-hour lease. Close it with `PATCH /api/tasks/t-1` and `{"agent":"first","status":"done","note":"hello"}`. The mission lands in the `general` project, which every hub starts with.
+The claim hands back the mission with a two-hour lease. The mission lands in the `general` project, which every hub starts with. It is boss-gate by default, so your agent can't close it: close it yourself, with your boss token, `PATCH /api/tasks/t-1` and `{"agent":"human","status":"done","note":"hello"}`.
 
-For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for scheduled AI sessions, [connectors/chat/](connectors/chat/) for chat apps over MCP (`GET /api/mcp` gives the connector URL). The full API is in [docs/protocol.md](docs/protocol.md).
+For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for scheduled AI sessions, [connectors/chat/](connectors/chat/) for chat apps over MCP (a minted token's `mcp_url` is the connector URL). The full API is in [docs/protocol.md](docs/protocol.md).
 
 ### Test it
 
@@ -128,7 +137,7 @@ CI runs three scripts against a scratch hub: `test/dummy-agent.sh` (the protocol
 ## Run it with Docker
 
 ```
-node -e "require('fs').writeFileSync('.env','BUREAU_TOKEN='+require('crypto').randomBytes(32).toString('hex')+'\n')"
+node -e "const r=()=>require('crypto').randomBytes(32).toString('hex');require('fs').writeFileSync('.env','BUREAU_BOSS_TOKEN='+r()+'\nBUREAU_TOKEN='+r()+'\n')"
 docker compose up -d    # builds the image, listens on 8100
 ```
 
@@ -140,7 +149,7 @@ Without compose:
 
 ```
 docker build -t bureau .
-docker run -d -p 8100:8100 -e BUREAU_TOKEN=... -v bureau-data:/data -v bureau-brain:/brain bureau
+docker run -d -p 8100:8100 -e BUREAU_BOSS_TOKEN=... -e BUREAU_TOKEN=... -v bureau-data:/data -v bureau-brain:/brain bureau
 ```
 
 The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.

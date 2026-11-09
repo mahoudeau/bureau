@@ -6,6 +6,13 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Security
+- **Strict mode: a boss credential separate from the agents'.** Setting `BUREAU_BOSS_TOKEN` makes identity come from the credential: only it can act as `human`, change settings and roles, see review links, or mint tokens. The dashboard signs in with it. Review links keep acting as the boss. With only `BUREAU_TOKEN` set (legacy) the hub keeps declared identities, warns at boot, and reports `auth: "legacy"` on `/api/health`. **Read UPGRADING.md.**
+- **Per-agent tokens.** `POST/GET/DELETE /api/tokens` and `hub/tools/token.js`: minted by the boss, hashed at rest, revocable, bound to one agent name and a list of projects. A token that declares another agent is refused.
+- **Project walls enforced from the credential**, on every read and write, REST and MCP: `?file=`, `?section=`, `?claim=`, `/map`, `/search`, `/api/context` (a `task:` of another project no longer switches scope), mission reads and updates, the work store, `/api/journal`, and capture tags. An `/api/` route with no rule in the table is a 404.
+- **MCP's credential is one agent with its own project list.** A minted token is its MCP URL; the old URL keeps working in strict mode as `consul`, never as `human`, until `DELETE /api/mcp` retires it.
+- **The gate, in every mode.** A `gate: boss` mission now cannot reach `done` or leave `review` except by the boss, a review link, or the explicit approval policy. **With no settings at all an agent no longer closes boss-gate work `done` (RULE-MISSIONS-24 changed).** `review` to `in_progress`, `failed`, `discarded`, `blocked` or `claimed` by an agent is refused. Agents can no longer file `verdicts`. A boss gate cannot be lowered to `critic` while in `review`. See UPGRADING.md for what agents relying on the old unset behaviour must do.
+
 ### Added
 - Claim ids (Brain Format v0.3). `hub/tools/migrate-claims.js <brain> [--write]` moves curated notes to `format: 0.3`: every claim on one line, every claim with a `^c-` id, its text unchanged. It is safe to run twice.
 - In a `format: 0.3` note the hub assigns ids as it writes, and refuses a new claim that has no source of its own or cites a mission or journal record that does not exist. Claims already there keep their file-level source. An approved payload is still written byte for byte.

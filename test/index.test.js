@@ -82,7 +82,7 @@ async function main() {
     check('a deliverable is not a passage', !files(r).some(f => f.includes('/deliverables/')), r.body);
 
     console.log('4. the journal');
-    const task = (await api('POST', '/api/tasks', { title: 'walrus work', project: 'alpha' })).body.task.id;
+    const task = (await api('POST', '/api/tasks', { title: 'walrus work', project: 'alpha', gate: 'critic' })).body.task.id;
     await api('POST', '/api/agents/register', { name: 'scribe', kind: 'dummy' });
     await api('POST', '/api/tasks/claim', { agent: 'scribe', id: task });
     await api('POST', '/api/journal', { agent: 'scribe', kind: 'gotcha', text: 'The quokka importer drops the last row', evidence: 'seen in a test' });

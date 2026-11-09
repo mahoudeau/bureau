@@ -97,6 +97,11 @@ jobs:
       - name: Apply (test/apply.test.js)
         run: node test/apply.test.js
 
+      # Identity, the gate and the walls, on strict and legacy hubs, and a table
+      # of every route and MCP tool. Self-contained: ports 8188 and 8189.
+      - name: Authorization (test/authz.test.js)
+        run: node test/authz.test.js
+
       # Self-contained: starts its own hubs on ports 4711 and 4712.
       - name: Storage (test/storage.sh)
         run: bash test/storage.sh
@@ -258,6 +263,9 @@ jobs:
 
       - name: Claim ids (test/claim-ids.test.js)
         run: node test/claim-ids.test.js
+
+      - name: Authorization (test/authz.test.js)
+        run: node test/authz.test.js
 
       - name: Hub log
         if: failure() || cancelled()

@@ -103,13 +103,13 @@ Connectors are the vendor glue; the hub never knows them (see `protocol.md`).
 
 ## 5. Security, deliberately boring
 
-Single shared secret (`BUREAU_TOKEN`) as a Bearer token on every API call; the dashboard asks for it once. Run it behind HTTPS (your host's front end or a reverse proxy). Path validation confines knowledge writes to `brain/`. All API responses send `Cache-Control: no-store`; polling endpoints also accept POST (some agent runtimes cache GETs). This is right-sized for a solo deployment; per-agent tokens are a later refinement.
+Strict mode (`BUREAU_BOSS_TOKEN` set): one boss credential, which the dashboard signs in with, and per-agent tokens minted by the boss, stored hashed, each bound to one agent name and a list of projects. The hub applies identity and project walls from the credential on every route and MCP tool (`docs/protocol.md`, "Who can do what", and `test/authz.test.js`). Legacy mode (only `BUREAU_TOKEN`) keeps one shared secret and declared identities, and exists for upgrades. Run it behind HTTPS (your host's front end or a reverse proxy). Path validation confines knowledge writes to `brain/`. All API responses send `Cache-Control: no-store`; polling endpoints also accept POST (some agent runtimes cache GETs).
 
 **One important caution:** the hub pipes text written by agents (and possibly by chat users) into other agents' contexts. Treat hub content as *data, not instructions* in your standing prompts, and keep the human `review` gate on anything irreversible (deploys, sends, purchases).
 
 ## 6. Deployment
 
-The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
+The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_BOSS_TOKEN` and `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
 
 JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable. If the queue ever gets big, swapping `lib/store.js` for SQLite is a contained change.
 

@@ -66,7 +66,8 @@ async function main() {
   const starting = input.hook_event_name === 'SessionStart';
   const compacted = starting && input.source === 'compact';
   if (starting && !compacted) return;
-  const body = { request: input.prompt || '', project: projectOf(input.cwd || process.cwd()), session: input.session_id, surface: 'claude-code', agent: 'consul', max_chars: MAX_CHARS, ...(compacted ? { reset: true } : {}) };
+  // The name must match the token in strict mode: the hub refuses another (403, noted below).
+  const body = { request: input.prompt || '', project: projectOf(input.cwd || process.cwd()), session: input.session_id, surface: 'claude-code', agent: process.env.BUREAU_AGENT || 'consul', max_chars: MAX_CHARS, ...(compacted ? { reset: true } : {}) };
   if (!body.project) delete body.project;
   if (!body.session) delete body.session;
   const res = await fetch(`${base}/api/context`, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(TIMEOUT_MS) });

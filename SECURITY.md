@@ -10,7 +10,8 @@ You'll get an acknowledgement within a week. Bureau is maintained by one person,
 
 The hub (`hub/`), in particular:
 
-- **Token handling.** The single Bearer token (`BUREAU_TOKEN`), including where it travels as a query parameter (the SSE stream), and anything that lets a request through without it.
+- **Token handling.** `BUREAU_BOSS_TOKEN`, minted agent tokens, the transitional `BUREAU_TOKEN`, including where one travels as a query parameter (the SSE stream), and anything that lets a request through without one.
+- **Identity and walls.** In strict mode, anything that lets a credential act as the boss, as another agent, or outside its project list, on REST or MCP (the rule table is in `docs/protocol.md`).
 - **The MCP capability URL** (`/mcp/<token>`). The URL is the credential: a way to guess it, derive it, or find it in a log, event, page or poke payload is in scope.
 - **Capability links.** The review, answer and view links the hub issues, and the image route behind them.
 - **Brain write paths.** `POST /api/knowledge` and the hand-drop sweep: escaping the brain directory, writing into `.git`, getting past the file-type allowlist, or getting git to run something it shouldn't.
@@ -19,7 +20,8 @@ The hub (`hub/`), in particular:
 
 ## What's out of scope
 
-- Anyone who holds the Bearer token. It's a single shared secret and grants full access by design; a token holder doing what the token allows is not a vulnerability.
+- A hub in legacy mode (only `BUREAU_TOKEN` set): the shared token is one secret and any holder can declare `agent: "human"`, by design. Strict mode is the fix; a legacy token holder doing what the token allows is not a vulnerability.
+- The holder of the boss token: that credential grants the boss's authority, by design.
 - Your own deployment: TLS, the host, the reverse proxy, where you keep `.env`.
 - Connectors and chat-app settings outside this repository.
 - Denial of service by volume.

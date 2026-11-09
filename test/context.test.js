@@ -176,7 +176,7 @@ async function main() {
 
     console.log('11. capture before closing');
     await api('POST', '/api/agents/register', { name: 'closer', kind: 'dummy' });
-    const claimOne = async () => { const id = (await api('POST', '/api/tasks', { title: 'a job', project: 'alpha' })).body.task.id; await api('POST', '/api/tasks/claim', { agent: 'closer', id }); return id; };
+    const claimOne = async () => { const id = (await api('POST', '/api/tasks', { title: 'a job', project: 'alpha', gate: 'critic' })).body.task.id; await api('POST', '/api/tasks/claim', { agent: 'closer', id }); return id; };
     let id = await claimOne();
     r = await api('PATCH', `/api/tasks/${id}`, { agent: 'closer', status: 'done' });
     check('off by default', r.code === 200 && r.body.task.status === 'done', r);

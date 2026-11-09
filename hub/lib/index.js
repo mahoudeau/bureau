@@ -300,11 +300,14 @@ function fileInfo(rel, scope) {
 }
 // One claim and its evidence, each source resolved: "where does this come
 // from" in one call. Its own sources, or the file's when it has none.
-function claimDetail(id) {
+// viewer (lib/auth.js viewer) keeps the answer inside a credential's walls: a
+// claim it cannot reach is not found, and neither is any of its evidence.
+function claimDetail(id, viewer) {
   ensure();
   let c = null;
   for (const x of chunks.values()) if (x.claim === id) { c = x; break; }
   if (!c) return null;
+  if (viewer && !viewer.canRead(c.file) && !(c.project && viewer.seesProject(c.project))) return null;
   const front = claims.parseFile(knowledge.readKnowledge(c.file) || '', { path: c.file }).frontmatter;
   const own = (c.sources || []).filter((s) => s !== id);
   const inherited = own.length ? [] : String(front.source || '').replace(/^\[(?!\[)|(?<!\])\]$/g, '').split(',').map((s) => s.trim().replace(/^\[\[|\]\]$/g, '')).filter(Boolean);
@@ -314,14 +317,17 @@ function claimDetail(id) {
   const resolve = (ref) => {
     if (/^t-\d+$/.test(ref)) {
       const t = tasks.find((x) => x.id === ref);
-      return t ? { ref, type: 'mission', found: true, title: t.title, status: t.status, project: t.project } : { ref, type: 'mission', found: false };
+      return t && (!viewer || viewer.seesProject(t.project)) ? { ref, type: 'mission', found: true, title: t.title, status: t.status, project: t.project } : { ref, type: 'mission', found: false };
     }
     if (/^j-/.test(ref)) {
       const r = records.find((x) => x.id === ref);
-      return r ? { ref, type: 'record', found: true, text: r.text, evidence: r.fields.evidence, by: r.fields.by, at: r.fields.at } : { ref, type: 'record', found: false };
+      const reachable = r && (!viewer || (journalProject(r) && viewer.seesProject(journalProject(r))));
+      return reachable ? { ref, type: 'record', found: true, text: r.text, evidence: r.fields.evidence, by: r.fields.by, at: r.fields.at } : { ref, type: 'record', found: false };
     }
     const target = ref.split('#')[0];
-    return { ref, type: 'wikilink', found: knowledge.readKnowledge(/\.md$/.test(target) ? target : `${target}.md`) !== null || [...files.values()].some((f) => f.title === target) };
+    const named = /\.md$/.test(target) ? target : `${target}.md`;
+    if (viewer && !viewer.canRead(named)) return { ref, type: 'wikilink', found: false };
+    return { ref, type: 'wikilink', found: knowledge.readKnowledge(named) !== null || [...files.values()].some((f) => f.title === target) };
   };
   return { id, file: c.file, section: c.section, line: c.line, text: c.text, compartment: c.compartment, verified: c.verified, belief: c.belief, volatility: c.volatility,
     evidence: own.length ? 'own' : inherited.length ? 'file' : 'none', sources: refs.map(resolve) };
@@ -425,4 +431,4 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp };
+module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, claimDetail, standingOf, stamp, journalProject };

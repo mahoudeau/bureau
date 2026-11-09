@@ -206,6 +206,56 @@ function nextId(prefix) {
 
 function nowISO() { return new Date().toISOString(); }
 
+// ---- Auth mode (docs/protocol.md, "Who can do what") ----
+// strict: BUREAU_BOSS_TOKEN set, identity comes from the credential. legacy:
+// one shared BUREAU_TOKEN, identity is declared. open: no token at all.
+function authMode() { return process.env.BUREAU_BOSS_TOKEN ? 'strict' : process.env.BUREAU_TOKEN ? 'legacy' : 'open'; }
+
+// ---- Agent tokens ----
+// Minted by the boss, one agent name and one project list each, stored as a
+// SHA-256 hash: the plaintext leaves the hub once, in the mint answer. 48 hex
+// characters, so the same token is also the agent's MCP URL (/mcp/<token>).
+const tokenHash = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
+const tokensOf = (s) => (s.agent_tokens = s.agent_tokens || []);
+const RESERVED_AGENT = /^(human|system)$/i;
+const tokenView = ({ hash: _h, ...rest }) => rest;
+function mintToken({ agent, projects, label }) {
+  const s = load();
+  if (typeof agent !== 'string' || !ID_RE.test(agent) || RESERVED_AGENT.test(agent)) return { error: 'agent: a name of letters, digits, dot, dash or underscore, max 40, and not human or system' };
+  if (!Array.isArray(projects) || !projects.length || projects.some((p) => typeof p !== 'string')) return { error: 'projects: a non-empty array of project ids, or ["*"] for all' };
+  if (projects.includes('*') && projects.length > 1) return { error: 'projects: ["*"] stands alone' };
+  if (!projects.includes('*')) {
+    const unknown = projects.filter((p) => !s.projects.some((x) => x.id === p));
+    if (unknown.length) return { error: `projects: unknown ${unknown.join(', ')}` };
+  }
+  const token = crypto.randomBytes(24).toString('hex');
+  const record = { id: `tok-${crypto.randomBytes(4).toString('hex')}`, agent, projects: [...new Set(projects)], label: label ? String(label).slice(0, 80) : null, hash: tokenHash(token), created_at: nowISO(), revoked_at: null, last_used: null };
+  tokensOf(s).push(record);
+  save();
+  return { token, record: tokenView(record) };
+}
+function listTokens() { return tokensOf(load()).map(tokenView); }
+function revokeToken(id) {
+  const t = tokensOf(load()).find((x) => x.id === id);
+  if (!t) return { error: 'not_found' };
+  if (!t.revoked_at) { t.revoked_at = nowISO(); save(); }
+  return { record: tokenView(t) };
+}
+function findAgentToken(candidate) {
+  if (typeof candidate !== 'string' || !candidate) return null;
+  const s = load();
+  if (!s.agent_tokens || !s.agent_tokens.length) return null;
+  const hash = Buffer.from(tokenHash(candidate), 'hex');
+  let hit = null;
+  for (const t of s.agent_tokens) if (crypto.timingSafeEqual(hash, Buffer.from(t.hash, 'hex')) && !t.revoked_at) hit = t;
+  if (hit && (!hit.last_used || Date.now() - Date.parse(hit.last_used) > 60_000)) { hit.last_used = nowISO(); save(); }
+  return hit;
+}
+// A project renamed moves with the tokens that name it: the wall stays where it was.
+function renameInTokens(s, from, to) {
+  for (const t of tokensOf(s)) t.projects = [...new Set(t.projects.map((p) => (p === from ? to : p)))];
+}
+
 // ---- Startup lock ----
 // One process owns a data dir, ever. Two hubs sharing state.json would break
 // the single-writer guarantee silently; refusing to boot is the honest failure.
@@ -471,6 +521,7 @@ function renameProject(from, to) {
   const dupe = s.projects.some(p => p.id === to);
   s.projects = s.projects.filter(p => !(p.id === from && dupe)).map(p => (p.id === from ? { ...p, id: to } : p));
   s.projects.sort((a, b) => a.id.localeCompare(b.id));
+  renameInTokens(s, from, to);
   save();
   return n;
 }
@@ -500,7 +551,9 @@ function expireLeases() {
   return expired;
 }
 
-function claimTask({ id, agent, lease_minutes }) {
+// projects: the credential's list ('*' or absent means all), so the pool can
+// never hand an agent a mission outside its walls.
+function claimTask({ id, agent, lease_minutes, projects }) {
   expireLeases();
   const s = load();
   let t;
@@ -524,6 +577,7 @@ function claimTask({ id, agent, lease_minutes }) {
     // lives outside any session and keeps).
     const ttlMs = (+process.env.BUREAU_RESERVATION_TTL_MIN || 30) * 60000;
     const claimable = x => {
+      if (Array.isArray(projects) && !projects.includes(x.project)) return false;
       if (!x.reserved_for || x.reserved_for === agent) return true;
       const holder = s.agents.find(a => a.name === x.reserved_for);
       if (!holder || holder.kind !== 'cowork') return false;
@@ -565,19 +619,21 @@ function agentHasCapability(s, agentName, cap) {
 // S2-c (boss ruling 2026-10-01): once any agent has roles in settings, every
 // role (lead, critic, librarian, curator) comes from settings only, for every
 // agent; an agent missing from settings.agents holds none, whatever it
-// registered with. No roles set anywhere: the capability check above, as before.
+// registered with. No roles set anywhere: the capability check above, as before,
+// except in strict mode, where a role only ever comes from settings: a tag
+// anyone can register is no authority once identity is real.
 function rolesConfigured(s) {
   const agents = s.settings && s.settings.agents;
   return !!agents && Object.values(agents).some(a => a && Array.isArray(a.roles));
 }
 function agentHasRole(s, agentName, role) {
-  if (!rolesConfigured(s)) return agentHasCapability(s, agentName, role);
+  if (!rolesConfigured(s)) return authMode() !== 'strict' && agentHasCapability(s, agentName, role);
   const cfg = s.settings.agents[agentName];
   return !!(cfg && Array.isArray(cfg.roles) && cfg.roles.includes(role));
 }
 const SETTINGS_ROLES_NOTE = 'settings govern lead, critic, librarian and curator; self-registered tags for those roles grant nothing';
 function ignoredRoleTags(s, capabilities) {
-  return rolesConfigured(s) && Array.isArray(capabilities) && capabilities.some(c => ROLES.includes(c));
+  return (rolesConfigured(s) || authMode() === 'strict') && Array.isArray(capabilities) && capabilities.some(c => ROLES.includes(c));
 }
 function isLead(s, agentName) { return agentName === 'human' || agentHasRole(s, agentName, 'lead'); }
 function isCriticOrLead(s, agentName) { return isLead(s, agentName) || agentHasRole(s, agentName, 'critic'); }
@@ -591,8 +647,8 @@ function canCurate(s, agentName) {
 }
 
 // ---- Settings (S2) ----
-// Absent settings mean today's behavior, exactly. Every stricter rule is
-// opt-in: approval only bites when the boss set it, globally or per project.
+// Roles and approval are set here by the boss. No approval set means an agent
+// cannot close boss-gate work (updateTask); the other knobs keep their defaults.
 const APPROVALS = ['dashboard', 'in-session', 'critic'];
 const GATES = ['boss', 'critic'];
 const NOTIFY = ['all', 'review', 'blocked', 'none'];
@@ -883,8 +939,8 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
         return { error: `verdicts: ${it.id} is already applied; its verdict stays ${it.verdict}` };
     }
   }
-  // S2 approval policy. Settings decide it; with none set, nothing below
-  // refuses anything that was allowed before.
+  // S2 approval policy: settings decide how an agent may close boss-gate work;
+  // with none set, it may not.
   const policy = effectiveSettings(s, t.project).approval;
   let quote = null;
   if (approved_in_session !== undefined && approved_in_session !== null) {
@@ -896,8 +952,18 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // Gate changes: anyone may raise to boss; only the boss or the lead set critic.
   if (gate !== undefined && gate !== 'boss' && !(gate === 'critic' && isLead(s, agent)))
     return { error: 'gate: anyone may raise to boss; only the boss or the lead (capabilities: ["lead"]) set critic' };
+  // Lowering a boss gate must not be a way past it: not while the mission sits
+  // at the boss's door, and not on the same PATCH that closes it.
+  if (gate === 'critic' && (t.gate || 'boss') === 'boss' && agent !== 'human') {
+    if (prevStatus === 'review') return { error: 'gate: a boss-gate mission in review stays boss-gate; only the boss lowers it' };
+    if (status === 'done' || status === 'failed' || status === 'discarded') return { error: 'gate: a boss gate cannot be lowered by the update that closes the mission' };
+  }
   // The guards below judge the update against the gate it asks for.
   const effGate = (gate !== undefined ? gate : t.gate) || 'boss';
+  // Verdicts are the boss's rulings: an agent filing them would pre-tick the
+  // review page and walk past the undecided-items rule.
+  if (Array.isArray(verdicts) && verdicts.length && agent !== 'human')
+    return { error: 'verdicts: only the boss rules on review items' };
   // Boss-gate review entry, hub-enforced (t-119, boss ruling 2026-08-16 after
   // t-59 rounds 22-23 reached his door with no critic pass): a mission with
   // gate:boss may be PARKED into review only by an agent authorized to clear
@@ -908,24 +974,26 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   // `status === 'review'` handling below, unguarded).
   if (status === 'review' && t.status !== 'review' && effGate === 'boss' && !isCriticOrLead(s, agent) && !isOwnLibrarianDigest(s, t, agent))
     return { error: 'boss-gate: only the critic, the lead, or the boss may park a gate:boss mission in review (the librarian may park its own digest) - hand this round to the critic instead (or register with capabilities including "critic" or "lead" if that authority is genuinely yours)' };
-  // The boss-gate law, hub-enforced: a boss-gate mission in review moves out
-  // (done or back to queued) only by the human's hand. Missions without a gate
-  // predate the field and are boss-gate by definition.
+  // The boss-gate law, hub-enforced: a boss-gate mission in review moves out,
+  // to any status at all, only by the boss's hand: an agent moving it back to
+  // in_progress could close it from there. Missions without a gate predate the
+  // field and are boss-gate by definition.
   // S2 in-session: the boss's quoted words count as his hand, for done only.
   const chatApproved = quote && policy === 'in-session' && status === 'done';
-  if ((status === 'done' || status === 'queued') && t.status === 'review' && effGate === 'boss' && agent !== 'human' && !chatApproved)
+  if (status && status !== 'review' && t.status === 'review' && effGate === 'boss' && agent !== 'human' && !chatApproved)
     return { error: 'boss-gate: only the boss moves this mission out of review' };
-  // S2 close policy, only when the boss set approval explicitly. dashboard:
-  // agents never close boss-gate work done. in-session: they may, quoting
-  // the boss. critic: a critic or lead pass closes it. Unset: as before.
+  // Reaching done on a boss gate, from any status: the boss, or the approval
+  // policy the boss set. With no policy that is dashboard, the safe reading:
+  // the gate is the default, not an opt-in (RULE-MISSIONS-24).
   // An approved mission was approved already: closing it is bookkeeping.
-  if (status === 'done' && t.status !== 'done' && t.status !== 'approved' && effGate === 'boss' && agent !== 'human' && policy) {
-    if (policy === 'dashboard')
-      return { error: `approval policy (dashboard) for ${t.project}: only the boss closes a gate:boss mission done; park it in review for him instead` };
-    if (policy === 'in-session' && !chatApproved)
-      return { error: `approval policy (in-session) for ${t.project}: closing a gate:boss mission done needs approved_in_session with the boss's words, or the boss's own hand in the dashboard` };
-    if (policy === 'critic' && !isCriticOrLead(s, agent))
-      return { error: `approval policy (critic) for ${t.project}: only the critic, the lead, or the boss closes a gate:boss mission done` };
+  if (status === 'done' && t.status !== 'done' && t.status !== 'approved' && effGate === 'boss' && agent !== 'human') {
+    if (policy === 'in-session') {
+      if (!chatApproved) return { error: `approval policy (in-session) for ${t.project}: closing a gate:boss mission done needs approved_in_session with the boss's words, or the boss's own hand in the dashboard` };
+    } else if (policy === 'critic') {
+      if (!isCriticOrLead(s, agent)) return { error: `approval policy (critic) for ${t.project}: only the critic, the lead, or the boss closes a gate:boss mission done` };
+    } else {
+      return { error: `approval policy (${policy || 'dashboard, by default'}) for ${t.project}: only the boss closes a gate:boss mission done; park it in review for him instead` };
+    }
   }
   // M4: no approval with undecided items. An approval (out of review, or a
   // close carrying the boss's quoted words) is refused while any item would
@@ -1131,6 +1199,7 @@ function getMessages({ forAgent, since }) {
 
 module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
+  authMode, mintToken, listTokens, revokeToken, findAgentToken, isLead,
   StorageError, SCHEMA_VERSION, STATE_FILE,
   createTask, claimTask, updateTask, expireLeases, findByReviewToken, applyCheck, applyItem, payloadHash,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
