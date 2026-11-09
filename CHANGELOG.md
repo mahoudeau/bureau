@@ -6,6 +6,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-09
+
 ### Security
 - **Strict mode: a boss credential separate from the agents'.** Setting `BUREAU_BOSS_TOKEN` makes identity come from the credential: only it can act as `human`, change settings and roles, see review links, or mint tokens. The dashboard signs in with it. Review links keep acting as the boss. With only `BUREAU_TOKEN` set (legacy) the hub keeps declared identities, warns at boot, and reports `auth: "legacy"` on `/api/health`. **Read UPGRADING.md.**
 - **Per-agent tokens.** `POST/GET/DELETE /api/tokens` and `hub/tools/token.js`: minted by the boss, hashed at rest, revocable, bound to one agent name and a list of projects. A token that declares another agent is refused.
@@ -41,8 +43,6 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - The v2 brain browser rendered note markdown without escaping it. It escapes first, links are http(s) or brain paths only, and every dashboard page carries a Content-Security-Policy with a per-response nonce.
 - The pattern that found headings was quadratic, and a note could stall boot for most of a minute. The same class is gone from claims parsing, brain-lint and the id migration, and headings are capped at 2,000 characters.
 - `git add` and `git mv` take paths after `--`, `.git` is refused in every path segment, and the intake sweep leaves out what the path guard refuses.
-
-## [0.3.0] - 2026-11-09
 
 ### Added
 - Lint on write reaches project files. A write under `projects/` that would leave an error there (an over-long summary, a duplicate spec rule) answers 422, as curated writes already did. Project files stay as lenient as they were about everything else.
