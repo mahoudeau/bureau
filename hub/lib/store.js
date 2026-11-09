@@ -8,6 +8,11 @@ const knowledge = require('./knowledge');
 
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+// BUREAU_STORE=sqlite keeps the state in data/bureau.db instead of state.json.
+// The hub works from memory either way; this is what sits underneath.
+const SQL = process.env.BUREAU_STORE === 'sqlite' ? require('./sqlite-store') : null;
+const DB_FILE = path.join(DATA_DIR, 'bureau.db');
+let importing = false;
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
@@ -31,6 +36,17 @@ class StorageError extends Error {}
 let state = null;
 
 function readState() {
+  if (SQL) {
+    let fromDb;
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      SQL.open(DB_FILE);
+      fromDb = SQL.load();
+    } catch (e) { throw new StorageError(`cannot read ${DB_FILE}: ${e.message}. Refusing to boot.`); }
+    if (fromDb) return fromDb;
+    // An empty database and a state.json: the first boot on SQLite imports it.
+    importing = fs.existsSync(STATE_FILE);
+  }
   let raw;
   try {
     raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -79,7 +95,15 @@ function load() {
   // A fresh hub writes its empty state now: the daily snapshot comes next,
   // and backups with no state.json beside them refuse the next boot, so a
   // hub stopped before its first change could never start again.
-  if (!fs.existsSync(STATE_FILE)) writeNow(s);
+  if (SQL) {
+    writeNow(s);
+    if (importing) {
+      const kept = `${STATE_FILE}.imported-${stamp()}`;
+      fs.renameSync(STATE_FILE, kept);
+      console.log(`[store] imported ${STATE_FILE} into ${DB_FILE}; the original is kept at ${kept}`);
+      importing = false;
+    }
+  } else if (!fs.existsSync(STATE_FILE)) writeNow(s);
   state = s;
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
@@ -114,7 +138,11 @@ function renameRetry(from, to) {
     }
   }
 }
-function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); dirty = false; }
+function writeNow(s) {
+  if (SQL) SQL.save(s);
+  else writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2));
+  dirty = false;
+}
 
 let saveTimer = null;
 // A save that failed: the state is still unwritten, retried in a second and
@@ -1131,7 +1159,7 @@ function getMessages({ forAgent, since }) {
 
 module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
-  StorageError, SCHEMA_VERSION, STATE_FILE,
+  StorageError, SCHEMA_VERSION, STATE_FILE, STORE_KIND: SQL ? 'sqlite' : 'json',
   createTask, claimTask, updateTask, expireLeases, findByReviewToken, applyCheck, applyItem, payloadHash,
   renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
   postMessage, getMessages, TASK_STATUSES, TERMINAL_STATUSES, ACTIVITIES,
