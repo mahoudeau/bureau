@@ -85,6 +85,12 @@ async function main() {
     check('so does a mission briefing', r.body.rendered === '', r.body);
     r = await ctx({ request: 'how do I flash the toaster firmware?', project: 'alpha' });
     check('a covered question is answered', r.body.state === 'answered' && !/has nothing/.test(r.body.rendered), r.body);
+    // Only a map-only file matches and the project has no Now: something near it, nothing to serve.
+    await api('POST', '/api/projects', { id: 'gamma', label: 'gamma' });
+    await put('projects/gamma/references/orbit.md', '---\ntitle: Orbit\n---\n\nThe orbital plumbing schedule for the station lists every valve inspection.\n');
+    r = await ctx({ request: 'orbital plumbing schedule valve inspection', project: 'gamma' });
+    check('nearby material is called adjacent', r.body.state === 'adjacent' && r.body.map.length > 0 && !r.body.context.length, r.body);
+    check('and says so inside the framed block', /Nearby material only\. Not covered: /.test(r.body.rendered) && /Nearby material only[^]*<\/bureau-context boundary="[0-9a-f]+">$/.test(r.body.rendered), r.body.rendered);
 
     console.log('5. the budget');
     r = await ctx({ request: 'penguin ledger audit reconciliation rule', project: 'alpha', budget: 200 });

@@ -300,7 +300,7 @@ function assemble(b) {
   const explicit = !b.surface || b.surface === 'mcp';
   let rendered = empty ? '' : out.rendered;
   if (explicit && state === 'none') rendered = `<bureau-context id="${id}"${scope.project ? ` project="${scope.project}"` : ''}>\nThe Bureau brain has nothing on this.\n</bureau-context>`;
-  else if (explicit && state === 'adjacent' && rendered && uncovered.length) rendered = rendered.replace(/<\/bureau-context>$/, `\nNearby material only. Not covered: ${uncovered.join(', ')}.\n</bureau-context>`);
+  else if (explicit && state === 'adjacent' && rendered && uncovered.length) rendered = rendered.replace(/(<\/bureau-context boundary="[0-9a-f]+">)$/, `\nNearby material only. Not covered: ${uncovered.join(', ')}.\n$1`);
   return { id, scope, context: passages, map: out.map, miss, state, uncovered, held_back: heldBack, skipped: null, tokens: { budget, context: out.context.reduce((a, c) => a + c.tokens, 0), map: mapUsed },
     rendered, index: brainIndex.stamp(), ms: Date.now() - t0 };
 }
