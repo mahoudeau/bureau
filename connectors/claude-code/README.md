@@ -38,6 +38,22 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
 - Permission rules match the **beginning** of the command: no variable preambles (`HUB="..."` breaks the match), one hub call per command.
 - **Every pipeline segment is checked**: parse responses with an allowlisted tool (`jq`), not an interpreter that will prompt.
 
+## The context call on every prompt
+
+`context-hook.js` asks the hub for what each prompt needs and hands it to the model. It finds the project the way `project-of.sh` does and reads the hub's address and token from the same files. If the hub is slow or absent, the prompt goes through without it. Add this to `~/.claude/settings.json`, with your path:
+
+```json
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node /path/to/bureau/connectors/claude-code/context-hook.js", "timeout": 3 }] }
+    ]
+  }
+}
+```
+
+Failures go to `~/.bureau-context-hook.log`.
+
 ## Planned
 
 The packaged form of all of this: a Claude Code plugin with a one-command installer, hooks (register on session start, heartbeats with activity verbs, a debrief nudge before context compaction), and skills for clock-in and debrief. The manual setup above is the plugin's specification in the meantime.

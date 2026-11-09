@@ -995,7 +995,7 @@ MH=$(api GET /api/memory/health)
 for k in status reasons lint journal approved_unapplied stale contradictions provenance reads computed_at; do
   check "the health block carries $k" "$MH" "\"$k\": "
 done
-check "reads are not tracked yet, and say so" "$(hv "$MH" reads)" '^{"tracked":false}$'
+check "reads say whether they are tracked" "$(hv "$MH" reads)" '"tracked":'
 # The boss's hand cleans what earlier sections left on purpose: the note
 # forced past lint (12b) and the block planted in today's journal (15).
 B='{"file":"knowledge/lint-bad.md","author":"human","content":"---\ntitle: Lint bad\ncompartment: knowledge\npermalink: lint-bad\nversion: 1\n---\n\n- [fact] now it has a source (source: t-1)\n"}'

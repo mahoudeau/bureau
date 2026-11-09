@@ -20,7 +20,7 @@ const PROSE_MIN = 40; // shorter leftovers beside a section's claims are noise
 // English and French. Accents are gone by the time a word is looked up here.
 const STOP = new Set((
   'a an and are as at be been but by can could did do does done for from had has have how i if in into is it its just me my ' +
-  'not no of on or our should so some than that the their them then there these they this to was we were what when where ' +
+  'not no yes ok okay please thanks sure go oui non merci of on or our should so some than that the their them then there these they this to was we were what when where ' +
   'which who why will with would you your about any all also after before use used using get got make need want ' +
   'au aux avec car ce ces cet cette comme comment dans de des dois doit donc du elle elles en es est et etre eu fait faire ' +
   'il ils je la le les leur leurs lui ma mais me mes moi mon ne nos notre nous on ou par pas peut peux plus pour pourquoi ' +
@@ -186,10 +186,12 @@ function chunkFile(rel, content, info) {
 let chunks = new Map();      // id -> chunk
 let byFile = new Map();      // file -> [id]
 let postings = new Map();    // term -> Map(id -> term frequency)
-let totalLen = 0, nextId = 1, built = false;
+let files = new Map();       // file -> one line about it, for the map
+let totalLen = 0, nextId = 1, built = false, builtAt = null, commit = undefined;
 let superseded = new Set();
 
 function removeFile(rel) {
+  files.delete(rel);
   for (const id of byFile.get(rel) || []) {
     const c = chunks.get(id);
     for (const t of c.tf.keys()) {
@@ -209,7 +211,14 @@ function addFile(rel) {
   const content = knowledge.readKnowledge(rel);
   if (content === null) return;
   const ids = [];
-  for (const c of chunkFile(rel, content, info)) {
+  const made = chunkFile(rel, content, info);
+  if (info.kind !== 'journal') {
+    const front = claims.parseFile(content, { path: rel }).frontmatter;
+    const first = made.length ? made[0].text.split(/(?<=[.!?])\s/)[0].replace(/\s+/g, ' ').slice(0, 200) : '';
+    files.set(rel, { file: rel, title: front.title || path.posix.basename(rel, '.md'), summary: front.summary || first, tokens: Math.ceil(Buffer.byteLength(content, 'utf8') / 4),
+      compartment: info.compartment, scope: info.scope, project: info.project, entity: info.entity, verified: front.verified || null, belief: front.belief || null });
+  }
+  for (const c of made) {
     const toks = tokens(c.index);
     delete c.index;
     if (!toks.length) continue;
@@ -240,10 +249,12 @@ function refreshSuperseded() {
 
 function build() {
   const t0 = Date.now();
-  chunks = new Map(); byFile = new Map(); postings = new Map(); totalLen = 0; nextId = 1;
+  chunks = new Map(); byFile = new Map(); postings = new Map(); files = new Map(); totalLen = 0; nextId = 1;
   for (const f of knowledge.listKnowledge('')) addFile(f.split(path.sep).join('/'));
   refreshSuperseded();
   built = true;
+  builtAt = new Date().toISOString();
+  commit = undefined;
   return { files: byFile.size, chunks: chunks.size, terms: postings.size, ms: Date.now() - t0 };
 }
 function ensure() { if (!built) build(); }
@@ -253,12 +264,43 @@ function invalidate() { built = false; }
 // a comma list from the intake sweep. Anything unreadable rebuilds on next use.
 function touch(field) {
   if (!built) return;
-  const files = String(field || '').split(/\s*(?:->|,)\s*/).map((x) => x.trim()).filter(Boolean);
-  if (!files.length) return invalidate();
+  const written = String(field || '').split(/\s*(?:->|,)\s*/).map((x) => x.trim()).filter(Boolean);
+  if (!written.length) return invalidate();
   try {
-    for (const f of files) { removeFile(f); addFile(f); }
+    for (const f of written) { removeFile(f); addFile(f); }
     refreshSuperseded();
+    commit = undefined;
   } catch { invalidate(); }
+}
+
+// What the index was built from, for the answer's footer. One git call per
+// brain change, not per request.
+function stamp() {
+  ensure();
+  if (commit === undefined) {
+    try { commit = (knowledge.recentCommits(1)[0] || {}).hash || null; } catch { commit = null; }
+  }
+  return { commit, built_at: builtAt };
+}
+
+// One line per file the caller may see: its own project first, then the rest
+// of the chain. The attic stays out, and journal days are not notes.
+function map(project) {
+  ensure();
+  const scope = scopeOf(project);
+  const rank = (f) => (f.scope === 'project' ? 0 : f.scope === 'entity' ? 1 : f.compartment === 'knowledge' ? 2 : 3);
+  const rows = [...files.values()].filter((f) => visible(f, scope)).sort((a, b) => rank(a) - rank(b) || a.file.localeCompare(b.file));
+  return { scope, files: rows.map(({ scope: _s, project: _p, entity: _e, ...r }) => r) };
+}
+function fileInfo(rel, scope) {
+  ensure();
+  const f = files.get(rel);
+  return f && visible(f, scope) ? f : null;
+}
+function findClaim(id, scope) {
+  ensure();
+  for (const c of chunks.values()) if (c.claim === id) return visible(c, scope) && !superseded.has(id) ? c : null;
+  return null;
 }
 
 function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
@@ -266,13 +308,16 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
   const scope = scopeOf(project);
   const limit = Math.min(Math.max(1, Number(k) || DEFAULT_K), MAX_K);
   const terms = [...new Set(tokens(q))];
-  if (!terms.length) return { scope, results: [], skipped: 'no terms' };
+  if (!terms.length) return { scope, results: [], skipped: 'no terms', size: chunks.size };
   const N = chunks.size || 1, avg = totalLen / N || 1;
-  const scores = new Map(), matched = new Map();
+  const scores = new Map(), matched = new Map(), weights = {};
   for (const t of terms) {
     const p = postings.get(t);
+    // A word the brain has never seen weighs the most: it is why a question
+    // about something absent covers so little of itself.
+    weights[t] = Math.log(1 + (N - (p ? p.size : 0) + 0.5) / ((p ? p.size : 0) + 0.5));
     if (!p) continue;
-    const idf = Math.log(1 + (N - p.size + 0.5) / (p.size + 0.5));
+    const idf = weights[t];
     for (const [id, tf] of p) {
       const c = chunks.get(id);
       if (!visible(c, scope) || (c.claim && superseded.has(c.claim))) continue;
@@ -291,11 +336,26 @@ function search(q, { project, k = DEFAULT_K, mapOnly = false } = {}) {
     const n = perFile.get(c.file) || 0;
     if (n >= PER_FILE) continue;
     perFile.set(c.file, n + 1);
+    const total = Object.values(weights).reduce((a, b) => a + b, 0) || 1;
+    const covered = matched.get(id).reduce((a, t) => a + weights[t], 0);
     results.push({ file: c.file, section: c.section, line: c.line, claim: c.claim, compartment: c.compartment, kind: c.kind, score: Math.round(score * 100) / 100,
-      matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief, volatility: c.volatility, contradicts: c.contradicts });
+      coverage: Math.round(covered / total * 1000) / 1000, matched: matched.get(id), text: c.text, tokens: c.tokens, sources: c.sources, verified: c.verified, belief: c.belief,
+      volatility: c.volatility, contradicts: c.contradicts, standing: c.standing });
     if (results.length >= limit) break;
   }
-  return { scope, results, skipped: null };
+  return { scope, results, skipped: null, size: chunks.size };
+}
+
+// The project's ## Now, whatever the question. Null when it has none.
+function standingOf(project) {
+  ensure();
+  const scope = scopeOf(project);
+  if (!scope.project) return null;
+  for (const id of byFile.get(`projects/${scope.project}/STATE.md`) || []) {
+    const c = chunks.get(id);
+    if (c.standing) return c;
+  }
+  return null;
 }
 
 // One section of a file, with its frontmatter. Null when the heading is not
@@ -315,4 +375,4 @@ function section(content, heading) {
 }
 function headingsOf(content) { return sectionsOf(content).filter((s) => s.heading).map((s) => s.heading); }
 
-module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure };
+module.exports = { build, invalidate, touch, search, section, headingsOf, scopeOf, tokens, classify, ensure, map, fileInfo, findClaim, standingOf, stamp };

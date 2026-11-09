@@ -624,6 +624,8 @@ function checkPolicyKeys(obj, where, isGlobal) {
     else if (k === 'notify') { if (!NOTIFY.includes(v)) return `${where}.notify: use one of ${NOTIFY.join(', ')}`; }
     // The journal free-text window (M2): true or unset keeps it open, false closes it
     else if (k === 'journal_free_text' && isGlobal) { if (typeof v !== 'boolean') return `${where}.journal_free_text: true or false`; }
+    // true: an agent closing a mission done must have captured something under it, or say it learned nothing
+    else if (k === 'require_capture' && isGlobal) { if (typeof v !== 'boolean') return `${where}.require_capture: true or false`; }
     else if (k === 'librarian' && isGlobal) {
       if (typeof v !== 'object' || Array.isArray(v)) return `${where}.librarian must be an object`;
       for (const [lk, lv] of Object.entries(v)) {
@@ -769,7 +771,7 @@ function unappliedItems(t) {
   return (t.items || []).filter(it => it.verdict === 'approved' && it.payload && !it.applied_at).map(it => it.id);
 }
 
-function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session, after_approval }) {
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session, after_approval, nothing_learned }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
@@ -795,6 +797,14 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   if (after_approval !== undefined && after_approval !== null) {
     if (after_approval !== 'return') return { error: 'after_approval: the only value is "return"' };
     if (status !== 'review' || prevStatus === 'review') return { error: 'after_approval: rides the PATCH that moves the mission into review' };
+  }
+  // A mission closes having recorded what it learned, or saying it learned
+  // nothing. A rule in prose is how capture stopped for two weeks. Only the
+  // agent's own close from working status: an approval is the boss's.
+  if (status === 'done' && agent !== 'human' && (prevStatus === 'claimed' || prevStatus === 'in_progress') && settingsOf(s).global.require_capture === true) {
+    if (nothing_learned === true) note = `${note ? `${note} ` : ''}(nothing learned, says ${agent})`;
+    else if (!require('./journal').list({ mission: t.id }).records.length)
+      return { error: `capture: ${t.id} has no journal record. Record what it taught with POST /api/journal, or close with nothing_learned: true` };
   }
   // Leaving approved: the holder (or the boss) closes it done once every
   // approved item with a payload is applied. Only the boss closes it failed

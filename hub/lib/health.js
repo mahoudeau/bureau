@@ -66,6 +66,16 @@ function approvedSince(t) {
   return (entry && entry.ts) || t.created_at;
 }
 
+// What the context call served: how much it is used, and the curated notes
+// nothing has asked for. Until a first call is logged, tracked is false.
+function readsBlock(files, nowMs) {
+  const u = require('./context').usage(nowMs);
+  if (!u.since) return { tracked: false };
+  const unread = files.filter((f) => CURATED_RE.test(f) && !/\/INDEX\.md$/.test(f) && !u.served.has(f));
+  const { served: _served, ...rest } = u;
+  return { ...rest, unread_curated: unread.length, unread_sample: unread.slice(0, 20) };
+}
+
 function compute(now = new Date()) {
   const nowMs = now.getTime();
   const files = brainFiles();
@@ -141,7 +151,7 @@ function compute(now = new Date()) {
     stale: { count: stale.length, undated, claims: stale.slice(0, STALE_LISTED) },
     contradictions,
     provenance: { ...prov, sourced_pct: prov.claims ? Math.round(sourced / prov.claims * 1000) / 10 : null },
-    reads: { tracked: false },
+    reads: readsBlock(files, nowMs),
     computed_at: now.toISOString(),
   };
 }

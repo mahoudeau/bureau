@@ -75,6 +75,10 @@ jobs:
       - name: Search (test/index.test.js)
         run: node test/index.test.js
 
+      # The context call, the Claude Code hook and the capture rule. Port 8194.
+      - name: Context call (test/context.test.js)
+        run: node test/context.test.js
+
       # Self-contained: starts its own hubs and sink on ports 8196 to 8199.
       - name: Pokes (test/pokes.sh)
         run: sh test/pokes.sh
@@ -244,6 +248,9 @@ jobs:
 
       - name: Search (test/index.test.js)
         run: node test/index.test.js
+
+      - name: Context call (test/context.test.js)
+        run: node test/context.test.js
 
       - name: Hub log
         if: failure() || cancelled()

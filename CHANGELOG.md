@@ -23,6 +23,10 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - CI runs `test/memory-eval.sh`: recall@5 on the fixture brain must not drop below the recorded number.
 - Brain search. `GET /api/knowledge/search?q=&project=&k=` (MCP `search_knowledge`) returns passages with their file, section and sources, best first: BM25 over sections, claims and journal records, in memory, rebuilt at boot and kept current on every write. English and French, accents ignored. A project sees global knowledge, its entity's files and its own, never another project's. `attic/`, `archive/` and free-text journal lines are not searched.
 - Section reads. `GET /api/knowledge?file=&section=` and `section` on MCP `read_knowledge` return one section and the frontmatter.
+- The brain map. `GET /api/knowledge/map?project=` (MCP `brain_map`): one line per file the caller can see.
+- The context call. `POST /api/context` (MCP `get_context`) takes the text of a request and returns the passages it needs, inside a token budget, and a map of related knowledge left out. No model call. An empty answer when nothing is relevant. A passage is not sent twice in a session. `POST /api/tasks/claim` and MCP `start_mission` return the same for the mission. The request text is not stored; `data/context-log.jsonl` records what was served, for 90 days, and the memory health block reports it.
+- `connectors/claude-code/context-hook.js`: a `UserPromptSubmit` hook that makes the context call on every prompt in Claude Code. If the hub is slow or absent, the prompt goes through without it.
+- The setting `require_capture` (global, default off). When on, an agent closing its own mission `done` must have a journal record under it or send `nothing_learned: true`. The boss's closes and approvals are not affected.
 
 ### Changed
 - Sol's digest opens with the health block, and anything in `attention` becomes an item or a message to the boss.

@@ -19,6 +19,8 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 | `PATCH /api/tasks/:id` | progress note, status change, artifacts, lease renew (and `POST /api/tasks/:id/apply` to write an approved item, below) |
 | `GET/POST /api/messages` | inbox (`?for=me&since=`) and outbox |
 | `GET/POST /api/knowledge` | read/write the brain (markdown, git-committed); `?section=<heading>` reads one section |
+| `POST /api/context` | `{request, project?, task?, session?, budget?, max_chars?, reset?, agent?, surface?}`: the passages this request needs, inside the budget (default 1,500 tokens, 6,000 at most), and a map of what was left out. `rendered` is the same thing as one block to inject. Empty when nothing is relevant; `task` decides the project; the request text is not kept. A claim's response carries the mission's own as `context` |
+| `GET /api/knowledge/map` | `?project=`: one line per file the caller can see |
 | `GET /api/knowledge/search` | `?q=&project=&k=`: passages from the caller's scope, best first. A project sees global knowledge, its entity's and its own, never another project's. Without a known project, global only |
 | `GET/POST /api/journal` | capture one thing learned as a typed journal record, and read records back (below) |
 | `GET/POST /api/work` | read/write an open mission's evidence (plain files under `work/<t-id>/`, deleted when it closes) |
