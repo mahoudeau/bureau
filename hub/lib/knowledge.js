@@ -151,10 +151,12 @@ function curatedCompartment(rel) {
 // result then carries what was overridden, so the route can log it. Hand edits
 // on disk never pass through here: the intake sweep commits them as they are.
 const brainLint = require('../tools/brain-lint');
+const migrateClaims = require('../tools/migrate-claims');
+const claims = require('./claims');
 // The lint errors a write would leave in its file ([] when the write is not
 // checked or passes). Never throws on lint, so a proposal can be checked
 // before it is filed (store.js, review item payloads).
-function writeLintErrors({ file, content, mode, encoding }) {
+function writeLintErrors({ file, content, mode, encoding, exact }) {
   // Project files too: lint is lenient there, but an over-long summary or a
   // duplicate spec rule is an error, and one of those once got in unnoticed.
   if (encoding === 'base64' || !/\.md$/i.test(String(file))) return [];
@@ -163,10 +165,54 @@ function writeLintErrors({ file, content, mode, encoding }) {
   const rel = toPosix(path.relative(BRAIN_DIR, abs));
   const before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
   const after = mode === 'append' ? before + (before.length ? '\n' : '') + content : String(content);
-  return brainLint.lintFile(BRAIN_DIR, rel, after).errors;
+  return [...brainLint.lintFile(BRAIN_DIR, rel, after).errors, ...claimErrors(file, rel, before, after, exact)];
 }
-function checkWrite({ file, content, mode, author, encoding, force }) {
-  const errors = writeLintErrors({ file, content, mode, encoding });
+
+// Every id in the brain, so a new one never repeats and a cited record exists.
+function allIds() {
+  return new Set(listKnowledge('').filter((f) => f.endsWith('.md')).flatMap((f) => migrateClaims.idsIn(fs.readFileSync(path.join(BRAIN_DIR, f), 'utf8'))));
+}
+const holdsClaims = (file) => /(knowledge|recipes)\/$/.test(curatedCompartment(file) || '');
+
+// Format 0.3 notes: the evidence rules for what a write adds. A claim already
+// there keeps its file-level source; a new one brings its own, and what it
+// cites has to exist. exact: the boss approved these bytes, so they stand.
+function claimErrors(file, rel, before, after, exact) {
+  if (!holdsClaims(file)) return [];
+  const a = claims.parseFile(after, { path: rel });
+  if (a.format !== '0.3') return [];
+  const errs = a.errors.map((e) => `${rel}: line ${e.line}: ${e.code} ${e.message}`);
+  if (exact) return errs;
+  const old = new Set(claims.parseFile(before, { path: rel }).claims.map((c) => c.text));
+  const fresh = a.claims.filter((c) => !old.has(c.text));
+  if (!fresh.length) return errs;
+  const ids = allIds();
+  const tasks = new Set(require('./store').load().tasks.map((t) => t.id));
+  for (const c of fresh) {
+    const quoted = `"${c.text.slice(0, 60)}"`;
+    if (!c.sources.length) errs.push(`${rel}: line ${c.line}: a new claim needs its own source, the file's covers only the claims already there: ${quoted}`);
+    for (const s of c.sources) {
+      if (s.type === 'mission' && !tasks.has(s.ref)) errs.push(`${rel}: line ${c.line}: cites ${s.ref}, which is not a mission: ${quoted}`);
+      if (s.type === 'record' && !ids.has(s.ref)) errs.push(`${rel}: line ${c.line}: cites ${s.ref}, which is not a journal record: ${quoted}`);
+    }
+  }
+  return errs;
+}
+
+// The hub assigns claim ids when it writes to a format 0.3 note. Not on an
+// apply: what the boss approved is written byte for byte.
+function stampNew({ file, content, mode, encoding, exact }) {
+  if (exact || encoding === 'base64' || !/\.md$/i.test(String(file)) || !holdsClaims(file)) return content;
+  const abs = safePath(file);
+  const before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+  const rel = toPosix(path.relative(BRAIN_DIR, abs));
+  const after = mode === 'append' ? before : String(content);
+  if (claims.parseFile(after, { path: rel }).format !== '0.3') return content;
+  return migrateClaims.stampIds(String(content), rel, allIds()).content;
+}
+
+function checkWrite({ file, content, mode, author, encoding, force, exact }) {
+  const errors = writeLintErrors({ file, content, mode, encoding, exact });
   if (!errors.length) return null;
   const rel = toPosix(path.relative(BRAIN_DIR, safePath(file)));
   if (force === true && author === 'human') return { forced: errors };
@@ -176,9 +222,10 @@ function checkWrite({ file, content, mode, author, encoding, force }) {
   throw e;
 }
 
-function writeKnowledge({ file, content, mode, author, message, encoding, force }) {
+function writeKnowledge({ file, content: raw, mode, author, message, encoding, force, exact }) {
   ensureRepo();
-  const checked = checkWrite({ file, content, mode, author, encoding, force });
+  const content = stampNew({ file, content: raw, mode, encoding, exact });
+  const checked = checkWrite({ file, content, mode, author, encoding, force, exact });
   const abs = safePath(file);
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   if (encoding === 'base64') {

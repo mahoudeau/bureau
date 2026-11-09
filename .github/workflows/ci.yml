@@ -79,6 +79,10 @@ jobs:
       - name: Context call (test/context.test.js)
         run: node test/context.test.js
 
+      # Claim ids, the migration, and the evidence rules. Port 8195.
+      - name: Claim ids (test/claim-ids.test.js)
+        run: node test/claim-ids.test.js
+
       # Self-contained: starts its own hubs and sink on ports 8196 to 8199.
       - name: Pokes (test/pokes.sh)
         run: sh test/pokes.sh
@@ -251,6 +255,9 @@ jobs:
 
       - name: Context call (test/context.test.js)
         run: node test/context.test.js
+
+      - name: Claim ids (test/claim-ids.test.js)
+        run: node test/claim-ids.test.js
 
       - name: Hub log
         if: failure() || cancelled()

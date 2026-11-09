@@ -114,7 +114,7 @@ function compute(now = new Date()) {
   // outside the retired compartments (attic/, archive/).
   const stale = [];
   let undated = 0;
-  const prov = { claims: 0, own: 0, file: 0, none: 0 };
+  const prov = { claims: 0, own: 0, file: 0, none: 0, with_id: 0 };
   const contradictions = [];
   for (const file of files) {
     if (RETIRED_RE.test(file)) continue;
@@ -126,6 +126,7 @@ function compute(now = new Date()) {
       for (const other of c.fields.contradicts || []) contradictions.push({ id: c.id, contradicts: other, file, line: c.line, text: c.text });
       if (!curated) continue;
       prov.claims++;
+      if (c.id) prov.with_id++;
       if (c.sources.length) prov.own++;
       else if (covered) prov.file++;
       else prov.none++;
