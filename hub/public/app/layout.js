@@ -12,6 +12,12 @@ const NAV = [
   ['Agents', '/agents'],
   ['Office', '/office'],
 ];
+// Rarely used, so they sit with the tools and leave the main nav alone.
+const SETUP = [
+  ['Projects', '/projects'],
+  ['Settings', '/settings'],
+];
+const ALL = [...NAV, ...SETUP];
 
 const LIVE = {
   connecting: { word: 'Connecting', dither: 'om-d25', title: 'Connecting to the hub' },
@@ -33,8 +39,9 @@ export function onSearch(fn) {
 // Builds the frame inside root. Returns the outlet and update({ path, bare }):
 // a bare page (sign-in) keeps the brand and footer and loses the nav.
 export function mountLayout(root) {
-  const links = NAV.map(([label, href]) => h('a', { href }, label));
-  const nav = h('nav', { class: 'om-nav', 'aria-label': 'Main' }, links);
+  const links = ALL.map(([label, href]) => h('a', { href }, label));
+  const nav = h('nav', { class: 'om-nav', 'aria-label': 'Main' }, links.slice(0, NAV.length));
+  const setup = h('nav', { class: 'om-nav', 'aria-label': 'Setup' }, links.slice(NAV.length));
 
   const liveMark = h('span', { class: 'om-swatch', 'aria-hidden': 'true' });
   const liveWord = h('span');
@@ -50,7 +57,7 @@ export function mountLayout(root) {
     },
   }, 'Search', h('kbd', { class: 'om-kbd app-kbd' }, `${modifier} K`));
 
-  const tools = h('div', { class: 'app-tools' }, liveEl, search);
+  const tools = h('div', { class: 'app-tools' }, setup, liveEl, search);
 
   const top = h('header', { class: 'om-top' },
     h('a', { class: 'om-brand', href: '/' }, logo(), h('span', { class: 'om-strong app-word' }, 'BUREAU')),
@@ -81,7 +88,7 @@ export function mountLayout(root) {
   function update({ path, bare }) {
     nav.hidden = !!bare;
     tools.hidden = !!bare;
-    NAV.forEach(([, href], i) => {
+    ALL.forEach(([, href], i) => {
       if (isCurrent(href, path)) links[i].setAttribute('aria-current', 'page');
       else links[i].removeAttribute('aria-current');
     });

@@ -4,6 +4,7 @@ import * as api from './api.js';
 import * as store from './store.js';
 import { mountLayout } from './layout.js';
 import { startRouter } from './router.js';
+import './palette.js';
 
 const desk = () => import('./pages/desk.js');
 

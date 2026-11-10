@@ -1,0 +1,189 @@
+// Needs me now: solid ink rows, ruled where they stand. Approve needs one click.
+// Send back and Answer open a note on the row, because the agent needs to know
+// what to change.
+
+import { h, fill } from '../dom.js';
+import { swatch } from '../status.js';
+import * as store from '../store.js';
+import { toast } from '../ui.js';
+import { lastEntry, needsMe, oldestFirst, projectLabel, undecided } from './model.js';
+import { keyed } from './keyed.js';
+import { ago, missionHref, refusalLine, remember, keep, rule } from './parts.js';
+import { batchBar } from './batch.js';
+
+function clipNote(text, n = 140) {
+  const s = String(text || '').replace(/\s+/g, ' ').trim();
+  return s.length > n ? `${s.slice(0, n)}...` : s;
+}
+
+export function needsSection(ctx) {
+  let newest = remember('deskNewestFirst', false);
+  const ruled = new Set(); // gone from here the moment the hub said yes
+  const selection = new Set();
+  const trays = new Map(); // id -> open tray kind, survives a repaint
+
+  const count = h('span', { class: 'work-needs-count om-strong' });
+  const sort = h('button', {
+    type: 'button',
+    class: 'om-btn om-btn-ghost',
+    onClick() {
+      newest = !newest;
+      keep('deskNewestFirst', newest);
+      paint();
+    },
+  });
+  const list = h('div', { class: 'work-needs-list' });
+  const clear = h('p', { class: 'work-clear', hidden: true }, 'Nothing needs you.');
+  const batch = batchBar({
+    getState: () => store.getState(),
+    selection,
+    onChange: () => paint(),
+    onDone: () => store.refresh().catch(() => {}),
+  });
+
+  const node = h('section', { class: 'work-needs', 'aria-label': 'Needs me now' },
+    h('div', { class: 'work-needs-head' },
+      h('h1', { class: 'om-display om-h2' }, 'Needs me now'),
+      h('div', { class: 'om-row' }, count, sort)),
+    clear, list, batch.node);
+
+  const visible = () => {
+    const rows = needsMe(store.getState()).filter((t) => !ruled.has(t.id)).sort(oldestFirst);
+    return newest ? rows.reverse() : rows;
+  };
+
+  // After a ruling the next item comes up, ready for the keyboard.
+  function focusNext(position) {
+    const rows = [...list.querySelectorAll('.work-need')];
+    const next = rows[Math.min(position, rows.length - 1)];
+    if (next) next.querySelector('.work-need-go').focus();
+  }
+
+  function row(t) {
+    const refusal = refusalLine();
+    const head = h('div', { class: 'work-need-head' });
+    const tray = h('form', { class: 'work-need-tray', hidden: true });
+    const el = h('div', { class: 'work-need om-alert-row', dataset: { id: t.id } }, head, tray, refusal.el);
+    let current = t;
+
+    async function decide(status, note, button) {
+      const position = visible().findIndex((x) => x.id === current.id);
+      refusal.clear();
+      el.querySelectorAll('button, input').forEach((b) => { b.disabled = true; });
+      try {
+        await rule(current.id, { status, note });
+      } catch (e) {
+        el.querySelectorAll('button, input').forEach((b) => { b.disabled = false; });
+        refusal.show(e.message);
+        if (button) button.focus();
+        return;
+      }
+      ruled.add(current.id);
+      selection.delete(current.id);
+      trays.delete(current.id);
+      toast(`${current.id}: ${status === 'done' ? 'approved' : current.status === 'blocked' ? 'answered' : 'sent back'}.`);
+      paint();
+      focusNext(position);
+      store.refresh().catch(() => {});
+    }
+
+    function openTray(kind) {
+      trays.set(current.id, kind);
+      const input = h('input', {
+        class: 'om-input',
+        placeholder: kind === 'answer' ? 'Your answer' : 'What should change',
+        'aria-label': kind === 'answer' ? `Your answer on ${current.id}` : `What should change on ${current.id}`,
+        onKeydown(e) { if (e.key === 'Escape') { e.preventDefault(); closeTray(); } },
+      });
+      const send = h('button', { type: 'submit', class: 'om-btn om-btn-primary' }, kind === 'answer' ? 'Send answer' : 'Send back');
+      fill(tray, input, send, h('button', { type: 'button', class: 'om-btn', onClick: closeTray }, 'Cancel'));
+      tray.onsubmit = (e) => {
+        e.preventDefault();
+        const note = input.value.trim();
+        if (!note) {
+          refusal.show(kind === 'answer' ? 'Write the answer first.' : 'Write what should change, so the agent knows.');
+          input.focus();
+          return;
+        }
+        decide('queued', note, send);
+      };
+      tray.hidden = false;
+      input.focus();
+    }
+
+    function closeTray() {
+      trays.delete(current.id);
+      tray.hidden = true;
+      tray.replaceChildren();
+      refusal.clear();
+      el.querySelector('.work-need-go').focus();
+    }
+
+    function paintHead(task) {
+      current = task;
+      const open = undecided(task).length;
+      const review = task.status === 'review';
+      const last = lastEntry(task);
+      const actions = [];
+      if (review && open) actions.push(h('a', { class: 'om-btn om-btn-primary work-need-go', href: missionHref(task.id) }, 'Review'));
+      if (review && !open) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-primary work-need-go', onClick: (e) => decide('done', 'approved', e.currentTarget) }, 'Approve'));
+      if (review) actions.push(h('button', { type: 'button', class: 'om-btn', onClick: () => openTray('back') }, 'Send back'));
+      if (!review) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-primary work-need-go', onClick: () => openTray('answer') }, 'Answer'));
+
+      fill(head,
+        review
+          ? h('label', { class: 'om-check work-need-pick' },
+            h('input', {
+              type: 'checkbox',
+              checked: selection.has(task.id),
+              'aria-label': `Select ${task.id} for a batch verdict`,
+              onChange(e) {
+                if (e.target.checked) selection.add(task.id); else selection.delete(task.id);
+                batch.paint();
+              },
+            }))
+          : h('span', { class: 'work-need-pick', 'aria-hidden': 'true' }),
+        swatch(task.status),
+        h('div', { class: 'work-need-main' },
+          h('a', { class: 'work-need-title', href: missionHref(task.id), title: task.title },
+            h('span', { class: 'work-need-id' }, task.id), h('span', { class: 'work-need-text' }, task.title)),
+          h('div', { class: 'work-need-meta om-meta' },
+            h('span', null, projectLabel(store.getState(), task.project)),
+            task.assignee ? h('span', null, task.assignee) : null,
+            h('span', null, ago(task.created_at)),
+            open ? h('span', { class: 'om-tag' }, `${open} to rule`) : null,
+            !review && last ? h('span', { class: 'work-need-asked om-clip', title: last.note }, clipNote(last.note)) : null)),
+        h('div', { class: 'work-need-actions' }, actions));
+    }
+
+    el.paintHead = paintHead;
+    paintHead(t);
+    if (trays.has(t.id)) openTray(trays.get(t.id));
+    return el;
+  }
+
+  function paint() {
+    const state = store.getState();
+    for (const id of [...ruled]) if (!needsMe(state).some((t) => t.id === id)) ruled.delete(id);
+    const rows = visible();
+    const n = rows.length;
+    count.textContent = n ? `${n} waiting` : '';
+    sort.textContent = newest ? 'Newest first' : 'Oldest first';
+    sort.hidden = n < 2;
+    clear.hidden = n > 0;
+    keyed(list, rows, {
+      key: (t) => t.id,
+      sig: (t) => [t.title, t.status, t.gate, t.project, t.assignee, undecided(t).length, ago(t.created_at), lastEntry(t) && lastEntry(t).note],
+      create: row,
+      patch: (el, t) => el.paintHead(t),
+    }).forEach((el, i) => {
+      // Ticks follow the selection without rebuilding the row under the cursor.
+      const box = el.querySelector('.work-need-pick input');
+      if (box) box.checked = selection.has(rows[i].id);
+    });
+    batch.paint();
+    ctx.title(n ? `Desk (${n})` : 'Desk');
+  }
+
+  return { node, paint };
+}
