@@ -25,17 +25,17 @@ function card(t, state) {
   const pinned = t.status === 'approved' ? (t.items || []).filter((it) => it.verdict === 'approved' && it.payload) : [];
   const kids = isGoal(t) ? goalChildren(state.tasks, t.id) : [];
   const shots = evidenceOf(t.artifacts).current.length;
-  return h('a', { class: 'om-card work-card', href: missionHref(t.id), title: `${t.id}: ${t.title}` },
+  return h('a', { class: 'om-card om-card-link work-card', href: missionHref(t.id), title: `${t.id}: ${t.title}` },
     h('span', { class: 'work-card-top' },
       swatch(t.status),
-      h('span', { class: 'work-card-id om-strong' }, t.id),
-      h('span', { class: 'work-card-word om-meta' }, statusWord(t.status)),
+      h('span', { class: 'work-card-id' }, t.id),
+      h('span', { class: 'work-card-word om-data-s' }, statusWord(t.status)),
       h('span', { class: 'om-grow' }),
       t.priority === 1 ? h('span', { class: 'om-tag om-tag-solid', title: 'Priority 1' }, 'P1') : null,
       t.priority === 2 ? h('span', { class: 'om-tag', title: 'Priority 2' }, 'P2') : null,
-      h('span', { class: 'om-meta' }, relativeTime(t.created_at))),
+      h('span', { class: 'om-data-s' }, relativeTime(t.created_at))),
     h('span', { class: 'work-card-title' }, t.title),
-    h('span', { class: 'work-card-meta om-meta' },
+    h('span', { class: 'work-card-meta om-data-s' },
       isGoal(t) ? h('span', { class: 'om-tag' }, 'Goal') : null,
       h('span', { class: 'om-clip' }, projectLabel(state, t.project)),
       t.assignee ? h('span', { class: 'om-clip om-strong' }, t.assignee) : null,
@@ -116,7 +116,7 @@ export async function render(ctx) {
     const boxes = ids.map((id) => h('label', { class: 'om-check work-menu-item' },
       h('input', { type: 'checkbox', checked: filters.projects.has(id), onChange: (e) => setProject(id, e.target.checked) }),
       h('span', { class: 'om-clip' }, projectLabel(state, id))));
-    fill(projectMenu, boxes.length ? boxes : h('p', { class: 'om-meta' }, 'No projects yet.'),
+    fill(projectMenu, boxes.length ? boxes : h('p', { class: 'om-data-s' }, 'No projects yet.'),
       h('div', { class: 'work-menu-foot' },
         h('button', {
           type: 'button',
@@ -155,30 +155,35 @@ export async function render(ctx) {
   segStatus.addEventListener('click', () => setGroup('status'));
   segProject.addEventListener('click', () => setGroup('project'));
 
+  // A toggle, so it's a one-option choice: solid when on, a dither bar on hover.
+  // As a button it went solid black when on, next to New mission.
   const archiveBtn = h('button', {
     type: 'button',
-    class: 'om-btn',
     onClick() {
       filters.archive = !filters.archive;
       syncUrl();
       paint(store.getState());
     },
   });
+  const archive = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Discarded missions' }, archiveBtn);
 
   const newLink = h('a', { class: 'om-btn om-btn-primary work-new-link', href: '/missions/new' }, 'New mission');
 
   const board = h('div', { class: 'work-board' });
   const empty = h('div', { hidden: true });
-  const page = h('div', { class: 'app-page work-page work-board-page' },
-    h('div', { class: 'work-board-head' },
-      h('h1', { class: 'om-display om-h2' }, 'Missions'),
-      h('div', { class: 'work-toolbar' },
-        projectWrap,
-        h('span', { class: 'work-toolbar-label om-label' }, 'Group'), group,
-        archiveBtn,
-        newLink)),
-    h('div', { class: 'work-filters' }, statusChips, projectChips),
-    empty, board);
+  const page = h('div', { class: 'work-page work-board-page' },
+    h('div', { class: 'om-band' },
+      h('div', { class: 'om-band-inner om-stack om-stack-3' },
+        h('div', { class: 'om-band-main work-board-head' },
+          h('h1', { class: 'om-display-m' }, 'Missions'),
+          h('div', { class: 'work-toolbar' },
+            projectWrap,
+            h('span', { class: 'work-toolbar-label om-label' }, 'Group'), group,
+            archive,
+            newLink)),
+        h('div', { class: 'work-filters' }, statusChips, projectChips))),
+    h('div', { class: 'om-ground om-field-ground' },
+      h('div', { class: 'om-container' }, empty, board)));
 
   // ---- Lanes ----
 
@@ -189,7 +194,7 @@ export async function render(ctx) {
       h('span', { class: 'work-lane-word om-label' }, label), headCount, h('span', { class: 'work-caret', 'aria-hidden': 'true' }));
     const cards = h('div', { class: 'work-cards' });
     const foot = h('div', { class: 'work-lane-foot' });
-    const band = h('div', { class: `app-strip ${dither}`, 'aria-hidden': 'true' });
+    const band = h('div', { class: `work-lane-strip ${dither}`, 'aria-hidden': 'true' });
     const body = h('div', { class: 'work-lane-body' }, cards, foot);
     const el = h('section', { class: 'work-lane', dataset: { lane: key }, 'aria-label': label }, band, button, body);
     el.paintLane = (tasks, state) => {
@@ -214,7 +219,7 @@ export async function render(ctx) {
           },
         }, showAllDone ? 'Show fewer' : `Show all ${done.length} done`));
       } else if (!tasks.length) {
-        fill(foot, h('p', { class: 'work-lane-none om-meta' }, 'Nothing here.'));
+        fill(foot, h('p', { class: 'work-lane-none om-data-s' }, 'Nothing here.'));
       } else {
         foot.replaceChildren();
       }
@@ -292,7 +297,6 @@ export async function render(ctx) {
     segProject.setAttribute('aria-pressed', String(filters.group === 'project'));
     archiveBtn.textContent = `Archive ${archived.length}`;
     archiveBtn.setAttribute('aria-pressed', String(filters.archive));
-    archiveBtn.classList.toggle('om-btn-primary', filters.archive);
     newLink.setAttribute('href', n === 1 ? `/missions/new?project=${encodeURIComponent([...filters.projects][0])}` : '/missions/new');
 
     if (mode !== filters.group) {

@@ -137,8 +137,10 @@
 
 /* ---- The board ---- */
 
-.work-board-page { display: grid; gap: var(--sp-3); }
-.work-board-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
+/* The band holds the title, the toolbar and the filters; the lanes sit on the
+   ground, and each card is a sheet. */
+.work-board-head { align-items: center; }
+.work-board-head h1 { margin: 0; }
 .work-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
 .work-toolbar-label { margin-left: var(--sp-1); }
 .work-new-link { margin-left: var(--sp-2); }
@@ -166,6 +168,8 @@
 
 .work-lanes { display: flex; gap: var(--sp-3); align-items: flex-start; min-width: 0; }
 .work-lane { flex: 1 1 0; min-width: 0; display: grid; gap: var(--sp-1); }
+/* The lane's dither, a strip over its column. */
+.work-lane-strip { display: block; height: 10px; border: var(--rule-sm) solid var(--ink); }
 .work-lane.is-collapsed { flex: 0 0 118px; }
 .work-lane-head,
 .work-swim-head {
@@ -175,25 +179,27 @@
   width: 100%;
   padding: 2px 4px;
   border: 0;
-  background: none;
+  background: var(--paper);
   color: inherit;
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
-.work-lane-head:hover, .work-swim-head:hover { background: var(--ink); color: var(--paper); }
-.work-lane-count { font-size: var(--fs-sm); font-weight: 700; margin-right: auto; }
+/* The head folds the lane: hover underlines its name, like a link. */
+.work-lane-head:hover .om-label, .work-swim-head:hover .om-label { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.work-lane-count { font: 700 12px/16px var(--font-mono); margin-right: auto; }
 .work-lane-word { flex: none; }
 .work-caret::before { content: "-"; font-weight: 700; }
 .is-collapsed > button .work-caret::before, .is-collapsed > .work-lane-head .work-caret::before { content: "+"; }
 .work-lane-body { display: grid; gap: var(--sp-1); }
 .work-cards { display: grid; gap: var(--sp-1); }
-.work-lane-foot .om-btn { width: 100%; }
-.work-lane-none { padding: var(--sp-1) 4px; }
+/* Text never sits on the ground's dots. */
+.work-lane-foot .om-btn { width: 100%; background: var(--paper); }
+.work-lane-none { padding: var(--sp-1) 4px; background: var(--paper); }
 
 .work-card { gap: 3px; min-width: 0; padding: 6px var(--sp-2); }
 .work-card-top { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
-.work-card-id { font-size: var(--fs-sm); }
+.work-card-id { font: 700 12px/16px var(--font-mono); }
 .work-card-word { display: none; }
 .work-card-title {
   display: -webkit-box;
@@ -201,9 +207,7 @@
   -webkit-line-clamp: 3;
   overflow: hidden;
   overflow-wrap: anywhere;
-  font-size: var(--fs-sm);
-  font-weight: 700;
-  line-height: 1.35;
+  font: 600 13px/18px var(--font-text);
 }
 .work-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); min-width: 0; }
 .work-card-meta .om-clip { max-width: 100%; }
@@ -211,7 +215,7 @@
 
 .work-swims { display: grid; gap: var(--sp-4); }
 .work-swim { display: grid; gap: var(--sp-2); min-width: 0; }
-.work-swim-head { border-bottom: var(--rule-md) solid var(--ink); padding: 2px 4px; }
+.work-swim-head { border-bottom: var(--rule-md) solid var(--ink); padding: 4px var(--sp-2); }
 
 /* ---- A mission ---- */
 
@@ -311,8 +315,7 @@
 
 /* ---- New mission ---- */
 
-.work-new { display: grid; gap: var(--sp-3); max-width: 820px; }
-.work-new-form { display: grid; gap: var(--sp-3); }
+.work-new-form { display: grid; gap: var(--sp-4); }
 .work-new-pair { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-3); }
 .work-new-body { min-height: 260px; }
 .work-new-thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }

@@ -98,6 +98,7 @@ button.om-card { width: 100%; font: inherit; text-align: left; cursor: pointer; 
 
 /* A native select keeps its arrow until its page moves to om-select-wrap. */
 .om-select { appearance: auto; padding-right: var(--ctl-pad); }
+.om-select-wrap > .om-select { appearance: none; padding-right: 28px; }
 
 .om-palette-list { max-height: 50vh; overflow: auto; }
 

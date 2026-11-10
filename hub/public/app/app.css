@@ -2,7 +2,11 @@
 
 #app { display: flex; flex-direction: column; min-height: 100vh; }
 #app > .om-footline { margin-top: auto; }
-.app-main { flex: 1 0 auto; min-width: 0; outline: none; }
+.app-main { flex: 1 0 auto; min-width: 0; outline: none; display: flex; flex-direction: column; }
+/* A short page still runs its ground down to the footer. */
+.app-main > * { flex: 1 0 auto; }
+.app-main > .work-page { display: flex; flex-direction: column; }
+.app-main > .work-page > .om-ground { flex: 1 0 auto; }
 .app-page { padding: var(--sp-6) var(--pad) var(--sp-10); }
 .app-page > p { margin: 0; }
 

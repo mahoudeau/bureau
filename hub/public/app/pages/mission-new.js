@@ -247,30 +247,35 @@ export async function render(ctx) {
       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) create(e);
     },
   },
-  h('label', { class: 'om-field' }, h('span', { class: 'om-label' }, 'Title'), title),
+  h('label', { class: 'om-field' }, h('span', { class: 'om-field-label' }, 'Title'), title),
   h('div', { class: 'work-new-pair' },
-    h('label', { class: 'om-field' }, h('span', { class: 'om-label' }, 'Project'), project),
-    h('label', { class: 'om-field' }, h('span', { class: 'om-label' }, 'Priority'), priority)),
+    h('label', { class: 'om-field' }, h('span', { class: 'om-field-label' }, 'Project'), h('span', { class: 'om-select-wrap' }, project)),
+    h('label', { class: 'om-field' }, h('span', { class: 'om-field-label' }, 'Priority'), h('span', { class: 'om-select-wrap' }, priority))),
   h('div', { class: 'om-field' },
-    h('span', { class: 'om-label' }, 'Start from'),
+    h('span', { class: 'om-field-label' }, 'Start from'),
     h('div', { class: 'om-chips', role: 'group', 'aria-label': 'Templates' },
       TEMPLATES.map((t) => h('button', { type: 'button', class: 'om-chip', onClick: () => useTemplate(t) }, t.label)))),
-  h('label', { class: 'om-field' }, h('span', { class: 'om-label' }, 'Body'), body),
+  h('label', { class: 'om-field' }, h('span', { class: 'om-field-label' }, 'Body ', h('em', null, '(optional)')), body),
   thumbs,
   h('div', { class: 'work-new-actions' },
     attach, fileInput,
-    h('span', { class: 'om-meta work-new-hint' }, 'or paste an image'),
+    h('span', { class: 'om-caption work-new-hint' }, 'or paste an image'),
     h('span', { class: 'om-grow' }),
     submit),
   h('div', { id: 'work-new-error' }, refusal.el));
 
-  const page = h('div', { class: 'app-page work-page work-new' },
-    h('nav', { 'aria-label': 'Breadcrumb' },
-      h('ol', { class: 'om-crumbs' },
-        h('li', null, h('a', { class: 'om-link', href: '/missions' }, 'Missions')),
-        h('li', null, 'New'))),
-    h('h1', { class: 'om-display om-h2' }, 'New mission'),
-    form);
+  // The template: a band with the way back, then one sheet in one column.
+  const page = h('div', { class: 'work-page work-new' },
+    h('div', { class: 'om-band' },
+      h('div', { class: 'om-band-inner om-stack om-stack-3' },
+        h('nav', { 'aria-label': 'Breadcrumb' },
+          h('ol', { class: 'om-crumbs' },
+            h('li', null, h('a', { href: '/missions' }, 'Missions')),
+            h('li', null, 'New'))),
+        h('h1', { class: 'om-display-m' }, 'New mission'))),
+    h('div', { class: 'om-ground om-field-ground' },
+      h('div', { class: 'om-work-single' },
+        h('section', { class: 'om-sheet' }, h('div', { class: 'om-sheet-body' }, form)))));
 
   requestAnimationFrame(() => title.focus({ preventScroll: true }));
   return page;

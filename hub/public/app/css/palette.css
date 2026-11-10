@@ -39,7 +39,7 @@
 .pal-foot { flex: none; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); border-top: var(--rule-md) solid var(--ink); }
 .pal-project-label { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
 .pal-project-label .om-select-wrap { max-width: 180px; }
-.pal-project { min-height: 28px; padding-left: 8px; padding-right: 28px; font-size: 13px; appearance: none; }
+.pal-project { min-height: 28px; padding-left: 8px; font-size: 13px; }
 .pal-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 @media (max-width: 760px) {
