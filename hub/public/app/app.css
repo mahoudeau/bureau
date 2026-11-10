@@ -1,0 +1,38 @@
+/* The app's own layout. Anything generic belongs in omako-ds instead. */
+
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+.app-main { flex: 1 0 auto; min-width: 0; outline: none; }
+.app-page { padding: var(--sp-6) var(--pad) var(--sp-10); }
+.app-page > p { margin: 0; }
+
+.app-word { letter-spacing: var(--ls-label); }
+.app-tools { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+.app-tools[hidden], .om-nav[hidden], .app-live[hidden] { display: none; }
+.app-live { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.app-status { display: inline-flex; align-items: center; gap: var(--sp-2); }
+
+.app-signin { width: min(420px, 100%); margin: 12vh auto 0; padding: 0 var(--sp-4) var(--sp-10); }
+.app-signin form { display: grid; gap: var(--sp-3); }
+.app-signin .om-btn { width: 100%; }
+
+/* The specimen at /ds */
+.ds-sheets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ds-sheet { padding: var(--sp-6) var(--pad); background: var(--paper); color: var(--ink); min-width: 0; }
+.ds-sheet + .ds-sheet { border-left: var(--rule-sm) solid var(--ink); }
+.ds-sheet > .om-stack { gap: var(--sp-8); }
+.ds-section { display: grid; gap: var(--sp-3); min-width: 0; }
+.ds-section p { margin: 0; }
+.ds-ramp { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: var(--sp-3); }
+.ds-tile { display: grid; gap: var(--sp-1); font-size: var(--fs-xs); }
+.ds-tile > div { height: 56px; border: var(--rule-sm) solid var(--ink); }
+.ds-inline .om-scrim { position: relative; inset: auto; z-index: 0; padding: var(--sp-6) var(--sp-4); }
+.ds-inline .om-toasts { position: static; width: auto; }
+.ds-inline .om-dialog { max-height: none; }
+
+@media (max-width: 900px) {
+  .ds-sheets { grid-template-columns: minmax(0, 1fr); }
+  .ds-sheet + .ds-sheet { border-left: 0; border-top: var(--rule) solid var(--ink); }
+}
+@media (max-width: 720px) {
+  .app-kbd { display: none; }
+}

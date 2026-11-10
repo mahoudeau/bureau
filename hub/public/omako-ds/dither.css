@@ -1,0 +1,154 @@
+/* Dither. The system's one source of tone: patterns of ink on paper, the way
+   a four-colour handheld got its greys.
+
+   Rules:
+   1. Text never sits on a pattern. Knock it out on paper, or write it beside.
+   2. A pattern never means something alone. Label it, or give it a title.
+   3. The ramp (12, 25, 50, 75, 100) is for a quantity or an order of steps.
+      Hatch, cross and bars break the ramp on purpose: use them for exceptions.
+   4. Five steps is the limit of what the eye separates at a glance. */
+
+:root,
+[data-theme],
+.om-invert,
+.om-scope {
+  --dot: conic-gradient(from 270deg at var(--px) var(--px), var(--ink) 0 25%, transparent 0);
+  --hole: conic-gradient(from 270deg at var(--px) var(--px), var(--paper) 0 25%, transparent 0);
+}
+
+/* A cell has to land on whole device pixels or the pattern shimmers. 2 CSS px
+   is whole at 1x, 1.5x, 2x and 3x. These are the common scales where it isn't. */
+@media (resolution: 1.25dppx) { :root { --px: 2.4px; } }
+@media (resolution: 1.75dppx) { :root { --px: 2.2857px; } }
+@media (resolution: 2.25dppx) { :root { --px: 2.2222px; } }
+@media (resolution: 2.5dppx) { :root { --px: 2.4px; } }
+
+.om-d0 { background-color: var(--paper); }
+
+.om-d12 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+  background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2);
+}
+
+.om-d25 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
+  background-position: 0 0, calc(var(--px) * 2) var(--px);
+}
+
+.om-d50 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+
+.om-d75 {
+  background-color: var(--ink);
+  background-image: var(--hole), var(--hole);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
+  background-position: 0 0, calc(var(--px) * 2) var(--px);
+}
+
+.om-d100 { background-color: var(--ink); }
+
+/* Exceptions. Each is a shape the ramp doesn't have. */
+.om-hatch,
+.om-cross {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+}
+.om-hatch {
+  background-position:
+    0 0, var(--px) var(--px), calc(var(--px) * 2) calc(var(--px) * 2), calc(var(--px) * 3) calc(var(--px) * 3),
+    var(--px) 0, calc(var(--px) * 2) var(--px), calc(var(--px) * 3) calc(var(--px) * 2), 0 calc(var(--px) * 3);
+}
+.om-cross {
+  background-position:
+    0 0, var(--px) var(--px), calc(var(--px) * 2) calc(var(--px) * 2), calc(var(--px) * 3) calc(var(--px) * 3),
+    calc(var(--px) * 3) 0, calc(var(--px) * 2) var(--px), var(--px) calc(var(--px) * 2), 0 calc(var(--px) * 3);
+}
+.om-bars {
+  background-color: var(--paper);
+  background-image: linear-gradient(to right, var(--ink) 50%, transparent 50%);
+  background-size: calc(var(--px) * 2) 100%;
+}
+
+/* The swatch: a status or a value, at the size of a capital letter. */
+.om-swatch {
+  display: inline-block;
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: var(--rule-sm) solid var(--ink);
+  vertical-align: -2px;
+}
+
+/* The band: a strip at the head of a column or a group. */
+.om-band {
+  display: block;
+  height: 10px;
+  border: var(--rule-sm) solid var(--ink);
+}
+
+/* Big numerals or words cut out of a pattern: put it next to a dN class. The
+   letters are the pattern, so rule 1 still holds. Poster sizes only. */
+.om-dither-type {
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A hard shadow made of dither. It needs a positioned parent and stays under
+   its element: isolate the parent. */
+.om-lift {
+  position: relative;
+  isolation: isolate;
+}
+.om-lift::after {
+  content: "";
+  position: absolute;
+  inset: 5px -6px -6px 5px;
+  z-index: -1;
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+
+/* A meter: value drawn solid, the rest in sparse dots. Set --value (0 to 100). */
+.om-meter {
+  position: relative;
+  display: block;
+  height: 10px;
+  border: var(--rule-sm) solid var(--ink);
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+  background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2);
+}
+.om-meter > i {
+  display: block;
+  height: 100%;
+  width: calc(var(--value, 0) * 1%);
+  background: var(--ink);
+}
+
+/* Waiting, in steps: a loading strip that marches. */
+.om-wait {
+  height: 10px;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+  animation: om-march 0.6s steps(2) infinite;
+}
+@keyframes om-march {
+  to { background-position: var(--px) 0, calc(var(--px) * 2) var(--px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .om-wait { animation: none; }
+}

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en" data-density="compact">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bureau</title>
+<!-- Before the stylesheets, so the first paint is already in the right theme.
+     Keep the key and the names in step with theme.js. -->
+<script>
+  (function () {
+    var attr = { paper: 'light', ink: 'dark' }, saved = null;
+    try { saved = localStorage.getItem('bureau_theme'); } catch (e) { /* no storage: follow the system */ }
+    if (attr[saved]) document.documentElement.setAttribute('data-theme', attr[saved]);
+  })();
+</script>
+<link rel="icon" href="/app/mark.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/omako-ds/all.css">
+<link rel="stylesheet" href="/app/app.css">
+<link rel="stylesheet" href="/app/css/work.css">
+<link rel="stylesheet" href="/app/css/brain.css">
+<link rel="stylesheet" href="/app/css/setup.css">
+<script src="/app/hub-auth.js"></script>
+<script type="module" src="/app/main.js"></script>
+</head>
+<body class="om-page">
+<div id="app"></div>
+<noscript><p style="padding:16px">The dashboard needs JavaScript.</p></noscript>
+</body>
+</html>

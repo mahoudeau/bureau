@@ -131,7 +131,7 @@
   <button id="btn-scale" title="Pixel scale" hidden>AUTO</button>
   <span id="conn">connecting</span>
 </div>
-<a id="btn-min" href="/v2" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
+<a id="btn-min" href="/" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
 <div id="ticker">&gt; Opening the office...</div>
 <div id="gate" hidden>
   <div>BUREAU · STAFF ENTRANCE</div>
@@ -139,7 +139,7 @@
   <button id="gate-go">CLOCK IN</button>
 </div>
 <script src="/office/assets.js"></script>
-<script src="/v2/hub-auth.js"></script>
+<script src="/app/hub-auth.js"></script>
 <script>
 'use strict';
 (function () {
@@ -820,8 +820,8 @@
   function go(href) { location.href = href; }
   function hotspots() {
     var list = [
-      { label: 'Mission board: open the mission list', rect: { x: 24, y: 6, w: 80, h: 32 }, act: function () { go('/v2#board'); } },
-      { label: 'Brain shelf: open the brain', rect: { x: 8, y: 52, w: 40, h: 52 }, act: function () { go('/v2#brain'); } },
+      { label: 'Mission board: open the mission list', rect: { x: 24, y: 6, w: 80, h: 32 }, act: function () { go('/missions'); } },
+      { label: 'Brain shelf: open the brain', rect: { x: 8, y: 52, w: 40, h: 52 }, act: function () { go('/brain'); } },
     ];
     DESK_SLOTS.forEach(function (d) {
       var ag = AGENTS.find(function (a) { return a.desk === d; });
@@ -831,7 +831,7 @@
     });
     list.push({ label: 'Boss door: ' + (reviewCount + blockedCount) + ' waiting for you (' + reviewCount +
       ' to review, ' + blockedCount + ' to answer). Open the review inbox',
-      rect: { x: 250, y: 174, w: 66, h: 36 }, act: function () { go('/v2#review'); } }); // door, mat and bench
+      rect: { x: 250, y: 174, w: 66, h: 36 }, act: function () { go('/'); } }); // door, mat and bench
     return list;
   }
   function inRect(r, x, y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
@@ -871,7 +871,7 @@
       '<div class="name">' + person(ag.name) + '</div>' +
       '<div>' + esc(act) + (ag.state === 'idle' && ag.activity !== 'idle' ? ' (idle)' : '') + '</div>' +
       '<div>' + (m
-        ? esc(m.how) + ': <a href="/v2#mission=' + encodeURIComponent(m.t.id) + '">' + titled(m.t, 60) + '</a>'
+        ? esc(m.how) + ': <a href="/missions/' + encodeURIComponent(m.t.id) + '">' + titled(m.t, 60) + '</a>'
         : 'No mission in hand') + '</div>' +
       '<button type="button" aria-label="Close">x</button>';
     cardEl.setAttribute('aria-label', ag.name);
@@ -1007,7 +1007,7 @@
     }).catch(function () { tick('Could not reach the hub'); });
   }
   (function gate() {
-    token = localStorage.getItem('bureau_token');
+    token = BureauHub.takeUrlToken() || localStorage.getItem('bureau_token');
     if (token) return boot();
     var g = document.getElementById('gate');
     g.hidden = false;

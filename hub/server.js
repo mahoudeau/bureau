@@ -97,6 +97,25 @@ function servePage(res, name, ...parts) {
   res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': page.csp, 'referrer-policy': 'no-referrer' });
   res.end(page.html);
 }
+// One shell for every page of the app. The client routes from the URL, and
+// everything it shows comes from the API, behind the token.
+const SHELL_ROUTE = /^\/(?:index\.html|sign-in|missions(?:\/[^/]+)?|goals(?:\/[^/]+)?|brain(?:\/.+)?|projects(?:\/[^/]+)?|agents|activity|settings|ds)?$/;
+const serveShell = res => servePage(res, 'app', 'index.html');
+// Static files. A segment can't hold a dot and the name holds exactly one, so
+// no `..` and no encoded slash can match. index.html and README.md can't either.
+const ASSET_ROUTE = /^\/(app|omako-ds)\/((?:[\w-]+\/)*[\w-]+\.(css|js|woff2|svg))$/;
+const ASSET_TYPES = { css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', woff2: 'font/woff2', svg: 'image/svg+xml' };
+function serveAsset(res, top, rel, ext) {
+  let body;
+  try { body = fs.readFileSync(path.join(__dirname, 'public', top, rel)); }
+  catch { return send(res, 404, { error: 'not found' }); }
+  res.writeHead(200, { 'content-type': ASSET_TYPES[ext], 'cache-control': ext === 'woff2' ? 'public, max-age=86400' : 'no-store' });
+  res.end(body);
+}
+function serveNotFound(res) {
+  res.writeHead(404, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
+  res.end(fs.readFileSync(path.join(__dirname, 'public', 'app', '404.html')));
+}
 function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function sendPage(res, code, title, bodyHtml) {
   const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bureau · review</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:560px;margin:8vh auto;padding:0 20px;color:#111}h1{font-size:18px}textarea{width:100%;min-height:90px;font:inherit;padding:8px;box-sizing:border-box}button{font:inherit;font-weight:600;padding:10px 18px;border:none;border-radius:8px;background:#2a78d6;color:#fff;cursor:pointer;margin-top:12px}p.err{color:#c22}fieldset{border:1px solid #ddd;border-radius:8px;margin:12px 0;padding:10px}legend{font-weight:600;padding:0 6px}fieldset label{margin-right:14px}fieldset input[type=text]{width:100%;font:inherit;padding:6px;box-sizing:border-box;margin-top:8px}pre{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;font-size:13px;overflow-x:auto}</style></head><body><h1>${title}</h1>${bodyHtml}</body></html>`;
@@ -318,24 +337,17 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    // Static dashboard (no token needed to load the shell; API calls need it)
-    if (req.method === 'GET' && (p === '/' || p === '/index.html')) return servePage(res, 'index.html');
+    // No token needed to load a shell; the API calls behind it need one.
+    if (req.method === 'GET' && SHELL_ROUTE.test(p)) return serveShell(res);
+    // Old links keep working. A browser carries the #fragment across.
+    if (req.method === 'GET' && (p === '/v2' || p === '/v2/styleguide')) {
+      res.writeHead(301, { location: '/' });
+      return res.end();
+    }
 
-    // Dashboard v2 (in-progress rebuild, t-53): its own shell + static assets,
-    // fully separate from / and index.html above until the boss flips the
-    // switch. hub/public/v2.html is the shell; hub/public/v2/*.css|*.js are
-    // the sibling modules built by the rest of this tranche.
-    if (req.method === 'GET' && p === '/v2') return servePage(res, 'v2.html');
-    // t-139 (goal: t-134): the living style guide — same static-serve pattern
-    // as /v2 just above, its own shell (hub/public/v2/styleguide.html) plus
-    // the sibling v2/styleguide.js already covered by the mV2Asset route
-    // below. Deliberately its own top-level route, not folded into the /v2
-    // shell: the goal's own bar treats the style guide as a first-class Page
-    // of the system, not a tab bolted onto the dashboard.
-    // t-278 (goal: t-54): the pixel office — a renderer of the SSE stream,
-    // served at /office per docs/office.md. Same static-serve pattern as
-    // /v2: the shell is public (no data; it asks for the token), the API
-    // calls it makes are Bearer-gated like everything else.
+    // t-278 (goal: t-54): the pixel office, a renderer of the SSE stream,
+    // served at /office per docs/office.md. The shell is public (no data; it
+    // asks for the token), the API calls it makes are Bearer-gated.
     if (req.method === 'GET' && p === '/office') return servePage(res, 'office.html');
     // t-278 GB era: the sprite gallery/approval page and the shared asset
     // module both pages load. Fixed paths, no user segments.
@@ -350,28 +362,8 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'font/ttf', 'cache-control': 'public, max-age=86400' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-font.ttf')));
     }
-    if (req.method === 'GET' && p === '/v2/styleguide') return servePage(res, 'v2', 'styleguide.html');
-    // t-92: components.css's vendored @font-face (fonts/Inter-Variable.woff2)
-    // 404'd here even once the CSS layer itself was wired in — this route
-    // only ever matched a single flat segment directly under v2/, so any
-    // asset one directory deeper (fonts/, icons/) was unreachable regardless
-    // of what any stylesheet or script asked for. Widened to an OPTIONAL one
-    // level subdirectory plus a woff2 extension, keeping the original no-'..'
-    // guarantee: both the subdir and filename segments are restricted to
-    // [\w-] (no '.', no '/'), so a real extension dot can only ever appear
-    // once, at the position this regex itself puts it — no traversal surface
-    // gained by the wider match.
-    const mV2Asset = p.match(/^\/v2\/(?:([\w-]+)\/)?([\w-]+\.(?:css|js|woff2))$/);
-    if (req.method === 'GET' && mV2Asset) {
-      const [, subdir, filename] = mV2Asset;
-      const file = path.join(__dirname, 'public', 'v2', subdir || '', filename);
-      if (!fs.existsSync(file)) return send(res, 404, { error: 'not found' }); // sibling module not built yet: harmless
-      const type = filename.endsWith('.css') ? 'text/css; charset=utf-8'
-        : filename.endsWith('.woff2') ? 'font/woff2'
-        : 'text/javascript; charset=utf-8';
-      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
-      return res.end(fs.readFileSync(file));
-    }
+    const mAsset = p.match(ASSET_ROUTE);
+    if (req.method === 'GET' && mAsset) return serveAsset(res, mAsset[1], mAsset[2], mAsset[3]);
 
     // Public on purpose (probes carry no token): liveness only. The version
     // and schema sit behind the token on /api/health (boss ruling 2026-10-01).
@@ -465,7 +457,9 @@ const server = http.createServer(async (req, res) => {
         (t.body ? `<p>${escHtml(t.body).replace(/\n/g, '<br>')}</p>` : '') + arts + logs);
     }
 
-    if (!p.startsWith('/api/')) return send(res, 404, { error: 'not found' });
+    // /mcp/ is a JSON-RPC door like /api/: a client there can't read a web page.
+    if (p.startsWith('/mcp/')) return send(res, 404, { error: 'not found' });
+    if (!p.startsWith('/api/')) return serveNotFound(res);
     // Judged before the token: a tokenless demo hub has nothing else in the way,
     // and a text/plain POST from any website reaches this line without a preflight.
     if (!ORIGINS.permits(req)) return send(res, 403, { error: 'origin not allowed: add it to BUREAU_ALLOWED_ORIGINS' });
