@@ -5,8 +5,8 @@ import { h, fill, on } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { toast } from '../ui.js';
-import { projectIds, projectLabel } from '../work/model.js';
-import { keep, missionHref, refusalLine, remember } from '../work/parts.js';
+import { projectIds, projectLabel } from '../desk/model.js';
+import { keep, missionHref, refusalLine, remember } from '../desk/parts.js';
 
 const TEMPLATES = [
   {

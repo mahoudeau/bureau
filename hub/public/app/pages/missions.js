@@ -6,9 +6,9 @@ import { h, fill, on } from '../dom.js';
 import * as store from '../store.js';
 import { LANES, STATUSES, statusLane, statusWord, swatch } from '../status.js';
 import { emptyState, relativeTime } from '../ui.js';
-import { byPriority, evidenceOf, goalChildren, isGoal, lastTouched, projectIds, projectLabel, undecided } from '../work/model.js';
-import { keyed } from '../work/keyed.js';
-import { keep, missionHref, remember } from '../work/parts.js';
+import { byPriority, evidenceOf, goalChildren, isGoal, lastTouched, projectIds, projectLabel, undecided } from '../desk/model.js';
+import { keyed } from '../desk/keyed.js';
+import { keep, missionHref, remember } from '../desk/parts.js';
 
 const DONE_CAP = 8;
 // Discarded has the Archive toggle, as a list of tombstones shouldn't be a chip.

@@ -33,6 +33,7 @@ One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboa
 - The dashboard screenshots in the README, which showed the old one.
 
 ### Fixed
+- `/m/<token>` no longer answers 500 for a log entry with no time, and no longer prints `Pundefined` for a mission with no priority.
 - Renaming a project moves its settings to the new id, in the same write. They used to stay under the old id.
 - A token that gets no event stream (403 on the ticket) stops asking every 3 seconds. The dashboard stays on polling and says so.
 - A mission body no longer shows a permanent `#` beside its headings on a touch screen.

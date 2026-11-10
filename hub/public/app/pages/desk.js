@@ -5,14 +5,14 @@ import { h, fill } from '../dom.js';
 import * as store from '../store.js';
 import { swatch, statusWord } from '../status.js';
 import { emptyState, relativeTime, timeTag } from '../ui.js';
-import { blockedOnMission, byId, byPriority, projectLabel } from '../work/model.js';
-import { keyed } from '../work/keyed.js';
-import { missionHref, section } from '../work/parts.js';
-import { needsSection } from '../work/needs.js';
-import { mergeSection } from '../work/merge.js';
-import { inboxSection } from '../work/inbox.js';
-import { teamSection } from '../work/team.js';
-import { officeWindow } from '../work/office.js';
+import { blockedOnMission, byId, byPriority, projectLabel } from '../desk/model.js';
+import { keyed } from '../desk/keyed.js';
+import { missionHref, section } from '../desk/parts.js';
+import { needsSection } from '../desk/needs.js';
+import { mergeSection } from '../desk/merge.js';
+import { inboxSection } from '../desk/inbox.js';
+import { teamSection } from '../desk/team.js';
+import { officeWindow } from '../desk/office.js';
 
 // What the feed says. Heartbeats aren't here: eight agents pinging is noise.
 const VERBS = {

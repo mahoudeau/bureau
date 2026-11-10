@@ -8,7 +8,7 @@
 
 import { fill, h } from './dom.js';
 import { emptyState, errorState, loadingState } from './ui.js';
-import { isAbort } from './api.js';
+import { isAbort, localPath } from './api.js';
 
 const SLOW_MS = 150;
 const SCROLL_FRAMES = 60;
@@ -132,8 +132,21 @@ async function render(y) {
     if (id === renderId) fill(outlet, h('div', { class: 'app-page' }, loadingState()));
   }, SLOW_MS);
 
+  let page;
   try {
-    const page = await found.route.load();
+    page = await found.route.load();
+  } catch (e) {
+    clearTimeout(slow);
+    runCleanups();
+    if (id !== renderId) return;
+    console.error(e);
+    // The browser's own words here are about modules. A reload also picks up a
+    // new deploy, which is the other way this happens.
+    fill(outlet, h('div', { class: 'app-page' }, errorState("This page didn't load. Check your connection and try again.", () => location.reload())));
+    return;
+  }
+
+  try {
     if (id !== renderId) { runCleanups(); return; }
     const out = await page.render(ctx);
     clearTimeout(slow);
@@ -155,17 +168,18 @@ async function render(y) {
   settleScroll(id, url.hash, y);
 }
 
-// Go somewhere. A path with no route, or another origin, is a full page load:
-// /office, /r/ links and the server's 404 all live out there.
+// Go somewhere on this hub. A path with no route is a full page load: /office,
+// /r/ links and the server's 404 all live out there. Anything that resolves off
+// this origin is refused, and you land on the Desk.
 export function navigate(to, { replace = false } = {}) {
-  const url = new URL(to, location.href);
-  if (url.origin !== location.origin || !match(url.pathname)) {
+  const target = localPath(to) ?? '/';
+  const url = new URL(target, location.href);
+  if (!match(url.pathname)) {
     location.assign(url.href);
     return;
   }
   entryKey = nextKey++;
   const state = { k: entryKey };
-  const target = url.pathname + url.search + url.hash;
   if (replace) history.replaceState(state, '', target);
   else history.pushState(state, '', target);
   render();

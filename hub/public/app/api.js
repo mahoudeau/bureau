@@ -31,17 +31,29 @@ export function signInPath() {
   return location.pathname === '/sign-in' ? '/sign-in' : `/sign-in?next=${encodeURIComponent(here)}`;
 }
 
+// The target as a path on this hub, or null if it goes anywhere else. It has to
+// stay here when resolved a second time: /.//evil.example/x parses as this
+// origin with the pathname //evil.example/x, and that string, handed to
+// anything that resolves it, is another host.
+export function localPath(target, base = location.href) {
+  try {
+    const { origin } = new URL(base);
+    const url = new URL(target, base);
+    if (url.origin !== origin) return null;
+    const path = url.pathname + url.search + url.hash;
+    return new URL(path, base).origin === origin ? path : null;
+  } catch {
+    return null;
+  }
+}
+
 // Where sign-in goes next. Only ever a path on this hub.
-export function nextPath(search = location.search) {
+export function nextPath(search = location.search, base = location.href) {
   const next = new URLSearchParams(search).get('next');
   if (!next || !next.startsWith('/')) return '/';
-  try {
-    const url = new URL(next, location.origin);
-    if (url.origin !== location.origin || url.pathname === '/sign-in') return '/';
-    return url.pathname + url.search + url.hash;
-  } catch {
-    return '/';
-  }
+  const path = localPath(next, base);
+  if (!path || new URL(path, base).pathname === '/sign-in') return '/';
+  return path;
 }
 
 // A full page load on purpose: it drops the event stream and all held state.
@@ -51,7 +63,7 @@ export function signOut() {
 }
 
 let leaving = false;
-function sessionEnded() {
+export function sessionEnded() {
   if (leaving) return;
   leaving = true;
   clearToken();

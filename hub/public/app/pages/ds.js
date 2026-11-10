@@ -114,8 +114,9 @@ function specimen(theme) {
       section('Rows',
         h('div', { class: 'om-list' },
           fakeLink({ class: 'om-list-row' }, h('span', { class: 'om-swatch om-d50' }), h('span', { class: 'om-grow om-clip' }, 'A row, hover it'), h('span', { class: 'om-meta' }, '2h ago')),
-          fakeLink({ class: 'om-list-row', 'aria-current': 'page' }, h('span', { class: 'om-swatch om-d75' }), h('span', { class: 'om-grow om-clip' }, 'The current row'), h('span', { class: 'om-meta' }, '1d ago')),
-          h('button', { class: 'om-list-row', 'aria-selected': 'true' }, h('span', { class: 'om-swatch om-hatch' }), h('span', { class: 'om-grow om-clip' }, 'A selected row')))),
+          fakeLink({ class: 'om-list-row', 'aria-current': 'page' }, h('span', { class: 'om-swatch om-d75' }), h('span', { class: 'om-grow om-clip' }, 'The current row'), h('span', { class: 'om-meta' }, '1d ago'))),
+        h('div', { class: 'om-list', role: 'listbox', 'aria-label': 'Selected rows' },
+          h('button', { class: 'om-list-row', role: 'option', 'aria-selected': 'true' }, h('span', { class: 'om-swatch om-hatch' }), h('span', { class: 'om-grow om-clip' }, 'A selected row')))),
 
       section('Alert rows',
         h('div', null,
@@ -149,7 +150,7 @@ function specimen(theme) {
       section('Top bar',
         h('div', { class: 'om-top' },
           fakeLink({ class: 'om-brand' }, mark(), h('span', { class: 'om-strong' }, 'BRAND')),
-          h('nav', { class: 'om-nav' }, fakeLink({ 'aria-current': 'page' }, 'One'), fakeLink(null, 'Two')))),
+          h('nav', { class: 'om-nav', 'aria-label': `Specimen navigation, ${theme === 'light' ? 'paper' : 'ink'}` }, fakeLink({ 'aria-current': 'page' }, 'One'), fakeLink(null, 'Two')))),
 
       section('Footer',
         h('div', { class: 'om-foot' }, h('span', null, 'The black slab'), fakeLink(null, 'A link'))),
@@ -165,11 +166,11 @@ function specimen(theme) {
       section('Palette',
         h('div', { class: 'ds-inline' },
           h('div', { class: 'om-dialog' },
-            h('input', { class: 'om-palette-input', placeholder: 'Search or type a command' }),
+            h('input', { class: 'om-palette-input', placeholder: 'Search or type a command', 'aria-label': 'Search or type a command' }),
             h('div', { class: 'om-palette-list' },
-              h('div', { class: 'om-list' },
-                h('button', { class: 'om-list-row', 'aria-selected': 'true' }, 'First result'),
-                h('button', { class: 'om-list-row' }, 'Second result')))))),
+              h('div', { class: 'om-list', role: 'listbox', 'aria-label': 'Results' },
+                h('button', { class: 'om-list-row', role: 'option', 'aria-selected': 'true' }, 'First result'),
+                h('button', { class: 'om-list-row', role: 'option', 'aria-selected': 'false' }, 'Second result')))))),
 
       section('Toast',
         h('div', { class: 'ds-inline' },
@@ -186,7 +187,7 @@ function specimen(theme) {
           h('h4', null, 'Heading four'),
           h('ul', null, h('li', null, 'A list'), h('li', null, 'With arrows', h('ul', null, h('li', null, 'And depth')))),
           h('ol', null, h('li', null, 'Numbered'), h('li', null, 'Too')),
-          h('p', null, h('input', { type: 'checkbox', checked: true, disabled: true }), 'A task, done'),
+          h('p', null, h('input', { type: 'checkbox', checked: true, disabled: true, 'aria-label': 'A task, done' }), 'A task, done'),
           h('blockquote', null, h('p', null, 'A quote.')),
           h('pre', null, h('code', null, 'const pre = "a block of code";')),
           h('hr'),
@@ -206,11 +207,11 @@ function registers() {
       h('div', { class: 'om-stack' },
         h('p', { class: 'om-label' }, 'Desk'),
         h('button', { class: 'om-btn' }, 'A button'),
-        h('input', { class: 'om-input', value: 'A field' })),
+        h('input', { class: 'om-input', value: 'A field', 'aria-label': 'A field, desk' })),
       h('div', { class: 'om-stack', 'data-density': 'poster' },
         h('p', { class: 'om-label' }, 'Poster'),
         h('button', { class: 'om-btn' }, 'A button'),
-        h('input', { class: 'om-input', value: 'A field' }))));
+        h('input', { class: 'om-input', value: 'A field', 'aria-label': 'A field, poster' }))));
 }
 
 export function render() {

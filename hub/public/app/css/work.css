@@ -77,12 +77,16 @@
 .work-need-id { flex: none; font-weight: 700; }
 .work-need-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-need-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3); min-width: 0; }
+/* A project label is whatever someone typed. It breaks rather than widens. */
+.work-need-meta > *, .work-group-head > *, .work-m-meta > *, .work-swim-head > * { min-width: 0; overflow-wrap: anywhere; }
 .work-need-asked { flex: 1 1 200px; font-weight: 700; }
 .work-need-actions { display: flex; gap: var(--sp-1); flex-wrap: wrap; justify-content: flex-end; }
 .work-need-tray { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-2); padding-left: calc(14px + 14px + var(--sp-3) * 2); }
 .work-need .work-refusal { padding-left: var(--sp-2); margin-left: calc(14px + 14px + var(--sp-3) * 2); }
 
 .work-batch { display: grid; gap: var(--sp-2); margin-top: calc(-1 * var(--sp-2)); padding: var(--sp-2) var(--sp-3); border: var(--rule-md) solid var(--ink); border-top-width: 0; }
+.work-item-batch { margin-top: var(--sp-2); border-top-width: var(--rule-md); }
+.work-item-pick { flex: none; }
 .work-batch-why { font-size: var(--fs-sm); }
 .work-batch-list { margin: 0; padding: 0; list-style: none; max-height: 160px; overflow-y: auto; font-size: var(--fs-sm); }
 
@@ -141,7 +145,8 @@
 .work-msg-open .om-swatch { width: 10px; height: 10px; }
 .work-msg-text { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 .work-msg.is-unread .work-msg-text { font-weight: 700; }
-.work-msg-meta { display: flex; gap: var(--sp-3); padding-left: calc(10px + var(--sp-2)); }
+.work-msg-meta { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); padding-left: calc(10px + var(--sp-2)); }
+.work-msg-meta > * { min-width: 0; overflow-wrap: anywhere; }
 
 .work-agent { padding: 3px 0; border-bottom: var(--rule-sm) solid var(--ink); min-width: 0; }
 .work-agent-line { display: grid; grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr); align-items: center; gap: var(--sp-2); font-size: var(--fs-sm); }

@@ -31,6 +31,7 @@ function preview(text) {
 export function inboxSection(ctx) {
   let messages = [];
   let failed = null;
+  let closed = false;
   let showAll = false;
   const read = loadRead();
   const expanded = new Set();
@@ -80,7 +81,7 @@ export function inboxSection(ctx) {
       return;
     }
     if (!messages.length) {
-      fill(note, emptyState('No messages'));
+      fill(note, closed ? emptyState('No messages here', "This token doesn't read the boss's inbox.") : emptyState('No messages'));
       keyed(list, [], { key: (m) => m.id, create: row });
       foot.replaceChildren();
       return;
@@ -122,14 +123,19 @@ export function inboxSection(ctx) {
       // holds what's addressed to him.
       messages = ((r && r.messages) || []).filter((m) => m.to === 'boss');
       failed = null;
+      closed = false;
     } catch (e) {
       if (api.isAbort(e)) return;
-      failed = e.message || "Couldn't load messages.";
+      // A token scoped to some projects doesn't get the boss's mail. That's
+      // the rule working, not a failure.
+      closed = e.status === 403;
+      failed = closed ? null : e.message || "Couldn't load messages.";
+      if (closed) messages = [];
     }
     paint();
   }
 
-  ctx.onCleanup(store.subscribeEvents((type) => { if (type === 'message.posted') load(); }));
+  ctx.onCleanup(store.subscribeEvents((type) => { if (type === 'message.posted' || type === store.RECONNECTED) load(); }));
   load();
   return { node };
 }

@@ -397,7 +397,7 @@
   // behind the boss gate plus blocked missions waiting on the boss's
   // answer. Critic-gate reviews wait on the critic; a block whose last
   // note says "waiting on: t-N" for a still-open mission waits on that
-  // mission (same rule as app/work/model.js).
+  // mission (same rule as app/desk/model.js).
   function blockedOnMission(t, byId) {
     var log = t.log || [], last = log[log.length - 1];
     var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
@@ -973,9 +973,15 @@
   }
   function connectSSE() {
     var conn = document.getElementById('conn');
+    var lost = false;
     BureauHub.events({
-      up: function () { conn.textContent = 'LIVE'; conn.classList.add('live'); },
-      down: function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); },
+      // Whatever happened while the stream was gone, nobody told the office.
+      up: function () {
+        conn.textContent = 'LIVE'; conn.classList.add('live');
+        if (lost) { lost = false; refreshState(); }
+      },
+      down: function () { lost = true; conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); },
+      ended: function () { localStorage.removeItem('bureau_token'); location.reload(); },
       wire: function (es) {
         ['agent.registered', 'agent.heartbeat', 'agent.removed',
          'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',

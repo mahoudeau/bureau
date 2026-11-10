@@ -2,13 +2,13 @@
 
 import * as api from '../api.js';
 import { h } from '../dom.js';
-import { crumbs, notFound, viewToggle } from '../brain/note-parts.js';
+import { crumbs, notFound, viewToggle } from '../notes/note-parts.js';
 import { errorState, toast } from '../ui.js';
 import { parseMarkdown, plainText, renderDocument } from '../markdown.js';
-import { baseOf, extOf, listFiles, notesFor, resolverFor, brainHref } from '../brain/data.js';
-import { fileBody, rawOf } from '../brain/file-view.js';
-import { folderRows, frame, section, summarize } from '../brain/listing.js';
-import { buildMargin, factLine } from '../brain/margin.js';
+import { baseOf, extOf, listFiles, notesFor, resolverFor, brainHref } from '../notes/data.js';
+import { fileBody, rawOf } from '../notes/file-view.js';
+import { folderRows, frame, section, summarize } from '../notes/listing.js';
+import { buildMargin, factLine } from '../notes/margin.js';
 
 async function copyText(text) {
   try {

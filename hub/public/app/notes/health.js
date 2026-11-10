@@ -85,7 +85,7 @@ export function healthLine(onCleanup) {
   }
 
   const off = store.subscribeEvents((type) => {
-    if (!EVENTS.test(type) || timer) return;
+    if ((type !== store.RECONNECTED && !EVENTS.test(type)) || timer) return;
     timer = setTimeout(() => { timer = null; load(); }, QUIET_MS);
   });
   onCleanup(() => { gone = true; off(); clearTimeout(timer); });

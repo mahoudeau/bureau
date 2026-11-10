@@ -483,13 +483,13 @@ const server = http.createServer(async (req, res) => {
       const t = store.findByViewToken(mView[1]);
       if (!t) return sendPage(res, 404, 'Not found', `${GONE_BAND}<p>No mission record behind this link.</p>`);
       const logs = (t.log || []).map(l =>
-        `<li><p class="om-meta">${escHtml(l.ts.slice(5, 16).replace('T', ' '))} <span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
+        `<li><p class="om-meta">${l.ts ? `${escHtml(String(l.ts).slice(5, 16).replace('T', ' '))} ` : ''}<span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
       const arts = (t.artifacts || []).map(a => {
         const linkable = a.url && /^https?:\/\//i.test(a.url);
         return `<li>${linkable ? `<a class="om-link" href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</li>`;
       }).join('');
       return sendPage(res, 200, `${escHtml(t.id)} · ${escHtml(t.title)}`,
-        `<p class="om-meta">P${t.priority}${t.assignee ? ' · ' + escHtml(t.assignee) : ''} · ${escHtml(t.project || '')}</p>` +
+        `<p class="om-meta">${[t.priority === undefined || t.priority === null ? '' : `P${escHtml(t.priority)}`, escHtml(t.assignee || ''), escHtml(t.project || '')].filter(Boolean).join(' · ')}</p>` +
         (t.body ? `<p class="lp-text">${escHtml(t.body)}</p>` : '') +
         (arts ? `<section class="lp-block"><h2 class="om-label">Artifacts</h2><ul class="lp-rows">${arts}</ul></section>` : '') +
         `<section class="lp-block"><h2 class="om-label">Log</h2>${logs ? `<ol class="lp-rows">${logs}</ol>` : '<p>No log yet.</p>'}</section>`, t.status);

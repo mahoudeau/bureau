@@ -1,6 +1,6 @@
 // test/security.test.js: the hub's security findings, one section each, every
 // one seen failing before its fix. Self-contained, zero deps, all data fake.
-// Starts its own hubs on ports 8201 to 8214, with scratch data dirs.
+// Starts its own hubs on ports 8201 to 8214 and 8216, with scratch data dirs.
 // Usage: node test/security.test.js
 'use strict';
 const fs = require('fs');
@@ -70,7 +70,7 @@ function rawRequest(port, text) {
 }
 const stop = async (h) => { h.proc.kill('SIGKILL'); await sleep(100); };
 const within = (ms, fn) => { const t0 = process.hrtime.bigint(); const r = fn(); return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r, ok: Number(process.hrtime.bigint() - t0) / 1e6 < ms }; };
-const STATIC = ['app/index.html', 'office.html', 'office-assets.html', 'app/hub-auth.js', 'app/work/parts.js', 'app/pages/mission.js', 'app/work/merge.js'];
+const STATIC = ['app/index.html', 'office.html', 'office-assets.html', 'app/hub-auth.js', 'app/desk/parts.js', 'app/pages/mission.js', 'app/desk/merge.js'];
 
 async function finding1() {
   console.log('1. a malformed request gets a 400 and the process lives');
@@ -446,9 +446,105 @@ async function finding4() {
   await stop(h);
 }
 
+// hub/public/app/api.js has no DOM to speak of, only location, so a stub is enough.
+async function redirects() {
+  console.log('10. sign-in and navigate stay on this hub');
+  const dir = fs.mkdtempSync(path.join(SCRATCH, 'api-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
+  fs.copyFileSync(path.join(ROOT, 'hub/public/app/api.js'), path.join(dir, 'api.js'));
+  const origin = 'https://hub.example';
+  globalThis.location = { origin, href: `${origin}/sign-in`, pathname: '/sign-in', search: '', hash: '' };
+  const api = await import(require('url').pathToFileURL(path.join(dir, 'api.js')).href);
+  const next = (target) => api.nextPath(`?next=${encodeURIComponent(target)}`);
+  for (const evil of ['/.//evil.example/phish', '/..//evil.example/phish', '/./\\evil.example/phish', '/.\\/evil.example', '//evil.example/phish', '/\\evil.example', '/\t/evil.example', 'https://evil.example/', 'javascript:alert(1)', '/sign-in', '/sign-in?next=/x']) {
+    check(`next=${JSON.stringify(evil)} lands on the Desk`, next(evil) === '/', next(evil));
+  }
+  check('a real path keeps its query and hash', next('/missions/t-1?a=1#b') === '/missions/t-1?a=1#b', next('/missions/t-1?a=1#b'));
+  check('a percent-escape that only looks like a slash stays a path', new URL(next('/%2f%2fevil.example'), origin).origin === origin, next('/%2f%2fevil.example'));
+  check('localPath is exported for the router', typeof api.localPath === 'function');
+  if (typeof api.localPath === 'function') {
+    for (const evil of ['https://evil.example/', '//evil.example/', '/.//evil.example/', 'javascript:alert(1)']) check(`localPath refuses ${evil}`, api.localPath(evil) === null, api.localPath(evil));
+    check('localPath keeps a relative path', api.localPath('/brain/a%20b.md?x=1') === '/brain/a%20b.md?x=1', api.localPath('/brain/a%20b.md?x=1'));
+  }
+  const router = fs.readFileSync(path.join(ROOT, 'hub/public/app/router.js'), 'utf8');
+  check('navigate goes through localPath', /export function navigate[\s\S]*?localPath\(to\)/.test(router));
+}
+
+// hub/public/app/hub-auth.js is a plain script. Run it against a fake page and
+// see what URL each kind of bytes ends up under.
+async function activeContent() {
+  console.log('11. nothing that can run script gets a same-origin blob: URL');
+  const vm = require('vm');
+  const made = [];
+  class HubURL extends URL { static createObjectURL(b) { made.push(b.type); return `blob:${TOKEN}/${made.length}`; } static revokeObjectURL() {} }
+  class FileReader { readAsDataURL(b) { b.arrayBuffer().then((buf) => { this.result = `data:ignored;base64,${Buffer.from(buf).toString('base64')}`; this.onload(); }, (e) => this.onerror(e)); } }
+  let observer = null;
+  class MutationObserver { constructor(fn) { observer = fn; } observe() {} }
+  const TYPES = { png: 'image/png', jpg: 'image/jpeg', pdf: 'application/pdf', svg: 'image/svg+xml', svgmixed: 'IMAGE/SVG+XML; charset=utf-8', html: 'text/html', bin: 'application/octet-stream', none: '' };
+  const fetchStub = async (url) => {
+    const type = TYPES[new HubURL(url, 'https://hub.example').searchParams.get('file').split('.').pop()];
+    return { ok: true, blob: async () => new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>x</script></svg>'], { type }) };
+  };
+  const sandbox = { URL: HubURL, Blob, FileReader, MutationObserver, fetch: fetchStub, Promise, Map, console, location: { href: 'https://hub.example/', hash: '' }, localStorage: { getItem: () => 'tok', setItem() {} }, history: { replaceState() {} }, document: { documentElement: {}, addEventListener() {}, hidden: false } };
+  sandbox.window = { addEventListener() {} };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'hub/public/app/hub-auth.js'), 'utf8'), sandbox);
+  const element = (tag, attr, url, extra = {}) => {
+    const attrs = { [attr]: url, ...extra };
+    return { attrs, tag,
+      matches(sel) { return sel.startsWith(tag) && sel.includes(attr); },
+      getAttribute(k) { return attrs[k] === undefined ? null : attrs[k]; },
+      hasAttribute(k) { return k in attrs; },
+      setAttribute(k, v) { attrs[k] = v; },
+      removeAttribute(k) { delete attrs[k]; },
+      querySelectorAll() { return []; } };
+  };
+  async function show(tag, file, extra) {
+    const attr = tag === 'img' ? 'data-secure-src' : 'data-secure-href';
+    const el = element(tag, attr, `/api/knowledge?file=${file}&raw=1`, extra);
+    observer([{ addedNodes: [el] }]);
+    await sleep(40);
+    return el;
+  }
+  const svg = await show('img', 'a.svg');
+  check('an SVG image is a data: URL', /^data:image\/svg\+xml;base64,/.test(svg.src || ''), svg.src);
+  const mixed = await show('img', 'b.svgmixed');
+  check('an SVG with odd casing and parameters is still only data:', /^data:image\/svg\+xml;base64,/.test(mixed.src || ''), mixed.src);
+  const link = await show('a', 'c.svg');
+  check('an SVG link is a data: URL', /^data:image\/svg\+xml;base64,/.test(link.href || ''), link.href);
+  check('an SVG link saves, since a tab will not open data:', link.attrs.download === 'c.svg', link.attrs);
+  const png = await show('img', 'd.png');
+  check('a PNG gets a blob: URL', /^blob:/.test(png.src || ''), png.src);
+  const pdf = await show('a', 'e.pdf');
+  check('a PDF gets a blob: URL', /^blob:/.test(pdf.href || ''), pdf.href);
+  for (const kind of ['html', 'bin', 'none']) {
+    const el = await show(kind === 'html' ? 'a' : 'img', `f.${kind}`);
+    check(`a ${kind} response gets no URL at all`, el.src === undefined && el.href === undefined, { src: el.src, href: el.href });
+  }
+  const saved = await show('a', 'g.html', { download: 'g.html' });
+  check('a download of anything else is octet-stream data', /^data:application\/octet-stream;base64,/.test(saved.href || ''), saved.href);
+  const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
+  check('every blob: URL made was an allowed type', made.length > 0 && made.every((t) => allowed.includes(t)), made);
+}
+
+async function missionRecord() {
+  console.log('12. the mission record page takes old records as they are');
+  const { dir } = hubEnv('f12', 8216);
+  const view = 'a'.repeat(32);
+  fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'data', 'state.json'), JSON.stringify({ schema_version: 1, seq: 2, agents: [], messages: [], log: [], projects: [{ id: 'general', label: 'General' }],
+    tasks: [{ id: 't-1', title: 'Old record', status: 'done', project: 'general', view_token: view, log: [{ by: 'someone', note: 'an entry with no timestamp' }, { ts: '2026-01-02T03:04:05.000Z', by: 'other', note: 'dated' }] }] }));
+  const h = await boot('f12', 8216);
+  const page = await h.api('GET', `/m/${view}`, undefined, { authorization: '' });
+  check('a log entry with no ts is not a 500', page.code === 200, page.code);
+  check('the entry is on the page', page.text.includes('an entry with no timestamp'), page.text.slice(0, 300));
+  check('a dated entry keeps its date', page.text.includes('01-02 03:04'), page.text.slice(0, 600));
+  check('a missing priority prints nothing', !page.text.includes('Pundefined') && !page.text.includes('Pnull'), page.text.slice(0, 600));
+  await stop(h);
+}
+
 async function main() {
   try {
-    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4 };
+    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4, redirects, activeContent, missionRecord };
     const only = process.env.SEC_ONLY; // SEC_ONLY=finding4 runs just that section
     for (const [name, fn] of Object.entries(all)) if (!only || only === name) await fn();
   } finally {

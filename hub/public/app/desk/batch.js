@@ -5,8 +5,9 @@
 // the box was ticked: a mission that changes drops out on its own.
 
 import { h, fill } from '../dom.js';
+import { statusWord } from '../status.js';
 import { toast } from '../ui.js';
-import { rule, refusalLine } from './parts.js';
+import { movedOn, rule, refusalLine } from './parts.js';
 
 function refusal(t) {
   if (!t) return 'no longer on the board';
@@ -46,8 +47,16 @@ export function batchBar({ getState, selection, onChange, onDone }) {
     }
     busy = true;
     node.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
-    const results = await Promise.all(ids.map((id) => rule(id, { status, note: note || (status === 'done' ? 'approved (batch)' : '') })
-      .then(() => null, (e) => `${id}: ${e.message}`)));
+    const results = await Promise.all(ids.map(async (id) => {
+      try {
+        const moved = status === 'done' ? await movedOn(id) : null;
+        if (moved) return `${id}: already moved on, it is ${statusWord(moved.status)} now.`;
+        await rule(id, { status, note: note || (status === 'done' ? 'approved (batch)' : '') });
+        return null;
+      } catch (e) {
+        return `${id}: ${e.message}`;
+      }
+    }));
     busy = false;
     const failures = results.filter(Boolean);
     const applied = ids.length - failures.length;

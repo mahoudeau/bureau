@@ -9,6 +9,14 @@ export const rule = (id, body) => api.patch(`/api/tasks/${encodeURIComponent(id)
 
 export const missionHref = (id) => `/missions/${encodeURIComponent(id)}`;
 
+// The mission as the hub holds it now, if it has left review. A tab can show a
+// live Approve on something that was ruled on hours ago, so approving asks first.
+export async function movedOn(id) {
+  const r = await api.get(`/api/tasks/${encodeURIComponent(id)}`);
+  const task = r && r.task;
+  return task && task.status !== 'review' ? task : null;
+}
+
 export function section(title, side, ...kids) {
   return h('section', { class: 'work-section' },
     h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, title), side || null),

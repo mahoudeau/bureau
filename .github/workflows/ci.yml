@@ -107,7 +107,7 @@ jobs:
         run: bash test/storage.sh
 
       # The security findings, each with a check seen failing before its fix.
-      # Self-contained: its own hubs on ports 8201 to 8214.
+      # Self-contained: its own hubs on ports 8201 to 8214 and 8216.
       - name: Security (test/security.test.js)
         run: node test/security.test.js
 

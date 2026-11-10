@@ -12,6 +12,9 @@ const EVENTS = [
   // Sent to the boss only. Other credentials on the stream never get these.
   'settings.changed', 'agent.roles_changed', 'token.minted', 'token.revoked',
 ];
+// Not from the hub: event subscribers get this when the stream comes back. Any
+// of them may have missed anything, so it means "reload what you hold".
+export const RECONNECTED = 'stream.reconnected';
 const POLL_MS = 60000;
 const QUIET_MS = 400;
 
@@ -70,9 +73,19 @@ export function start() {
     version = (h && h.version) || '';
     notify(liveSubs, live, version);
   }).catch(() => {});
+  let lost = false;
   window.BureauHub.events({
-    up() { setLive('live'); },
-    down() { setLive('polling'); },
+    up() {
+      setLive('live');
+      if (!lost) return;
+      // Nobody told us what happened while the stream was gone, so state is
+      // re-read and everything that only listens for events is told to reload.
+      lost = false;
+      refresh().catch(() => {});
+      notify(eventSubs, RECONNECTED, null);
+    },
+    down() { lost = true; setLive('polling'); },
+    ended: api.sessionEnded,
     wire(es) {
       for (const type of EVENTS) {
         es.addEventListener(type, (e) => {

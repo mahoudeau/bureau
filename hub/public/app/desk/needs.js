@@ -3,12 +3,12 @@
 // what to change.
 
 import { h, fill } from '../dom.js';
-import { swatch } from '../status.js';
+import { statusWord, swatch } from '../status.js';
 import * as store from '../store.js';
 import { relativeTime, toast } from '../ui.js';
 import { lastEntry, needsMe, oldestFirst, projectLabel, undecided } from './model.js';
 import { keyed } from './keyed.js';
-import { missionHref, refusalLine, remember, keep, rule } from './parts.js';
+import { missionHref, movedOn, refusalLine, remember, keep, rule } from './parts.js';
 import { batchBar } from './batch.js';
 
 function clipNote(text, n = 140) {
@@ -52,11 +52,13 @@ export function needsSection(ctx) {
     return newest ? rows.reverse() : rows;
   };
 
-  // After a ruling the next item comes up, ready for the keyboard.
+  // After a ruling the next item comes up, ready for the keyboard: on its title,
+  // never on its ruling button. Enter opens the mission. A held or repeated Enter
+  // must not walk down the queue approving everything it lands on.
   function focusNext(position) {
     const rows = [...list.querySelectorAll('.work-need')];
     const next = rows[Math.min(position, rows.length - 1)];
-    if (next) next.querySelector('.work-need-go').focus();
+    if (next) next.querySelector('.work-need-title').focus();
   }
 
   function row(t) {
@@ -71,6 +73,14 @@ export function needsSection(ctx) {
       refusal.clear();
       el.querySelectorAll('button, input').forEach((b) => { b.disabled = true; });
       try {
+        const moved = status === 'done' ? await movedOn(current.id) : null;
+        if (moved) {
+          toast(`${current.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
+          el.querySelectorAll('button, input').forEach((b) => { b.disabled = false; });
+          await store.refresh().catch(() => {});
+          focusNext(position);
+          return;
+        }
         await rule(current.id, { status, note });
       } catch (e) {
         el.querySelectorAll('button, input').forEach((b) => { b.disabled = false; });
@@ -116,7 +126,7 @@ export function needsSection(ctx) {
       tray.hidden = true;
       tray.replaceChildren();
       refusal.clear();
-      el.querySelector('.work-need-go').focus();
+      el.querySelector('.work-need-title').focus();
     }
 
     function paintHead(task) {

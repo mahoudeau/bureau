@@ -62,7 +62,25 @@ function collect() {
   return seen;
 }
 
+// Every path segment under a folder, files and folders alike.
+function segments(dir, prefix = '') {
+  const out = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    out.push(rel);
+    if (entry.isDirectory()) out.push(...segments(path.join(dir, entry.name), rel));
+  }
+  return out;
+}
+
 async function main() {
+  console.log('0. nothing under hub/public/ has a name the deploy deletes');
+  // The deploy's rsync --delete excludes data, brain, work and .env, unanchored,
+  // to protect production's data: a segment with one of those names never ships.
+  const forbidden = new Set(['brain', 'data', 'work', '.env']);
+  const banned = segments(PUBLIC).filter((p) => p.split('/').some((seg) => forbidden.has(seg)));
+  check('no path segment under hub/public/ is exactly brain, data, work or .env', banned.length === 0, banned);
+
   console.log('1. everything the shell and the stylesheets name');
   const assets = collect();
   check('the walk found the shell\'s assets', assets.has('/app/main.js') && assets.has('/omako-ds/tokens.css') && assets.has('/app/pages/mission.js'), [...assets.keys()]);

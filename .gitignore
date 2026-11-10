@@ -2,7 +2,6 @@ node_modules/
 .env
 data/
 brain/
-!hub/public/app/brain/
 hub/work/
 .DS_Store
 *.log

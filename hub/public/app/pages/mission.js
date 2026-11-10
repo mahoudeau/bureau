@@ -10,9 +10,9 @@ import { confirmButton, emptyState, relativeTime, timeTag, toast } from '../ui.j
 import {
   evidenceOf, findReplacement, goalChildren, goalRef, isGoal, isTerminal, nextNeeding, plainArtifacts,
   prOf, projectLabel, roundOf, waitingOnId,
-} from '../work/model.js';
-import { isTypingIn, keyed } from '../work/keyed.js';
-import { kbd, missionHref, refusalLine, rule, section, thumb } from '../work/parts.js';
+} from '../desk/model.js';
+import { isTypingIn, keyed } from '../desk/keyed.js';
+import { kbd, missionHref, movedOn, refusalLine, rule, section, thumb } from '../desk/parts.js';
 
 const BODY_FOLD_CHARS = 1400;
 const VERDICT_WORD = { approved: 'Accepted', rejected: 'Rejected', later: 'Later', proposed: 'To rule' };
@@ -116,8 +116,9 @@ export async function render(ctx) {
   const artifactsEl = h('div', { class: 'work-m-block' });
   const itemsCount = h('span', { class: 'om-meta' });
   const itemsList = h('ol', { class: 'work-items' });
+  const itemBatchEl = h('div', { class: 'work-batch work-item-batch', hidden: true });
   const itemsEl = h('div', { class: 'work-m-block', hidden: true },
-    section('Items', itemsCount, h('p', { class: 'work-keys om-meta' }, kbd('1-9'), ' pick ', kbd('A'), ' ', kbd('R'), ' ', kbd('L'), ' rule ', kbd('Enter'), ' save'), itemsList));
+    section('Items', itemsCount, h('p', { class: 'work-keys om-meta' }, kbd('1-9'), ' pick ', kbd('A'), ' ', kbd('R'), ' ', kbd('L'), ' rule ', kbd('Enter'), ' save'), itemsList, itemBatchEl));
   const logCount = h('span', { class: 'om-meta' });
   const logList = h('ol', { class: 'work-log' });
   const logEl = section('Log', logCount, logList);
@@ -285,9 +286,91 @@ export async function render(ctx) {
     paintDirty();
   }
 
+  // ---- Several items, one verdict ----
+  //
+  // The risk is the same as the Desk's batch: rubber-stamping. So it takes at
+  // least two items, lists their titles, and asks you to say you read them.
+  // Selection is checked against the live mission: an item that gets applied or
+  // disappears drops out on its own.
+
+  const picked = new Set();
+  let itemBatchSig = '';
+  const canRule = (it) => editableStatus() && !it.applied_at;
+
+  function paintItemBatch() {
+    const items = task.items || [];
+    for (const itemId of [...picked]) {
+      const it = items.find((x) => x.id === itemId);
+      if (!it || !canRule(it)) picked.delete(itemId);
+    }
+    const sig = JSON.stringify([...picked].map((itemId) => [itemId, (items.find((x) => x.id === itemId) || {}).title]));
+    if (sig === itemBatchSig) return;
+    itemBatchSig = sig;
+    if (!picked.size) { itemBatchEl.hidden = true; itemBatchEl.replaceChildren(); return; }
+    itemBatchEl.hidden = false;
+    if (picked.size < 2) { fill(itemBatchEl, h('p', { class: 'work-batch-why' }, 'Select one more to rule them together.')); return; }
+
+    const err = refusalLine();
+    const accept = h('button', { type: 'button', class: 'om-btn om-btn-primary', disabled: true, onClick: () => applyItemVerdict('approved', err) }, 'Accept all');
+    const reject = h('button', { type: 'button', class: 'om-btn', disabled: true, onClick: () => applyItemVerdict('rejected', err) }, 'Reject all');
+    const ack = h('input', { type: 'checkbox', onChange() { accept.disabled = !ack.checked; reject.disabled = !ack.checked; } });
+    fill(itemBatchEl,
+      h('p', { class: 'om-label' }, `One verdict for ${picked.size} items`),
+      h('ul', { class: 'work-batch-list' }, [...picked].map((itemId) => h('li', { class: 'om-clip' }, h('span', { class: 'om-strong' }, itemId), ' ', items.find((x) => x.id === itemId).title))),
+      h('label', { class: 'om-check' }, ack, `I read these ${picked.size} items`),
+      err.el,
+      h('div', { class: 'om-row' }, accept, reject,
+        h('button', { type: 'button', class: 'om-btn om-btn-ghost', onClick() { picked.clear(); paintItems(); } }, 'Clear')));
+  }
+
+  async function applyItemVerdict(verdict, err) {
+    if (busy) return;
+    const ids = [...picked];
+    err.clear();
+    busy = true;
+    itemBatchEl.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
+    let response;
+    try {
+      // A comment typed on one of these rides along. Drafts on the other items
+      // stay drafts: this verdict isn't about them.
+      response = await rule(task.id, {
+        verdicts: ids.map((itemId) => {
+          const comment = ((drafts.get(itemId) || {}).comment || '').trim();
+          return { id: itemId, verdict, ...(comment ? { comment } : {}) };
+        }),
+      });
+    } catch (e) {
+      busy = false;
+      itemBatchEl.querySelectorAll('button, input').forEach((el) => { el.disabled = false; });
+      if (!api.isAbort(e)) err.show(e.message);
+      return;
+    }
+    busy = false;
+    toast(`${verdict === 'approved' ? 'Accepted' : 'Rejected'}: ${ids.length} items.`);
+    picked.clear();
+    ids.forEach((itemId) => drafts.delete(itemId));
+    task = response.task;
+    memo.delete('bar');
+    paintPassive();
+    paintControls(true);
+    store.refresh().catch(() => {});
+  }
+
   function itemRow(it, index) {
     const editable = editableStatus() && !it.applied_at;
     const number = h('span', { class: 'work-item-no', 'aria-hidden': 'true' }, index < 9 ? String(index + 1) : '');
+    const pick = editable
+      ? h('label', { class: 'om-check work-item-pick' },
+        h('input', {
+          type: 'checkbox',
+          checked: picked.has(it.id),
+          'aria-label': `Select ${it.id} for a batch verdict`,
+          onChange(e) {
+            if (e.target.checked) picked.add(it.id); else picked.delete(it.id);
+            paintItemBatch();
+          },
+        }))
+      : null;
     const controls = editable
       ? h('div', { class: 'work-item-controls' },
         h('div', { class: 'om-seg', role: 'group', 'aria-label': `Verdict on ${it.id}` },
@@ -315,6 +398,7 @@ export async function render(ctx) {
       : (it.comment ? h('p', { class: 'work-item-said' }, h('span', { class: 'om-label' }, 'Comment '), it.comment) : null);
     return h('li', { class: 'work-item', dataset: { item: it.id } },
       h('div', { class: 'work-item-head' },
+        pick,
         number,
         h('span', { class: 'work-item-id om-strong' }, it.id),
         h('span', { class: 'work-item-title om-strong' }, it.title),
@@ -327,6 +411,7 @@ export async function render(ctx) {
   function paintItems() {
     const items = task.items || [];
     itemsEl.hidden = !items.length;
+    paintItemBatch();
     if (!items.length) return;
     const pinned = items.filter((it) => it.verdict === 'approved' && it.payload);
     itemsCount.textContent = pinned.length
@@ -340,6 +425,11 @@ export async function render(ctx) {
       create: ({ it, i }) => itemRow(it, i),
     });
     items.forEach((it) => paintRowState(it.id));
+    // Ticks follow the selection without rebuilding a row that didn't change.
+    [...itemsList.children].forEach((row) => {
+      const box = row.querySelector('.work-item-pick input');
+      if (box) box.checked = picked.has(row.dataset.item);
+    });
     if (cursor < 0 || cursor >= items.length) {
       const first = editable ? items.findIndex((it) => it.verdict === 'proposed' && !it.applied_at) : 0;
       setCursor(first < 0 ? 0 : first, { scroll: false });
@@ -365,7 +455,7 @@ export async function render(ctx) {
     fill(factsEl, h('dl', { class: 'work-facts' },
       fact('Status', statusLabel(task.status)),
       fact('Gate', task.gate || 'boss'),
-      fact('Priority', `P${task.priority}`),
+      fact('Priority', `P${task.priority ?? 3}`),
       fact('Project', h('a', { class: 'om-link', href: `/projects/${encodeURIComponent(task.project)}` }, projectLabel(state, task.project))),
       fact('Assignee', task.assignee || 'Nobody'),
       task.reserved_for ? fact('Reserved for', task.reserved_for) : null,
@@ -449,7 +539,23 @@ export async function render(ctx) {
 
   const currentNote = () => (noteInput ? noteInput.value.trim() : '');
 
-  function approve() {
+  async function approve() {
+    if (busy) return;
+    setBusy(true);
+    let moved;
+    try {
+      moved = await movedOn(task.id);
+    } catch (e) {
+      setBusy(false);
+      if (!api.isAbort(e)) refusal.show(e.message);
+      return;
+    }
+    setBusy(false);
+    if (moved) {
+      toast(`${moved.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
+      await adopt(moved);
+      return;
+    }
     decide({ status: 'done', note: currentNote() || 'approved' }, (t) => {
       toast(`${t.id}: ${t.status === 'approved' ? 'approved, back with its holder to apply.' : 'approved.'}`);
       const next = currentNext();

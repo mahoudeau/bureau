@@ -23,7 +23,7 @@ function listen() {
   if (listening) return;
   listening = true;
   store.subscribeEvents((type) => {
-    if (type === 'knowledge.written' || type === 'journal.captured' || type === 'project.renamed') forget();
+    if (type === 'knowledge.written' || type === 'journal.captured' || type === 'project.renamed' || type === store.RECONNECTED) forget();
   });
 }
 

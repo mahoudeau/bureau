@@ -5,9 +5,9 @@ import * as api from '../api.js';
 import * as store from '../store.js';
 import { h } from '../dom.js';
 import { emptyState, errorState } from '../ui.js';
-import { baseOf, brainHref, gitDate, listFiles, notesFor } from '../brain/data.js';
-import { healthLine } from '../brain/health.js';
-import { folderRows, frame, row, searchButton, section } from '../brain/listing.js';
+import { baseOf, brainHref, gitDate, listFiles, notesFor } from '../notes/data.js';
+import { healthLine } from '../notes/health.js';
+import { folderRows, frame, row, searchButton, section } from '../notes/listing.js';
 
 // /brain?claim=<id>, the link a claim's source makes. It goes to where the
 // claim or the journal record lives.
