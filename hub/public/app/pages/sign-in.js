@@ -11,7 +11,7 @@ export function render(ctx) {
     required: true,
   });
   const error = h('p', { class: 'om-field-error', role: 'alert', hidden: true });
-  const submit = h('button', { type: 'submit', class: 'om-btn om-btn-primary' }, 'Sign in');
+  const submit = h('button', { type: 'submit', class: 'om-btn om-btn-primary om-btn-block' }, 'Sign in');
 
   function fail(message) {
     error.textContent = message;
@@ -37,15 +37,20 @@ export function render(ctx) {
     ctx.navigate(api.nextPath(), { replace: true });
   }
 
-  // A second way in ("Sign in with OMAKO") goes under the form.
-  const page = h('div', { class: 'app-signin om-stack' },
-    h('h1', { class: 'om-display om-h1' }, 'Sign in'),
-    h('form', { onSubmit: signIn },
-      h('div', { class: 'om-field' },
-        h('label', { class: 'om-label', for: 'token' }, 'Hub token'),
-        input),
-      error,
-      submit));
+  // The sign-in template: one raised sheet in the middle of the ground. The
+  // OMAKO button goes above the form once Bureau signs in with OMAKO.
+  const page = h('div', { class: 'app-layers' },
+    h('div', { class: 'om-ground om-center app-signin' },
+      h('div', { class: 'om-center-sheet om-stack om-stack-4' },
+        h('section', { class: 'om-raised' },
+          h('header', { class: 'om-titlebar om-titlebar-active' }, h('h1', null, 'Sign in to Bureau')),
+          h('form', { class: 'om-raised-body om-stack om-stack-4', onSubmit: signIn },
+            h('div', { class: 'om-field' },
+              h('label', { class: 'om-field-label', for: 'token' }, 'Hub token'),
+              input),
+            error,
+            submit)),
+        h('p', { class: 'om-caption app-signin-note' }, 'Self-hosted. Your token stays on this server.'))));
   setTimeout(() => input.focus(), 0);
   return page;
 }
