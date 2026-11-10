@@ -1,4 +1,4 @@
-// Small shared pieces: toast, confirm in place, the states a page can be in, and
+// Small shared pieces: toast, confirm in a dialog, the states a page can be in, and
 // how the app writes time.
 
 import { h } from './dom.js';
@@ -15,45 +15,79 @@ export function toast(message, { ms = 4000 } = {}) {
   return el;
 }
 
-// A button that asks once, on itself: the first click arms it, the second acts.
-// It disarms after a few seconds or when focus leaves. onConfirm may be async;
-// if it throws, the message goes to a toast.
-export function confirmButton(label, onConfirm, { confirmLabel = 'Click again to confirm', class: cls = 'om-btn om-btn-danger', ms = 4000 } = {}) {
-  let armed = false;
-  let timer = null;
-  const disarm = () => {
-    armed = false;
-    clearTimeout(timer);
-    button.textContent = label;
-    button.removeAttribute('aria-live');
-    button.classList.remove('om-btn-primary');
+// A dialog that asks before something that can't be undone. The focus stays
+// inside it, Esc and the scrim close it, and focus goes back where it was.
+// onConfirm may be async; if it throws, the message shows in the dialog and it
+// stays open.
+let dialogSeq = 0;
+export function confirmDialog({ title, body = '', confirmLabel, keepLabel = 'Keep it', onConfirm }) {
+  const returnTo = document.activeElement;
+  const id = `app-confirm-${++dialogSeq}`;
+  const error = h('p', { class: 'om-field-error', role: 'alert', hidden: true });
+  let busy = false;
+  const close = () => {
+    scrim.remove();
+    if (returnTo && returnTo.isConnected) returnTo.focus();
   };
-  const button = h('button', {
+  const keep = h('button', { type: 'button', class: 'om-btn', onClick: close }, keepLabel);
+  const confirm = h('button', {
     type: 'button',
-    class: cls,
-    onBlur: disarm,
+    class: 'om-btn om-btn-primary',
     async onClick() {
-      if (!armed) {
-        armed = true;
-        button.textContent = confirmLabel;
-        button.setAttribute('aria-live', 'polite');
-        button.classList.add('om-btn-primary');
-        timer = setTimeout(disarm, ms);
-        return;
-      }
-      clearTimeout(timer);
-      button.disabled = true;
+      if (busy) return;
+      busy = true;
+      confirm.disabled = true;
+      error.hidden = true;
       try {
         await onConfirm();
       } catch (e) {
-        toast(e.message || 'That failed.');
-      } finally {
-        button.disabled = false;
-        disarm();
+        busy = false;
+        confirm.disabled = false;
+        error.textContent = e.message || 'That failed.';
+        error.hidden = false;
+        return;
       }
+      close();
     },
+  }, confirmLabel);
+  const scrim = h('div', {
+    class: 'om-scrim',
+    onClick(e) { if (e.target === scrim) close(); },
+    onKeydown(e) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        close();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const stops = [...scrim.querySelectorAll('button:not(:disabled), input')];
+      const first = stops[0];
+      const last = stops[stops.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    },
+  },
+  h('div', { class: 'om-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': id },
+    h('header', { class: 'om-dialog-head' },
+      h('h2', { id }, title),
+      h('button', { type: 'button', class: 'om-btn om-btn-icon om-btn-sm', 'aria-label': 'Close', onClick: close }, h('i', { class: 'om-icon om-i-x', 'aria-hidden': 'true' }))),
+    h('div', { class: 'om-dialog-body' }, body ? h('p', null, body) : null, error),
+    h('footer', { class: 'om-dialog-foot' }, keep, confirm)));
+  document.body.append(scrim);
+  keep.focus();
+  return close;
+}
+
+// A quiet button for something that can't be undone. It asks in a dialog, as
+// the system wants for every destructive action. The dialog title is the
+// question, and its main button repeats the action.
+export function confirmButton(label, onConfirm, { title = `${label}?`, body = '', confirmLabel = label, class: cls = 'om-btn om-btn-danger' } = {}) {
+  return h('button', {
+    type: 'button',
+    class: cls,
+    onClick: () => confirmDialog({ title, body, confirmLabel, onConfirm }),
   }, label);
-  return button;
 }
 
 export function emptyState(title, body, action) {
@@ -66,7 +100,7 @@ export function emptyState(title, body, action) {
 export function loadingState(label = 'Loading') {
   return h('div', { class: 'om-stack', role: 'status', 'aria-label': label },
     h('div', { class: 'om-wait' }),
-    h('p', { class: 'om-meta', style: 'margin:0' }, label));
+    h('p', { class: 'om-data-s' }, label));
 }
 
 // retry, when given, is a function called by a Retry button.
@@ -76,13 +110,6 @@ export function errorState(message, retry) {
     h('div', { class: 'om-banner-body om-spread' },
       h('span', null, message),
       retry ? h('button', { type: 'button', class: 'om-btn', onClick: retry }, 'Retry') : null));
-}
-
-// The title and "Not built yet". Delete it when the page is built.
-export function placeholder(title) {
-  return h('div', { class: 'app-page om-stack' },
-    h('h1', { class: 'om-display om-h1' }, title),
-    h('p', null, 'Not built yet'));
 }
 
 const UNITS = [[60, 'm'], [24, 'h'], [30, 'd']];

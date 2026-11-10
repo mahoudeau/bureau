@@ -82,7 +82,7 @@ function renameForm(ctx, state, project) {
     await store.refresh().catch(() => {});
     toast(`Now ${to}`);
     ctx.navigate(`/projects/${encodeURIComponent(to)}`, { replace: true });
-  }, { confirmLabel: 'Click again to rename' });
+  }, { title: `Rename ${project.id}?`, body: 'Missions, tokens and the brain folder move to the new id. Links to the old id stop working.', confirmLabel: 'Rename' });
 
   const sync = () => {
     const to = input.value.trim();
@@ -114,7 +114,7 @@ function deleteForm(ctx, project) {
     await store.refresh().catch(() => {});
     toast(`Deleted ${project.id}`);
     ctx.navigate('/projects', { replace: true });
-  }, { confirmLabel: 'Click again to delete' });
+  }, { title: `Delete ${project.id}?`, body: 'Closed missions keep its id, and its brain folder stays.', confirmLabel: 'Delete' });
 
   return h('div', { class: 'om-field' },
     h('span', { class: 'om-label' }, 'Delete'),

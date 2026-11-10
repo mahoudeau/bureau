@@ -252,7 +252,7 @@ export async function tokens(ctx, health) {
         { label: 'State', cell: tokenStatus },
         {
           label: 'Revoke',
-          cell: (t) => (t.revoked_at ? '' : confirmButton('Revoke', () => revoke(t), { confirmLabel: 'Click again to revoke' })),
+          cell: (t) => (t.revoked_at ? '' : confirmButton('Revoke', () => revoke(t), { title: `Revoke ${t.agent}'s token?`, body: 'It stops working at once. Mint a new one to replace it.' })),
         },
       ], sorted, (t) => (t.revoked_at ? 'set-muted' : null))
       : emptyState('No tokens yet', 'Mint one for each agent, with only the projects it needs.'));
@@ -330,7 +330,7 @@ export async function mcp(ctx, health) {
           data = { ...data, url: null };
           toast('Retired');
           setTimeout(paint, 0);
-        }, { confirmLabel: 'Click again to retire' })) : null,
+        }, { title: 'Retire the old MCP URL?', body: 'Any connector still using it stops working.', confirmLabel: 'Retire it' })) : null,
         error.el));
     } else {
       parts.push(section('The old MCP URL', null, h('p', null, 'Retired, or never issued. Nothing to do here.')));

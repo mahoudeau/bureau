@@ -68,7 +68,7 @@ function row(a, view) {
             held.length > 1 ? h('span', { class: 'om-meta' }, ` +${held.length - 1}`) : null]
           : h('span', { class: 'om-meta' }, a.activity || (state === 'offline' ? 'Away' : 'No mission'))),
       h('span', { class: 'om-meta set-seen' }, a.last_seen ? `Seen ${relativeTime(a.last_seen)}` : 'Never seen'),
-      confirmButton('Remove', () => view.remove(a), { confirmLabel: 'Click again', class: 'om-btn set-remove' })),
+      confirmButton('Remove', () => view.remove(a), { title: `Remove ${a.name}?`, body: 'It leaves the roster. Its missions and history stay, and it can register again.', class: 'om-btn set-remove' })),
     fleet.length ? h('ul', { class: 'set-fleet' }, fleet.map((f) => h('li', null,
       h('span', null, f.label), f.activity ? h('span', { class: 'om-meta' }, f.activity) : null))) : null,
     refused ? h('p', { class: 'om-field-error set-message', role: 'alert' }, refused) : null);
