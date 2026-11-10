@@ -544,7 +544,7 @@ export async function render(ctx) {
     setBusy(true);
     let moved;
     try {
-      moved = await movedOn(task.id);
+      moved = await movedOn(task.id, task.log ? task.log.length : null);
     } catch (e) {
       setBusy(false);
       if (!api.isAbort(e)) refusal.show(e.message);
@@ -552,7 +552,9 @@ export async function render(ctx) {
     }
     setBusy(false);
     if (moved) {
-      toast(`${moved.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
+      toast(moved.status === 'review'
+        ? `${moved.id} is back for a new round. Nothing was approved.`
+        : `${moved.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
       await adopt(moved);
       return;
     }

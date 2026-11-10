@@ -9,12 +9,17 @@ export const rule = (id, body) => api.patch(`/api/tasks/${encodeURIComponent(id)
 
 export const missionHref = (id) => `/missions/${encodeURIComponent(id)}`;
 
-// The mission as the hub holds it now, if it has left review. A tab can show a
-// live Approve on something that was ruled on hours ago, so approving asks first.
-export async function movedOn(id) {
+// The mission as the hub holds it now, if it isn't the review on screen: it left
+// review, or it left and came back as a new round since the log entry `seen`. A
+// tab can show a live Approve on something ruled on hours ago, so approving asks
+// first. A note added during the review doesn't count.
+export async function movedOn(id, seen) {
   const r = await api.get(`/api/tasks/${encodeURIComponent(id)}`);
   const task = r && r.task;
-  return task && task.status !== 'review' ? task : null;
+  if (!task) return null;
+  if (task.status !== 'review') return task;
+  const newRound = seen != null && (task.log || []).slice(seen).some((entry) => entry.to === 'review');
+  return newRound ? task : null;
 }
 
 export function section(title, side, ...kids) {

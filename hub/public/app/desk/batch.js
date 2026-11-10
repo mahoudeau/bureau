@@ -49,8 +49,9 @@ export function batchBar({ getState, selection, onChange, onDone }) {
     node.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
     const results = await Promise.all(ids.map(async (id) => {
       try {
-        const moved = status === 'done' ? await movedOn(id) : null;
-        if (moved) return `${id}: already moved on, it is ${statusWord(moved.status)} now.`;
+        const known = ((getState() && getState().tasks) || []).find((t) => t.id === id);
+        const moved = status === 'done' ? await movedOn(id, known && known.log ? known.log.length : null) : null;
+        if (moved) return moved.status === 'review' ? `${id}: back for a new round.` : `${id}: already moved on, it is ${statusWord(moved.status)} now.`;
         await rule(id, { status, note: note || (status === 'done' ? 'approved (batch)' : '') });
         return null;
       } catch (e) {

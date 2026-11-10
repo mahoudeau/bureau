@@ -73,9 +73,11 @@ export function needsSection(ctx) {
       refusal.clear();
       el.querySelectorAll('button, input').forEach((b) => { b.disabled = true; });
       try {
-        const moved = status === 'done' ? await movedOn(current.id) : null;
+        const moved = status === 'done' ? await movedOn(current.id, current.log ? current.log.length : null) : null;
         if (moved) {
-          toast(`${current.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
+          toast(moved.status === 'review'
+            ? `${current.id} is back for a new round. Nothing was approved.`
+            : `${current.id} already moved on: it is ${statusWord(moved.status)} now. Nothing was approved.`);
           el.querySelectorAll('button, input').forEach((b) => { b.disabled = false; });
           await store.refresh().catch(() => {});
           focusNext(position);

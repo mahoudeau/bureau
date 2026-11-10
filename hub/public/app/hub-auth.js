@@ -111,6 +111,9 @@
     window.addEventListener('pageshow', function (e) {
       if (e.persisted) connect();
     });
+    // Opened in a background tab there's no stream yet. Saying so now means the
+    // first up, when the tab is shown, catches up like any other.
+    if (document.hidden && opts.down) opts.down();
     connect();
   }
 
