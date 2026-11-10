@@ -147,11 +147,11 @@ function statusMark(status) {
   return `<span class="lp-status"><span class="om-swatch ${look.dither}" aria-hidden="true"></span><span class="om-label">${escHtml(look.word)}</span></span>`;
 }
 const PAGE_MARK = '<svg class="om-mark" viewBox="-1.5 -1.5 103 103" aria-hidden="true"><path fill-rule="evenodd" d="M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z"/></svg>';
-const GONE_BAND = '<div class="app-strip om-cross" aria-hidden="true"></div>';
+const GONE_BAND = '<div class="lp-strip om-cross" aria-hidden="true"></div>';
 const missionLine = task =>`<p class="lp-mission"><span class="om-strong">${escHtml(task.id)}</span> ${escHtml(task.title)}</p>`;
 // title is HTML already: callers escape what came from a mission.
 function sendPage(res, code, title, bodyHtml, status) {
-  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/aliases.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="om-strong lp-word">BUREAU</span></span>${status ? statusMark(status) : ''}</header><main class="lp-main"><h1 class="om-display lp-title">${title}</h1>${bodyHtml}</main><footer class="om-foot"><span>Built by OMAKO</span></footer></body></html>`;
+  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="lp-word">Bureau</span></span>${status ? statusMark(status) : ''}</header><div class="om-band"><div class="lp-inner"><h1 class="om-display-m lp-title">${title}</h1></div></div><main class="om-ground om-field-ground lp-ground"><div class="om-sheet om-sheet-body lp-main">${bodyHtml}</div></main><footer class="om-footline"><span>Built by OMAKO</span></footer></body></html>`;
   res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
   res.end(html);
 }
@@ -308,17 +308,17 @@ function reviewForm(task, action, token, err, kind) {
   // A payload is shown as it will be written: the exact text the boss approves.
   const payloadBlock = it => it.payload ? it.payload.ops.map(o =>
     `<p class="lp-op">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre class="lp-pre">${escHtml(o.content)}</pre>`).join('') +
-    `<p class="om-meta">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
+    `<p class="om-data-s">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
   const verdictChoice = (it, value, word) =>
     `<label class="lp-verdict"><input type="radio" name="v_${it.id}" value="${value}"${it.verdict === value ? ' checked' : ''}><span>${word}</span></label>`;
   const itemBlocks = (kind !== 'answer' && Array.isArray(task.items) && task.items.length)
     ? task.items.map(it => `<fieldset class="lp-item"><legend class="om-strong">${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre class="lp-pre">${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
-        it.verdict !== 'proposed' ? `<p class="om-meta">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
+        it.verdict !== 'proposed' ? `<p class="om-data-s">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
       }<div class="lp-verdicts">${verdictChoice(it, 'approved', 'Accept')}${verdictChoice(it, 'rejected', 'Reject')}${verdictChoice(it, 'later', 'Later')}</div><input class="om-input" type="text" name="c_${it.id}" aria-label="Comment on ${escHtml(it.id)}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
   const evidence = evidenceFiles(task).map(({ file, label }) =>
-    `<figure class="lp-figure"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"><figcaption class="om-meta">${escHtml(label)}</figcaption></figure>`).join('');
+    `<figure class="lp-figure"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"><figcaption class="om-data-s">${escHtml(label)}</figcaption></figure>`).join('');
   const returns = action === 'done' && kind !== 'answer' && task.after_approval === 'return'
     ? `<p class="lp-help">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
   const refused = err ? `<div class="om-banner" role="alert"><div class="om-banner-edge om-cross" aria-hidden="true"></div><div class="om-banner-body om-strong">${escHtml(err)}</div></div>` : '';
@@ -483,13 +483,13 @@ const server = http.createServer(async (req, res) => {
       const t = store.findByViewToken(mView[1]);
       if (!t) return sendPage(res, 404, 'Not found', `${GONE_BAND}<p>No mission record behind this link.</p>`);
       const logs = (t.log || []).map(l =>
-        `<li><p class="om-meta">${l.ts ? `${escHtml(String(l.ts).slice(5, 16).replace('T', ' '))} ` : ''}<span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
+        `<li><p class="om-data-s">${l.ts ? `${escHtml(String(l.ts).slice(5, 16).replace('T', ' '))} ` : ''}<span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
       const arts = (t.artifacts || []).map(a => {
         const linkable = a.url && /^https?:\/\//i.test(a.url);
         return `<li>${linkable ? `<a class="om-link" href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</li>`;
       }).join('');
       return sendPage(res, 200, `${escHtml(t.id)} · ${escHtml(t.title)}`,
-        `<p class="om-meta">${[t.priority === undefined || t.priority === null ? '' : `P${escHtml(t.priority)}`, escHtml(t.assignee || ''), escHtml(t.project || '')].filter(Boolean).join(' · ')}</p>` +
+        `<p class="om-data-s">${[t.priority === undefined || t.priority === null ? '' : `P${escHtml(t.priority)}`, escHtml(t.assignee || ''), escHtml(t.project || '')].filter(Boolean).join(' · ')}</p>` +
         (t.body ? `<p class="lp-text">${escHtml(t.body)}</p>` : '') +
         (arts ? `<section class="lp-block"><h2 class="om-label">Artifacts</h2><ul class="lp-rows">${arts}</ul></section>` : '') +
         `<section class="lp-block"><h2 class="om-label">Log</h2>${logs ? `<ol class="lp-rows">${logs}</ol>` : '<p>No log yet.</p>'}</section>`, t.status);

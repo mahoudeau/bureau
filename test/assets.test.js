@@ -50,7 +50,6 @@ function collect() {
   const add = (url, by) => { if (isAsset(url) && !seen.has(url)) { seen.set(url, by); queue.push(url); } };
   for (const url of urlsInHtml(read('app/index.html'))) add(url, 'app/index.html');
   add('/omako-ds/css/all.css', 'the link pages');
-  add('/app/css/aliases.css', 'the link pages');
   add('/app/css/link-pages.css', 'the link pages');
   while (queue.length) {
     const url = queue.shift();
