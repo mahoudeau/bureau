@@ -56,7 +56,9 @@
 /* Decision rows: a list of things waiting on someone. */
 .om-need { display: grid; grid-template-columns: 16px 14px minmax(0, 1fr) 208px; align-items: center; gap: var(--sp-3); min-height: 56px; padding: var(--sp-2) var(--sp-5); border-top: var(--rule-sm) solid var(--ink); background: var(--paper); }
 .om-titlebar-active + .om-need { border-top: 0; }
-.om-need-main { display: grid; gap: 1px; min-width: 0; }
+/* minmax(0, 1fr): an auto track grows to its longest line, and one long
+   question then runs under the buttons or widens the page. */
+.om-need-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; min-width: 0; }
 .om-need-title { display: flex; gap: var(--sp-2); align-items: baseline; min-width: 0; color: inherit; font: 600 14px/20px var(--font-text); text-decoration: none; }
 .om-need-title:hover .om-clip { background: var(--ink); color: var(--paper); }
 .om-need-id { flex: none; font: 700 12px/20px var(--font-mono); }

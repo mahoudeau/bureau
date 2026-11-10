@@ -11,7 +11,7 @@ function isCollapsed() {
 
 export function officeWindow() {
   const frameWrap = h('div', { class: 'work-office-frame' });
-  const toggle = h('button', { type: 'button', class: 'om-btn om-btn-ghost work-office-toggle' });
+  const toggle = h('button', { type: 'button', class: 'om-btn om-btn-ghost om-btn-sm work-office-toggle' });
 
   function setCollapsed(collapsed) {
     frameWrap.hidden = collapsed;
@@ -28,9 +28,9 @@ export function officeWindow() {
   toggle.addEventListener('click', () => setCollapsed(!frameWrap.hidden));
   setCollapsed(isCollapsed());
 
-  return h('section', { id: 'office-window', class: 'work-office', 'aria-label': 'The office' },
-    h('div', { class: 'work-office-head' },
-      h('a', { class: 'om-label work-office-title', href: '/office' }, 'Office'),
+  return h('section', { id: 'office-window', class: 'om-sheet work-office', 'aria-label': 'The office' },
+    h('header', { class: 'om-titlebar' },
+      h('h2', null, h('a', { class: 'work-office-title', href: '/office' }, 'Office')),
       toggle),
     frameWrap);
 }

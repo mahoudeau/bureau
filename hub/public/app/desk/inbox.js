@@ -9,7 +9,7 @@ import * as api from '../api.js';
 import * as store from '../store.js';
 import { emptyState, errorState, relativeTime, timeTag } from '../ui.js';
 import { keyed } from './keyed.js';
-import { missionHref, section } from './parts.js';
+import { missionHref, section, sideNote } from './parts.js';
 
 const READ_KEY = 'bureauV2.nmn.readMessageIds'; // v2's key, so what's read stays read
 const RECENT = 5;
@@ -36,7 +36,7 @@ export function inboxSection(ctx) {
   const read = loadRead();
   const expanded = new Set();
 
-  const count = h('span', { class: 'om-meta' });
+  const count = sideNote();
   const list = h('div', { class: 'work-list' });
   const foot = h('div', { class: 'work-foot' });
   const note = h('div', null);
@@ -66,14 +66,14 @@ export function inboxSection(ctx) {
       },
       h('span', { class: `om-swatch ${unread ? 'om-d100' : 'om-d0'}`, role: 'img', 'aria-label': unread ? 'Unread' : 'Read', title: unread ? 'Unread' : 'Read' }),
       h('span', { class: 'work-msg-text' }, open ? m.body : preview(m.body))),
-      h('div', { class: 'work-msg-meta om-meta' },
+      h('div', { class: 'work-msg-meta om-data-s' },
         h('span', { class: 'om-strong' }, m.from), timeTag(m.ts),
         m.task_id ? h('a', { class: 'om-link', href: missionHref(m.task_id), onClick: () => markRead(m.id) }, m.task_id) : null));
   }
 
   function paint() {
     const unread = messages.filter((m) => !read.has(m.id)).length;
-    count.textContent = messages.length ? `${unread} unread of ${messages.length}` : '';
+    count.textContent = messages.length ? (unread ? `${unread} unread` : `${messages.length}`) : '';
     if (failed) {
       fill(note, errorState(failed, load));
       keyed(list, [], { key: (m) => m.id, create: row });
@@ -98,7 +98,7 @@ export function inboxSection(ctx) {
     if (unread) {
       kids.push(h('button', {
         type: 'button',
-        class: 'om-btn om-btn-ghost',
+        class: 'om-btn om-btn-ghost om-btn-sm',
         onClick() {
           messages.forEach((m) => read.add(m.id));
           saveRead(read);
@@ -109,7 +109,7 @@ export function inboxSection(ctx) {
     if (messages.length > RECENT) {
       kids.push(h('button', {
         type: 'button',
-        class: 'om-btn om-btn-ghost',
+        class: 'om-btn om-btn-ghost om-btn-sm',
         onClick() { showAll = !showAll; paint(); },
       }, showAll ? 'Recent only' : `Show all ${messages.length}`));
     }

@@ -24,15 +24,15 @@ function agentRow(a) {
       h('span', { class: `om-swatch ${look.dither}`, role: 'img', 'aria-label': look.word, title: look.word }),
       h('span', { class: 'om-strong om-clip' }, a.name),
       h('span', { class: 'om-tag' }, roleOf(a)),
-      h('span', { class: 'work-agent-doing om-meta om-clip' }, a.activity || look.word.toLowerCase())),
-    fleet.length ? h('div', { class: 'work-fleet om-meta' }, fleet.map((s) => h('div', { class: 'om-clip' }, s.label, s.activity ? `: ${s.activity}` : ''))) : null);
+      h('span', { class: 'work-agent-doing om-data-s om-clip' }, a.activity || look.word.toLowerCase())),
+    fleet.length ? h('div', { class: 'work-fleet om-data-s' }, fleet.map((s) => h('div', { class: 'om-clip' }, s.label, s.activity ? `: ${s.activity}` : ''))) : null);
 }
 
 export function teamSection() {
   const list = h('div', { class: 'work-list' });
   const quiet = h('div', null);
   const foot = h('div', { class: 'work-foot' });
-  const node = section('Team', h('a', { class: 'om-meta om-link', href: '/agents' }, 'All agents'), quiet, list, foot);
+  const node = section('Team', h('a', { class: 'om-link om-caption', href: '/agents' }, 'All agents'), quiet, list, foot);
 
   function paint(state) {
     const all = (state && state.agents) || [];

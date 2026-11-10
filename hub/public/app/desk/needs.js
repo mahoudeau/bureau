@@ -1,6 +1,7 @@
-// Needs me now: solid ink rows, ruled where they stand. Approve needs one click.
-// Send back and Answer open a note on the row, because the agent needs to know
-// what to change.
+// Needs me now: the page's one raised sheet, rows ruled where they stand.
+// Approve needs one click. Send back and Answer open a note on the row, because
+// the agent needs to know what to change. Only the next decision's button is
+// solid: the ink goes to one place.
 
 import { h, fill } from '../dom.js';
 import { statusWord, swatch } from '../status.js';
@@ -22,11 +23,11 @@ export function needsSection(ctx) {
   const selection = new Set();
   const trays = new Map(); // id -> open tray kind, survives a repaint
 
-  const hint = h('span', { class: 'work-needs-hint', hidden: true }, 'Tick two or more to rule on them together');
-  const count = h('span', { class: 'work-needs-count om-strong' });
+  const hint = h('span', { class: 'om-caption work-needs-hint', hidden: true }, 'Tick two or more to rule on them together');
+  const count = h('span', { class: 'om-count work-needs-count' });
   const sort = h('button', {
     type: 'button',
-    class: 'om-btn om-btn-ghost',
+    class: 'om-btn om-btn-ghost om-btn-sm',
     onClick() {
       newest = !newest;
       keep('deskNewestFirst', newest);
@@ -42,10 +43,10 @@ export function needsSection(ctx) {
     onDone: () => store.refresh().catch(() => {}),
   });
 
-  const node = h('section', { class: 'work-needs', 'aria-label': 'Needs me now' },
-    h('div', { class: 'work-needs-head' },
-      h('h1', { class: 'om-display om-h2' }, 'Needs me now'),
-      h('div', { class: 'om-cluster' }, hint, count, sort)),
+  const node = h('section', { class: 'om-raised work-needs', 'aria-labelledby': 'work-needs-title' },
+    h('header', { class: 'om-titlebar om-titlebar-active work-needs-head' },
+      h('h1', { id: 'work-needs-title' }, 'Needs me now'),
+      h('div', { class: 'om-cluster om-cluster-3' }, hint, sort, count)),
     clear, list, batch.node);
 
   const visible = () => {
@@ -64,9 +65,9 @@ export function needsSection(ctx) {
 
   function row(t) {
     const refusal = refusalLine();
-    const head = h('div', { class: 'work-need-head' });
+    const head = h('div', { class: 'om-need work-need-head' });
     const tray = h('form', { class: 'work-need-tray', hidden: true });
-    const el = h('div', { class: 'work-need om-alert-row', dataset: { id: t.id } }, head, tray, refusal.el);
+    const el = h('div', { class: 'work-need', dataset: { id: t.id } }, head, tray, refusal.el);
     let current = t;
 
     async function decide(status, note, button) {
@@ -121,6 +122,8 @@ export function needsSection(ctx) {
         decide('queued', note, send);
       };
       tray.hidden = false;
+      el.classList.remove('is-next');
+      el.querySelectorAll('.work-need-go').forEach((b) => b.classList.remove('om-btn-primary'));
       input.focus();
     }
 
@@ -129,6 +132,7 @@ export function needsSection(ctx) {
       tray.hidden = true;
       tray.replaceChildren();
       refusal.clear();
+      paint();
       el.querySelector('.work-need-title').focus();
     }
 
@@ -137,11 +141,13 @@ export function needsSection(ctx) {
       const open = undecided(task).length;
       const review = task.status === 'review';
       const last = lastEntry(task);
+      // The main action goes solid only on the first row, set in paint().
+      const go = ['om-btn', 'om-btn-sm', 'work-need-go', el.classList.contains('is-next') && 'om-btn-primary'];
       const actions = [];
-      if (review && open) actions.push(h('a', { class: 'om-btn om-btn-primary work-need-go', href: missionHref(task.id) }, 'Review'));
-      if (review && !open) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-primary work-need-go', onClick: (e) => decide('done', 'approved', e.currentTarget) }, 'Approve'));
-      if (review) actions.push(h('button', { type: 'button', class: 'om-btn', onClick: () => openTray('back') }, 'Send back'));
-      if (!review) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-primary work-need-go', onClick: () => openTray('answer') }, 'Answer'));
+      if (review && open) actions.push(h('a', { class: go, href: missionHref(task.id) }, 'Review'));
+      if (review && !open) actions.push(h('button', { type: 'button', class: go, onClick: (e) => decide('done', 'approved', e.currentTarget) }, 'Approve'));
+      if (review) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-sm', onClick: () => openTray('back') }, 'Send back'));
+      if (!review) actions.push(h('button', { type: 'button', class: go, onClick: () => openTray('answer') }, 'Answer'));
 
       fill(head,
         // A box only where a batch would take it. A question needs its own
@@ -159,16 +165,16 @@ export function needsSection(ctx) {
             }))
           : h('span', { class: 'work-need-pick', 'aria-hidden': 'true' }),
         swatch(task.status),
-        h('div', { class: 'work-need-main' },
-          h('a', { class: 'work-need-title', href: missionHref(task.id), title: task.title },
-            h('span', { class: 'work-need-id' }, task.id), h('span', { class: 'work-need-text' }, task.title)),
-          h('div', { class: 'work-need-meta om-meta' },
+        h('div', { class: 'om-need-main work-need-main' },
+          h('a', { class: 'om-need-title work-need-title', href: missionHref(task.id), title: task.title },
+            h('span', { class: 'om-need-id' }, task.id), h('span', { class: 'om-clip work-need-text' }, task.title)),
+          h('div', { class: 'om-need-meta work-need-meta' },
             h('span', null, projectLabel(store.getState(), task.project)),
             task.assignee ? h('span', null, task.assignee) : null,
             h('span', null, relativeTime(task.created_at)),
             open ? h('span', { class: 'om-tag' }, `${open} to rule`) : null,
             !review && last ? h('span', { class: 'work-need-asked om-clip', title: last.note }, clipNote(last.note)) : null)),
-        h('div', { class: 'work-need-actions' }, actions));
+        h('div', { class: 'om-actions work-need-actions' }, actions));
     }
 
     el.paintHead = paintHead;
@@ -185,7 +191,9 @@ export function needsSection(ctx) {
     // A row that stopped being batchable has lost its box, so it can't stay ticked.
     for (const t of rows) if (batchRefusal(t)) selection.delete(t.id);
     hint.hidden = rows.filter((t) => !batchRefusal(t)).length < 2;
-    count.textContent = n ? `${n} waiting` : '';
+    count.textContent = n ? String(n) : '';
+    count.hidden = !n;
+    count.setAttribute('aria-label', `${n} waiting`);
     sort.textContent = newest ? 'Newest first' : 'Oldest first';
     sort.hidden = n < 2;
     clear.hidden = n > 0;
@@ -198,6 +206,11 @@ export function needsSection(ctx) {
       // Ticks follow the selection without rebuilding the row under the cursor.
       const box = el.querySelector('.work-need-pick input');
       if (box) box.checked = selection.has(rows[i].id);
+      // One solid button on the sheet: the next decision's.
+      // With a note open, the note's own button is the decision instead.
+      const solid = i === 0 && !trays.has(rows[i].id);
+      el.classList.toggle('is-next', solid);
+      el.querySelectorAll('.work-need-go').forEach((b) => b.classList.toggle('om-btn-primary', solid));
     });
     batch.paint();
     ctx.title(n ? `Desk (${n})` : 'Desk');

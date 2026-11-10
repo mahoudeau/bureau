@@ -7,7 +7,7 @@ import { swatch, statusWord } from '../status.js';
 import { emptyState, relativeTime, timeTag } from '../ui.js';
 import { blockedOnMission, byId, byPriority, projectLabel } from '../desk/model.js';
 import { keyed } from '../desk/keyed.js';
-import { missionHref, section } from '../desk/parts.js';
+import { missionHref, section, sideNote } from '../desk/parts.js';
 import { needsSection } from '../desk/needs.js';
 import { mergeSection } from '../desk/merge.js';
 import { inboxSection } from '../desk/inbox.js';
@@ -42,19 +42,18 @@ function inFlightOf(state) {
 }
 
 function flightRow(t) {
-  return h('a', { class: 'om-list-row work-row', href: missionHref(t.id) },
+  return h('a', { class: 'om-row work-row', href: missionHref(t.id) },
     swatch(t.status),
-    h('span', { class: 'work-row-word om-meta' }, t.status === 'review' ? 'With critic' : statusWord(t.status)),
-    h('span', { class: 'work-row-id om-strong' }, t.id),
-    h('span', { class: 'om-grow om-clip' }, t.title),
-    t.assignee ? h('span', { class: 'work-row-who om-meta om-clip' }, t.assignee) : null,
-    h('span', { class: 'work-row-age om-meta' }, relativeTime(t.created_at)));
+    h('span', { class: 'om-row-id' }, t.id),
+    h('span', { class: 'om-row-title' }, t.title),
+    h('span', { class: 'om-row-meta work-row-word' }, t.status === 'review' ? 'With critic' : statusWord(t.status)),
+    h('span', { class: 'om-row-meta work-row-who' }, [t.assignee, relativeTime(t.created_at)].filter(Boolean).join(', ')));
 }
 
 function flightGroup(group) {
   const list = h('div', { class: 'om-list' });
   const el = h('div', { class: 'work-group' },
-    h('div', { class: 'work-group-head om-label' }, h('span', null, group.label), h('span', null, group.tasks.length)),
+    h('div', { class: 'om-group-head' }, h('span', { class: 'om-label' }, group.label), h('span', { class: 'om-data-s' }, String(group.tasks.length))),
     list);
   el.fillRows = (tasks) => keyed(list, tasks, {
     key: (t) => t.id,
@@ -66,7 +65,7 @@ function flightGroup(group) {
 }
 
 function inFlightSection() {
-  const count = h('span', { class: 'om-meta' });
+  const count = sideNote();
   const groups = h('div', { class: 'work-groups' });
   const quiet = h('div', null);
   const node = section('In flight', count, quiet, groups);
@@ -99,20 +98,20 @@ function eventRow(ev) {
   const target = (/^t-\d+$/.test(ev.id || '') && ev.id) || ev.file || ev.to || '';
   const label = ev.title || ev.note || ev.body || '';
   const inner = [
-    timeTag(ev.ts),
-    h('span', { class: 'work-event-what om-clip' },
+    h('span', { class: 'om-row-meta work-event-time' }, timeTag(ev.ts)),
+    h('span', { class: 'om-row-title work-event-what' },
       actor ? h('span', { class: 'om-strong' }, actor) : null, ` ${VERBS[ev.type]}${target ? ` ${target}` : ''}`,
       label ? h('span', { class: 'work-event-label' }, ` ${label}`) : null),
   ];
   return ev.id && /^t-\d+$/.test(ev.id)
-    ? h('a', { class: 'om-list-row work-event', href: missionHref(ev.id) }, inner)
-    : h('div', { class: 'work-event work-event-plain' }, inner);
+    ? h('a', { class: 'om-row work-event', href: missionHref(ev.id) }, inner)
+    : h('div', { class: 'om-row om-row-static work-event' }, inner);
 }
 
 function recentSection() {
   const list = h('div', { class: 'om-list' });
   const quiet = h('div', null);
-  const node = section('Recent', h('a', { class: 'om-meta om-link', href: '/activity' }, 'All activity'), quiet, list);
+  const node = section('Recent', h('a', { class: 'om-link om-caption', href: '/activity' }, 'All activity'), quiet, list);
 
   function paint(state) {
     const events = (state.log || []).filter((ev) => VERBS[ev.type]).slice(-25).reverse();
@@ -139,11 +138,13 @@ export async function render(ctx) {
   const inbox = inboxSection(ctx);
   const team = teamSection();
 
-  const page = h('div', { class: 'app-page work-page work-desk' },
-    needs.node,
-    h('div', { class: 'work-cols' },
-      h('div', { class: 'work-main' }, flight.node, merge.node, recent.node),
-      h('aside', { class: 'work-rail', 'aria-label': 'The office, inbox and team' }, officeWindow(), inbox.node, team.node)));
+  // The layers: one raised sheet for the decisions, plain sheets for what's
+  // moving, and the rail for what you glance at.
+  const page = h('div', { class: 'work-page work-desk' },
+    h('div', { class: 'om-ground om-field-ground' },
+      h('div', { class: 'om-workspace' },
+        h('div', { class: 'om-work work-main' }, needs.node, flight.node, merge.node, recent.node),
+        h('aside', { class: 'om-rail work-rail', 'aria-label': 'The office, inbox and team' }, officeWindow(), inbox.node, team.node))));
 
   ctx.onCleanup(store.subscribe((state) => {
     needs.paint();

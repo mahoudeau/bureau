@@ -22,11 +22,15 @@ export async function movedOn(id, seen) {
   return newRound ? task : null;
 }
 
+// A sheet with its title bar. In the rail the bar turns into a small mono label.
 export function section(title, side, ...kids) {
-  return h('section', { class: 'work-section' },
-    h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, title), side || null),
+  return h('section', { class: 'om-sheet work-section' },
+    h('header', { class: 'om-titlebar' }, h('h2', null, title), side || null),
     ...kids);
 }
+
+// The quiet count or note at the end of a title bar.
+export const sideNote = (text = '') => h('span', { class: 'om-data-s' }, text);
 
 export const kbd = (key) => h('kbd', { class: 'om-kbd work-kbd' }, key);
 

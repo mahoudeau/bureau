@@ -17,7 +17,7 @@ import { statusWord, swatch } from '../status.js';
 import { emptyState } from '../ui.js';
 import { evidenceOf, prOf } from './model.js';
 import { keyed } from './keyed.js';
-import { missionHref, section, thumb } from './parts.js';
+import { missionHref, section, sideNote, thumb } from './parts.js';
 
 const OPEN_TTL = 120000;
 const TICK_MS = 60000;
@@ -131,7 +131,7 @@ function row(o) {
       swatch(o.task.status),
       h('a', { class: 'work-pr-title om-clip om-grow', href: missionHref(o.task.id) }, h('span', { class: 'om-strong' }, o.task.id), ' ', o.task.title),
       o.state === 'unconfirmed' ? h('span', { class: 'om-tag', title: "GitHub hasn't answered yet, so this PR might already be closed." }, 'Unconfirmed') : null,
-      o.loop ? h('span', { class: 'om-meta' }, o.task.status === 'review' ? `Review, gate ${o.task.gate}` : statusWord(o.task.status)) : null),
+      o.loop ? h('span', { class: 'om-data-s' }, o.task.status === 'review' ? `Review, gate ${o.task.gate}` : statusWord(o.task.status)) : null),
     evidenceFold(o.task));
 }
 
@@ -139,7 +139,7 @@ const SIG = (o) => [o.task.id, o.task.title, o.task.status, o.task.gate, o.state
 const KEY = (o) => o.task.id;
 
 export function mergeSection(ctx, getState) {
-  const count = h('span', { class: 'om-meta' });
+  const count = sideNote();
   const ready = h('div', { class: 'work-list' });
   const loopRows = h('div', { class: 'work-list' });
   const loopSummary = h('summary');
