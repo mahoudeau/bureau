@@ -5,7 +5,7 @@ import { h } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { confirmButton, emptyState, relativeTime } from '../ui.js';
-import { livePainter, pageHead, refusal, section } from '../setup/kit.js';
+import { livePainter, pageHead, refusal, section, setupPage } from '../setup/kit.js';
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -59,18 +59,18 @@ function row(a, view) {
       livenessMark(state),
       h('span', { class: 'set-agent-name' },
         h('span', { class: 'om-strong' }, a.name),
-        h('span', { class: 'om-meta' }, a.kind || '')),
+        h('span', { class: 'om-data-s' }, a.kind || '')),
       h('span', { class: 'om-cluster om-cluster-3 set-tags' }, tags.map((t) => h('span', { class: 'om-tag' }, t))),
       h('span', { class: 'set-agent-work' },
         held.length
           ? [h('a', { class: 'om-link', href: `/missions/${encodeURIComponent(held[0].id)}`, dataset: { k: `${a.name}-m` } }, held[0].id),
             ' ', h('span', { class: 'set-held' }, held[0].title),
-            held.length > 1 ? h('span', { class: 'om-meta' }, ` +${held.length - 1}`) : null]
-          : h('span', { class: 'om-meta' }, a.activity || (state === 'offline' ? 'Away' : 'No mission'))),
-      h('span', { class: 'om-meta set-seen' }, a.last_seen ? `Seen ${relativeTime(a.last_seen)}` : 'Never seen'),
-      confirmButton('Remove', () => view.remove(a), { title: `Remove ${a.name}?`, body: 'It leaves the roster. Its missions and history stay, and it can register again.', class: 'om-btn set-remove' })),
+            held.length > 1 ? h('span', { class: 'om-data-s' }, ` +${held.length - 1}`) : null]
+          : h('span', { class: 'om-data-s' }, a.activity || (state === 'offline' ? 'Away' : 'No mission'))),
+      h('span', { class: 'om-data-s set-seen' }, a.last_seen ? `Seen ${relativeTime(a.last_seen)}` : 'Never seen'),
+      confirmButton('Remove', () => view.remove(a), { title: `Remove ${a.name}?`, body: 'It leaves the roster. Its missions and history stay, and it can register again.', class: 'om-btn om-btn-danger set-remove' })),
     fleet.length ? h('ul', { class: 'set-fleet' }, fleet.map((f) => h('li', null,
-      h('span', null, f.label), f.activity ? h('span', { class: 'om-meta' }, f.activity) : null))) : null,
+      h('span', null, f.label), f.activity ? h('span', { class: 'om-data-s' }, f.activity) : null))) : null,
     refused ? h('p', { class: 'om-field-error set-message', role: 'alert' }, refused) : null);
 }
 
@@ -118,8 +118,7 @@ export async function render(ctx) {
       if (api.isAbort(err)) return;
       errors.set(a.name, refusal(err));
     }
-    // The button still holds its armed state while this runs, so wait for it.
-    setTimeout(() => painter.paint(), 0);
+    painter.paint();
   }
 
   const view = () => ({
@@ -136,7 +135,7 @@ export async function render(ctx) {
   ctx.onCleanup(store.subscribe((next) => { state = next; painter.paint(); }));
   ctx.onCleanup(painter.stop);
 
-  return h('div', { class: 'app-page set-page' },
+  return setupPage(
     pageHead('Agents', h('a', { class: 'om-btn', href: '/settings?tab=roles' }, 'Roles')),
     list);
 }

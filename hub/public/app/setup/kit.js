@@ -16,22 +16,35 @@ export function refusal(err) {
 }
 
 export function pageHead(title, ...right) {
-  return h('div', { class: 'set-head' },
-    h('h1', { class: 'om-display om-h2 set-title' }, title),
+  return h('div', { class: 'om-band-main set-head' },
+    h('h1', { class: 'om-display-m set-title' }, title),
     right.length ? h('div', { class: 'om-cluster om-cluster-3' }, right) : null);
 }
 
 export function crumbs(...items) {
   return h('nav', { 'aria-label': 'Breadcrumb' },
     h('ol', { class: 'om-crumbs' }, items.map(([text, href]) => h('li', null,
-      href ? h('a', { class: 'om-link', href }, text) : text))));
+      href ? h('a', { href }, text) : text))));
+}
+
+// The page's layers. The breadcrumb and the head at the start go in the band,
+// everything after them sits on the ground.
+const inBand = (el) => el instanceof Element && (el.tagName === 'NAV' || el.classList.contains('set-head') || el.classList.contains('set-band'));
+export function setupPage(...children) {
+  const all = children.flat().filter(Boolean);
+  let i = 0;
+  while (i < all.length && inBand(all[i])) i += 1;
+  const band = all.slice(0, i);
+  return h('div', { class: 'app-layers set-page' },
+    band.length ? h('div', { class: 'om-band' }, h('div', { class: 'om-band-inner om-stack om-stack-3' }, band)) : null,
+    h('div', { class: 'om-ground om-field-ground' }, h('div', { class: 'om-container set-body' }, all.slice(i))));
 }
 
 export function section(title, meta, ...children) {
-  return h('section', { class: 'set-section' },
-    h('div', { class: 'om-bar' },
-      h('h2', { class: 'om-label' }, title),
-      meta ? h('span', { class: 'om-meta' }, meta) : null),
+  return h('section', { class: 'om-sheet set-section' },
+    h('header', { class: 'om-titlebar' },
+      h('h2', null, title),
+      meta ? h('span', { class: 'om-data-s' }, meta) : null),
     children);
 }
 
@@ -42,11 +55,13 @@ export function field(label, control, hint) {
   control.id = id;
   let help = null;
   if (hint) {
-    help = h('p', { class: 'om-meta set-hint', id: `${id}-hint` }, hint);
+    help = h('p', { class: 'om-field-help set-hint', id: `${id}-hint` }, hint);
     control.setAttribute('aria-describedby', `${id}-hint`);
   }
+  // A select gets the system's arrow.
+  const shown = control.tagName === 'SELECT' ? h('span', { class: 'om-select-wrap' }, control) : control;
   return h('div', { class: 'om-field' },
-    h('label', { class: 'om-label', for: id }, label), control, help);
+    h('label', { class: 'om-field-label', for: id }, label), shown, help);
 }
 
 // One line that says what went wrong, in place. Hidden until it has something.
@@ -128,7 +143,7 @@ export function meter({ done, total, value }) {
   const label = total ? `${done} of ${total} done` : 'No missions yet';
   return h('span', { class: 'set-meter' },
     h('span', { class: 'om-meter', style: { '--value': value }, role: 'img', 'aria-label': label }, h('i')),
-    h('span', { class: 'om-meta set-count' }, label));
+    h('span', { class: 'om-data-s set-count' }, label));
 }
 
 const ORDER = ['blocked', 'review', 'approved', 'in_progress', 'claimed', 'queued', 'done', 'failed', 'discarded'];
@@ -139,28 +154,23 @@ const rank = (t) => {
 export const byStatus = (a, b) => rank(a) - rank(b) || newestFirst(a, b);
 
 export function missionRow(t, extra) {
-  return h('a', { class: 'om-list-row set-mission', href: `/missions/${encodeURIComponent(t.id)}`, dataset: { k: t.id } },
+  return h('a', { class: 'om-row set-mission', href: `/missions/${encodeURIComponent(t.id)}`, dataset: { k: t.id } },
     h('span', { class: 'set-status' }, statusLabel(t.status)),
-    h('span', { class: 'set-id om-meta' }, t.id),
+    h('span', { class: 'set-id om-row-id' }, t.id),
     h('span', { class: 'set-name' }, t.title),
-    h('span', { class: 'om-meta set-by' }, t.assignee || extra || ''),
-    h('span', { class: 'om-meta set-age' }, timeTag(t.created_at)));
+    h('span', { class: 'om-data-s set-by' }, t.assignee || extra || ''),
+    h('span', { class: 'om-data-s set-age' }, timeTag(t.created_at)));
 }
 
 // ---- Live lists ----
 
-// Repaints target from build() when the result differs. Leaves an armed confirm
-// alone and puts focus back where it was, so a heartbeat can't take the row out
-// from under a click.
+// Repaints target from build() when the result differs, and puts focus back
+// where it was, so a heartbeat can't take the row out from under a click.
 export function livePainter(target, build) {
   let shown = null;
   let timer = null;
   const paint = () => {
     clearTimeout(timer);
-    if (target.querySelector('button[aria-live]')) {
-      timer = setTimeout(paint, 500);
-      return;
-    }
     const next = build();
     if (shown && shown.isEqualNode(next)) return;
     const active = document.activeElement;

@@ -16,7 +16,7 @@ const THEME_HINT = { system: 'Follows your machine.', paper: 'Ink on paper.', in
 // ---- Appearance ----
 
 export function appearance() {
-  const hint = h('p', { class: 'om-meta set-hint' });
+  const hint = h('p', { class: 'om-data-s set-hint' });
   const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Theme' });
   function paint() {
     const now = getTheme();
@@ -139,7 +139,7 @@ export async function roles(ctx, health) {
         ? h('div', { class: 'set-roles' }, names.map(line))
         : emptyState('No agents yet', 'Roles are set per agent, once one has registered.')),
     h('dl', { class: 'set-defs' }, ROLES.map(([role, what]) => [h('dt', { class: 'om-label' }, role), h('dd', null, what)])),
-    h('p', { class: 'om-meta' }, 'On a strict hub these are the only roles that count. Tags an agent declares grant nothing.'));
+    h('p', { class: 'om-data-s' }, 'On a strict hub these are the only roles that count. Tags an agent declares grant nothing.'));
 }
 
 // ---- Tokens ----
@@ -159,7 +159,8 @@ function secretRow(label, value) {
 }
 
 function mintedPanel(minted, dismiss) {
-  return h('div', { class: 'om-panel-heavy set-minted' },
+  // Shown once and gone after: the task on the page, so the raised sheet.
+  return h('div', { class: 'om-raised om-raised-body set-minted' },
     h('h2', { class: 'om-label' }, `Token for ${minted.agent}`),
     h('p', { class: 'om-strong' }, "Copy these now. The hub keeps only a hash, so it can't show them again."),
     secretRow('Token', minted.token),
@@ -234,7 +235,7 @@ export async function tokens(ctx, health) {
   const shownOnce = h('div');
   const error = message();
   const listBox = h('div');
-  const shared = h('p', { class: 'om-meta' });
+  const shared = h('p', { class: 'om-data-s' });
 
   function paintShared() {
     shared.replaceChildren('Shared token last used: ', data.shared_token_last_used ? timeTag(data.shared_token_last_used) : 'not since the hub started');
@@ -317,7 +318,7 @@ export async function mcp(ctx, health) {
       }, 'Show');
       parts.push(section(strict ? 'The old MCP URL' : 'MCP URL', null,
         h('div', { class: 'set-secret' }, code, reveal, copyButton(() => data.url)),
-        strict ? h('p', { class: 'om-meta set-hint' }, 'It acts as consul on every project. Each connector should have its own token now.') : null,
+        strict ? h('p', { class: 'om-data-s set-hint' }, 'It acts as consul on every project. Each connector should have its own token now.') : null,
         strict ? h('div', null, confirmButton('Retire this URL', async () => {
           error.clear();
           try {

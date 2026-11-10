@@ -5,7 +5,7 @@ import { h } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { emptyState } from '../ui.js';
-import { field, isClosed, livePainter, message, pageHead, refusal, table } from '../setup/kit.js';
+import { field, isClosed, livePainter, message, pageHead, refusal, setupPage, table } from '../setup/kit.js';
 import { approvalWord } from '../setup/approval.js';
 
 function createForm(ctx, close) {
@@ -40,8 +40,9 @@ function createForm(ctx, close) {
     }
   }
 
-  const form = h('form', { class: 'set-form om-panel', novalidate: true, onSubmit: send },
-    h('h2', { class: 'om-label' }, 'New project'),
+  // Making a project is the task on the page while the form is open: the raised sheet.
+  const form = h('form', { class: 'set-form om-raised om-raised-body', novalidate: true, onSubmit: send },
+    h('h2', { class: 'om-title' }, 'New project'),
     field('Label', label),
     field('Id', id, 'Letters, digits, dot, dash, underscore. Made from the label if you leave it empty. Missions and the brain folder use it.'),
     field('Entity', entity, 'Optional. The scope wall this project sits behind.'),
@@ -57,16 +58,16 @@ function createForm(ctx, close) {
 function build(state, settings) {
   const projects = state.projects || [];
   if (!projects.length) {
-    return h('div', null, emptyState('No projects yet', 'A project groups missions, sets how many run at once, and decides who approves them.'));
+    return h('div', { class: 'om-sheet' }, emptyState('No projects yet', 'A project groups missions, sets how many run at once, and decides who approves them.'));
   }
   const open = {};
   for (const t of state.tasks) if (t.project && !isClosed(t)) open[t.project] = (open[t.project] || 0) + 1;
-  return h('div', null, table([
+  return h('div', { class: 'om-sheet' }, table([
     {
       label: 'Name',
       cell: (p) => h('span', { class: 'set-pname' },
         h('a', { class: 'om-link om-strong', href: `/projects/${encodeURIComponent(p.id)}`, dataset: { k: p.id } }, p.label || p.id),
-        p.label && p.label !== p.id ? h('span', { class: 'om-meta' }, p.id) : null),
+        p.label && p.label !== p.id ? h('span', { class: 'om-data-s' }, p.id) : null),
     },
     { label: 'Entity', cell: (p) => p.entity || '' },
     { label: 'Open', cell: (p) => String(open[p.id] || 0) },
@@ -110,5 +111,5 @@ export async function render(ctx) {
   }
   if (ctx.query.get('new')) showForm();
 
-  return h('div', { class: 'app-page set-page' }, pageHead('Projects', button), slot, list);
+  return setupPage(pageHead('Projects', button), slot, list);
 }

@@ -5,7 +5,7 @@ import { h, fill } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { emptyState } from '../ui.js';
-import { crumbs, field, message, pageHead } from '../setup/kit.js';
+import { crumbs, field, message, pageHead, setupPage } from '../setup/kit.js';
 
 const MAX_BYTES = 5 * 1024 * 1024;
 const ACCEPT = '.png,.jpg,.jpeg,.gif,.svg,.pdf';
@@ -36,8 +36,8 @@ export async function render(ctx) {
   const state = await store.ready();
   const projects = state.projects || [];
   if (!projects.length) {
-    return h('div', { class: 'app-page set-page' }, pageHead('New goal'),
-      emptyState('No projects yet', 'A goal belongs to a project.', h('a', { class: 'om-btn', href: '/projects' }, 'Projects')));
+    return setupPage(pageHead('New goal'),
+      h('div', { class: 'om-sheet' }, emptyState('No projects yet', 'A goal belongs to a project.', h('a', { class: 'om-btn', href: '/projects' }, 'Projects'))));
   }
 
   const wanted = ctx.query.get('project');
@@ -52,7 +52,7 @@ export async function render(ctx) {
   const loops = h('input', { class: 'om-input', name: 'loops', type: 'number', min: 1, max: 999, inputmode: 'numeric' });
   const destination = h('textarea', { class: 'om-textarea', name: 'destination', rows: 5, required: true });
   const bar = h('textarea', { class: 'om-textarea', name: 'bar', rows: 5 });
-  const chosenFiles = h('ul', { class: 'set-files om-meta', hidden: true });
+  const chosenFiles = h('ul', { class: 'set-files om-data-s', hidden: true });
   const files = h('input', {
     class: 'set-file',
     name: 'files',
@@ -66,7 +66,7 @@ export async function render(ctx) {
     },
   });
 
-  const status = h('p', { class: 'om-meta', role: 'status', hidden: true });
+  const status = h('p', { class: 'om-data-s', role: 'status', hidden: true });
   const error = message();
   const submit = h('button', { type: 'submit', class: 'om-btn om-btn-primary' }, 'File the goal');
 
@@ -123,11 +123,13 @@ export async function render(ctx) {
     }
   }
 
-  return h('div', { class: 'app-page set-page' },
+  // The new mission template: the way back and the head in the band, then one
+  // sheet in one column.
+  return setupPage(
     crumbs(['Goals', '/goals'], ['New']),
     pageHead('New goal'),
-    h('p', { class: 'set-lead' }, 'The lead breaks this into missions, each with its own acceptance bar. Concrete references beat adjectives.'),
-    h('form', { class: 'set-form', novalidate: true, onSubmit: send },
+    h('p', { class: 'om-band-ask set-band set-lead' }, 'The lead breaks this into missions, each with its own acceptance bar. Concrete references beat adjectives.'),
+    h('div', { class: 'om-work-single' }, h('section', { class: 'om-sheet om-sheet-body' }, h('form', { class: 'set-form', novalidate: true, onSubmit: send },
       field('Goal, in one line', title),
       h('div', { class: 'set-trio' },
         field('Project', project),
@@ -141,5 +143,5 @@ export async function render(ctx) {
       error.el,
       h('div', { class: 'om-cluster om-cluster-3' },
         submit,
-        h('a', { class: 'om-btn om-btn-ghost', href: '/goals' }, 'Cancel'))));
+        h('a', { class: 'om-btn om-btn-ghost', href: '/goals' }, 'Cancel'))))));
 }

@@ -4,7 +4,7 @@ import { h } from '../dom.js';
 import * as store from '../store.js';
 import { statusLabel } from '../status.js';
 import { emptyState, relativeTime, timeTag } from '../ui.js';
-import { byStatus, childrenOf, crumbs, goalName, isGoal, livePainter, meter, missionRow, progress, projectLabel, richText, section } from '../setup/kit.js';
+import { byStatus, childrenOf, crumbs, goalName, isGoal, livePainter, meter, missionRow, progress, projectLabel, richText, section, setupPage } from '../setup/kit.js';
 
 // Sections split on their headings. The form writes this shape, and goals filed
 // by agents mostly follow it. Whatever isn't the bar stays with the destination.
@@ -42,18 +42,18 @@ function text(goal) {
   const cycles = PERPETUAL.test(goal.body || '') ? (goal.log || []).filter((l) => CYCLE.test((l.note || '').trim())) : [];
   return h('div', { class: 'set-sections' },
     section('Destination', loops ? `${loops} loops per mission` : null,
-      destination ? richText(destination) : h('p', { class: 'om-meta' }, 'No destination written.')),
+      destination ? richText(destination) : h('p', { class: 'om-data-s' }, 'No destination written.')),
     bar ? section('The bar', null, richText(bar)) : null,
     refs.length ? section('Reference files', String(refs.length),
       h('ul', { class: 'set-refs' }, refs.map((path) => h('li', null, h('a', { class: 'om-link', href: brainHref(path) }, path))))) : null,
     cycles.length ? section('Cycles', String(cycles.length),
-      h('ul', { class: 'set-refs' }, cycles.map((l) => h('li', null, h('span', { class: 'om-meta' }, relativeTime(l.ts)), ' ', l.note)))) : null);
+      h('ul', { class: 'set-refs' }, cycles.map((l) => h('li', null, h('span', { class: 'om-data-s' }, relativeTime(l.ts)), ' ', l.note)))) : null);
 }
 
 function progressPart(goal, state) {
   const children = childrenOf(goal, state.tasks).sort(byStatus);
   return h('div', { class: 'set-sections' },
-    h('div', { class: 'set-bigmeter' }, meter(progress(children))),
+    h('div', { class: 'om-sheet om-sheet-body set-bigmeter' }, meter(progress(children))),
     section('Missions', String(children.length),
       children.length
         ? h('div', { class: 'om-list set-flush' }, children.map((c) => missionRow(c)))
@@ -62,8 +62,8 @@ function progressPart(goal, state) {
 
 function head(goal, state) {
   return h('div', { class: 'set-goalhead' },
-    h('h1', { class: 'om-display om-h2 set-title' }, goalName(goal)),
-    h('p', { class: 'om-cluster om-cluster-3 om-meta set-facts' },
+    h('h1', { class: 'om-display-m set-title' }, goalName(goal)),
+    h('p', { class: 'om-cluster om-cluster-3 om-band-meta set-facts' },
       statusLabel(goal.status),
       h('span', null, projectLabel(state, goal.project)),
       goal.assignee ? h('span', null, goal.assignee) : null,
@@ -75,7 +75,6 @@ export async function render(ctx) {
   let state = await store.ready();
   const id = ctx.params.id;
   const find = () => state.tasks.find((t) => t.id === id);
-  const page = h('div', { class: 'app-page set-page' });
   const crumbsNav = crumbs(['Goals', '/goals'], [id]);
 
   let goal = find();
@@ -84,13 +83,12 @@ export async function render(ctx) {
     goal = find();
   }
   if (!goal || !isGoal(goal)) {
-    page.append(crumbsNav, emptyState('No such goal', `${id} isn't a goal on this hub, or it's outside what this token can see.`,
-      h('a', { class: 'om-link', href: '/goals' }, 'All goals')));
-    return page;
+    return setupPage(crumbsNav, h('div', { class: 'om-sheet' }, emptyState('No such goal', `${id} isn't a goal on this hub, or it's outside what this token can see.`,
+      h('a', { class: 'om-link', href: '/goals' }, 'All goals'))));
   }
   ctx.title(goalName(goal));
 
-  const top = h('div');
+  const top = h('div', { class: 'set-band' });
   const left = h('div');
   const right = h('div');
   const topPainter = livePainter(top, () => head(find() || goal, state));
@@ -118,6 +116,5 @@ export async function render(ctx) {
   ctx.onCleanup(topPainter.stop);
   ctx.onCleanup(progressPainter.stop);
 
-  page.append(crumbsNav, top, h('div', { class: 'set-split' }, left, right));
-  return page;
+  return setupPage(crumbsNav, top, h('div', { class: 'set-split' }, left, right));
 }

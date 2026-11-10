@@ -4,7 +4,7 @@
 import { h } from '../dom.js';
 import * as store from '../store.js';
 import { emptyState, timeTag } from '../ui.js';
-import { livePainter, pageHead } from '../setup/kit.js';
+import { livePainter, pageHead, setupPage } from '../setup/kit.js';
 
 const PAGE = 50;
 
@@ -52,7 +52,7 @@ function row(e) {
   const text = String(what(e)).slice(0, 200);
   const mission = /^t-\d+$/.test(e.id || '') ? e.id : null;
   return h('li', { class: 'set-event' },
-    h('span', { class: 'om-meta set-event-time' }, timeTag(e.ts)),
+    h('span', { class: 'om-data-s set-event-time' }, timeTag(e.ts)),
     h('span', { class: 'om-label set-event-type' }, WORDS[e.type] || e.type),
     h('span', { class: 'om-strong set-event-who' }, who),
     h('span', { class: 'set-event-what' },
@@ -127,17 +127,17 @@ export async function render(ctx) {
     const all = [...seen.values()].filter(wanted).reverse();
     const page = all.slice(0, shown);
     if (!seen.size) {
-      return h('div', null, emptyState('Nothing yet', 'Events land here as agents claim missions, write to the brain and report back.'));
+      return h('div', { class: 'om-sheet' }, emptyState('Nothing yet', 'Events land here as agents claim missions, write to the brain and report back.'));
     }
     if (!all.length) {
-      return h('div', null, emptyState('Nothing of that type',
+      return h('div', { class: 'om-sheet' }, emptyState('Nothing of that type',
         `None of the ${seen.size} events the hub has handed over match.`,
         h('button', { type: 'button', class: 'om-btn', onClick: clearFilters }, 'Show everything')));
     }
-    return h('div', { class: 'om-stack' },
+    return h('div', { class: 'om-sheet' },
       h('ol', { class: 'set-events' }, page.map(row)),
-      h('div', { class: 'om-spread' },
-        h('span', { class: 'om-meta' }, `Showing ${page.length} of ${all.length}. The hub hands over its last 200 events.`),
+      h('div', { class: 'om-spread set-events-foot' },
+        h('span', { class: 'om-data-s' }, `Showing ${page.length} of ${all.length}. The hub hands over its last 200 events.`),
         all.length > page.length
           ? h('button', {
             type: 'button',
@@ -163,9 +163,9 @@ export async function render(ctx) {
   }));
   ctx.onCleanup(painter.stop);
 
-  return h('div', { class: 'app-page set-page' },
+  return setupPage(
     pageHead('Activity'),
-    h('div', { class: 'set-toolbar' },
+    h('div', { class: 'set-band set-toolbar' },
       chips,
       h('label', { class: 'om-check' }, toggle, 'Include heartbeats')),
     feed);

@@ -5,7 +5,7 @@ import { h } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { confirmButton, emptyState, toast } from '../ui.js';
-import { byStatus, crumbs, field, isClosed, livePainter, message, missionRow, pageHead, refusal, section } from '../setup/kit.js';
+import { byStatus, crumbs, field, isClosed, livePainter, message, missionRow, pageHead, refusal, section, setupPage } from '../setup/kit.js';
 import { projectSelect } from '../setup/approval.js';
 
 const CLOSED_SHOWN = 8;
@@ -37,9 +37,9 @@ function repoField(project) {
     }, 'Change'));
   return {
     el: h('div', { class: 'om-field' },
-      h('span', { class: 'om-label', id: 'repo-label' }, 'Repo'),
+      h('span', { class: 'om-field-label', id: 'repo-label' }, 'Repo'),
       link, editing,
-      h('p', { class: 'om-meta set-hint' }, 'The https clone URL. Empty clears it.')),
+      h('p', { class: 'om-field-help set-hint' }, 'The https clone URL. Empty clears it.')),
     value: () => input.value.trim(),
     input,
   };
@@ -65,7 +65,7 @@ function missions(state, id, showAll, onShowAll) {
 function renameForm(ctx, state, project) {
   const input = h('input', { class: 'om-input', autocomplete: 'off', spellcheck: 'false', value: project.id });
   const error = message();
-  const hint = h('p', { class: 'om-meta set-hint' });
+  const hint = h('p', { class: 'om-field-help set-hint' });
   const plain = 'Missions, tokens and the brain folder move with it. Links to the old id stop working.';
   hint.textContent = plain;
 
@@ -95,7 +95,7 @@ function renameForm(ctx, state, project) {
   sync();
 
   return h('div', { class: 'om-field' },
-    h('label', { class: 'om-label', for: 'rename-id' }, 'Rename id'),
+    h('label', { class: 'om-field-label', for: 'rename-id' }, 'Rename id'),
     h('div', { class: 'set-inline' }, Object.assign(input, { id: 'rename-id' }), button),
     hint, error.el);
 }
@@ -117,8 +117,8 @@ function deleteForm(ctx, project) {
   }, { title: `Delete ${project.id}?`, body: 'Closed missions keep its id, and its brain folder stays.', confirmLabel: 'Delete' });
 
   return h('div', { class: 'om-field' },
-    h('span', { class: 'om-label' }, 'Delete'),
-    h('p', { class: 'om-meta set-hint' }, 'Refused while the project has open missions. Closed missions keep its id, and its brain folder stays.'),
+    h('span', { class: 'om-field-label' }, 'Delete'),
+    h('p', { class: 'om-field-help set-hint' }, 'Refused while the project has open missions. Closed missions keep its id, and its brain folder stays.'),
     h('div', null, button),
     error.el);
 }
@@ -132,10 +132,10 @@ export async function render(ctx) {
   }
   const found = find();
   if (!found) {
-    return h('div', { class: 'app-page set-page' },
+    return setupPage(
       crumbs(['Projects', '/projects'], [id]),
-      emptyState('No such project', `${id} isn't on this hub, or it's outside what this token can see.`,
-        h('a', { class: 'om-link', href: '/projects' }, 'All projects')));
+      h('div', { class: 'om-sheet' }, emptyState('No such project', `${id} isn't on this hub, or it's outside what this token can see.`,
+        h('a', { class: 'om-link', href: '/projects' }, 'All projects'))));
   }
   ctx.title(found.label || found.id);
 
@@ -209,14 +209,13 @@ export async function render(ctx) {
   ctx.onCleanup(store.subscribe((next) => { state = next; painter.paint(); }));
   ctx.onCleanup(painter.stop);
 
-  return h('div', { class: 'app-page set-page' },
+  return setupPage(
     crumbs(['Projects', '/projects'], [id]),
     heading,
     h('div', { class: 'set-split' },
       h('div', { class: 'set-sections' },
         section('Project', project.id, form),
-        h('section', { class: 'set-section set-danger' },
-          h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, 'Danger')),
+        section('Danger', null,
           renameForm(ctx, state, project),
           deleteForm(ctx, project))),
       list));

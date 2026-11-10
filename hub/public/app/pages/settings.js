@@ -2,7 +2,7 @@
 
 import { h } from '../dom.js';
 import * as api from '../api.js';
-import { pageHead } from '../setup/kit.js';
+import { pageHead, setupPage } from '../setup/kit.js';
 import { appearance, approval, mcp, roles, tokens } from '../setup/settings-tabs.js';
 
 const TABS = [
@@ -30,9 +30,9 @@ export async function render(ctx) {
   const health = await api.get('/api/health', { signal: ctx.signal });
   const body = await build(ctx, health);
 
-  return h('div', { class: 'app-page set-page' },
+  return setupPage(
     pageHead('Settings',
-      h('span', { class: 'om-meta' }, who(health)),
+      h('span', { class: 'om-data-s' }, who(health)),
       h('button', { type: 'button', class: 'om-btn', onClick: () => api.signOut() }, 'Sign out')),
     h('nav', { class: 'om-tabs', 'aria-label': 'Settings' },
       TABS.map(([k, w]) => h('a', { href: `/settings?tab=${k}`, 'aria-current': k === key ? 'page' : null }, w))),
