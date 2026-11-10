@@ -430,6 +430,42 @@ async function interactions({ strict, boss, worker, shared, roamer, anon, old, l
   check('and a legacy ticket opens the stream', r.status === 200, r.status);
   await r.body.cancel().catch(() => {});
 
+  console.log('G2. Settings, roles and tokens reach the stream only for the boss');
+  const lastSeen = (t) => t.includes('event: token.revoked');
+  const bossBack = streamUntil(await openEvents(strict, (await boss('POST', '/api/events/ticket')).json.ticket), lastSeen);
+  const sharedBack = streamUntil(await openEvents(strict, (await shared('POST', '/api/events/ticket')).json.ticket), lastSeen, 2000);
+  const roamerBack = streamUntil(await openEvents(strict, (await roamer('POST', '/api/events/ticket')).json.ticket), lastSeen, 2000);
+  await sleep(100);
+  await boss('PATCH', '/api/settings', { agents: { evtprobe: { roles: ['lead'] } } });
+  const probe = await boss('POST', '/api/tokens', { agent: 'evtprobe', projects: ['*'] });
+  check('(setup) a token to report on', probe.status === 200 && !!probe.json.token, probe);
+  await boss('DELETE', `/api/tokens/${probe.json.id}`);
+  const seenBoss = (await bossBack).text, seenShared = (await sharedBack).text, seenRoamer = (await roamerBack).text;
+  for (const type of ['settings.changed', 'agent.roles_changed', 'token.minted', 'token.revoked']) {
+    check(`the boss's stream carries ${type}`, seenBoss.includes(`event: ${type}\n`), seenBoss.slice(0, 200));
+    check(`a shared-token stream does not carry ${type}`, !seenShared.includes(`event: ${type}\n`), seenShared.slice(0, 200));
+    check(`a ["*"] agent stream does not carry ${type}`, !seenRoamer.includes(`event: ${type}\n`), seenRoamer.slice(0, 200));
+  }
+  check('no event carries a token value', !seenBoss.includes(probe.json.token) && !seenShared.includes(probe.json.token) && !seenRoamer.includes(probe.json.token));
+  await boss('PATCH', '/api/settings', { agents: { evtprobe: null } });
+
+  console.log('G3. A project keeps its policy when its id changes');
+  await boss('POST', '/api/projects', { id: 'policyold', label: 'Policy old' });
+  await boss('PATCH', '/api/settings', { projects: { policyold: { approval: 'in-session' } } });
+  r = await boss('POST', '/api/projects/rename', { from: 'policyold', to: 'policynew' });
+  check('(setup) the rename went through', r.status === 200, r);
+  let policy = (await boss('GET', '/api/settings')).json.settings.projects;
+  check('the policy is under the new id', !!policy.policynew && policy.policynew.approval === 'in-session', policy);
+  check('and nothing is left under the old one', policy.policyold === undefined, policy);
+  await boss('POST', '/api/projects', { id: 'policyhost', label: 'Policy host' });
+  await boss('PATCH', '/api/settings', { projects: { policyhost: { approval: 'critic' } } });
+  await boss('POST', '/api/projects/rename', { from: 'policynew', to: 'policyhost' });
+  policy = (await boss('GET', '/api/settings')).json.settings.projects;
+  check('renaming onto an existing project leaves that project its own policy', !!policy.policyhost && policy.policyhost.approval === 'critic', policy);
+  check('and drops the one merged in', policy.policynew === undefined, policy);
+  await boss('PATCH', '/api/settings', { projects: { policyhost: null } });
+  await boss('DELETE', '/api/projects/policyhost');
+
   console.log('H. Dashboard sign-in and images with the boss credential');
   r = await boss('GET', '/api/health');
   check('the boss credential signs in: /api/health names it', r.status === 200 && r.json.credential.kind === 'boss', r.json);

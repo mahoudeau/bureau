@@ -16,7 +16,7 @@ OMAKO's design system. Plain CSS, no build, no dependency. Ink, paper and dither
 
 **Poster** is the default: 4px rules and big Archivo, for pages people read once.
 
-**Desk** is `data-density="compact"` on the page or on one part of it: 1px rules, mono, hierarchy by weight, for screens that hold a lot. Inside a compact page, `data-density="poster"` brings the loud controls back for one part.
+**Desk** is `data-density="compact"` on the page or on one part of it: 1px rules, mono, hierarchy by weight, for screens that hold a lot. Inside a compact page, `data-density="poster"` brings the loud controls back for one part. Long text inside a working screen takes `om-prose-compact` on the element around `om-prose`.
 
 ## Taking it
 

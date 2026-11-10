@@ -206,9 +206,6 @@
 .work-lane-none { padding: var(--sp-1) 4px; }
 
 .work-card { gap: 3px; min-width: 0; padding: 6px var(--sp-2); }
-.work-card:hover { background: var(--ink); color: var(--paper); outline: 0; }
-.work-card:hover .om-tag-solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
-.work-card:hover .om-swatch { outline: 1px solid var(--paper); }
 .work-card-top { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
 .work-card-id { font-size: var(--fs-sm); }
 .work-card-word { display: none; }
@@ -245,19 +242,6 @@
 .work-m-block { min-width: 0; }
 
 .work-body { max-width: 86ch; min-width: 0; overflow-wrap: anywhere; }
-/* A brief is read at the desk, not on a poster. Archivo stays on the page title. */
-.work-body .om-prose { font-size: var(--fs-md); line-height: 1.55; max-width: none; }
-.work-body .om-prose h1, .work-body .om-prose h2, .work-body .om-prose h3 {
-  margin: var(--sp-4) 0 var(--sp-1);
-  padding: 0;
-  border: 0;
-  font: 700 var(--fs-md)/1.3 var(--font-mono);
-  letter-spacing: 0;
-  text-transform: none;
-}
-.work-body .om-prose > :first-child { margin-top: 0; }
-.work-body .md-anchor { display: none; }
-.work-body .om-prose p, .work-body .om-prose ul, .work-body .om-prose ol, .work-body .om-prose blockquote, .work-body .om-prose pre, .work-body .om-prose table { margin-bottom: var(--sp-2); }
 .work-body.is-folded { max-height: 320px; overflow: hidden; border-bottom: var(--rule-sm) dashed var(--ink); }
 .work-body-more { margin-top: var(--sp-1); }
 .work-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }

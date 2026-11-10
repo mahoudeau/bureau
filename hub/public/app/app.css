@@ -6,7 +6,9 @@
 .app-page > p { margin: 0; }
 
 .app-word { letter-spacing: var(--ls-label); }
-.app-tools { display: flex; align-items: center; gap: var(--sp-3); margin-left: auto; }
+.app-nav { flex: 1 1 auto; min-width: 0; }
+.app-setup { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-left: auto; }
+.app-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); margin-left: auto; }
 .app-tools[hidden], .om-nav[hidden], .app-live[hidden] { display: none; }
 .app-live { display: inline-flex; align-items: center; gap: var(--sp-2); }
 .app-status { display: inline-flex; align-items: center; gap: var(--sp-2); }
@@ -35,4 +37,11 @@
 }
 @media (max-width: 720px) {
   .app-kbd { display: none; }
+  /* Two short rows: brand and tools, then the links in one line that scrolls. */
+  .om-top { gap: var(--sp-1) var(--sp-3); padding: var(--sp-1) var(--pad); border-bottom-width: var(--rule-md); }
+  .app-tools { flex-wrap: nowrap; gap: var(--sp-2); }
+  .app-nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .app-nav::-webkit-scrollbar { display: none; }
+  .app-nav a { flex: none; padding: 3px 8px; }
+  .app-setup { flex-wrap: nowrap; margin-left: 0; }
 }

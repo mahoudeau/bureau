@@ -85,16 +85,18 @@ export function placeholder(title) {
     h('p', null, 'Not built yet'));
 }
 
-const UNITS = [[60, 's'], [60, 'm'], [24, 'h'], [30, 'd']];
+const UNITS = [[60, 'm'], [24, 'h'], [30, 'd']];
 
 // '5m ago', 'in 2h', 'just now', and a plain date past a month. Empty for a
-// value that isn't a date.
+// value that isn't a date. To the minute: live rows compare this to decide
+// whether to rebuild, and a counter in seconds would rebuild them on every
+// heartbeat.
 export function relativeTime(value, now = Date.now()) {
   const then = new Date(value).getTime();
   if (Number.isNaN(then)) return '';
   const past = then <= now;
-  let n = Math.floor(Math.abs(now - then) / 1000);
-  if (n < 10) return 'just now';
+  let n = Math.floor(Math.abs(now - then) / 60000);
+  if (n < 1) return past ? 'just now' : 'in under 1m';
   for (const [size, unit] of UNITS) {
     if (n < size) return past ? `${n}${unit} ago` : `in ${n}${unit}`;
     n = Math.floor(n / size);

@@ -222,7 +222,9 @@
   text-decoration: none;
 }
 button.om-card { font: inherit; text-align: left; cursor: pointer; width: 100%; }
-.om-card:hover { outline: var(--rule-sm) solid var(--ink); }
+.om-card:hover { background: var(--ink); color: var(--paper); }
+.om-card:hover .om-tag-solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.om-card:hover .om-swatch { outline: 1px solid var(--paper); }
 .om-panel { border: var(--rule-sm) solid var(--ink); background: var(--paper); padding: var(--sp-3); }
 .om-panel-heavy { border: var(--rule) solid var(--ink); background: var(--paper); }
 

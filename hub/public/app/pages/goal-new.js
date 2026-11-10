@@ -44,7 +44,7 @@ export async function render(ctx) {
   const chosen = projects.some((p) => p.id === wanted) ? wanted
     : projects.some((p) => p.id === 'general') ? 'general' : projects[0].id;
 
-  const title = h('input', { class: 'om-input', name: 'title', required: true, autocomplete: 'off' });
+  const title = h('input', { class: 'om-input', name: 'title', required: true, autocomplete: 'off', value: ctx.query.get('title') || '' });
   const project = h('select', { class: 'om-select', name: 'project' },
     projects.map((p) => h('option', { value: p.id, selected: p.id === chosen }, p.label || p.id)));
   const priority = h('select', { class: 'om-select', name: 'priority' },

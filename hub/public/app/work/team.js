@@ -2,10 +2,10 @@
 // Visitors are counted, not listed: /agents has them.
 
 import { h, fill } from '../dom.js';
-import { emptyState } from '../ui.js';
+import { emptyState, relativeTime } from '../ui.js';
 import { isVisitor, liveness, roleOf, teamOf } from './model.js';
 import { keyed } from './keyed.js';
-import { ago, section } from './parts.js';
+import { section } from './parts.js';
 
 const LOOK = {
   active: { dither: 'om-d100', word: 'Active' },
@@ -19,7 +19,7 @@ function agentRow(a) {
   const look = LOOK[live];
   // A stale fleet reads as a lie: only a live parent shows one.
   const fleet = live === 'active' && Array.isArray(a.sub_agents) ? a.sub_agents : [];
-  return h('div', { class: ['work-agent', live !== 'active' && 'is-quiet'], title: `${look.word}, seen ${ago(a.last_seen)}` },
+  return h('div', { class: ['work-agent', live !== 'active' && 'is-quiet'], title: `${look.word}, seen ${relativeTime(a.last_seen)}` },
     h('div', { class: 'work-agent-line' },
       h('span', { class: `om-swatch ${look.dither}`, role: 'img', 'aria-label': look.word, title: look.word }),
       h('span', { class: 'om-strong om-clip' }, a.name),
@@ -40,7 +40,7 @@ export function teamSection() {
     const shown = team.slice(0, SHOW);
     keyed(list, shown, {
       key: (a) => a.name,
-      sig: (a) => [a.activity, liveness(a), roleOf(a), a.sub_agents, ago(a.last_seen)],
+      sig: (a) => [a.activity, liveness(a), roleOf(a), a.sub_agents, relativeTime(a.last_seen)],
       create: agentRow,
     });
     if (team.length) quiet.replaceChildren();

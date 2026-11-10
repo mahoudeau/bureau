@@ -62,7 +62,7 @@ function missions(state, id, showAll, onShowAll) {
         : null) : null);
 }
 
-function renameForm(ctx, state, project, settings) {
+function renameForm(ctx, state, project) {
   const input = h('input', { class: 'om-input', autocomplete: 'off', spellcheck: 'false', value: project.id });
   const error = message();
   const hint = h('p', { class: 'om-meta set-hint' });
@@ -79,9 +79,6 @@ function renameForm(ctx, state, project, settings) {
       error.say(refusal(err));
       return;
     }
-    // The hub leaves a project's policy under the old id. Carry it across.
-    const own = settings && settings.projects && settings.projects[project.id];
-    if (own) await api.patch('/api/settings', { projects: { [to]: own } }).catch(() => {});
     await store.refresh().catch(() => {});
     toast(`Now ${to}`);
     ctx.navigate(`/projects/${encodeURIComponent(to)}`, { replace: true });
@@ -220,7 +217,7 @@ export async function render(ctx) {
         section('Project', project.id, form),
         h('section', { class: 'set-section set-danger' },
           h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, 'Danger')),
-          renameForm(ctx, state, project, settings),
+          renameForm(ctx, state, project),
           deleteForm(ctx, project))),
       list));
 }

@@ -6,13 +6,13 @@ import { h, fill, on } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
 import { statusLabel, statusWord, swatch } from '../status.js';
-import { confirmButton, emptyState, relativeTime, toast } from '../ui.js';
+import { confirmButton, emptyState, relativeTime, timeTag, toast } from '../ui.js';
 import {
   evidenceOf, findReplacement, goalChildren, goalRef, isGoal, isTerminal, nextNeeding, plainArtifacts,
   prOf, projectLabel, roundOf, waitingOnId,
 } from '../work/model.js';
 import { isTypingIn, keyed } from '../work/keyed.js';
-import { ago, agoTag, kbd, missionHref, refusalLine, rule, section, thumb } from '../work/parts.js';
+import { kbd, missionHref, refusalLine, rule, section, thumb } from '../work/parts.js';
 
 const BODY_FOLD_CHARS = 1400;
 const VERDICT_WORD = { approved: 'Accepted', rejected: 'Rejected', later: 'Later', proposed: 'To rule' };
@@ -152,7 +152,7 @@ export async function render(ctx) {
   }
 
   function paintHead() {
-    if (!changed('head', [task.title, task.status, task.gate, task.assignee, task.project, task.priority, roundOf(task), ago(task.created_at)])) return;
+    if (!changed('head', [task.title, task.status, task.gate, task.assignee, task.project, task.priority, roundOf(task), relativeTime(task.created_at)])) return;
     ctx.title(`${task.id} ${task.title}`);
     const round = roundOf(task);
     fill(headEl,
@@ -164,7 +164,7 @@ export async function render(ctx) {
         h('span', { class: 'om-strong' }, task.id),
         task.assignee ? h('span', null, task.assignee) : h('span', null, 'Nobody on it'),
         h('a', { class: 'om-link', href: `/projects/${encodeURIComponent(task.project)}` }, projectLabel(store.getState(), task.project)),
-        agoTag(task.created_at),
+        timeTag(task.created_at),
         round ? h('span', null, `Round ${round}`) : null));
   }
 
@@ -174,7 +174,7 @@ export async function render(ctx) {
     bodyEl.hidden = false;
     const long = task.body.length > BODY_FOLD_CHARS;
     fill(bodyEl,
-      h('div', { class: ['work-body', long && !bodyOpen && 'is-folded'] }, bodyNode(task.body, md)),
+      h('div', { class: ['work-body', 'om-prose-compact', long && !bodyOpen && 'is-folded'] }, bodyNode(task.body, md)),
       long ? h('button', {
         type: 'button',
         class: 'om-btn om-btn-ghost work-body-more',
@@ -370,7 +370,7 @@ export async function render(ctx) {
       fact('Assignee', task.assignee || 'Nobody'),
       task.reserved_for ? fact('Reserved for', task.reserved_for) : null,
       task.lease_until ? fact('Lease', h('time', { datetime: task.lease_until, title: new Date(task.lease_until).toLocaleString() }, relativeTime(task.lease_until))) : null,
-      fact('Filed', `${task.created_by || 'unknown'} `, agoTag(task.created_at)),
+      fact('Filed', `${task.created_by || 'unknown'} `, timeTag(task.created_at)),
       parent ? fact('Goal', h('a', { class: 'om-link', href: `/goals/${encodeURIComponent(parent)}` }, parent), parentTask ? h('span', { class: 'work-fact-sub' }, parentTask.title) : null) : null,
       kids.length ? fact(`Children ${done}/${kids.length}`,
         h('span', { class: 'om-meter', style: { '--value': Math.round((done / kids.length) * 100) } }, h('i')),

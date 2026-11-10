@@ -7,9 +7,9 @@
 import { h, fill } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
-import { emptyState, errorState } from '../ui.js';
+import { emptyState, errorState, relativeTime, timeTag } from '../ui.js';
 import { keyed } from './keyed.js';
-import { ago, agoTag, missionHref, section } from './parts.js';
+import { missionHref, section } from './parts.js';
 
 const READ_KEY = 'bureauV2.nmn.readMessageIds'; // v2's key, so what's read stays read
 const RECENT = 5;
@@ -66,7 +66,7 @@ export function inboxSection(ctx) {
       h('span', { class: `om-swatch ${unread ? 'om-d100' : 'om-d0'}`, role: 'img', 'aria-label': unread ? 'Unread' : 'Read', title: unread ? 'Unread' : 'Read' }),
       h('span', { class: 'work-msg-text' }, open ? m.body : preview(m.body))),
       h('div', { class: 'work-msg-meta om-meta' },
-        h('span', { class: 'om-strong' }, m.from), agoTag(m.ts),
+        h('span', { class: 'om-strong' }, m.from), timeTag(m.ts),
         m.task_id ? h('a', { class: 'om-link', href: missionHref(m.task_id), onClick: () => markRead(m.id) }, m.task_id) : null));
   }
 
@@ -90,7 +90,7 @@ export function inboxSection(ctx) {
     const shown = showAll ? ordered : ordered.slice(0, RECENT);
     keyed(list, shown, {
       key: (m) => m.id,
-      sig: (m) => [m.body, m.from, m.ts, m.task_id, read.has(m.id), expanded.has(m.id), ago(m.ts)],
+      sig: (m) => [m.body, m.from, m.ts, m.task_id, read.has(m.id), expanded.has(m.id), relativeTime(m.ts)],
       create: row,
     });
     const kids = [];

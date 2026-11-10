@@ -6,6 +6,37 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboard".
+
+### Added
+- **The Desk, at `/`.** What needs you, what's in flight, PRs awaiting merge, your messages, the team, and the office in a window.
+- **A page for everything.** `/missions/:id`, `/goals`, `/goals/:id`, `/projects/:id`, `/activity`, and `/brain/<path>`, which reads a note as a full page with its formatting.
+- **`/settings`.** Appearance, approval, roles, agent tokens and the MCP URL.
+- **`/goals/new`.** Destination, bar, loops and reference files.
+- **Delete a project, rename its id, discard a mission, remove an agent** from the dashboard. Each was API only or missing.
+- **Cmd-K** jumps to any page, project or mission, and searches the brain with the ranked search.
+- **omako-ds**, the design system, in `hub/public/omako-ds/`. Its specimen is at `/ds`.
+- An HTML 404.
+- `settings.changed`, `agent.roles_changed`, `token.minted` and `token.revoked` on the event stream, for the boss credential only. A token value is never in an event.
+- `test/assets.test.js`: every file the app names exists and is served. `test/markdown.test.js` now runs in CI.
+
+### Changed
+- `/r/<token>` and `/m/<token>` use omako-ds, phone first, still with no script.
+- Dashboard text is JetBrains Mono, page titles Archivo. A status is a dither pattern and a word, and there is no hue anywhere.
+- Themes are system, paper and ink. The four Game Boy themes stay in the office.
+- Times on the dashboard are to the minute.
+- After a ruling, the review moves to the next thing that needs you.
+- In the palette, Enter opens the highlighted result. Making a mission is its own row, or Cmd/Ctrl+Enter.
+
+### Removed
+- `hub/public/index.html`, `hub/public/v2.html` and `hub/public/v2/`, with the old design system, its fonts (Fraunces, Inter) and its icons (Lucide). `/v2` and `/v2/styleguide` redirect to `/`.
+- The dashboard screenshots in the README, which showed the old one.
+
+### Fixed
+- Renaming a project moves its settings to the new id, in the same write. They used to stay under the old id.
+- A token that gets no event stream (403 on the ticket) stops asking every 3 seconds. The dashboard stays on polling and says so.
+- A mission body no longer shows a permanent `#` beside its headings on a touch screen.
+
 ## [0.3.0] - 2026-11-09
 
 ### Security

@@ -123,7 +123,7 @@ function specimen(theme) {
           h('div', { class: 'om-alert-row' }, h('span', { class: 'om-swatch om-hatch' }), h('span', { class: 'om-grow' }, 'A second one'), h('button', { class: 'om-btn' }, 'Answer')))),
 
       section('Cards and panels',
-        fakeLink({ class: 'om-card' }, h('span', { class: 'om-strong' }, 'A card'), h('span', { class: 'om-meta' }, 'Hover thickens the edge')),
+        fakeLink({ class: 'om-card' }, h('span', { class: 'om-strong' }, 'A card'), h('span', { class: 'om-meta' }, 'Hover inverts')),
         h('div', { class: 'om-panel' }, 'A panel'),
         h('div', { class: 'om-panel-heavy', style: 'padding:12px' }, 'A heavy panel')),
 

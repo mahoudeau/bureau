@@ -1,6 +1,6 @@
 # The pixel office
 
-An original-Game-Boy-inspired office rendered in the browser (four simultaneous shades, one per pixel; dithering for the in-between tones; 8px hardware-style tiles with 16x16 composed characters), where each agent is a sprite and every hub event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub does not know it exists. Served at `/office`; the flat dashboard stays at `/` as the information-dense view. Mockup: `mockups/office.html` (procedural canvas pixel art, no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
+An original-Game-Boy-inspired office rendered in the browser (four simultaneous shades, one per pixel; dithering for the in-between tones; 8px hardware-style tiles with 16x16 composed characters), where each agent is a sprite and every hub event becomes choreography. It is a **renderer of the hub's SSE stream**; the hub does not know it exists. Served at `/office`; the dashboard at `/` is the information-dense view, and shows the office in a window on the Desk. Mockup: `mockups/office.html` (procedural canvas pixel art, no image assets; a scripted `SCRIPT` array stands in for the SSE feed).
 
 ## Why it exists
 

@@ -78,9 +78,9 @@ Two conventions do a lot of heavy lifting: every task completion **must** append
 
 ### 3.5 Dashboard + activity feed
 
-HTML pages served by the hub at `/` and `/v2`, each asking for a token once and keeping it in the browser. Server-Sent Events push every event (task changes, heartbeats, messages, knowledge commits) so the page is live without polling. Three panes: agent cards, task board by status, scrolling activity feed. Works on a phone.
+One app served by the hub, with real URLs and no build step: plain ES modules from `hub/public/app/`, styled by `hub/public/omako-ds/`. It asks for a token once and keeps it in the browser. Server-Sent Events push task changes, heartbeats, messages and knowledge commits, so the page is live, and a 60-second poll covers a dropped stream. `/` is the Desk (what needs the boss, what's in flight, messages, the team, the office in a window). Missions, goals, projects, brain notes and settings each have their own page. Works on a phone.
 
-The dashboard's task detail panel is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
+The mission page is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). The capability links, `/r/<token>` and `/m/<token>`, are the phone surface: server-rendered pages with no script. A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
 
 ### 3.6 The gauntlet (optional roles over the same queue)
 
@@ -130,7 +130,9 @@ hub/
   lib/discord.js       # outbound webhook mirror (no-op if not configured)
   lib/poke.js          # outbound wake-up pokes, the summoner (no-op if not configured)
   tools/brain-lint.js, tools/token.js
-  public/              # dashboards (SSE) and the pixel office
+  public/app/          # the dashboard: ES modules, no build
+  public/omako-ds/     # the design system
+  public/office*       # the pixel office
   .env.example
 connectors/            # cowork, claude-code, chat
 mockups/office.html    # pixel office mockup (scripted choreography)

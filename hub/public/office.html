@@ -123,7 +123,7 @@
   <span class="leg" id="leg-working" data-icon="folder-working"><canvas></canvas><span class="n">0</span></span>
   <span class="leg" id="leg-review" data-icon="folder-review"><canvas></canvas><span class="n">0</span></span>
   <span class="leg" id="leg-done" data-icon="folder-done"><canvas></canvas><span class="n">0</span></span>
-  <!-- boss order 2026-08-23: no menu nav on the office — the palette and
+  <!-- boss order 2026-08-23: no menu nav on the office: the palette and
        scale settings live on the P and S keys (and on /office/assets);
        the only chrome is the minimize icon, fixed top right. The buttons
        stay in the DOM hidden because the settings logic drives them. -->
@@ -145,7 +145,7 @@
 (function () {
   var A = window.OfficeAssets;
   var W = 384, H = 216, TILE = 8;
-  // t-278: mini mode — embedded in the dashboard's agents rail as a
+  // t-278: mini mode: embedded in the Desk's office window as a
   // same-origin iframe (shares bureau_token localStorage). Chrome hides,
   // the canvas letterboxes into whatever box the parent gives us; the
   // integer-scaling law holds (a 208px rail at dpr 2 yields a clean 1x
@@ -153,7 +153,7 @@
   var MINI = new URLSearchParams(location.search).has('mini');
   if (MINI) document.documentElement.setAttribute('data-mini', '');
   // ttfText caches glyph runs; anything drawn before the vendored font
-  // finished loading is a fallback-font render frozen forever — flush the
+  // finished loading is a fallback-font render frozen forever, so flush the
   // cache the moment the real font lands (the rAF loop repaints after).
   if (document.fonts && document.fonts.load) {
     document.fonts.load('8px OfficePixel').then(function () { A.clearTtfCache(); }).catch(function () {});
@@ -397,7 +397,7 @@
   // behind the boss gate plus blocked missions waiting on the boss's
   // answer. Critic-gate reviews wait on the critic; a block whose last
   // note says "waiting on: t-N" for a still-open mission waits on that
-  // mission (same rule as v2/needs-me-now.js).
+  // mission (same rule as app/work/model.js).
   function blockedOnMission(t, byId) {
     var log = t.log || [], last = log[log.length - 1];
     var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
@@ -733,7 +733,7 @@
     A.drawSprite(ctx, mon, p, d.x + 34, d.y - 12);
     // Nameplate: PRESENT agents (active or idle) floating above the
     // screen; only the offline/absent lose their plate (boss refinement:
-    // sol idled and her name vanished — presence, not activity, owns it).
+    // sol idled and her name vanished: presence, not activity, owns it).
     if (ag && ag.state !== 'offline') {
       // full name when it fits in 14 glyphs (64px, well clear of the next
       // desk), else the first 13 and an ellipsis
@@ -781,7 +781,7 @@
     var carryY = headY - 9;
     var emoteY = a.carry ? carryY - 9 : headY - 9;
     // 2x super-size (boss: the 10-wide parts were dwarfed by the
-    // furniture): integer scale, feet stay on the same line — the
+    // furniture): integer scale, feet stay on the same line, the
     // sprite grows upward and outward from the old 16-box.
     if (key) {
       var cnv = A.sprite(key, p);

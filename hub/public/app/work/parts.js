@@ -9,20 +9,6 @@ export const rule = (id, body) => api.patch(`/api/tasks/${encodeURIComponent(id)
 
 export const missionHref = (id) => `/missions/${encodeURIComponent(id)}`;
 
-// Age to the minute. Live rows compare this to decide whether to rebuild, and a
-// counter in seconds would rebuild every row on every heartbeat.
-export function ago(value) {
-  const seconds = (Date.now() - new Date(value).getTime()) / 1000;
-  return seconds >= 0 && seconds < 60 ? 'just now' : relativeTime(value);
-}
-
-// The same, as a <time> with the exact moment on hover.
-export function agoTag(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return h('time', null, '');
-  return h('time', { datetime: date.toISOString(), title: date.toLocaleString() }, ago(value));
-}
-
 export function section(title, side, ...kids) {
   return h('section', { class: 'work-section' },
     h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, title), side || null),

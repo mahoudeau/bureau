@@ -61,6 +61,17 @@ function broadcast(type, data, extra) {
     } catch { sseClients.delete(res); }
   }
 }
+// Settings, roles and tokens go only to the credentials that can already read
+// them. A shared token or a ["*"] agent token also holds a stream, and those may
+// not see other agents' roles or the token list. Name the fields sent: a token
+// value must never reach an event.
+function bossEvent(type, data) {
+  const line = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const [res, who] of sseClients) {
+    if (who.kind !== 'boss' && who.kind !== 'legacy') continue;
+    try { res.write(line); } catch { sseClients.delete(res); }
+  }
+}
 function summarize(type, d) {
   // keep the persisted activity log compact
   return {
@@ -117,8 +128,30 @@ function serveNotFound(res) {
   res.end(fs.readFileSync(path.join(__dirname, 'public', 'app', '404.html')));
 }
 function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-function sendPage(res, code, title, bodyHtml) {
-  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Bureau · review</title><style>body{font:16px/1.5 system-ui,sans-serif;max-width:560px;margin:8vh auto;padding:0 20px;color:#111}h1{font-size:18px}textarea{width:100%;min-height:90px;font:inherit;padding:8px;box-sizing:border-box}button{font:inherit;font-weight:600;padding:10px 18px;border:none;border-radius:8px;background:#2a78d6;color:#fff;cursor:pointer;margin-top:12px}p.err{color:#c22}fieldset{border:1px solid #ddd;border-radius:8px;margin:12px 0;padding:10px}legend{font-weight:600;padding:0 6px}fieldset label{margin-right:14px}fieldset input[type=text]{width:100%;font:inherit;padding:6px;box-sizing:border-box;margin-top:8px}pre{white-space:pre-wrap;background:#f6f6f6;padding:8px;border-radius:6px;font-size:13px;overflow-x:auto}</style></head><body><h1>${title}</h1>${bodyHtml}</body></html>`;
+// The pages a link opens, usually on a phone: review (/r/) and record (/m/).
+// Server-rendered and script-less. Status is the same dither and word as
+// hub/public/app/status.js; test/assets.test.js keeps the two in step.
+const STATUS_LOOK = {
+  queued: { word: 'Queued', dither: 'om-d12' },
+  claimed: { word: 'Claimed', dither: 'om-d25' },
+  in_progress: { word: 'In progress', dither: 'om-d50' },
+  blocked: { word: 'Blocked', dither: 'om-hatch' },
+  approved: { word: 'Approved', dither: 'om-bars' },
+  review: { word: 'Review', dither: 'om-d75' },
+  done: { word: 'Done', dither: 'om-d100' },
+  failed: { word: 'Failed', dither: 'om-cross' },
+  discarded: { word: 'Discarded', dither: 'om-d0' },
+};
+function statusMark(status) {
+  const look = STATUS_LOOK[status] || { word: String(status || 'Unknown'), dither: 'om-d0' };
+  return `<span class="lp-status"><span class="om-swatch ${look.dither}" aria-hidden="true"></span><span class="om-label">${escHtml(look.word)}</span></span>`;
+}
+const PAGE_MARK = '<svg class="om-mark" viewBox="-1.5 -1.5 103 103" aria-hidden="true"><path fill-rule="evenodd" d="M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z"/></svg>';
+const GONE_BAND = '<div class="om-band om-cross" aria-hidden="true"></div>';
+const missionLine = task =>`<p class="lp-mission"><span class="om-strong">${escHtml(task.id)}</span> ${escHtml(task.title)}</p>`;
+// title is HTML already: callers escape what came from a mission.
+function sendPage(res, code, title, bodyHtml, status) {
+  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="om-strong lp-word">BUREAU</span></span>${status ? statusMark(status) : ''}</header><main class="lp-main"><h1 class="om-display lp-title">${title}</h1>${bodyHtml}</main><footer class="om-foot"><span>Built by OMAKO</span></footer></body></html>`;
   res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
   res.end(html);
 }
@@ -265,28 +298,31 @@ function workWriteRefusal(file) {
 
 function reviewForm(task, action, token, err, kind) {
   const lastNote = (task.log || []).slice(-1)[0];
-  const context = kind === 'answer' && lastNote ? `<p style="color:#666">${escHtml(lastNote.note)}</p>` : '';
+  const context = kind === 'answer' && lastNote ? `<blockquote class="lp-asked">${escHtml(lastNote.note)}</blockquote>` : '';
   const noteField = action === 'queued'
-    ? `<p>${kind === 'answer' ? 'Your answer goes to the mission log; the next shift resumes with it.' : 'A note is required: the agent reads it as its correction.'}</p><textarea name="note" placeholder="${kind === 'answer' ? 'Your answer' : 'What should change?'}"></textarea>`
+    ? `<p class="lp-help">${kind === 'answer' ? 'Your answer goes to the mission log; the next shift resumes with it.' : 'A note is required: the agent reads it as its correction.'}</p><textarea class="om-textarea" name="note" aria-label="${kind === 'answer' ? 'Your answer' : 'Note for the agent'}" placeholder="${kind === 'answer' ? 'Your answer' : 'What should change?'}"></textarea>`
     : '';
   // Itemized review: each proposal gets its own verdict. Later is a decision
   // (deferred to the next digest); an item nobody ruled on starts with no
   // choice selected, so an approval cannot defer or accept it by default.
   // A payload is shown as it will be written: the exact text the boss approves.
   const payloadBlock = it => it.payload ? it.payload.ops.map(o =>
-    `<p style="margin:8px 0 2px;font-size:13px">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre>${escHtml(o.content)}</pre>`).join('') +
-    `<p style="color:#666;font-size:12px;margin:2px 0">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
+    `<p class="lp-op">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre class="lp-pre">${escHtml(o.content)}</pre>`).join('') +
+    `<p class="om-meta">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
+  const verdictChoice = (it, value, word) =>
+    `<label class="lp-verdict"><input type="radio" name="v_${it.id}" value="${value}"${it.verdict === value ? ' checked' : ''}><span>${word}</span></label>`;
   const itemBlocks = (kind !== 'answer' && Array.isArray(task.items) && task.items.length)
-    ? task.items.map(it => `<fieldset><legend>${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre>${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
-        it.verdict !== 'proposed' ? `<p style="color:#666">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
-      }<label><input type="radio" name="v_${it.id}" value="approved"${it.verdict === 'approved' ? ' checked' : ''}> Accept</label><label><input type="radio" name="v_${it.id}" value="rejected"${it.verdict === 'rejected' ? ' checked' : ''}> Reject</label><label><input type="radio" name="v_${it.id}" value="later"${it.verdict === 'later' ? ' checked' : ''}> Later</label><input type="text" name="c_${it.id}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
+    ? task.items.map(it => `<fieldset class="lp-item"><legend class="om-strong">${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre class="lp-pre">${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
+        it.verdict !== 'proposed' ? `<p class="om-meta">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
+      }<div class="lp-verdicts">${verdictChoice(it, 'approved', 'Accept')}${verdictChoice(it, 'rejected', 'Reject')}${verdictChoice(it, 'later', 'Later')}</div><input class="om-input" type="text" name="c_${it.id}" aria-label="Comment on ${escHtml(it.id)}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
   const evidence = evidenceFiles(task).map(({ file, label }) =>
-    `<figure style="margin:12px 0"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}" style="max-width:100%;border-radius:8px;border:1px solid #ddd"><figcaption style="font-size:12px;color:#666">${escHtml(label)}</figcaption></figure>`).join('');
+    `<figure class="lp-figure"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"><figcaption class="om-meta">${escHtml(label)}</figcaption></figure>`).join('');
   const returns = action === 'done' && kind !== 'answer' && task.after_approval === 'return'
-    ? `<p style="color:#666">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
-  return `${err ? `<p class="err">${escHtml(err)}</p>` : ''}<p>${escHtml(task.id)} · ${escHtml(task.title)}</p>${context}${returns}${evidence}<form method="POST" action="/r/${token}">${itemBlocks}${noteField}<button>${verb} ${escHtml(task.id)}</button></form>`;
+    ? `<p class="lp-help">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
+  const refused = err ? `<div class="om-banner" role="alert"><div class="om-banner-edge om-cross" aria-hidden="true"></div><div class="om-banner-body om-strong">${escHtml(err)}</div></div>` : '';
+  return `${refused}${missionLine(task)}${context}${returns}${evidence}<form class="lp-form" method="POST" action="/r/${token}">${itemBlocks}${noteField}<button class="om-btn om-btn-primary lp-submit">${verb} ${escHtml(task.id)}</button></form>`;
 }
 
 // The principal behind a request, or null. Credentials travel in the
@@ -356,7 +392,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(fs.readFileSync(path.join(__dirname, 'public', 'office-assets.js')));
     }
-    // Vendored pixel font (Press Start by codeman38, freeware) — the t-54
+    // Vendored pixel font (Press Start by codeman38, freeware): the t-54
     // no-external-requests law: the font ships from the hub itself.
     if (req.method === 'GET' && p === '/office/font.ttf') {
       res.writeHead(200, { 'content-type': 'font/ttf', 'cache-control': 'public, max-age=86400' });
@@ -394,13 +430,13 @@ const server = http.createServer(async (req, res) => {
       const found = store.findByReviewToken(mReview[1]);
       const expectStatus = found && (found.kind === 'answer' ? 'blocked' : 'review');
       if (!found || found.task.status !== expectStatus)
-        return sendPage(res, 410, 'Link no longer valid', '<p>This link was already used, or the mission has moved on.</p>');
+        return sendPage(res, 410, 'Link no longer valid', `${GONE_BAND}<p>This link was already used, or the mission has moved on.</p>`);
       if (found.exp < new Date().toISOString())
-        return sendPage(res, 410, 'Link expired', '<p>This link has expired. Handle the mission from the dashboard.</p>');
+        return sendPage(res, 410, 'Link expired', `${GONE_BAND}<p>This link has expired. Handle the mission from the dashboard.</p>`);
       const { task, action, kind } = found;
       const title = kind === 'answer' ? 'Answer the worker' : action === 'done' ? 'Approve this mission?' : 'Send this mission back?';
       if (req.method === 'GET')
-        return sendPage(res, 200, title, reviewForm(task, action, mReview[1], null, kind));
+        return sendPage(res, 200, title, reviewForm(task, action, mReview[1], null, kind), task.status);
       if (req.method === 'POST') {
         const raw = await new Promise((resolve, reject) => {
           let d = ''; req.on('data', c => { d += c; if (d.length > 1e5) { reject(security.requestError(413, 'body too large')); req.destroy(); } });
@@ -409,7 +445,7 @@ const server = http.createServer(async (req, res) => {
         const form = new URLSearchParams(raw);
         const note = (form.get('note') || '').trim();
         if (action === 'queued' && !note)
-          return sendPage(res, 400, title, reviewForm(task, action, mReview[1], kind === 'answer' ? 'The answer is required.' : 'The note is required.', kind));
+          return sendPage(res, 400, title, reviewForm(task, action, mReview[1], kind === 'answer' ? 'The answer is required.' : 'The note is required.', kind), task.status);
         // Per-item verdicts ride along with the overall action (no choice = still proposed)
         const verdicts = (task.items || []).map(it => {
           const v = form.get(`v_${it.id}`), c = (form.get(`c_${it.id}`) || '').trim();
@@ -419,11 +455,11 @@ const server = http.createServer(async (req, res) => {
         const r = store.updateTask({ id: task.id, agent: 'human', kind: logKind, status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
         // A refusal (an undecided item, say) shows the form again with the
         // reason; the link stays live because nothing changed.
-        if (r.error) return sendPage(res, 400, title, reviewForm(task, action, mReview[1], r.error, kind));
+        if (r.error) return sendPage(res, 400, title, reviewForm(task, action, mReview[1], r.error, kind), task.status);
         broadcast(statusEvent(action, r.task), { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
         const returned = r.task.status === 'approved';
         return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
-          `<p>${escHtml(task.id)} · ${escHtml(task.title)}</p><p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : returned ? `Back with ${escHtml(r.task.assignee || 'its agent')}, who applies the approved items exactly as filed, then closes it.` : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`);
+          `${missionLine(task)}<p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : returned ? `Back with ${escHtml(r.task.assignee || 'its agent')}, who applies the approved items exactly as filed, then closes it.` : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`, r.task.status);
       }
     }
 
@@ -445,16 +481,18 @@ const server = http.createServer(async (req, res) => {
     const mView = p.match(/^\/m\/([a-f0-9]{32})$/);
     if (req.method === 'GET' && mView) {
       const t = store.findByViewToken(mView[1]);
-      if (!t) return sendPage(res, 404, 'Not found', '<p>No mission record behind this link.</p>');
+      if (!t) return sendPage(res, 404, 'Not found', `${GONE_BAND}<p>No mission record behind this link.</p>`);
       const logs = (t.log || []).map(l =>
-        `<p style="border-bottom:1px solid #eee;padding:6px 0;margin:0"><span style="color:#888;font-size:13px">${escHtml(l.ts.slice(5, 16).replace('T', ' '))}</span> <b>${escHtml(l.by)}</b><br>${escHtml(l.note).replace(/\n/g, '<br>')}</p>`).join('') || '<p>No log yet.</p>';
+        `<li><p class="om-meta">${escHtml(l.ts.slice(5, 16).replace('T', ' '))} <span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
       const arts = (t.artifacts || []).map(a => {
         const linkable = a.url && /^https?:\/\//i.test(a.url);
-        return `<p>📎 ${linkable ? `<a href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</p>`;
+        return `<li>${linkable ? `<a class="om-link" href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</li>`;
       }).join('');
       return sendPage(res, 200, `${escHtml(t.id)} · ${escHtml(t.title)}`,
-        `<p style="color:#666">${escHtml(t.status)} · P${t.priority}${t.assignee ? ' · ' + escHtml(t.assignee) : ''} · ${escHtml(t.project || '')}</p>` +
-        (t.body ? `<p>${escHtml(t.body).replace(/\n/g, '<br>')}</p>` : '') + arts + logs);
+        `<p class="om-meta">P${t.priority}${t.assignee ? ' · ' + escHtml(t.assignee) : ''} · ${escHtml(t.project || '')}</p>` +
+        (t.body ? `<p class="lp-text">${escHtml(t.body)}</p>` : '') +
+        (arts ? `<section class="lp-block"><h2 class="om-label">Artifacts</h2><ul class="lp-rows">${arts}</ul></section>` : '') +
+        `<section class="lp-block"><h2 class="om-label">Log</h2>${logs ? `<ol class="lp-rows">${logs}</ol>` : '<p>No log yet.</p>'}</section>`, t.status);
     }
 
     // /mcp/ is a JSON-RPC door like /api/: a client there can't read a web page.
@@ -595,6 +633,8 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const r = store.patchSettings(b);
       if (r.error) return send(res, 400, r);
+      bossEvent('settings.changed', { before: r.before, after: r.settings });
+      for (const change of r.rolesChanged) bossEvent('agent.roles_changed', change);
       return send(res, 200, { settings: r.settings });
     }
 
@@ -603,7 +643,9 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const r = store.mintToken({ agent: b.agent, projects: b.projects, label: b.label });
       if (r.error) return send(res, 400, r);
-      store.logEvent('token.minted', { agent: r.record.agent, note: `${r.record.id} for ${r.record.agent}: ${r.record.projects.join(', ')}` });
+      const minted = { agent: r.record.agent, note: `${r.record.id} for ${r.record.agent}: ${r.record.projects.join(', ')}` };
+      store.logEvent('token.minted', minted);
+      bossEvent('token.minted', minted);
       const base = (process.env.BUREAU_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
       return send(res, 200, { token: r.token, mcp_url: `${base}/mcp/${r.token}`, ...r.record, note: 'shown once: the hub keeps only its hash' });
     }
@@ -615,6 +657,7 @@ const server = http.createServer(async (req, res) => {
       const r = store.revokeToken(mToken[1]);
       if (r.error) return send(res, 404, r);
       store.logEvent('token.revoked', { agent: r.record.agent, note: r.record.id });
+      bossEvent('token.revoked', { agent: r.record.agent, note: r.record.id });
       // A stream outlives the request that opened it: end the revoked ones.
       for (const [stream, holder] of sseClients) if (holder.tokenId === r.record.id) { sseClients.delete(stream); stream.end(); }
       return send(res, 200, r.record);

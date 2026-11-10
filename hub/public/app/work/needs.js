@@ -5,10 +5,10 @@
 import { h, fill } from '../dom.js';
 import { swatch } from '../status.js';
 import * as store from '../store.js';
-import { toast } from '../ui.js';
+import { relativeTime, toast } from '../ui.js';
 import { lastEntry, needsMe, oldestFirst, projectLabel, undecided } from './model.js';
 import { keyed } from './keyed.js';
-import { ago, missionHref, refusalLine, remember, keep, rule } from './parts.js';
+import { missionHref, refusalLine, remember, keep, rule } from './parts.js';
 import { batchBar } from './batch.js';
 
 function clipNote(text, n = 140) {
@@ -150,7 +150,7 @@ export function needsSection(ctx) {
           h('div', { class: 'work-need-meta om-meta' },
             h('span', null, projectLabel(store.getState(), task.project)),
             task.assignee ? h('span', null, task.assignee) : null,
-            h('span', null, ago(task.created_at)),
+            h('span', null, relativeTime(task.created_at)),
             open ? h('span', { class: 'om-tag' }, `${open} to rule`) : null,
             !review && last ? h('span', { class: 'work-need-asked om-clip', title: last.note }, clipNote(last.note)) : null)),
         h('div', { class: 'work-need-actions' }, actions));
@@ -173,7 +173,7 @@ export function needsSection(ctx) {
     clear.hidden = n > 0;
     keyed(list, rows, {
       key: (t) => t.id,
-      sig: (t) => [t.title, t.status, t.gate, t.project, t.assignee, undecided(t).length, ago(t.created_at), lastEntry(t) && lastEntry(t).note],
+      sig: (t) => [t.title, t.status, t.gate, t.project, t.assignee, undecided(t).length, relativeTime(t.created_at), lastEntry(t) && lastEntry(t).note],
       create: row,
       patch: (el, t) => el.paintHead(t),
     }).forEach((el, i) => {

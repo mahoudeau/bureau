@@ -22,7 +22,7 @@ const ALL = [...NAV, ...SETUP];
 const LIVE = {
   connecting: { word: 'Connecting', dither: 'om-d25', title: 'Connecting to the hub' },
   live: { word: 'Live', dither: 'om-d100', title: 'The event stream is up' },
-  polling: { word: 'Polling', dither: 'om-hatch', title: 'The stream dropped. Checking every minute until it comes back' },
+  polling: { word: 'Polling', dither: 'om-hatch', title: 'No event stream. Checking every minute' },
 };
 
 const logo = () => s('svg', { class: 'om-mark', viewBox: '-1.5 -1.5 103 103', 'aria-hidden': 'true' },
@@ -40,8 +40,10 @@ export function onSearch(fn) {
 // a bare page (sign-in) keeps the brand and footer and loses the nav.
 export function mountLayout(root) {
   const links = ALL.map(([label, href]) => h('a', { href }, label));
-  const nav = h('nav', { class: 'om-nav', 'aria-label': 'Main' }, links.slice(0, NAV.length));
-  const setup = h('nav', { class: 'om-nav', 'aria-label': 'Setup' }, links.slice(NAV.length));
+  // One nav, so a phone can run every link along a single scrolling line.
+  const nav = h('nav', { class: 'om-nav app-nav', 'aria-label': 'Main' },
+    links.slice(0, NAV.length),
+    h('span', { class: 'app-setup' }, links.slice(NAV.length)));
 
   const liveMark = h('span', { class: 'om-swatch', 'aria-hidden': 'true' });
   const liveWord = h('span');
@@ -57,7 +59,7 @@ export function mountLayout(root) {
     },
   }, 'Search', h('kbd', { class: 'om-kbd app-kbd' }, `${modifier} K`));
 
-  const tools = h('div', { class: 'app-tools' }, setup, liveEl, search);
+  const tools = h('div', { class: 'app-tools' }, liveEl, search);
 
   const top = h('header', { class: 'om-top' },
     h('a', { class: 'om-brand', href: '/' }, logo(), h('span', { class: 'om-strong app-word' }, 'BUREAU')),

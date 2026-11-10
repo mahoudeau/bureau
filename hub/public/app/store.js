@@ -9,6 +9,8 @@ const EVENTS = [
   'agent.registered', 'agent.heartbeat', 'agent.removed',
   'message.posted', 'knowledge.written', 'journal.captured',
   'project.created', 'project.renamed', 'project.deleted',
+  // Sent to the boss only. Other credentials on the stream never get these.
+  'settings.changed', 'agent.roles_changed', 'token.minted', 'token.revoked',
 ];
 const POLL_MS = 60000;
 const QUIET_MS = 400;

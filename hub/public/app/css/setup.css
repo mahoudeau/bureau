@@ -114,9 +114,6 @@ tr.set-muted { opacity: 0.6; }
 .set-code { flex: 1 1 240px; min-width: 0; padding: 4px var(--ctl-pad); border: var(--rule-md) solid var(--ink); font: 400 var(--ctl-fs)/1.5 var(--font-mono); overflow-wrap: anywhere; user-select: all; }
 .set-danger { border: var(--rule-md) solid var(--ink); padding: var(--sp-3); gap: var(--sp-4); }
 
-/* Only as much of the frame as these pages need at phone width. */
-.app-tools { flex-wrap: wrap; }
-
 @media (max-width: 1000px) {
   .set-split { grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
   .set-agent-row { grid-template-columns: 88px minmax(0, 1fr) auto; row-gap: 2px; }

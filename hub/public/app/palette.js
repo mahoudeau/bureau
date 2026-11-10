@@ -1,9 +1,11 @@
 // The command palette. Cmd/Ctrl+K, or the search button. The only overlay in the
-// app. Jump to a page, a project or a mission, search the brain, or type a title
-// and press Enter to make a mission.
+// app. Jump to a page, a project or a mission, search the brain, or make a
+// mission from what you typed.
 //
-// The first row is what Enter does, and it's "New mission" unless what you typed
-// is exactly a mission id, a page or a project.
+// Enter opens the highlighted row, and the top result starts highlighted. Making
+// a mission is its own row: Enter on it when it's highlighted, or Cmd/Ctrl+Enter
+// from anywhere. It only starts highlighted when nothing matches, and never while
+// the brain is still answering, so a search can't file a mission by accident.
 
 import * as api from './api.js';
 import * as store from './store.js';
@@ -98,6 +100,8 @@ function open(initial = '') {
   const appRoot = document.getElementById('app');
   let query = '';
   let selectedKey = null;
+  let picked = false; // true once you chose a row, so results landing don't move it
+  let lastPointer = null;
   let rows = [];
   let brain = { state: 'idle', results: [], q: '', scope: null };
   let controller = null;
@@ -168,9 +172,10 @@ function open(initial = '') {
 
     const project = wantedProject;
     const create = {
-      label: 'New',
+      label: 'Create',
       rows: [{
         key: 'create',
+        maker: true,
         title: `New mission: ${q}`,
         meta: project ? `in ${project}` : '',
         run: () => createMission(q, project),
@@ -189,17 +194,30 @@ function open(initial = '') {
     const more = {
       label: 'More',
       rows: [
-        { key: 'create:project', title: `New project: ${q}`, run: () => createProject(q) },
-        { key: 'create:goal', title: `New goal: ${q}`, run: () => go(`/goals/new?title=${encodeURIComponent(q)}`) },
+        { key: 'create:project', maker: true, title: `New project: ${q}`, run: () => createProject(q) },
+        { key: 'create:goal', maker: true, title: `New goal: ${q}`, run: () => go(`/goals/new?title=${encodeURIComponent(q)}`) },
         ...themes.map(themeRow),
       ],
     };
-    // What you typed exactly goes first, so Enter opens it.
+    // What you typed exactly goes first, so Enter opens it. With local matches,
+    // Create sits right under them; with none, under whatever the brain finds.
     const exact = exactMission ? found[0] : exactPage ? found[1] : exactProject ? found[2] : null;
-    const ordered = exact
-      ? [exact, ...found.filter((g) => g !== exact), create, ...brainGroup, more]
-      : [create, ...found, ...brainGroup, more];
+    const local = exact ? [exact, ...found.filter((g) => g !== exact)] : found;
+    const hasLocal = local.some((g) => g.rows.length);
+    const ordered = hasLocal
+      ? [...local, create, ...brainGroup, more]
+      : [...brainGroup, create, more];
     return ordered.filter((g) => g.rows.length);
+  }
+
+  // The row that starts highlighted: the top result. Create only when there are
+  // none, and nothing at all while the brain might still add one.
+  function defaultKey() {
+    const top = rows.find((r) => !r.still && !r.maker);
+    if (top) return top.key;
+    if (brain.state === 'loading') return null;
+    const create = rows.find((r) => r.key === 'create');
+    return create ? create.key : null;
   }
 
   const baseName = (file) => file.slice(file.lastIndexOf('/') + 1).replace(/\.md$/, '');
@@ -303,6 +321,7 @@ function open(initial = '') {
     onInput() {
       query = input.value;
       selectedKey = null;
+      picked = false;
       error.hidden = true;
       askBrain();
       paint();
@@ -366,17 +385,18 @@ function open(initial = '') {
 
   function hintFor() {
     const row = rows[selectedIndex()];
-    if (!row) return 'Esc closes';
-    if (row.key === 'create') return 'Enter makes the mission. Arrows pick a result.';
-    return 'Enter opens. Arrows move.';
+    const direct = rows.some((r) => r.key === 'create') ? ` ${isMac ? 'Cmd' : 'Ctrl'}+Enter makes a mission.` : '';
+    if (!row) return brain.state === 'loading' ? `Searching.${direct}` : 'Esc closes';
+    if (row.key === 'create') return 'Enter makes this mission.';
+    return `Enter opens. Arrows move.${direct}`;
   }
 
   function paint() {
     const made = groups();
     rows = made.flatMap((g) => g.rows);
-    if (!rows.some((r) => r.key === selectedKey && !r.still)) {
-      const first = rows.find((r) => !r.still);
-      selectedKey = first ? first.key : null;
+    if (!picked || !rows.some((r) => r.key === selectedKey && !r.still)) {
+      picked = false;
+      selectedKey = defaultKey();
     }
     let n = 0;
     fill(list, made.map((g, gi) => {
@@ -397,9 +417,16 @@ function open(initial = '') {
             'aria-selected': 'false',
             dataset: { key: r.key },
             onClick: () => run(r),
-            onMousemove() {
-              if (selectedKey === r.key) return;
+            onMousemove(e) {
+              // A repaint under a resting pointer also fires this. Only a real
+              // move counts as choosing a row.
+              const at = `${e.screenX},${e.screenY}`;
+              if (at === lastPointer) return;
+              const first = lastPointer === null;
+              lastPointer = at;
+              if (first || selectedKey === r.key) return;
               selectedKey = r.key;
+              picked = true;
               markSelected();
             },
           },
@@ -423,6 +450,7 @@ function open(initial = '') {
     const at = live.findIndex((r) => r.key === selectedKey);
     const next = at === -1 ? 0 : (at + delta + live.length) % live.length;
     selectedKey = live[next].key;
+    picked = true;
     markSelected();
   }
 
@@ -447,7 +475,7 @@ function open(initial = '') {
       else if (e.key === 'ArrowUp') { e.preventDefault(); move(-1); }
       else if (e.key === 'Enter') {
         e.preventDefault();
-        const row = rows.find((r) => r.key === selectedKey);
+        const row = rows.find((r) => r.key === (e.metaKey || e.ctrlKey ? 'create' : selectedKey));
         if (row) run(row);
       }
     }
@@ -484,6 +512,7 @@ function open(initial = '') {
       input.value = text;
       query = text;
       selectedKey = null;
+      picked = false;
       askBrain();
       paint();
     },

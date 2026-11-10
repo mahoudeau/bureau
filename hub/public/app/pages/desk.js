@@ -4,10 +4,10 @@
 import { h, fill } from '../dom.js';
 import * as store from '../store.js';
 import { swatch, statusWord } from '../status.js';
-import { emptyState } from '../ui.js';
+import { emptyState, relativeTime, timeTag } from '../ui.js';
 import { blockedOnMission, byId, byPriority, projectLabel } from '../work/model.js';
 import { keyed } from '../work/keyed.js';
-import { ago, agoTag, missionHref, section } from '../work/parts.js';
+import { missionHref, section } from '../work/parts.js';
 import { needsSection } from '../work/needs.js';
 import { mergeSection } from '../work/merge.js';
 import { inboxSection } from '../work/inbox.js';
@@ -48,7 +48,7 @@ function flightRow(t) {
     h('span', { class: 'work-row-id om-strong' }, t.id),
     h('span', { class: 'om-grow om-clip' }, t.title),
     t.assignee ? h('span', { class: 'work-row-who om-meta om-clip' }, t.assignee) : null,
-    h('span', { class: 'work-row-age om-meta' }, ago(t.created_at)));
+    h('span', { class: 'work-row-age om-meta' }, relativeTime(t.created_at)));
 }
 
 function flightGroup(group) {
@@ -58,7 +58,7 @@ function flightGroup(group) {
     list);
   el.fillRows = (tasks) => keyed(list, tasks, {
     key: (t) => t.id,
-    sig: (t) => [t.title, t.status, t.assignee, t.gate, ago(t.created_at)],
+    sig: (t) => [t.title, t.status, t.assignee, t.gate, relativeTime(t.created_at)],
     create: flightRow,
   });
   el.fillRows(group.tasks);
@@ -99,7 +99,7 @@ function eventRow(ev) {
   const target = (/^t-\d+$/.test(ev.id || '') && ev.id) || ev.file || ev.to || '';
   const label = ev.title || ev.note || ev.body || '';
   const inner = [
-    agoTag(ev.ts),
+    timeTag(ev.ts),
     h('span', { class: 'work-event-what om-clip' },
       actor ? h('span', { class: 'om-strong' }, actor) : null, ` ${VERBS[ev.type]}${target ? ` ${target}` : ''}`,
       label ? h('span', { class: 'work-event-label' }, ` ${label}`) : null),
@@ -118,7 +118,7 @@ function recentSection() {
     const events = (state.log || []).filter((ev) => VERBS[ev.type]).slice(-25).reverse();
     keyed(list, events, {
       key: (ev) => `${ev.ts}|${ev.type}|${ev.id || ev.file || ev.name || ''}`,
-      sig: (ev) => [ago(ev.ts)],
+      sig: (ev) => [relativeTime(ev.ts)],
       create: eventRow,
     });
     if (events.length) quiet.replaceChildren();

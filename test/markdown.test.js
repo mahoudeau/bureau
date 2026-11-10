@@ -73,7 +73,8 @@ async function load() {
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
   fs.copyFileSync(path.join(APP, 'markdown.js'), path.join(dir, 'markdown.js'));
   fs.copyFileSync(path.join(APP, 'dom.js'), path.join(dir, 'dom.js'));
-  const mod = await import(path.join(dir, 'markdown.js'));
+  // A file URL: a bare D:\ path is not something import() takes on Windows.
+  const mod = await import(require('url').pathToFileURL(path.join(dir, 'markdown.js')).href);
   fs.rmSync(dir, { recursive: true, force: true });
   return mod;
 }

@@ -536,6 +536,13 @@ function renameProject(from, to) {
   s.projects = s.projects.filter(p => !(p.id === from && dupe)).map(p => (p.id === from ? { ...p, id: to } : p));
   s.projects.sort((a, b) => a.id.localeCompare(b.id));
   renameInTokens(s, from, to);
+  // The project's own policy moves with its id, in this same write. Renaming
+  // onto a project that exists merges into it, and that one keeps its policy.
+  const policies = s.settings && s.settings.projects;
+  if (policies && policies[from]) {
+    if (!policies[to]) policies[to] = policies[from];
+    delete policies[from];
+  }
   save();
   return n;
 }
@@ -764,12 +771,17 @@ function patchSettings(patch) {
   logEvent('settings.changed', { before, after: next });
   // Role changes get their own event, like capability changes (t-356)
   const names = new Set([...Object.keys(before.agents), ...Object.keys(next.agents)]);
+  const rolesChanged = [];
   for (const name of names) {
     const b = before.agents[name] && before.agents[name].roles, a = next.agents[name] && next.agents[name].roles;
-    if (JSON.stringify(b ?? null) !== JSON.stringify(a ?? null)) logEvent('agent.roles_changed', { name, before: b ?? null, after: a ?? null });
+    if (JSON.stringify(b ?? null) !== JSON.stringify(a ?? null)) {
+      const change = { name, before: b ?? null, after: a ?? null };
+      logEvent('agent.roles_changed', change);
+      rolesChanged.push(change);
+    }
   }
   save();
-  return { settings: next, before };
+  return { settings: next, before, rolesChanged };
 }
 // The librarian's own digest (t-356): a mission titled "<name>: ..." by an
 // agent holding the librarian role (settings, else its tag) is a proposal set the boss rules

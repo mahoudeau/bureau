@@ -38,8 +38,8 @@ const VIEWS = [
   { id: 'laptop-1024', width: 1024, height: 768, url: '/office' },
   { id: 'wide-1280', width: 1280, height: 720, url: '/office' }, // 16:9, the tight fit
   { id: 'phone-390', width: 390, height: 844, url: '/office' },
-  { id: 'mini-v2', width: 1440, height: 900, url: '/v2', clip: '#v2-office-card' },
-  { id: 'mini-v2-2x', width: 1440, height: 900, url: '/v2', clip: '#v2-office-card', dpr: 2 },
+  { id: 'mini-desk', width: 1440, height: 900, url: '/', clip: '#office-window' },
+  { id: 'mini-desk-2x', width: 1440, height: 900, url: '/', clip: '#office-window', dpr: 2 },
 ];
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));

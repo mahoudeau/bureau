@@ -108,14 +108,16 @@
 
 /* ---- What markdown adds to om-prose ---- */
 .om-prose [id] { scroll-margin-top: var(--sp-4); }
-.md-anchor {
-  visibility: hidden; margin-left: var(--sp-2); font-family: var(--font-mono); font-weight: 400; font-size: 0.6em; letter-spacing: 0;
+/* Heading links belong to a note you read and cite. Elsewhere there are none. */
+.md-anchor { display: none; }
+.brain-doc .md-anchor {
+  display: inline; visibility: hidden; margin-left: var(--sp-2); font-family: var(--font-mono); font-weight: 400; font-size: 0.6em; letter-spacing: 0;
   text-decoration: none !important;
 }
-:is(h1, h2, h3, h4, h5, h6):hover > .md-anchor, .md-anchor:focus-visible { visibility: visible; }
+.brain-doc :is(h1, h2, h3, h4, h5, h6):hover > .md-anchor, .brain-doc .md-anchor:focus-visible { visibility: visible; }
 .om-prose :is(h1, h2, h3, h4, h5, h6):target { background: var(--ink); color: var(--paper); box-shadow: 0 0 0 4px var(--ink); }
-.om-prose :target > .md-anchor { visibility: visible; }
-@media (hover: none) { .md-anchor { visibility: visible; } }
+.brain-doc .om-prose :target > .md-anchor { visibility: visible; }
+@media (hover: none) { .brain-doc .md-anchor { visibility: visible; } }
 
 .md-code { margin: 0 0 var(--sp-5); min-width: 0; }
 .md-code pre { margin: 0; }

@@ -37,3 +37,24 @@
 .om-prose td { padding: 5px 8px; border: var(--rule-sm) solid var(--ink); vertical-align: top; }
 .om-prose input[type="checkbox"] { appearance: none; width: 12px; height: 12px; margin: 0 6px 0 0; border: var(--rule-md) solid var(--ink); vertical-align: -1px; }
 .om-prose input[type="checkbox"]:checked { background: var(--ink); }
+
+/* Compact: prose inside a working screen, on the element around .om-prose.
+   Mono headings, hierarchy by weight, and the page's title keeps the Archivo. */
+.om-prose-compact .om-prose { max-width: none; font-size: var(--fs-md); line-height: 1.55; }
+.om-prose-compact .om-prose h1,
+.om-prose-compact .om-prose h2,
+.om-prose-compact .om-prose h3 {
+  margin: var(--sp-4) 0 var(--sp-1);
+  padding: 0;
+  border: 0;
+  font: 700 var(--fs-md)/1.3 var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.om-prose-compact .om-prose > :first-child { margin-top: 0; }
+.om-prose-compact .om-prose p,
+.om-prose-compact .om-prose ul,
+.om-prose-compact .om-prose ol,
+.om-prose-compact .om-prose blockquote,
+.om-prose-compact .om-prose pre,
+.om-prose-compact .om-prose table { margin-bottom: var(--sp-2); }

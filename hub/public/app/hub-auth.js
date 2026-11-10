@@ -32,15 +32,25 @@
   // opts.up() and opts.down() report the connection.
   function events(opts) {
     var current = null;
+    var refused = false;
     function retry() {
       if (opts.down) opts.down();
       setTimeout(connect, 3000);
     }
     function connect() {
+      if (refused) return;
       fetch('/api/events/ticket', { method: 'POST', headers: auth() }).then(function (r) {
+        // 403 is an answer, not an outage: a token scoped to some projects gets
+        // no stream, by design. Asking again every 3 seconds won't change it.
+        if (r.status === 403) {
+          refused = true;
+          if (opts.down) opts.down();
+          return null;
+        }
         if (!r.ok) throw new Error('ticket refused: ' + r.status);
         return r.json();
       }).then(function (t) {
+        if (!t) return;
         var es = new EventSource('/api/events?ticket=' + encodeURIComponent(t.ticket));
         current = es;
         es.onopen = function () { if (opts.up) opts.up(); };

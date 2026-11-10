@@ -5,10 +5,10 @@
 import { h, fill, on } from '../dom.js';
 import * as store from '../store.js';
 import { LANES, STATUSES, statusLane, statusWord, swatch } from '../status.js';
-import { emptyState } from '../ui.js';
+import { emptyState, relativeTime } from '../ui.js';
 import { byPriority, evidenceOf, goalChildren, isGoal, lastTouched, projectIds, projectLabel, undecided } from '../work/model.js';
 import { keyed } from '../work/keyed.js';
-import { ago, keep, missionHref, remember } from '../work/parts.js';
+import { keep, missionHref, remember } from '../work/parts.js';
 
 const DONE_CAP = 8;
 // Discarded has the Archive toggle, as a list of tombstones shouldn't be a chip.
@@ -33,7 +33,7 @@ function card(t, state) {
       h('span', { class: 'om-grow' }),
       t.priority === 1 ? h('span', { class: 'om-tag om-tag-solid', title: 'Priority 1' }, 'P1') : null,
       t.priority === 2 ? h('span', { class: 'om-tag', title: 'Priority 2' }, 'P2') : null,
-      h('span', { class: 'om-meta' }, ago(t.created_at))),
+      h('span', { class: 'om-meta' }, relativeTime(t.created_at))),
     h('span', { class: 'work-card-title' }, t.title),
     h('span', { class: 'work-card-meta om-meta' },
       isGoal(t) ? h('span', { class: 'om-tag' }, 'Goal') : null,
@@ -48,7 +48,7 @@ function card(t, state) {
 }
 
 const cardSig = (t, state) => [t.title, t.status, t.gate, t.priority, t.project, t.assignee, t.reserved_for, undecided(t).length,
-  ago(t.created_at), evidenceOf(t.artifacts).current.length, projectLabel(state, t.project),
+  relativeTime(t.created_at), evidenceOf(t.artifacts).current.length, projectLabel(state, t.project),
   isGoal(t) ? goalChildren(state.tasks, t.id).map((k) => k.status) : 0,
   t.status === 'approved' ? (t.items || []).map((it) => it.applied_at || '') : 0];
 
