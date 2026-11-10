@@ -15,10 +15,11 @@ import { navigate } from './router.js';
 import { getTheme, setTheme, THEMES } from './theme.js';
 import { toast } from './ui.js';
 import { plainText, slugify } from './markdown.js';
+import { swatch, statusWord } from './status.js';
 
 const PROJECT_KEY = 'bureau_palette_project';
 const DEBOUNCE_MS = 180;
-const MAX_MISSIONS = 6;
+const MAX_MISSIONS = 5;
 const MAX_BRAIN = 8;
 const isMac = /mac|iphone|ipad/i.test(navigator.platform);
 
@@ -82,10 +83,41 @@ function matchMissions(tasks, q) {
     scored.push({ t, score });
   }
   scored.sort((a, b) => b.score - a.score || String(b.t.id).localeCompare(String(a.t.id), undefined, { numeric: true }));
-  return scored.slice(0, MAX_MISSIONS).map((x) => x.t);
+  return { list: scored.slice(0, MAX_MISSIONS).map((x) => x.t), total: scored.length };
 }
 
 const contains = (text, q) => text.toLowerCase().includes(q.toLowerCase());
+
+// The text with each place it matches what you typed marked, so you can see
+// why a row is there.
+function marked(text, q) {
+  const s = String(text);
+  const needles = [q.trim(), ...q.trim().split(/\s+/)].filter((w) => w.length).map((w) => w.toLowerCase());
+  const lower = s.toLowerCase();
+  const hits = [];
+  for (const n of needles) {
+    let at = lower.indexOf(n);
+    while (at !== -1 && n) {
+      hits.push([at, at + n.length]);
+      at = lower.indexOf(n, at + n.length);
+    }
+    if (hits.length && n === needles[0]) break; // the whole query matched, that's enough
+  }
+  if (!hits.length) return s;
+  hits.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let from = 0;
+  for (const [a, b] of hits) {
+    if (a < from) continue;
+    if (a > from) out.push(s.slice(from, a));
+    out.push(h('b', { class: 'pal-hit' }, s.slice(a, b)));
+    from = b;
+  }
+  if (from < s.length) out.push(s.slice(from));
+  return out;
+}
+
+const icon = (name) => h('i', { class: `om-icon om-i-${name}`, 'aria-hidden': 'true' });
 
 function open(initial = '') {
   if (session) {
@@ -111,25 +143,28 @@ function open(initial = '') {
 
   const stateNow = () => store.getState() || {};
   const projects = () => stateNow().projects || [];
-  const statusOf = (t) => String(t.status || '').replace(/_/g, ' ');
 
   // ---- what's on offer ----
 
   const projectRow = (p) => ({
     key: `project:${p.id}`,
+    icon: 'folder',
     title: p.label || p.id,
     meta: p.id,
     run: () => go(`/projects/${encodeURIComponent(p.id)}`),
   });
-  const pageRow = ([label, href]) => ({ key: `page:${href}`, title: label, meta: href, run: () => go(href) });
+  const pageRow = ([label, href]) => ({ key: `page:${href}`, icon: 'arrow-right', title: label, meta: href, run: () => go(href) });
   const missionRow = (t) => ({
     key: `mission:${t.id}`,
+    status: t.status,
+    id: t.id,
     title: t.title || t.id,
-    meta: `${t.id} ${statusOf(t)}`,
+    meta: statusWord(t.status),
     run: () => go(`/missions/${t.id}`),
   });
   const themeRow = (name) => ({
     key: `theme:${name}`,
+    icon: 'eye',
     title: `Theme: ${name}`,
     meta: getTheme() === name ? 'current' : '',
     run: () => { setTheme(name); close(); },
@@ -141,6 +176,7 @@ function open(initial = '') {
     if (brain.state === 'done' && !brain.results.length) return [{ key: 'brain:none', still: true, title: 'Nothing in the brain matches.' }];
     return brain.results.slice(0, MAX_BRAIN).map((r, i) => ({
       key: `brain:${r.file}:${r.line}:${i}`,
+      icon: 'file',
       title: r.section ? `${baseName(r.file)} / ${r.section}` : baseName(r.file),
       sub: plainText(r.text).slice(0, 140),
       meta: r.file.includes('/') ? r.file.slice(0, r.file.lastIndexOf('/')) : '',
@@ -154,15 +190,16 @@ function open(initial = '') {
       return [
         { label: 'Go to', rows: PAGES.map(pageRow) },
         { label: 'New', rows: [
-          { key: 'new:mission', title: 'New mission', meta: '/missions/new', run: () => go('/missions/new') },
-          { key: 'new:goal', title: 'New goal', meta: '/goals/new', run: () => go('/goals/new') },
-          { key: 'new:project', title: 'New project', meta: '/projects', run: () => go('/projects') },
+          { key: 'new:mission', icon: 'plus', maker: true, title: 'New mission', meta: '/missions/new', run: () => go('/missions/new') },
+          { key: 'new:goal', icon: 'plus', maker: true, title: 'New goal', meta: '/goals/new', run: () => go('/goals/new') },
+          { key: 'new:project', icon: 'plus', maker: true, title: 'New project', meta: '/projects', run: () => go('/projects') },
         ] },
         { label: 'Theme', rows: THEMES.map(themeRow) },
       ];
     }
 
-    const missions = matchMissions(stateNow().tasks || [], q);
+    const matched = matchMissions(stateNow().tasks || [], q);
+    const missions = matched.list;
     const pages = PAGES.filter(([label]) => contains(label, q));
     const projs = projects().filter((p) => contains(p.id, q) || contains(p.label || '', q));
     const lower = q.toLowerCase();
@@ -175,14 +212,20 @@ function open(initial = '') {
       label: 'Create',
       rows: [{
         key: 'create',
+        icon: 'plus',
         maker: true,
-        title: `New mission: ${q}`,
+        title: 'New mission',
+        query: q,
         meta: project ? `in ${project}` : '',
         run: () => createMission(q, project),
       }],
     };
+    const moreMissions = matched.total - missions.length;
     const found = [
-      { label: 'Missions', rows: missions.map(missionRow) },
+      { label: 'Missions', count: matched.total, rows: [
+        ...missions.map(missionRow),
+        ...(moreMissions > 0 ? [{ key: 'missions:more', still: true, title: `${moreMissions} more match. Type more to narrow it.` }] : []),
+      ] },
       { label: 'Pages', rows: pages.map(pageRow) },
       { label: 'Projects', rows: projs.map(projectRow) },
     ];
@@ -194,8 +237,8 @@ function open(initial = '') {
     const more = {
       label: 'More',
       rows: [
-        { key: 'create:project', maker: true, title: `New project: ${q}`, run: () => createProject(q) },
-        { key: 'create:goal', maker: true, title: `New goal: ${q}`, run: () => go(`/goals/new?title=${encodeURIComponent(q)}`) },
+        { key: 'create:project', icon: 'plus', maker: true, title: 'New project', query: q, run: () => createProject(q) },
+        { key: 'create:goal', icon: 'plus', maker: true, title: 'New goal', query: q, run: () => go(`/goals/new?title=${encodeURIComponent(q)}`) },
         ...themes.map(themeRow),
       ],
     };
@@ -305,7 +348,7 @@ function open(initial = '') {
 
   // ---- the page itself ----
 
-  const list = h('div', { class: 'om-palette-list', id: 'pal-list', role: 'listbox', 'aria-label': 'Results' });
+  const list = h('div', { class: 'pal-list', id: 'pal-list', role: 'listbox', 'aria-label': 'Results' });
   const input = h('input', {
     class: 'om-palette-input',
     type: 'text',
@@ -329,7 +372,7 @@ function open(initial = '') {
   });
   const error = h('p', { class: 'pal-error', role: 'alert', hidden: true });
   const projectSelect = h('select', {
-    class: 'om-select pal-project',
+    class: 'om-select om-input-sm pal-project',
     'aria-label': 'Project for a new mission',
     onChange() {
       wantedProject = projectSelect.value;
@@ -338,15 +381,15 @@ function open(initial = '') {
       paint();
     },
   });
-  const hint = h('span', { class: 'om-meta pal-hint' });
-  const closeBtn = h('button', { type: 'button', class: 'om-btn om-btn-ghost pal-close', 'aria-label': 'Close', onClick: () => close() }, 'Esc');
+  const hint = h('span', { class: 'om-data-s pal-hint' });
+  const closeBtn = h('button', { type: 'button', class: 'om-btn om-btn-ghost om-btn-sm pal-close', 'aria-label': 'Close', onClick: () => close() }, h('span', { class: 'om-kbd' }, 'Esc'));
 
   const dialog = h('div', { class: 'om-dialog om-palette', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Command palette' },
-    input,
+    h('div', { class: 'pal-search' }, icon('search'), input),
     list,
     error,
     h('div', { class: 'pal-foot' },
-      h('label', { class: 'pal-project-label' }, h('span', { class: 'om-label' }, 'Project'), projectSelect),
+      h('label', { class: 'pal-project-label' }, h('span', { class: 'om-label' }, 'Project'), h('span', { class: 'om-select-wrap' }, projectSelect)),
       hint,
       closeBtn));
   const scrim = h('div', {
@@ -399,19 +442,25 @@ function open(initial = '') {
       selectedKey = defaultKey();
     }
     let n = 0;
+    const q = query.trim();
     fill(list, made.map((g, gi) => {
       const labelId = `pal-g${gi}`;
+      const live = g.rows.filter((r) => !r.still).length;
+      const count = g.count !== undefined ? g.count : live;
       return h('div', { role: 'group', 'aria-labelledby': labelId, class: 'pal-group' },
-        h('div', { class: 'om-label pal-group-label', id: labelId }, g.label),
+        h('div', { class: 'om-label pal-group-label', id: labelId },
+          h('span', null, g.label),
+          q && count > 1 ? h('span', { class: 'pal-group-count' }, String(count)) : null),
         g.rows.map((r) => {
           const id = `pal-o${n++}`;
           if (r.still) {
             return h('div', { class: 'pal-still', role: 'presentation' },
               r.wait ? h('div', { class: 'om-wait' }) : null,
-              h('span', { class: 'om-meta' }, r.title));
+              h('span', { class: 'om-data-s' }, r.title));
           }
+          const lead = r.status ? swatch(r.status) : r.icon ? icon(r.icon) : null;
           return h('div', {
-            class: 'om-list-row pal-row',
+            class: ['om-row', 'pal-row', r.maker && 'pal-maker'],
             id,
             role: 'option',
             'aria-selected': 'false',
@@ -430,10 +479,14 @@ function open(initial = '') {
               markSelected();
             },
           },
-          h('span', { class: 'pal-row-main' },
-            h('span', { class: 'pal-row-title' }, r.title),
-            r.sub ? h('span', { class: 'pal-row-sub' }, r.sub) : null),
-          r.meta ? h('span', { class: 'pal-row-meta' }, r.meta) : null);
+          h('span', { class: 'pal-lead' }, lead),
+          r.id ? h('span', { class: 'om-row-id' }, r.maker || !q ? r.id : marked(r.id, q)) : null,
+          h('span', { class: 'pal-main' },
+            h('span', { class: 'pal-title' },
+              r.maker || !q ? r.title : marked(r.title, q),
+              r.query ? [' ', h('span', { class: 'pal-query' }, `"${r.query}"`)] : null),
+            r.sub ? h('span', { class: 'pal-sub' }, r.sub) : null),
+          r.meta ? h('span', { class: 'pal-meta' }, r.meta) : null);
         }));
     }));
     markSelected();

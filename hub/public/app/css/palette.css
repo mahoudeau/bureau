@@ -1,0 +1,54 @@
+/* The command palette, on OMAKO DS. Results are list rows: they invert and get
+   the edge like every other row. Results speak louder than commands: a result
+   is a title in medium weight, a command is a plus sign and quiet text. */
+
+.pal-open { overflow: hidden; }
+.pal-scrim { padding-top: 12vh; }
+.om-palette { display: flex; flex-direction: column; width: min(680px, 100%); max-height: 72vh; overflow: hidden; }
+
+/* The search line: an icon, then what you type, a step above the results. */
+.pal-search { flex: none; display: flex; align-items: center; gap: var(--sp-3); padding-left: var(--sp-4); border-bottom: var(--rule-md) solid var(--ink); }
+.pal-search .om-icon { flex: none; }
+.pal-search .om-palette-input { flex: 1 1 auto; min-width: 0; padding-left: 0; border-bottom: 0; font-weight: 600; }
+
+.pal-list { flex: 1 1 auto; min-height: 0; overflow: auto; }
+
+/* A group: a rule, the name and how many. */
+.pal-group + .pal-group { border-top: var(--rule-sm) solid var(--ink); }
+.pal-group-label { display: flex; justify-content: space-between; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4) var(--sp-1); }
+.pal-group-count { font-weight: 400; }
+
+.om-row.pal-row { gap: var(--sp-3); min-height: 36px; padding: 4px var(--sp-4); border-bottom: 0; }
+.pal-lead { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; }
+.pal-row .om-row-id { min-width: 44px; }
+.pal-main { display: grid; flex: 1 1 auto; min-width: 0; }
+.pal-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-hit { font-weight: 800; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.pal-sub { font: 400 12px/16px var(--font-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pal-meta { flex: 0 1 auto; max-width: 40%; font: 400 12px/16px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A command: what it does, then what you typed, in mono. */
+.pal-maker .pal-title { font-weight: 400; }
+.pal-query { font: 700 13px/18px var(--font-mono); }
+
+.pal-still { display: flex; align-items: center; gap: var(--sp-2); padding: 4px var(--sp-4) var(--sp-2); }
+
+.pal-error { margin: 0; padding: var(--sp-2) var(--sp-4); font: 700 12px/16px var(--font-text); border-top: var(--rule-md) solid var(--ink); }
+.pal-error[hidden] { display: none; }
+
+.pal-foot { flex: none; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-4); border-top: var(--rule-md) solid var(--ink); }
+.pal-project-label { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.pal-project-label .om-select-wrap { max-width: 180px; }
+.pal-project { min-height: 28px; padding-left: 8px; padding-right: 28px; font-size: 13px; appearance: none; }
+.pal-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 760px) {
+  .om-palette { max-height: 84vh; }
+  .pal-scrim { padding: var(--sp-3); }
+  .pal-search .om-palette-input { font-size: 16px; }
+  .pal-hint { display: none; }
+  .pal-foot { justify-content: space-between; }
+  .pal-project-label .om-select-wrap { max-width: 150px; }
+  .pal-project { font-size: 16px; }
+  .pal-row .om-row-id { min-width: 0; }
+}

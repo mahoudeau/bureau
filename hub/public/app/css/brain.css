@@ -148,27 +148,6 @@
 .md-fields dt { font-weight: 700; }
 .md-fields dd { margin: 0; overflow-wrap: anywhere; }
 
-/* ---- The palette ---- */
-.pal-open { overflow: hidden; }
-.pal-scrim { padding-top: 12vh; }
-.om-palette { display: flex; flex-direction: column; width: min(680px, 100%); max-height: 72vh; overflow: hidden; }
-.om-palette .om-palette-input { flex: none; }
-.om-palette .om-palette-list { flex: 1 1 auto; min-height: 0; max-height: none; padding-bottom: var(--sp-2); }
-.pal-group-label { padding: var(--sp-3) var(--sp-3) var(--sp-1); }
-.om-list-row.pal-row { justify-content: space-between; gap: var(--sp-4); min-height: 32px; padding: 4px var(--sp-3); border-bottom: 0; }
-.pal-row-main { display: grid; min-width: 0; flex: 1 1 auto; }
-.pal-row-title { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pal-row-sub { font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pal-row-meta { flex: 0 1 auto; max-width: 42%; font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pal-still { display: grid; gap: var(--sp-1); padding: 4px var(--sp-3); }
-.pal-error { margin: 0; padding: var(--sp-2) var(--sp-3); font-size: var(--fs-sm); font-weight: 700; border-top: var(--rule-md) solid var(--ink); }
-.pal-error[hidden] { display: none; }
-.pal-foot { flex: none; display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-2) var(--sp-3); border-top: var(--rule-md) solid var(--ink); }
-.pal-project-label { display: inline-flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.pal-project { width: auto; max-width: 180px; min-height: 26px; padding: 0 6px; font-size: var(--fs-sm); }
-.pal-hint { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pal-close { min-height: 26px; }
-
 @media (max-width: 1040px) {
   .brain-note { grid-template-columns: minmax(0, 1fr); }
   .brain-note-solo { grid-template-columns: minmax(0, 1fr); }
@@ -189,10 +168,4 @@
   .brain-title { font-size: clamp(28px, 8.4vw, 44px); }
   .brain-summary { font-size: 14px; }
   .md-claim { grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
-  .om-palette { max-height: 84vh; }
-  .pal-scrim { padding: var(--sp-3); }
-  .om-palette .om-palette-input { font-size: 16px; }
-  .pal-hint { display: none; }
-  .pal-foot { justify-content: space-between; }
-  .pal-project { max-width: 150px; font-size: 16px; }
 }
