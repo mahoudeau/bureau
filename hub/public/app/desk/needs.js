@@ -9,7 +9,7 @@ import { relativeTime, toast } from '../ui.js';
 import { lastEntry, needsMe, oldestFirst, projectLabel, undecided } from './model.js';
 import { keyed } from './keyed.js';
 import { missionHref, movedOn, refusalLine, remember, keep, rule } from './parts.js';
-import { batchBar } from './batch.js';
+import { batchBar, batchRefusal } from './batch.js';
 
 function clipNote(text, n = 140) {
   const s = String(text || '').replace(/\s+/g, ' ').trim();
@@ -22,6 +22,7 @@ export function needsSection(ctx) {
   const selection = new Set();
   const trays = new Map(); // id -> open tray kind, survives a repaint
 
+  const hint = h('span', { class: 'work-needs-hint', hidden: true }, 'Tick two or more to rule on them together');
   const count = h('span', { class: 'work-needs-count om-strong' });
   const sort = h('button', {
     type: 'button',
@@ -44,7 +45,7 @@ export function needsSection(ctx) {
   const node = h('section', { class: 'work-needs', 'aria-label': 'Needs me now' },
     h('div', { class: 'work-needs-head' },
       h('h1', { class: 'om-display om-h2' }, 'Needs me now'),
-      h('div', { class: 'om-row' }, count, sort)),
+      h('div', { class: 'om-cluster' }, hint, count, sort)),
     clear, list, batch.node);
 
   const visible = () => {
@@ -143,7 +144,9 @@ export function needsSection(ctx) {
       if (!review) actions.push(h('button', { type: 'button', class: 'om-btn om-btn-primary work-need-go', onClick: () => openTray('answer') }, 'Answer'));
 
       fill(head,
-        review
+        // A box only where a batch would take it. A question needs its own
+        // answer, and undecided items or a critic gate need their own page.
+        !batchRefusal(task)
           ? h('label', { class: 'om-check work-need-pick' },
             h('input', {
               type: 'checkbox',
@@ -179,6 +182,9 @@ export function needsSection(ctx) {
     for (const id of [...ruled]) if (!needsMe(state).some((t) => t.id === id)) ruled.delete(id);
     const rows = visible();
     const n = rows.length;
+    // A row that stopped being batchable has lost its box, so it can't stay ticked.
+    for (const t of rows) if (batchRefusal(t)) selection.delete(t.id);
+    hint.hidden = rows.filter((t) => !batchRefusal(t)).length < 2;
     count.textContent = n ? `${n} waiting` : '';
     sort.textContent = newest ? 'Newest first' : 'Oldest first';
     sort.hidden = n < 2;

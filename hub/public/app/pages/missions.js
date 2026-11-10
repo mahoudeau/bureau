@@ -189,7 +189,7 @@ export async function render(ctx) {
       h('span', { class: 'work-lane-word om-label' }, label), headCount, h('span', { class: 'work-caret', 'aria-hidden': 'true' }));
     const cards = h('div', { class: 'work-cards' });
     const foot = h('div', { class: 'work-lane-foot' });
-    const band = h('div', { class: `om-band ${dither}`, 'aria-hidden': 'true' });
+    const band = h('div', { class: `app-strip ${dither}`, 'aria-hidden': 'true' });
     const body = h('div', { class: 'work-lane-body' }, cards, foot);
     const el = h('section', { class: 'work-lane', dataset: { lane: key }, 'aria-label': label }, band, button, body);
     el.paintLane = (tasks, state) => {

@@ -18,7 +18,7 @@ export function refusal(err) {
 export function pageHead(title, ...right) {
   return h('div', { class: 'set-head' },
     h('h1', { class: 'om-display om-h2 set-title' }, title),
-    right.length ? h('div', { class: 'om-row' }, right) : null);
+    right.length ? h('div', { class: 'om-cluster om-cluster-3' }, right) : null);
 }
 
 export function crumbs(...items) {

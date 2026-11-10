@@ -1,0 +1,138 @@
+/* The old design system's names, kept while the pages move to the new one, one
+   at a time. Delete a rule once nothing uses it, and this file when the port is
+   done. Nothing new goes in here. */
+
+:root {
+  --fs-2xs: 10px;
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-md: 13px;
+  --fs-base: 14px;
+  --fs-lg: 15px;
+  --fs-xl: 18px;
+  --fs-2xl: 24px;
+  --fs-3xl: 32px;
+  --lh-tight: 0.92;
+  --lh-snug: 1.3;
+  --lh-body: 1.55;
+  --ls-display: -0.02em;
+  --ls-label: 0.08em;
+}
+
+body.om-page { line-height: 1.45; }
+
+/* Type */
+.om-display {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-variation-settings: "wdth" 125;
+  font-weight: 900;
+  letter-spacing: var(--ls-display);
+  line-height: var(--lh-tight);
+  text-transform: uppercase;
+}
+.om-h1 { font-size: var(--fs-3xl); }
+.om-h2 { font-size: var(--fs-2xl); }
+.om-meta { font-family: var(--font-mono); font-size: var(--fs-xs); }
+.om-dither-type { -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+/* The section bar. The new om-bar is a poster part no app page uses. */
+.om-bar {
+  gap: var(--sp-3);
+  padding: 0 0 var(--sp-1);
+  border-top: 0;
+  border-bottom: var(--rule-md) solid var(--ink);
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* The strip at the head of a lane. The name om-band now means the page band. */
+.app-strip { display: block; height: 10px; border: var(--rule-sm) solid var(--ink); }
+
+/* Rows */
+.om-list { border-top: var(--rule-sm) solid var(--ink); }
+.om-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  width: 100%;
+  min-height: var(--row-h);
+  padding: 3px var(--sp-2);
+  border: 0;
+  border-bottom: var(--rule-sm) solid var(--ink);
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.om-list-row:hover, .om-list-row[aria-selected="true"], .om-list-row[aria-current="page"] { background: var(--ink); color: var(--paper); }
+.om-list-row:hover .om-swatch, .om-list-row[aria-selected="true"] .om-swatch, .om-list-row[aria-current="page"] .om-swatch { outline: 1px solid var(--paper); }
+
+.om-alert-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-3);
+  min-height: var(--row-h);
+  padding: var(--sp-2) var(--sp-3);
+  --ink: var(--ink-inv);
+  --paper: var(--paper-inv);
+  --dot: conic-gradient(from 270deg at var(--px) var(--px), var(--ink) 0 25%, transparent 0);
+  --hole: conic-gradient(from 270deg at var(--px) var(--px), var(--paper) 0 25%, transparent 0);
+  background: var(--paper);
+  color: var(--ink);
+}
+.om-alert-row + .om-alert-row { border-top: var(--rule-sm) solid var(--ink); }
+
+/* Cards and panels */
+.om-card:hover { background: var(--ink); color: var(--paper); }
+.om-card:hover .om-tag-solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.om-card:hover .om-swatch { outline: 1px solid var(--paper); }
+button.om-card { width: 100%; font: inherit; text-align: left; cursor: pointer; }
+.om-panel { padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); background: var(--paper); }
+.om-panel-heavy { border: var(--rule) solid var(--ink); background: var(--paper); }
+
+/* A native select keeps its arrow until its page moves to om-select-wrap. */
+.om-select { appearance: auto; padding-right: var(--ctl-pad); }
+
+.om-palette-list { max-height: 50vh; overflow: auto; }
+
+/* Prose inside a working screen, on the element around the prose. */
+.om-prose-compact .om-prose { max-width: none; font-size: var(--fs-md); line-height: 1.55; }
+.om-prose-compact .om-prose h1,
+.om-prose-compact .om-prose h2,
+.om-prose-compact .om-prose h3 {
+  margin: var(--sp-4) 0 var(--sp-1);
+  padding: 0;
+  border: 0;
+  font: 700 var(--fs-md)/1.3 var(--font-mono);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.om-prose-compact .om-prose > :first-child { margin-top: 0; }
+.om-prose-compact .om-prose p,
+.om-prose-compact .om-prose ul,
+.om-prose-compact .om-prose ol,
+.om-prose-compact .om-prose blockquote,
+.om-prose-compact .om-prose pre,
+.om-prose-compact .om-prose table { margin-bottom: var(--sp-2); }
+
+/* The footer slab */
+.om-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) var(--pad);
+  --ink: var(--ink-inv);
+  --paper: var(--paper-inv);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: var(--fs-sm);
+}
+.om-foot a { color: inherit; }
+.om-foot a:hover { background: var(--ink); color: var(--paper); }

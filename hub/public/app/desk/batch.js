@@ -9,7 +9,7 @@ import { statusWord } from '../status.js';
 import { toast } from '../ui.js';
 import { movedOn, rule, refusalLine } from './parts.js';
 
-function refusal(t) {
+export function batchRefusal(t) {
   if (!t) return 'no longer on the board';
   if (t.status !== 'review') return 'left review';
   if (t.gate === 'critic') return 'critic gate';
@@ -33,7 +33,7 @@ export function batchBar({ getState, selection, onChange, onDone }) {
 
   function read() {
     const tasks = new Map(((getState() && getState().tasks) || []).map((t) => [t.id, t]));
-    const rows = [...selection].map((id) => ({ id, t: tasks.get(id), reason: refusal(tasks.get(id)) }));
+    const rows = [...selection].map((id) => ({ id, t: tasks.get(id), reason: batchRefusal(tasks.get(id)) }));
     return { eligible: rows.filter((r) => !r.reason), refused: rows.filter((r) => r.reason) };
   }
 
@@ -91,7 +91,7 @@ export function batchBar({ getState, selection, onChange, onDone }) {
       h('label', { class: 'om-check' }, ack, `I read these ${eligible.length} titles`),
       noteEl,
       err.el,
-      h('div', { class: 'om-row' }, approve, back,
+      h('div', { class: 'om-cluster om-cluster-3' }, approve, back,
         h('button', { type: 'button', class: 'om-btn om-btn-ghost', onClick() { confirming = false; paint(); } }, 'Cancel')));
   }
 
@@ -120,7 +120,7 @@ export function batchBar({ getState, selection, onChange, onDone }) {
     fill(node,
       h('div', { class: 'om-spread' },
         h('span', { class: 'om-strong' }, `${selection.size} selected`),
-        h('div', { class: 'om-row' },
+        h('div', { class: 'om-cluster om-cluster-3' },
           canBatch ? h('button', { type: 'button', class: 'om-btn om-btn-primary', onClick() { confirming = true; paint(); } }, 'Review and apply') : null,
           h('button', { type: 'button', class: 'om-btn om-btn-ghost', onClick: clear }, 'Clear'))),
       refused.length ? h('p', { class: 'work-batch-why' }, `One at a time: ${refused.map((r) => `${r.id} ${r.reason}`).join(', ')}.`) : null,

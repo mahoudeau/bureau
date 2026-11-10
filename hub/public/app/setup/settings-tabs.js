@@ -120,7 +120,7 @@ export async function roles(ctx, health) {
     };
     return h('div', { class: 'set-role' },
       h('span', { class: 'om-strong set-role-name' }, name),
-      h('span', { class: 'om-row set-role-boxes' }, ROLES.map(([role]) => {
+      h('span', { class: 'om-cluster om-cluster-3 set-role-boxes' }, ROLES.map(([role]) => {
         const box = h('input', {
           type: 'checkbox',
           checked: held.has(role),
@@ -179,7 +179,7 @@ function mintForm(ctx, state, onMinted) {
     },
   });
   const boxes = (state.projects || []).map((p) => ({ id: p.id, box: h('input', { type: 'checkbox', name: 'project', value: p.id }), label: p.label || p.id }));
-  const list = h('div', { class: 'om-row', hidden: true }, boxes.map(({ box, label: text }) => h('label', { class: 'om-check' }, box, text)));
+  const list = h('div', { class: 'om-cluster om-cluster-3', hidden: true }, boxes.map(({ box, label: text }) => h('label', { class: 'om-check' }, box, text)));
   const error = message();
   const submit = h('button', { type: 'submit', class: 'om-btn om-btn-primary' }, 'Mint token');
 

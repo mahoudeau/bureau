@@ -49,7 +49,8 @@ function collect() {
   const queue = [];
   const add = (url, by) => { if (isAsset(url) && !seen.has(url)) { seen.set(url, by); queue.push(url); } };
   for (const url of urlsInHtml(read('app/index.html'))) add(url, 'app/index.html');
-  add('/omako-ds/all.css', 'the link pages');
+  add('/omako-ds/css/all.css', 'the link pages');
+  add('/app/css/aliases.css', 'the link pages');
   add('/app/css/link-pages.css', 'the link pages');
   while (queue.length) {
     const url = queue.shift();
@@ -83,7 +84,7 @@ async function main() {
 
   console.log('1. everything the shell and the stylesheets name');
   const assets = collect();
-  check('the walk found the shell\'s assets', assets.has('/app/main.js') && assets.has('/omako-ds/tokens.css') && assets.has('/app/pages/mission.js'), [...assets.keys()]);
+  check('the walk found the shell\'s assets', assets.has('/app/main.js') && assets.has('/omako-ds/css/tokens.css') && assets.has('/app/pages/mission.js'), [...assets.keys()]);
   check('the walk reached the fonts through all.css', [...assets.keys()].some((u) => u.endsWith('.woff2')), [...assets.keys()]);
 
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: scratch, USERPROFILE: scratch, PORT: String(PORT), HOST: '127.0.0.1', BUREAU_TOKEN: 'assets-test-token-0123456789',
@@ -104,10 +105,10 @@ async function main() {
     }
 
     console.log('2. what the hub must not serve from those folders');
-    for (const url of ['/app/index.html', '/omako-ds/README.md', '/app/../office.html', '/app/%2e%2e/office.html']) {
+    for (const url of ['/app/index.html', '/omako-ds/NOTICE.md', '/app/../office.html', '/app/%2e%2e/office.html']) {
       const r = await fetch(BASE + url);
       const body = await r.text();
-      check(`${url} is not a static file`, !body.includes('office-assets') && !body.startsWith('# omako-ds'), r.status);
+      check(`${url} is not a static file`, !body.includes('office-assets') && !body.startsWith('# Notice'), r.status);
     }
 
     console.log('3. the old dashboards are gone and their links redirect');

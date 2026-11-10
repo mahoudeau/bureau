@@ -25,7 +25,6 @@ const routes = [
   { path: '/agents', title: 'Agents', load: () => import('./pages/agents.js') },
   { path: '/activity', title: 'Activity', load: () => import('./pages/activity.js') },
   { path: '/settings', title: 'Settings', load: () => import('./pages/settings.js') },
-  { path: '/ds', title: 'Design system', public: true, load: () => import('./pages/ds.js') },
 ];
 
 function guard(route, url) {

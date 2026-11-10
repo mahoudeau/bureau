@@ -63,7 +63,7 @@ function progressPart(goal, state) {
 function head(goal, state) {
   return h('div', { class: 'set-goalhead' },
     h('h1', { class: 'om-display om-h2 set-title' }, goalName(goal)),
-    h('p', { class: 'om-row om-meta set-facts' },
+    h('p', { class: 'om-cluster om-cluster-3 om-meta set-facts' },
       statusLabel(goal.status),
       h('span', null, projectLabel(state, goal.project)),
       goal.assignee ? h('span', null, goal.assignee) : null,

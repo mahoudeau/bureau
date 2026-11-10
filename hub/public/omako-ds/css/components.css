@@ -1,0 +1,361 @@
+/* ---- Atoms ---- */
+
+/* Icon */
+.om-icon { display: inline-block; flex: none; width: 12px; height: 12px; background: currentColor; -webkit-mask: var(--i) center / 100% 100% no-repeat; mask: var(--i) center / 100% 100% no-repeat; }
+.om-icon-24 { width: 24px; height: 24px; }
+
+/* Mark */
+.om-mark { display: block; width: 24px; height: 24px; fill: currentColor; flex: none; }
+
+/* Button */
+.om-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  --btn-bw: var(--rule-sm);
+  border: var(--btn-bw) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 600 var(--ctl-fs)/1.1 var(--font-text);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.om-btn-primary { background: var(--ink); color: var(--paper); font-weight: 700; }
+/* Hover is a dithered lift, the raised sheet's lift scaled down: the button
+   shifts up and left over an L of 50% dither. Colours never change, so a
+   hovered secondary can't pass for a primary. Pressing sets it back down. */
+.om-btn:not(.om-btn-danger, .om-btn-omako, :disabled, [aria-disabled="true"]):is(:hover, .is-hover) { position: relative; z-index: 1; transform: translate(-2px, -2px); }
+.om-btn:not(.om-btn-danger, .om-btn-omako, :disabled, [aria-disabled="true"]):is(:hover, .is-hover)::after {
+  content: "";
+  position: absolute;
+  /* Measured from the outer edge, whatever the border, so the L always sits
+     outside the button. */
+  top: calc(4px - var(--btn-bw));
+  left: calc(4px - var(--btn-bw));
+  right: calc(-7px - var(--btn-bw));
+  bottom: calc(-7px - var(--btn-bw));
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+  clip-path: polygon(calc(100% - 6px) 0, 100% 0, 100% 100%, 0 100%, 0 calc(100% - 6px), calc(100% - 6px) calc(100% - 6px));
+}
+.om-btn:not(.om-btn-danger, :disabled, [aria-disabled="true"]):active { transform: none; }
+.om-btn:not(.om-btn-danger, :disabled, [aria-disabled="true"]):active::after { content: none; }
+.om-btn-ghost { border-color: transparent; background: transparent; }
+/* The OMAKO button: part of the identity, like the mark itself. Solid ink, the
+   O mark, the words "Continue with OMAKO". Products place it, they don't restyle it. */
+.om-btn-omako { gap: 10px; background: var(--ink); color: var(--paper); font-weight: 700; }
+.om-btn-omako .om-mark { width: 20px; height: 20px; }
+.om-btn-omako:hover, .om-btn-omako.is-hover { background: var(--paper); color: var(--ink); box-shadow: 3px 3px 0 var(--ink); }
+.om-btn-danger { border-color: transparent; background: transparent; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; font-weight: 500; }
+.om-btn-danger:hover, .om-btn-danger.is-hover { text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.om-btn:disabled, .om-btn[aria-disabled="true"] { background: transparent; color: var(--ink); border-style: dashed; border-color: var(--ink); font-weight: 400; cursor: not-allowed; transform: none; box-shadow: none; }
+/* Locked: a button that can't be used yet says why, and points at what's
+   missing. Use aria-disabled with data-why, not disabled, so it can still be
+   hovered and reached with Tab. Mark what's missing with .om-wants. */
+.om-btn[aria-disabled="true"] { position: relative; }
+.om-btn[aria-disabled="true"][data-why]:is(:hover, :focus-visible, .is-hover)::after {
+  content: attr(data-why);
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  z-index: var(--z-dock);
+  padding: 4px 8px;
+  border: var(--rule-sm) solid var(--paper);
+  background: var(--ink);
+  color: var(--paper);
+  font: 400 12px/16px var(--font-mono);
+  white-space: nowrap;
+}
+:is(form, .om-dock, .om-sheet-body, .om-raised-body, .om-dialog):has(.om-btn[aria-disabled="true"]:is(:hover, :focus-visible, .is-hover)) .om-wants { --ink: var(--ink-inv); --paper: var(--paper-inv); background: var(--paper); color: var(--ink); box-shadow: 0 0 0 6px var(--paper); }
+.om-dock:has(.om-btn[aria-disabled="true"]:is(:hover, :focus-visible, .is-hover)) .om-wants { --ink: var(--paper-inv); --paper: var(--ink-inv); }
+.om-btn-sm { min-height: 28px; padding: 0 8px; font-size: 13px; }
+.om-btn-lg { min-height: 52px; padding: 0 24px; font-size: 16px; }
+.om-btn-block { width: 100%; }
+.om-btn-icon { width: var(--ctl-h); padding: 0; }
+.om-btn-icon.om-btn-sm { width: 28px; }
+.om-input-sm { min-height: 28px; }
+@media (pointer: coarse) {
+  .om-btn-sm, .om-input-sm { min-height: var(--ctl-h); }
+  .om-btn-icon.om-btn-sm { width: var(--ctl-h); }
+}
+.om-btn-loud {
+  font-family: var(--font-display); font-stretch: 125%; font-variation-settings: "wdth" 125; font-weight: 900; text-transform: uppercase; letter-spacing: -0.01em;
+  --btn-bw: 3px; border-width: var(--btn-bw); min-height: 56px; padding: 0 26px; font-size: 18px;
+}
+
+/* Inputs */
+.om-input, .om-textarea, .om-select {
+  width: 100%;
+  min-height: var(--ctl-h);
+  padding: 0 var(--ctl-pad);
+  border: var(--rule-sm) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 var(--ctl-fs)/1.4 var(--font-text);
+}
+.om-textarea { display: block; min-height: 96px; padding-block: var(--sp-2); resize: vertical; }
+.om-input::placeholder, .om-textarea::placeholder { color: var(--ink); opacity: 0.62; }
+.om-input:focus, .om-textarea:focus, .om-select:focus, .om-input.is-focus { outline: none; box-shadow: var(--shadow-control); border-width: var(--rule-md); }
+.om-input:disabled, .om-textarea:disabled, .om-select:disabled { border-style: dashed; cursor: not-allowed; }
+.om-input[aria-invalid="true"], .om-textarea[aria-invalid="true"] { border-width: var(--rule-md); }
+.om-input-mono { font-family: var(--font-mono); font-size: 13px; }
+.om-select-wrap { position: relative; display: block; }
+.om-select { appearance: none; padding-right: 28px; cursor: pointer; }
+.om-select-wrap::after { content: ""; position: absolute; right: 10px; top: 50%; margin-top: -2px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--ink); pointer-events: none; }
+
+/* Dock field: a writing line on ink, so it can't pass for a button. It turns
+   paper while you type in it, and stays paper while it holds text. */
+.om-dock .om-input { border: 0; border-bottom: var(--rule) solid var(--ink); background: transparent; padding-inline: 2px; }
+.om-dock .om-input:focus, .om-dock .om-input:not(:placeholder-shown) { background: var(--ink); color: var(--paper); border-bottom-color: var(--ink); padding-inline: var(--ctl-pad); box-shadow: none; }
+.om-dock .om-input:focus::placeholder, .om-dock .om-input:not(:placeholder-shown)::placeholder { color: var(--paper); }
+
+/* Checkbox, radio, switch */
+.om-check { display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; min-height: 20px; }
+.om-check input { appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border: var(--rule-sm) solid var(--ink); border-radius: 0; background: var(--paper); cursor: pointer; }
+.om-check input:hover { box-shadow: inset 0 0 0 1px var(--ink); }
+.om-check input[type="checkbox"]:checked { background: var(--ink); box-shadow: inset 0 0 0 2px var(--paper); }
+.om-check input[type="checkbox"]:indeterminate { background: linear-gradient(var(--ink), var(--ink)) center / 8px 2px no-repeat var(--paper); }
+.om-check input[type="radio"] { width: 13px; height: 13px; margin: 0 2px; transform: rotate(45deg); }
+.om-check input[type="radio"]:checked { background: var(--ink); box-shadow: inset 0 0 0 2px var(--paper); }
+.om-check input:disabled { border-style: dashed; cursor: not-allowed; }
+
+.om-switch { display: inline-flex; align-items: center; gap: var(--sp-2); cursor: pointer; }
+.om-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.om-switch-track { position: relative; flex: none; width: 36px; height: 18px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 2); background-position: 0 0, calc(var(--px) * 2) var(--px); }
+.om-switch-track::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 12px; background: var(--ink); }
+.om-switch input:checked + .om-switch-track { background: var(--ink); }
+.om-switch input:checked + .om-switch-track::after { left: 18px; background: var(--paper); }
+.om-switch input:focus-visible + .om-switch-track { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+/* Tag, count */
+.om-tag { display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; border: var(--rule-sm) solid currentColor; font: 700 10px/16px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+.om-tag-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.om-count { display: inline-block; min-width: 18px; padding: 0 4px; background: var(--ink); color: var(--paper); font: 700 11px/18px var(--font-mono); text-align: center; }
+.om-count-quiet { background: transparent; color: inherit; font-weight: 400; padding: 0; min-width: 0; }
+
+/* Swatch and status */
+.om-swatch { display: inline-block; flex: none; width: 14px; height: 14px; border: var(--rule-sm) solid var(--ink); }
+.om-swatch-lg { width: 24px; height: 24px; }
+.om-status { display: inline-flex; align-items: center; gap: 6px; font: 700 12px/16px var(--font-mono); letter-spacing: 0.04em; text-transform: uppercase; white-space: nowrap; }
+
+/* Kbd */
+.om-kbd { display: inline-block; min-width: 18px; padding: 0 4px; border: var(--rule-sm) solid currentColor; font: 700 10px/16px var(--font-mono); text-align: center; }
+
+/* Avatar: square, always. */
+.om-avatar { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; border: var(--rule-sm) solid var(--ink); background: var(--paper); color: var(--ink); font: 700 10px/1 var(--font-mono); text-transform: uppercase; }
+.om-avatar-solid { background: var(--ink); color: var(--paper); }
+.om-avatar-sm { width: 18px; height: 18px; font-size: 9px; }
+.om-avatar-lg { width: 40px; height: 40px; font-size: 14px; }
+.om-avatars { display: inline-flex; }
+.om-avatars > * + * { margin-left: -1px; }
+
+/* Meter and steps */
+.om-meter { position: relative; display: block; height: 10px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 4); background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2); }
+.om-meter > i { display: block; height: 100%; width: calc(var(--value, 0) * 1%); background: var(--ink); }
+.om-steps { display: inline-flex; gap: 3px; }
+.om-steps > i { display: block; width: 18px; height: 10px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); }
+.om-steps > i.is-done { background: var(--ink); }
+.om-steps > i.is-now { background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 2) calc(var(--px) * 2); background-position: 0 0, var(--px) var(--px); }
+
+/* Waiting */
+.om-wait { display: block; height: 10px; background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 2) calc(var(--px) * 2); background-position: 0 0, var(--px) var(--px); animation: om-march 0.6s steps(2) infinite; }
+@keyframes om-march { to { background-position: var(--px) 0, calc(var(--px) * 2) var(--px); } }
+.om-skeleton { display: block; height: 12px; background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 2); background-position: 0 0, calc(var(--px) * 2) var(--px); }
+@media (prefers-reduced-motion: reduce) { .om-wait { animation: none; } }
+
+/* Tooltip */
+.om-tooltip { display: inline-block; padding: 2px 6px; font: 400 11px/16px var(--font-mono); white-space: nowrap; }
+
+/* Inline code */
+.om-inline-code { padding: 0 3px; border: var(--rule-sm) solid var(--ink); font: 400 12px/18px var(--font-mono); }
+
+/* ---- Molecules ---- */
+
+/* Field */
+.om-field { display: grid; gap: 6px; min-width: 0; }
+.om-field-label { font: 600 13px/18px var(--font-text); }
+.om-field-label em { font-style: normal; font-weight: 400; }
+.om-field-help { font: 500 12px/16px var(--font-text); margin: 0; }
+.om-field-error { display: flex; align-items: center; gap: 6px; font: 700 12px/16px var(--font-text); margin: 0; }
+
+/* Input with an icon or an action */
+.om-affix { position: relative; display: block; }
+.om-affix > .om-icon { position: absolute; left: 10px; top: 50%; margin-top: -6px; }
+.om-affix > .om-input { padding-left: 30px; }
+.om-affix > .om-kbd { position: absolute; right: 8px; top: 50%; margin-top: -9px; }
+
+/* Equal action slots, so the main action lines up down a list. */
+.om-actions { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(96px, 1fr); gap: var(--sp-1); }
+.om-actions > .om-btn { width: 100%; }
+
+.om-btn-group { display: inline-flex; }
+.om-btn-group > .om-btn + .om-btn { margin-left: -1px; }
+
+/* Segmented control */
+.om-seg { display: inline-flex; border: var(--rule-sm) solid var(--ink); }
+.om-seg button { min-height: calc(var(--ctl-h) - 2px); padding: 0 var(--ctl-pad); border: 0; border-radius: 0; background: var(--paper); color: var(--ink); font: 600 var(--ctl-fs)/1 var(--font-text); cursor: pointer; }
+.om-seg button + button { border-left: var(--rule-sm) solid var(--ink); }
+.om-seg button { position: relative; }
+.om-seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+/* A choice: hover shows a 50% dither bar along the bottom, choosing makes the
+   whole option solid. Half means about to, full means chosen. Hover never
+   fills an option, so nothing looks chosen before it is. */
+.om-seg button:is(:hover, .is-hover)::after, .om-chip:is(:hover, .is-hover)::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+
+/* Chips */
+.om-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
+.om-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; border: var(--rule-sm) solid var(--ink); background: var(--paper); color: var(--ink); font: 600 12px/1 var(--font-text); cursor: pointer; text-decoration: none; }
+.om-chip { position: relative; }
+.om-chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.om-chip:is(:hover, .is-hover)::after { height: 3px; }
+
+/* Tabs */
+.om-tabs { display: flex; flex-wrap: wrap; gap: var(--sp-5); border-bottom: var(--rule-sm) solid var(--ink); }
+.om-tabs a, .om-tabs button { display: inline-flex; align-items: center; gap: 6px; padding: var(--sp-2) 0 6px; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; background: none; color: inherit; font: 500 14px/20px var(--font-text); text-decoration: none; cursor: pointer; }
+.om-tabs a:hover, .om-tabs button:hover { border-bottom-color: var(--ink); }
+.om-tabs [aria-selected="true"], .om-tabs [aria-current="page"] { border-bottom-color: var(--ink); font-weight: 700; }
+
+/* Breadcrumbs */
+.om-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; padding: 0; list-style: none; font: 400 13px/18px var(--font-text); }
+.om-crumbs li + li::before { content: "/"; margin-right: 6px; font-family: var(--font-mono); }
+.om-crumbs a { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.om-crumbs a:is(:hover, .is-hover) { text-decoration-thickness: 3px; text-underline-offset: 4px; }
+
+/* Pagination */
+.om-pager { display: flex; align-items: center; gap: var(--sp-1); font: 400 12px/16px var(--font-mono); }
+.om-pager a, .om-pager span[aria-current] { display: grid; place-items: center; min-width: 28px; height: 28px; border: var(--rule-sm) solid transparent; text-decoration: none; }
+.om-pager a:hover { border-color: var(--ink); }
+.om-pager span[aria-current] { background: var(--ink); color: var(--paper); font-weight: 700; }
+
+/* Menu and listbox */
+.om-menu { display: inline-grid; min-width: 200px; padding: 0; margin: 0; list-style: none; background: var(--paper); border: var(--rule-sm) solid var(--ink); box-shadow: var(--shadow-menu); }
+.om-menu-item { display: flex; align-items: center; gap: var(--sp-2); width: 100%; min-height: 32px; padding: 0 var(--sp-3); border: 0; background: var(--paper); color: var(--ink); font: 500 13px/18px var(--font-text); text-align: left; text-decoration: none; cursor: pointer; }
+.om-menu-item .om-kbd { margin-left: auto; }
+.om-menu-sep { border-top: var(--rule-sm) solid var(--ink); margin: 0; }
+.om-menu-head { padding: var(--sp-2) var(--sp-3) var(--sp-1); font: 700 11px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+
+/* Banner: a level is a pattern at the edge, never a hue. */
+.om-banner { display: flex; align-items: stretch; background: var(--paper); border: var(--rule-sm) solid var(--ink); }
+.om-banner-edge { flex: none; width: 12px; border-right: var(--rule-sm) solid var(--ink); }
+.om-banner-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); justify-content: space-between; padding: var(--sp-2) var(--sp-3); }
+.om-banner-body p { margin: 0; }
+
+/* Toast */
+.om-toast { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: min(360px, 100%); padding: var(--sp-2) var(--sp-3); font: 600 13px/18px var(--font-text); animation: om-stamp 0.16s var(--ease-stamp); }
+.om-toasts { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: var(--z-toast); display: grid; gap: var(--sp-2); }
+@keyframes om-stamp { from { transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .om-toast { animation: none; } }
+
+/* Property list */
+.om-props { display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0; }
+.om-props dt, .om-props dd { padding: 6px 0; border-bottom: var(--rule-sm) solid var(--ink); margin: 0; min-width: 0; }
+.om-props dt { padding-right: var(--sp-4); }
+.om-props dt { font: 700 11px/18px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; }
+.om-props dd { font: 400 13px/18px var(--font-text); }
+.om-props > dt:nth-last-of-type(1), .om-props > dd:last-of-type { border-bottom: 0; }
+
+/* Stat */
+.om-stat { display: grid; gap: var(--sp-1); min-width: 0; }
+.om-stat-value { font-family: var(--font-display); font-stretch: 125%; font-variation-settings: "wdth" 125; font-weight: 900; font-size: 32px; line-height: 34px; letter-spacing: -0.02em; }
+.om-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.om-stats > * { padding: var(--sp-3) var(--sp-4); border-right: var(--rule-sm) solid var(--ink); }
+.om-stats > :last-child { border-right: 0; }
+
+/* Rows */
+.om-list { display: grid; }
+.om-row { position: relative; display: flex; align-items: center; gap: var(--sp-3); width: 100%; min-height: var(--row-h); padding: 4px var(--sp-3); border: 0; border-bottom: var(--rule-sm) solid var(--ink); background: var(--paper); color: inherit; font: inherit; text-align: left; text-decoration: none; cursor: pointer; min-width: 0; }
+/* Rows invert on hover and when selected, and carry an edge down the left:
+   solid on the selected row, 50% dither under the pointer. The selected row
+   switches to dither too, so every row answers the pointer. */
+:is(.om-row:not(.om-row-static), .om-queue-row):is(:hover, .is-hover, [aria-selected="true"], [aria-current="page"])::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  background: var(--ink);
+}
+:is(.om-row:not(.om-row-static), .om-queue-row):is(:hover, .is-hover)::after {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+.om-row:is([aria-selected="true"], [aria-current="page"]) .om-row-title { font-weight: 700; }
+.om-list > .om-row:last-child { border-bottom: 0; }
+.om-row-static { cursor: default; }
+.om-row-title { flex: 1 1 auto; min-width: 0; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.om-row-meta { flex: none; font: 400 12px/16px var(--font-mono); }
+.om-row-id { flex: none; font: 700 12px/16px var(--font-mono); min-width: 40px; }
+
+/* The alert row: the one place a list can spend ink. */
+.om-alert { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: var(--sp-3); min-height: 56px; padding: var(--sp-2) var(--sp-4); }
+.om-alert + .om-alert { border-top: var(--rule-sm) solid var(--ink); }
+
+/* Card */
+.om-card { display: grid; gap: var(--sp-1); padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); background: var(--paper); color: inherit; text-decoration: none; min-width: 0; }
+.om-card-link { cursor: pointer; }
+
+/* Disclosure */
+.om-disclosure { border-top: var(--rule-sm) solid var(--ink); }
+.om-disclosure:first-child { border-top: 0; }
+.om-disclosure > summary { display: flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: var(--sp-2) var(--sp-4); font: 700 14px/20px var(--font-text); cursor: pointer; list-style: none; }
+.om-disclosure > summary::-webkit-details-marker { display: none; }
+.om-disclosure > summary::before { content: ""; flex: none; border-left: 6px solid var(--ink); border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.om-disclosure[open] > summary::before { transform: rotate(90deg); }
+.om-disclosure > summary:hover { background: var(--ink); color: var(--paper); }
+.om-disclosure > summary:hover::before { border-left-color: var(--paper); }
+.om-disclosure-meta { margin-left: auto; font: 400 12px/16px var(--font-mono); }
+.om-disclosure-body { padding: 0 var(--sp-4) var(--sp-4); }
+
+/* Stepper */
+.om-stepper { display: flex; flex-wrap: wrap; gap: 0; margin: 0; padding: 0; list-style: none; border: var(--rule-sm) solid var(--ink); background: var(--paper); }
+.om-stepper li { display: flex; align-items: center; gap: var(--sp-2); padding: var(--sp-2) var(--sp-4); font: 500 13px/18px var(--font-text); border-right: var(--rule-sm) solid var(--ink); }
+.om-stepper li:last-child { border-right: 0; }
+.om-stepper li[aria-current="step"] { font-weight: 700; background: var(--ink); color: var(--paper); }
+
+/* Empty */
+.om-empty { display: grid; gap: var(--sp-2); justify-items: center; padding: var(--sp-10) var(--sp-5); border: var(--rule-sm) dashed var(--ink); background: var(--paper); text-align: center; }
+.om-empty p { margin: 0; max-width: 44ch; }
+
+/* Thumbnail */
+.om-thumb { display: grid; border: var(--rule-sm) solid var(--ink); background: var(--paper); color: inherit; text-decoration: none; min-width: 0; }
+.om-thumb-img { display: block; width: 100%; aspect-ratio: 16 / 10; object-fit: cover; border-bottom: var(--rule-sm) solid var(--ink); }
+.om-thumb-cap { padding: 2px var(--sp-2); font: 400 11px/16px var(--font-mono); }
+.om-thumb:hover { outline: var(--rule-sm) solid var(--ink); }
+.om-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--sp-2); }
+
+/* File row and diff */
+.om-diff { margin: 0; border: var(--rule-sm) solid var(--ink); font: 400 12px/18px var(--font-mono); overflow-x: auto; }
+.om-diff-head { display: flex; justify-content: space-between; gap: var(--sp-3); padding: 4px var(--sp-2); border-bottom: var(--rule-sm) solid var(--ink); font-weight: 700; }
+.om-diff-line { display: grid; grid-template-columns: 18px minmax(0, 1fr); padding: 0 var(--sp-2); white-space: pre-wrap; }
+.om-diff-add { font-weight: 700; }
+.om-diff-del { text-decoration: line-through; }
+
+/* Comment */
+.om-comment { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--sp-1) var(--sp-3); }
+.om-comment-head { display: flex; align-items: baseline; gap: var(--sp-2); }
+.om-comment-body { grid-column: 2; margin: 0; }

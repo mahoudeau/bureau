@@ -1,0 +1,289 @@
+/* OMAKO Design System. Ink, paper, dither. Tokens live in tokens.json. This
+   file holds everything a token can't say: density, inversion, patterns and
+   every component. Every class is prefixed om-. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+/* The dither cell has to land on whole device pixels or the pattern shimmers. */
+:root { --px: 2px; --t-step: 120ms; --ease-stamp: cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+@media (resolution: 1.25dppx) { :root { --px: 2.4px; } }
+@media (resolution: 1.75dppx) { :root { --px: 2.2857px; } }
+@media (resolution: 2.25dppx) { :root { --px: 2.2222px; } }
+@media (resolution: 2.5dppx) { :root { --px: 2.4px; } }
+
+/* Density. Set it on the page or on one part of it. */
+[data-density="compact"] { --ctl-h: 28px; --ctl-pad: 8px; --ctl-fs: 13px; --row-h: 32px; }
+[data-density="comfortable"] { --ctl-h: 36px; --ctl-pad: 12px; --ctl-fs: 14px; --row-h: 40px; }
+[data-density="poster"] { --ctl-h: 52px; --ctl-pad: 20px; --ctl-fs: 16px; --row-h: 56px; }
+@media (pointer: coarse) {
+  :root, [data-density="compact"], [data-density="comfortable"] { --ctl-h: 44px; --ctl-pad: 14px; --row-h: 48px; }
+}
+
+/* Inversion. Everything that flips goes through this one list, so patterns,
+   tags and focus rings inside it flip too. */
+.om-invert,
+.om-dock,
+.om-titlebar-active,
+.om-alert,
+.om-slab,
+.om-row:not(.om-row-static):is(:hover, .is-hover),
+.om-row[aria-selected="true"],
+.om-queue-row:is(:hover, .is-hover),
+.om-row[aria-current="page"],
+.om-table tbody tr:hover,
+.om-table tbody tr[aria-selected="true"],
+.om-card-link:hover,
+.om-menu-item:hover,
+.om-menu-item[aria-selected="true"],
+.om-tree-item:hover,
+.om-tree-item[aria-current="page"],
+.om-tooltip,
+.om-toast {
+  --ink: var(--ink-inv);
+  --paper: var(--paper-inv);
+  background: var(--paper);
+  color: var(--ink);
+}
+
+:root, [data-theme], .om-invert, .om-dock, .om-titlebar-active, .om-alert, .om-slab, .om-row, .om-queue-row, .om-wants, .om-table tr, .om-card-link, .om-menu-item, .om-tree-item {
+  --dot: conic-gradient(from 270deg at var(--px) var(--px), var(--ink) 0 25%, transparent 0);
+  --hole: conic-gradient(from 270deg at var(--px) var(--px), var(--paper) 0 25%, transparent 0);
+}
+
+/* The page */
+.om-page {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 14px/20px var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+.om-page[data-register="poster"] { font-family: var(--font-mono); line-height: 1.55; }
+:where(.om-page) a { color: inherit; }
+/* Keyboard focus is a ring of 50% dither just outside the control. Nothing
+   else looks like it, so the keyboard position is never in doubt. Fields
+   can't draw it (no ::before on an input), so they keep a solid outline. */
+:where(.om-page) :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+:where(.om-page) :focus-visible:not(input, textarea, select, iframe, summary) { outline: none; }
+/* Zero specificity, so anything positioned on purpose keeps its position. */
+:where(.om-page :focus-visible:not(input, textarea, select, iframe, summary)) { position: relative; }
+:where(.om-page) :focus-visible:not(input, textarea, select, iframe, summary)::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  z-index: 2;
+  padding: 3px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+  mask: linear-gradient(currentColor 0 0) content-box, linear-gradient(currentColor 0 0);
+  mask-composite: exclude;
+}
+:where(.om-page) :is(a, .om-btn-danger):not(.om-row, .om-btn, .om-card-link, .om-menu-item, .om-tree-item):focus-visible::before { inset: -4px -2px; padding: 2px; }
+:where(.om-page) :is(.om-row, .om-queue-row, .om-menu-item, .om-tree-item):focus-visible::before { inset: 0; }
+.om-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.om-skip { position: absolute; left: -9999px; top: 0; z-index: var(--z-toast); padding: 10px 14px; background: var(--ink); color: var(--paper); }
+.om-skip:focus { left: var(--pad); }
+
+/* Type. Size and weight come from tokens.json. These add what a token can't. */
+.om-display-xl, .om-display-l, .om-display-m, .om-display-s, .om-poster {
+  margin: 0;
+  font-family: var(--font-display);
+  font-stretch: 125%;
+  font-variation-settings: "wdth" 125;
+  text-transform: uppercase;
+  text-wrap: balance;
+}
+.om-poster { font-size: var(--fs-poster); font-weight: 900; line-height: 0.92; letter-spacing: -0.02em; }
+/* Expanded display type is wide. On a phone it steps down so a long word fits. */
+@media (max-width: 720px) {
+  .om-display-xl { font-size: 40px; line-height: 40px; }
+  .om-display-l { font-size: 30px; line-height: 32px; }
+  .om-display-m { font-size: 22px; line-height: 25px; }
+  .om-display-s { font-size: 18px; line-height: 22px; }
+  .om-display-xl, .om-display-l, .om-display-m, .om-display-s, .om-poster { overflow-wrap: anywhere; }
+}
+.om-title, .om-heading, .om-body, .om-body-l, .om-body-s, .om-caption, .om-label, .om-data, .om-data-s { margin: 0; }
+.om-label { text-transform: uppercase; }
+.om-code, .om-prose code { font-family: var(--font-mono); }
+.om-strong { font-weight: 700; }
+.om-clip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.om-measure { max-width: var(--measure); }
+.om-link { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+/* Link hover: the underline gets heavy, nothing else moves. */
+.om-link:is(:hover, .is-hover) { text-decoration-thickness: 3px; text-underline-offset: 4px; }
+
+/* Layout helpers */
+.om-stack { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+.om-stack-1 { gap: var(--sp-1); } .om-stack-2 { gap: var(--sp-2); } .om-stack-3 { gap: var(--sp-3); } .om-stack-4 { gap: var(--sp-4); } .om-stack-6 { gap: var(--sp-6); } .om-stack-8 { gap: var(--sp-8); }
+.om-cluster { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; min-width: 0; }
+.om-cluster-3 { gap: var(--sp-3); } .om-cluster-4 { gap: var(--sp-4); }
+.om-spread { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; min-width: 0; }
+.om-grow { flex: 1 1 auto; min-width: 0; }
+.om-rule { border: 0; border-top: var(--rule-sm) solid var(--ink); margin: 0; }
+.om-rule-md { border: 0; border-top: var(--rule-md) solid var(--ink); margin: 0; }
+.om-rule-heavy { border: 0; border-top: var(--rule) solid var(--ink); margin: 0; }
+
+/* ---- Dither ---- */
+.om-d0 { background-color: var(--paper); }
+.om-d12 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+  background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2);
+}
+/* The ground is a surface, not a quantity, so it sits off the ramp and stays
+   well under it: it has to recede behind dense screens. */
+.om-ground {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 8) calc(var(--px) * 8);
+  background-position: 0 0, calc(var(--px) * 4) calc(var(--px) * 4);
+}
+.om-d25 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
+  background-position: 0 0, calc(var(--px) * 2) var(--px);
+}
+.om-d50 {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+.om-d75 {
+  background-color: var(--ink);
+  background-image: var(--hole), var(--hole);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
+  background-position: 0 0, calc(var(--px) * 2) var(--px);
+}
+.om-d100 { background-color: var(--ink); }
+.om-hatch, .om-cross {
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot), var(--dot);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+}
+.om-hatch {
+  background-position:
+    0 0, var(--px) var(--px), calc(var(--px) * 2) calc(var(--px) * 2), calc(var(--px) * 3) calc(var(--px) * 3),
+    var(--px) 0, calc(var(--px) * 2) var(--px), calc(var(--px) * 3) calc(var(--px) * 2), 0 calc(var(--px) * 3);
+}
+.om-cross {
+  background-position:
+    0 0, var(--px) var(--px), calc(var(--px) * 2) calc(var(--px) * 2), calc(var(--px) * 3) calc(var(--px) * 3),
+    calc(var(--px) * 3) 0, calc(var(--px) * 2) var(--px), var(--px) calc(var(--px) * 2), 0 calc(var(--px) * 3);
+}
+.om-bars {
+  background-color: var(--paper);
+  background-image: linear-gradient(to right, var(--ink) 50%, transparent 50%);
+  background-size: calc(var(--px) * 2) 100%;
+}
+
+/* ---- Layers ---- */
+.om-sheet { background: var(--paper); border: var(--rule-sm) solid var(--ink); min-width: 0; }
+.om-raised {
+  position: relative;
+  background: var(--paper);
+  border: var(--rule-md) solid var(--ink);
+  min-width: 0;
+  margin: 0 8px 8px 0;
+}
+/* The lift: an L of 50% dither outside the bottom and right edges. */
+.om-raised::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  right: -10px;
+  bottom: -10px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+  clip-path: polygon(calc(100% - 8px) 0, 100% 0, 100% 100%, 0 100%, 0 calc(100% - 8px), calc(100% - 8px) calc(100% - 8px));
+}
+.om-sheet-body { padding: var(--sp-4); }
+.om-raised-body { padding: var(--sp-5); }
+.om-sheet-body > :first-child, .om-raised-body > :first-child { margin-top: 0; }
+
+.om-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  min-height: 40px;
+  padding: var(--sp-1) var(--sp-3);
+  border-bottom: var(--rule-sm) solid var(--ink);
+  background: var(--paper);
+}
+.om-titlebar-active { min-height: 48px; padding-inline: var(--sp-5); border-bottom: 0; }
+.om-titlebar h2, .om-titlebar h3 { margin: 0; font: 700 15px/20px var(--font-text); }
+.om-titlebar-active h2, .om-titlebar-active h3 { font: 700 16px/20px var(--font-text); }
+
+/* The dock: solid ink, pinned to the bottom of the window, one per view. */
+.om-dock {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--z-dock);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--sp-4);
+  min-height: 72px;
+  padding: var(--sp-3) max(var(--pad), env(safe-area-inset-right, 0px)) calc(var(--sp-3) + env(safe-area-inset-bottom, 0px)) max(var(--pad), env(safe-area-inset-left, 0px));
+  --ctl-h: 44px;
+  --ctl-fs: 15px;
+  --ctl-pad: 18px;
+}
+.om-dock-state { display: grid; gap: var(--sp-1); min-width: 170px; }
+.om-dock-actions { display: flex; align-items: center; gap: var(--sp-2); }
+
+/* Page anatomy */
+.om-shell { display: flex; flex-direction: column; min-height: 100vh; }
+.om-shell > .om-ground, .om-shell > main { flex: 1 0 auto; }
+.om-band {
+  display: grid;
+  gap: var(--sp-2);
+  padding: var(--sp-5) var(--pad);
+  background: var(--paper);
+  border-bottom: var(--rule-md) solid var(--ink);
+}
+.om-band-inner, .om-container { width: 100%; max-width: var(--page-max); margin-inline: auto; }
+.om-container-narrow { width: 100%; max-width: var(--page-narrow); margin-inline: auto; }
+.om-field-ground { padding: var(--sp-6) var(--pad) var(--sp-8); }
+.om-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  gap: var(--sp-6);
+  align-items: start;
+  width: 100%;
+  max-width: var(--page-max);
+  margin-inline: auto;
+}
+.om-work, .om-rail { display: grid; gap: var(--sp-4); min-width: 0; }
+.om-rail { position: sticky; top: var(--sp-4); }
+.om-work-single { display: grid; gap: var(--sp-4); width: 100%; max-width: var(--page-narrow); margin-inline: auto; }
+@media (max-width: 1000px) {
+  .om-workspace { grid-template-columns: minmax(0, 1fr); }
+  .om-rail { position: static; }
+}
+@media (max-width: 720px) {
+  .om-dock { grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-height: 0; padding-top: var(--sp-2); }
+  .om-dock-state { grid-auto-flow: column; justify-content: space-between; align-items: center; min-width: 0; }
+  .om-dock-actions { display: grid; grid-template-columns: 1fr 1fr; }
+  .om-dock:not(.is-noting) .om-dock-note { display: none; }
+}
+
+/* Specimen scaffolding, used by the previews only */
+.om-spec { padding: var(--sp-4); display: flex; flex-direction: column; gap: var(--sp-4); }
+.om-spec-row { display: flex; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.om-spec-stack { display: grid; gap: var(--sp-3); max-width: 420px; }
+.om-spec-cap { font: 700 11px/16px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase; margin: 0; }
+.om-spec-ground { padding: var(--sp-5); }
+.om-spec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: var(--sp-3); }

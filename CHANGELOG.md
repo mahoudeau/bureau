@@ -15,7 +15,7 @@ One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboa
 - **`/goals/new`.** Destination, bar, loops and reference files.
 - **Delete a project, rename its id, discard a mission, remove an agent** from the dashboard. Each was API only or missing.
 - **Cmd-K** jumps to any page, project or mission, and searches the brain with the ranked search.
-- **omako-ds**, the design system, in `hub/public/omako-ds/`. Its specimen is at `/ds`.
+- **OMAKO DS**, the design system. The dashboard ships a copy in `hub/public/omako-ds/`.
 - An HTML 404.
 - `settings.changed`, `agent.roles_changed`, `token.minted` and `token.revoked` on the event stream, for the boss credential only. A token value is never in an event.
 - `test/assets.test.js`: every file the app names exists and is served. `test/markdown.test.js` now runs in CI.

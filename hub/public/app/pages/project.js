@@ -24,7 +24,7 @@ function tidyRepo(url) {
 function repoField(project) {
   const input = h('input', { class: 'om-input', type: 'url', autocomplete: 'off', spellcheck: 'false', placeholder: 'https://github.com/you/repo.git', 'aria-labelledby': 'repo-label', value: project.repo || '' });
   const editing = h('div', { hidden: !!project.repo }, input);
-  const link = h('div', { class: 'om-row', hidden: !project.repo },
+  const link = h('div', { class: 'om-cluster om-cluster-3', hidden: !project.repo },
     project.repo ? h('a', { class: 'om-link', href: project.repo, target: '_blank', rel: 'noopener noreferrer' }, tidyRepo(project.repo)) : null,
     h('button', {
       type: 'button',

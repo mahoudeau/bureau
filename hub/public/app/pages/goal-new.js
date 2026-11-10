@@ -139,7 +139,7 @@ export async function render(ctx) {
       chosenFiles,
       status,
       error.el,
-      h('div', { class: 'om-row' },
+      h('div', { class: 'om-cluster om-cluster-3' },
         submit,
         h('a', { class: 'om-btn om-btn-ghost', href: '/goals' }, 'Cancel'))));
 }

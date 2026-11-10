@@ -21,8 +21,8 @@
 /* An auto grid track grows to its widest child, and one long title then widens
    the page. Every stacking grid here says what it means. */
 .work-section, .work-main, .work-rail, .work-list, .work-groups, .work-cards, .work-lane, .work-lane-body,
-.work-swims, .work-swim, .work-board-page, .work-mission, .work-m-head, .work-m-main, .work-items, .work-item,
-.work-log, .work-artifacts, .work-payload, .work-payload-op, .work-new, .work-new-form, .work-batch, .work-kids {
+.work-swims, .work-swim, .work-board-page, .work-items,
+.work-artifacts, .work-payload, .work-new, .work-new-form, .work-batch, .work-kids {
   grid-template-columns: minmax(0, 1fr);
 }
 
@@ -63,8 +63,7 @@
 .work-desk { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-6); }
 .work-needs { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; }
 .work-needs-head { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; }
-.work-needs-head .om-row { gap: var(--sp-2); }
-.work-needs-count { font-size: var(--fs-sm); }
+.work-needs-count, .work-needs-hint { font-size: var(--fs-sm); }
 .work-clear { padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); font-weight: 700; }
 
 .work-needs-list { display: grid; grid-template-columns: minmax(0, 1fr); }
@@ -78,9 +77,10 @@
 .work-need-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .work-need-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--sp-3); min-width: 0; }
 /* A project label is whatever someone typed. It breaks rather than widens. */
-.work-need-meta > *, .work-group-head > *, .work-m-meta > *, .work-swim-head > * { min-width: 0; overflow-wrap: anywhere; }
+.work-need-meta > *, .work-group-head > *, .om-band-meta > *, .work-swim-head > * { min-width: 0; overflow-wrap: anywhere; }
 .work-need-asked { flex: 1 1 200px; font-weight: 700; }
-.work-need-actions { display: flex; gap: var(--sp-1); flex-wrap: wrap; justify-content: flex-end; }
+/* Two equal slots, sized on the longest label (Send back), so the main action lines up down the list. */
+.work-need-actions { display: grid; grid-template-columns: repeat(2, calc(9ch + var(--ctl-pad) * 2 + var(--rule-sm) * 2)); gap: var(--sp-1); font: 700 var(--ctl-fs)/1.2 var(--font-mono); }
 .work-need-tray { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-2); padding-left: calc(14px + 14px + var(--sp-3) * 2); }
 .work-need .work-refusal { padding-left: var(--sp-2); margin-left: calc(14px + 14px + var(--sp-3) * 2); }
 
@@ -234,87 +234,99 @@
 
 /* ---- A mission ---- */
 
-.work-mission { display: grid; gap: var(--sp-3); padding-bottom: 0; }
-.work-m-top { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); flex-wrap: wrap; font-size: var(--fs-sm); }
-.work-m-crumbs, .work-m-next { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.work-m-head { display: grid; gap: var(--sp-2); min-width: 0; }
-.work-m-status { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
-.work-m-title { overflow-wrap: anywhere; font-size: clamp(20px, 2.4vw, var(--fs-2xl)); line-height: 1.02; }
-.work-m-meta { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); }
+/* Band, ground, raised sheet, rail and dock all come from OMAKO DS. This is only
+   what fits them to the hub's real data. */
+.app-main:has(> .work-mission) { display: flex; flex-direction: column; }
+.work-mission { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }
+.work-ground { flex: 1 0 auto; }
+/* The dock is the end of the page, so the footer steps aside for it. */
+#app:has(.om-dock:not([hidden])) > .om-footline { display: none; }
+/* Real rails run taller than the window, and a pinned one could never be read to its end. */
+.work-mission .om-rail { position: static; }
+.work-mission .om-props dd { overflow-wrap: anywhere; }
 
-.work-m-cols { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: var(--sp-6); align-items: start; }
-.work-m-main { display: grid; gap: var(--sp-5); min-width: 0; }
-.work-m-block { min-width: 0; }
+.work-head { flex: 1 1 320px; }
+.work-m-title { overflow-wrap: anywhere; }
+.work-ask {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  max-width: var(--measure);
+  overflow-wrap: anywhere;
+}
+.work-note-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); max-width: var(--page-narrow); }
+.work-note-form .om-input { flex: 1 1 280px; width: auto; }
+.work-note-form .work-refusal { flex: 1 0 100%; }
+.work-more { position: relative; }
+.work-more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: var(--z-sticky); }
 
-.work-body { max-width: 86ch; min-width: 0; overflow-wrap: anywhere; }
+.om-rail .work-thumbs { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.om-rail .work-thumb img { height: 88px; }
+
+.work-body { min-width: 0; overflow-wrap: anywhere; }
 .work-body.is-folded { max-height: 320px; overflow: hidden; border-bottom: var(--rule-sm) dashed var(--ink); }
 .work-body-more { margin-top: var(--sp-1); }
 .work-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
 
 .work-artifacts { margin: 0; padding: 0; list-style: none; display: grid; }
-.work-artifact { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); padding: 3px 0; border-bottom: var(--rule-sm) solid var(--ink); font-size: var(--fs-sm); min-width: 0; overflow-wrap: anywhere; }
+.work-artifact { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); padding: 3px 0; border-bottom: var(--rule-sm) solid var(--ink); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.work-artifact:last-child { border-bottom: 0; }
 .work-artifact-path { flex: 1; min-width: 0; }
 
+/* The queue. Every row stays built; only the one under the cursor opens. */
 .work-keys { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
-.work-items { margin: 0; padding: 0; list-style: none; display: grid; border-top: 0; }
-.work-item {
-  display: grid;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border-bottom: var(--rule-sm) solid var(--ink);
-  border-left: var(--rule) solid transparent;
-  min-width: 0;
-  scroll-margin: 12px 0 132px;
-}
-.work-item.is-cursor { border-left-color: var(--ink); }
-.work-item-head { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; flex-wrap: wrap; }
-.work-item-no { flex: none; width: 14px; font-size: var(--fs-xs); font-weight: 700; text-align: center; }
-.work-item-id { flex: none; font-size: var(--fs-sm); }
-.work-item-title { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
+.work-items { margin: 0; padding: 0; list-style: none; display: grid; }
+.work-item { min-width: 0; border-top: var(--rule-sm) solid var(--ink); scroll-margin: 64px 0 132px; }
+.work-items > .work-item:first-child { border-top: 0; }
+.work-item-row { display: flex; align-items: stretch; min-width: 0; }
+.work-item-row > .om-queue-row { flex: 1 1 auto; min-width: 0; border-top: 0; }
+.work-item-pick { flex: none; padding-left: var(--sp-5); }
+.work-item-row:has(.work-item-pick) > .om-queue-row { padding-left: var(--sp-3); }
+.om-queue-row:hover .om-tag-solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.work-item-static { cursor: default; }
+.work-item-static:hover, .work-item.is-cursor .om-queue-row:hover { background: var(--paper); color: var(--ink); }
+.work-item.is-cursor .om-queue-row { cursor: default; }
+.work-item-static:hover .om-tag-solid, .work-item.is-cursor .om-queue-row:hover .om-tag-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.work-item-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item.is-cursor .work-item-title, .work-items.is-all-open .work-item-title { font: 700 18px/24px var(--font-text); white-space: normal; overflow-wrap: anywhere; }
+.work-item-id { margin-right: var(--sp-1); }
 .work-item-state { flex: none; }
-.work-item-body, .work-pre {
-  margin: 0;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font: 400 var(--fs-sm)/1.45 var(--font-mono);
+.work-item-detail { display: none; padding-top: 0; }
+.work-item.is-cursor .work-item-detail, .work-items.is-all-open .work-item-detail { display: grid; }
+.work-item-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Nothing ruled yet: Enter accepts, so Accept carries the "about to" dither
+   bar. Never solid: an unruled item must not look ruled. */
+.work-item.is-cursor .work-verdicts:not(:has([aria-pressed="true"])) [data-verdict="approved"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
 }
-.work-pre { max-height: 240px; overflow: auto; padding: var(--sp-2); border: var(--rule-sm) solid var(--ink); white-space: pre; overflow-wrap: normal; }
-.work-payload { display: grid; gap: var(--sp-1); min-width: 0; }
-.work-payload-op { display: grid; gap: 2px; min-width: 0; }
-.work-payload-file { overflow-wrap: anywhere; }
+.work-pre { margin: 0; max-height: 240px; overflow: auto; padding: var(--sp-2); font: 400 12px/18px var(--font-mono); white-space: pre; }
+.work-payload { display: grid; gap: var(--sp-2); min-width: 0; }
+.work-payload-file { min-width: 0; overflow-wrap: anywhere; }
 .work-payload-seal { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); }
-.work-item-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); min-width: 0; }
-.work-item-comment { flex: 1 1 220px; min-width: 0; width: auto; border-width: var(--rule-sm); }
-.work-item-said { font-size: var(--fs-sm); }
+.work-item-said { font-size: 13px; }
+.work-item-batch { margin-top: 0; padding: var(--sp-3) var(--sp-5); border: 0; border-top: var(--rule-md) solid var(--ink); }
 
-.work-log { margin: 0; padding: 0; list-style: none; display: grid; }
-.work-log-row { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--sp-3); padding: 3px 0; border-bottom: var(--rule-sm) solid var(--ink); font-size: var(--fs-sm); }
 .work-log-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
 
-.work-facts { margin: 0; display: grid; border-top: var(--rule-md) solid var(--ink); }
-.work-fact { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: var(--sp-2); padding: 4px 0; border-bottom: var(--rule-sm) solid var(--ink); font-size: var(--fs-sm); }
-.work-fact dt { padding-top: 2px; }
-.work-fact dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-.work-fact-sub { display: block; font-size: var(--fs-xs); }
-.work-fact .om-meter { margin-bottom: var(--sp-1); }
+.work-fact-sub { display: block; font-size: 12px; }
 .work-kids { margin: 0; padding: 0; list-style: none; display: grid; }
 .work-kid { display: flex; align-items: center; gap: var(--sp-1); color: inherit; text-decoration: none; min-width: 0; }
 .work-kid:hover { background: var(--ink); color: var(--paper); }
+.om-props .om-meter { margin-bottom: var(--sp-1); }
 
-.work-bar {
-  position: sticky;
-  bottom: 0;
-  z-index: var(--z-sticky);
-  display: grid;
-  gap: var(--sp-1);
-  margin: var(--sp-4) calc(-1 * var(--pad)) 0;
-  padding: var(--sp-2) var(--pad);
-  border-top: var(--rule) solid var(--ink);
-  background: var(--paper);
-}
-.work-bar-row { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
-.work-bar-note { flex: 1 1 auto; min-width: 0; width: auto; }
-.work-bar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-1); flex: none; }
+/* What the hub said, right where the ruling was made. */
+.work-dock > .work-refusal, .work-dock > .work-bar-result { grid-column: 1 / -1; }
 
 /* ---- New mission ---- */
 
@@ -332,11 +344,10 @@
 
 @media (max-width: 1100px) {
   .work-cols { grid-template-columns: minmax(0, 1fr) 280px; gap: var(--sp-4); }
-  .work-m-cols { grid-template-columns: minmax(0, 1fr) 240px; gap: var(--sp-4); }
 }
 
 @media (max-width: 860px) {
-  .work-cols, .work-m-cols { grid-template-columns: minmax(0, 1fr); }
+  .work-cols { grid-template-columns: minmax(0, 1fr); }
   .work-rail { order: 2; }
   .work-lanes { flex-direction: column; align-items: stretch; }
   .work-lane, .work-lane.is-collapsed { flex: none; }
@@ -345,7 +356,7 @@
 
 /* A thumb is bigger than a pointer. */
 @media (max-width: 720px) {
-  .work-page { --ctl-h: 40px; --row-h: 40px; }
+  .work-page:not(.work-mission) { --ctl-h: 40px; --row-h: 40px; }
   .work-page .om-chip { padding: 5px 9px; }
   .work-page .om-seg button { padding: 8px 12px; }
   .work-row { --row-h: 36px; }
@@ -354,8 +365,8 @@
   .work-need-head { grid-template-columns: auto auto minmax(0, 1fr); align-items: start; }
   .work-need-pick { width: 18px; height: 18px; }
   .work-need-pick input { width: 18px; height: 18px; }
-  .work-need-actions { grid-column: 1 / -1; justify-content: stretch; }
-  .work-need-actions > * { flex: 1 1 0; }
+  .work-need-actions { grid-column: 1 / -1; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .work-need-actions > :only-child { grid-column: 1 / -1; }
   .work-need-text {
     display: -webkit-box;
     -webkit-box-orient: vertical;
@@ -374,12 +385,10 @@
   .work-new-link { margin-left: auto; }
   .work-event:nth-child(n+9) { display: none; }
 
-  .work-log-row { grid-template-columns: minmax(0, 1fr); gap: 0; }
-  .work-bar-row { flex-wrap: wrap; }
-  .work-bar-note { flex-basis: 100%; }
-  .work-bar-actions { flex: 1 1 100%; }
-  .work-bar-actions > * { flex: 1 1 0; }
-  .work-fact { grid-template-columns: 84px minmax(0, 1fr); }
+  .work-item-pick { padding-left: var(--sp-3); }
+  .work-item-batch { padding-inline: var(--sp-3); }
+  .work-verdicts { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .work-dock .om-dock-actions > :only-child { grid-column: 1 / -1; }
   .work-thumb img { height: 180px; }
   .work-new-actions .work-new-hint { display: none; }
   .work-new-actions .om-btn { flex: 1 1 auto; }

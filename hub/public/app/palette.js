@@ -94,7 +94,7 @@ function open(initial = '') {
     return;
   }
   if (!api.getToken() || location.pathname === '/sign-in') return;
-  store.start(); // a public page like /ds hasn't started it
+  store.start(); // a public page hasn't started it
 
   const previous = document.activeElement;
   const appRoot = document.getElementById('app');

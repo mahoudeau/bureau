@@ -95,7 +95,7 @@ async function finding2() {
   await markdownCannotRunScript();
 
   const h = await boot('f2', 8202);
-  for (const route of ['/', '/index.html', '/missions', '/missions/t-1', '/goals', '/brain', '/brain/knowledge/x.md', '/projects', '/agents', '/activity', '/settings', '/sign-in', '/ds', '/office', '/office/assets']) {
+  for (const route of ['/', '/index.html', '/missions', '/missions/t-1', '/goals', '/brain', '/brain/knowledge/x.md', '/projects', '/agents', '/activity', '/settings', '/sign-in', '/office', '/office/assets']) {
     const r = await h.api('GET', route, undefined, { authorization: '' });
     const csp = r.headers.get('content-security-policy') || '';
     const nonce = (csp.match(/'nonce-([^']+)'/) || [])[1];
@@ -108,7 +108,7 @@ async function finding2() {
     const r = await fetch(h.base + route, { redirect: 'manual' });
     check(`${route} is a 301 to the Desk`, r.status === 301 && r.headers.get('location') === '/', { status: r.status, location: r.headers.get('location') });
   }
-  for (const file of ['app/index.html', 'app/404.html', 'office.html', 'office-assets.html', 'omako-ds/README.md']) {
+  for (const file of ['app/index.html', 'app/404.html', 'office.html', 'office-assets.html', 'omako-ds/NOTICE.md']) {
     check(`${file} has no inline handler`, !/\son[a-z]+\s*=\s*["']/i.test(fs.readFileSync(path.join(ROOT, 'hub/public', file), 'utf8')));
   }
   const missing = await h.api('GET', '/no-such-page', undefined, { authorization: '' });
@@ -131,7 +131,7 @@ async function finding2() {
     check(`${label} is not allowed any script`, !/script-src/.test(csp), csp);
     check(`${label} has no script tag`, !/<script\b/i.test(page.text), page.text.slice(0, 300));
     check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text.replace(/&lt;[^]*?&gt;/g, '')), page.text.slice(0, 300));
-    check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/all\.css">/.test(page.text), page.text.slice(0, 300));
+    check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/css\/all\.css">/.test(page.text), page.text.slice(0, 300));
   }
   const record = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
   check('mission text is escaped on the record page', record.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !record.text.includes('<script>alert(1)'), record.text.slice(0, 400));

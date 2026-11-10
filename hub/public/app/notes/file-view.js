@@ -87,7 +87,7 @@ export function fileBody(path, file) {
       return h('div', { class: 'om-panel om-stack brain-file-card' },
         h('p', { class: 'om-label' }, `PDF, ${size}`),
         h('p', { style: 'margin:0' }, baseOf(path)),
-        h('div', { class: 'om-row' }, h('a', { class: 'om-btn om-btn-primary', dataset: { secureHref: rawUrl(path) }, target: '_blank', rel: 'noopener' }, 'Open the PDF'), downloadLink(path, 'Download')));
+        h('div', { class: 'om-cluster om-cluster-3' }, h('a', { class: 'om-btn om-btn-primary', dataset: { secureHref: rawUrl(path) }, target: '_blank', rel: 'noopener' }, 'Open the PDF'), downloadLink(path, 'Download')));
     }
     return h('div', { class: 'om-panel om-stack brain-file-card' },
       h('p', { class: 'om-label' }, `Binary file, ${size}`),

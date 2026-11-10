@@ -1,0 +1,82 @@
+/* Generated from tokens/tokens.json by scripts/build.js. Change that file, not this one. */
+:root,
+[data-theme="light"] {
+  --ink: #0b0d12;
+  --paper: #ffffff;
+  --ink-inv: #ffffff;
+  --paper-inv: #0b0d12;
+  --shadow-control: 3px 3px 0 #0b0d12;
+  --shadow-menu: 4px 4px 0 #0b0d12;
+  --shadow-dialog: 10px 10px 0 #0b0d12;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --ink: #f1f2ec;
+  --paper: #0b0d12;
+  --ink-inv: #0b0d12;
+  --paper-inv: #f1f2ec;
+  --shadow-control: 3px 3px 0 #f1f2ec;
+  --shadow-menu: 4px 4px 0 #f1f2ec;
+  --shadow-dialog: 10px 10px 0 #f1f2ec;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ink: #f1f2ec;
+    --paper: #0b0d12;
+    --ink-inv: #0b0d12;
+    --paper-inv: #f1f2ec;
+    --shadow-control: 3px 3px 0 #f1f2ec;
+    --shadow-menu: 4px 4px 0 #f1f2ec;
+    --shadow-dialog: 10px 10px 0 #f1f2ec;
+    color-scheme: dark;
+  }
+}
+:root {
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+  --sp-10: 40px;
+  --sp-12: 48px;
+  --sp-16: 64px;
+  --radius-none: 0;
+  --rule: 4px;
+  --rule-md: 2px;
+  --rule-sm: 1px;
+  --ctl-h: 36px;
+  --ctl-pad: 12px;
+  --ctl-fs: 14px;
+  --row-h: 40px;
+  --pad: clamp(16px, 3vw, 40px);
+  --measure: 68ch;
+  --rail-w: 360px;
+  --page-max: 1520px;
+  --page-narrow: 880px;
+  --fs-poster: clamp(48px, 9vw, 132px);
+  --z-sticky: 10;
+  --z-dock: 20;
+  --z-overlay: 40;
+  --z-palette: 50;
+  --z-toast: 60;
+  --font-display: "Archivo", "Arial Black", sans-serif;
+  --font-text: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+.om-display-xl { font-family: var(--font-display); font-size: 64px; line-height: 60px; font-weight: 900; letter-spacing: -0.02em; }
+.om-display-l { font-family: var(--font-display); font-size: 40px; line-height: 40px; font-weight: 900; letter-spacing: -0.02em; }
+.om-display-m { font-family: var(--font-display); font-size: 28px; line-height: 30px; font-weight: 900; letter-spacing: -0.02em; }
+.om-display-s { font-family: var(--font-display); font-size: 20px; line-height: 24px; font-weight: 900; letter-spacing: -0.01em; }
+.om-title { font-family: var(--font-text); font-size: 18px; line-height: 24px; font-weight: 700; }
+.om-heading { font-family: var(--font-text); font-size: 15px; line-height: 20px; font-weight: 700; }
+.om-body-l { font-family: var(--font-text); font-size: 16px; line-height: 24px; font-weight: 400; }
+.om-body { font-family: var(--font-text); font-size: 14px; line-height: 20px; font-weight: 400; }
+.om-body-s { font-family: var(--font-text); font-size: 13px; line-height: 18px; font-weight: 400; }
+.om-caption { font-family: var(--font-text); font-size: 12px; line-height: 16px; font-weight: 500; }
+.om-label { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 700; letter-spacing: 0.08em; }
+.om-data { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; }
+.om-data-s { font-family: var(--font-mono); font-size: 12px; line-height: 16px; font-weight: 400; }
+.om-code { font-family: var(--font-mono); font-size: 13px; line-height: 20px; font-weight: 400; }

@@ -60,7 +60,7 @@ function row(a, view) {
       h('span', { class: 'set-agent-name' },
         h('span', { class: 'om-strong' }, a.name),
         h('span', { class: 'om-meta' }, a.kind || '')),
-      h('span', { class: 'om-row set-tags' }, tags.map((t) => h('span', { class: 'om-tag' }, t))),
+      h('span', { class: 'om-cluster om-cluster-3 set-tags' }, tags.map((t) => h('span', { class: 'om-tag' }, t))),
       h('span', { class: 'set-agent-work' },
         held.length
           ? [h('a', { class: 'om-link', href: `/missions/${encodeURIComponent(held[0].id)}`, dataset: { k: `${a.name}-m` } }, held[0].id),

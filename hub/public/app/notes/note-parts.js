@@ -39,7 +39,7 @@ export function notFound(path, message) {
     h('h1', { class: 'om-display om-h1 brain-404-title' }, message ? 'Out of reach' : 'No such note'),
     h('p', { class: 'brain-404-path' }, path),
     h('p', null, message || "Nothing in the brain has that path. It may have moved to the attic."),
-    h('div', { class: 'om-row' },
+    h('div', { class: 'om-cluster om-cluster-3' },
       h('a', { class: 'om-btn', href: '/brain' }, 'Back to the brain'),
       h('button', { type: 'button', class: 'om-btn', onClick: () => openPalette(name) }, `Search for ${name}`)));
 }

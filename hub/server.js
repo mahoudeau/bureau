@@ -147,11 +147,11 @@ function statusMark(status) {
   return `<span class="lp-status"><span class="om-swatch ${look.dither}" aria-hidden="true"></span><span class="om-label">${escHtml(look.word)}</span></span>`;
 }
 const PAGE_MARK = '<svg class="om-mark" viewBox="-1.5 -1.5 103 103" aria-hidden="true"><path fill-rule="evenodd" d="M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z"/></svg>';
-const GONE_BAND = '<div class="om-band om-cross" aria-hidden="true"></div>';
+const GONE_BAND = '<div class="app-strip om-cross" aria-hidden="true"></div>';
 const missionLine = task =>`<p class="lp-mission"><span class="om-strong">${escHtml(task.id)}</span> ${escHtml(task.title)}</p>`;
 // title is HTML already: callers escape what came from a mission.
 function sendPage(res, code, title, bodyHtml, status) {
-  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="om-strong lp-word">BUREAU</span></span>${status ? statusMark(status) : ''}</header><main class="lp-main"><h1 class="om-display lp-title">${title}</h1>${bodyHtml}</main><footer class="om-foot"><span>Built by OMAKO</span></footer></body></html>`;
+  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/aliases.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="om-strong lp-word">BUREAU</span></span>${status ? statusMark(status) : ''}</header><main class="lp-main"><h1 class="om-display lp-title">${title}</h1>${bodyHtml}</main><footer class="om-foot"><span>Built by OMAKO</span></footer></body></html>`;
   res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
   res.end(html);
 }

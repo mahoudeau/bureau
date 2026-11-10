@@ -47,28 +47,28 @@ export function mountLayout(root) {
 
   const liveMark = h('span', { class: 'om-swatch', 'aria-hidden': 'true' });
   const liveWord = h('span');
-  const liveEl = h('span', { class: 'app-live om-label', hidden: true }, liveMark, liveWord);
+  const liveEl = h('span', { class: 'app-live om-live', hidden: true }, liveMark, liveWord);
 
   const modifier = /mac|iphone|ipad/i.test(navigator.platform) ? 'Cmd' : 'Ctrl';
   const search = h('button', {
     type: 'button',
-    class: 'om-btn',
+    class: 'om-search-btn',
     onClick() {
       if (searchHandler) searchHandler();
       else toast('Search is not built yet.');
     },
-  }, 'Search', h('kbd', { class: 'om-kbd app-kbd' }, `${modifier} K`));
+  }, h('i', { class: 'om-icon om-i-search', 'aria-hidden': 'true' }), 'Search', h('kbd', { class: 'om-kbd app-kbd' }, `${modifier} K`));
 
   const tools = h('div', { class: 'app-tools' }, liveEl, search);
 
   const top = h('header', { class: 'om-top' },
-    h('a', { class: 'om-brand', href: '/' }, logo(), h('span', { class: 'om-strong app-word' }, 'BUREAU')),
+    h('a', { class: 'om-brand', href: '/' }, logo(), 'Bureau'),
     nav, tools);
 
   const outlet = h('main', { id: 'main', class: 'app-main', tabindex: '-1' });
 
   const versionEl = h('span');
-  const foot = h('footer', { class: 'om-foot' }, h('span', null, 'Built by OMAKO'), versionEl);
+  const foot = h('footer', { class: 'om-footline' }, h('span', null, 'Built by OMAKO'), versionEl);
 
   function paintLive(state, version) {
     const look = LIVE[state];

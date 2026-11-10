@@ -4,7 +4,7 @@ Two surfaces, one event stream: the dashboard at `/` and the pixel office at `/o
 
 ## The dashboard
 
-The dashboard is built on omako-ds, in `hub/public/omako-ds/`. Plain CSS, no build, no dependency. The specimen is at `/ds` on any hub.
+The dashboard is built on OMAKO DS, with a copy in `hub/public/omako-ds/`. Plain CSS, no build, no dependency. Its licence terms are in `NOTICE.md` in that folder.
 
 - **Ink, paper and dither. No hue.** Inversion is the only colour. Dark mode swaps the two.
 - **Hover is inversion, and it's instant.** Nothing floats, nothing is rounded. A shadow is hard ink or dither.

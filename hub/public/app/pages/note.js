@@ -67,7 +67,7 @@ function shell(ctx, path, { title, summary, line, body, raw, margin, tools }) {
   if (wanted) setRaw(true);
 
   return h('div', { class: 'app-page brain brain-note-page' },
-    h('header', { class: 'brain-head' }, crumbs(path), h('div', { class: 'om-row brain-tools' }, toggle, copyPathButton(path), tools)),
+    h('header', { class: 'brain-head' }, crumbs(path), h('div', { class: 'om-cluster om-cluster-3 brain-tools' }, toggle, copyPathButton(path), tools)),
     h('div', { class: margin ? 'brain-note' : 'brain-note brain-note-solo' },
       h('article', { class: 'brain-doc' },
         h('header', { class: 'brain-doc-head' },

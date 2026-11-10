@@ -47,7 +47,7 @@ function createForm(ctx, close) {
     field('Entity', entity, 'Optional. The scope wall this project sits behind.'),
     field('Repo', repo, 'Optional. The https clone URL.'),
     error.el,
-    h('div', { class: 'om-row' },
+    h('div', { class: 'om-cluster om-cluster-3' },
       submit,
       h('button', { type: 'button', class: 'om-btn om-btn-ghost', onClick: close }, 'Cancel')));
   setTimeout(() => label.focus(), 0);
