@@ -7,7 +7,7 @@ import { h } from '../dom.js';
 import { emptyState, errorState } from '../ui.js';
 import { baseOf, brainHref, gitDate, listFiles, notesFor } from '../notes/data.js';
 import { healthLine } from '../notes/health.js';
-import { folderRows, frame, row, searchButton, section } from '../notes/listing.js';
+import { folderRows, frame, layers, row, searchButton, section } from '../notes/listing.js';
 
 // /brain?claim=<id>, the link a claim's source makes. It goes to where the
 // claim or the journal record lives.
@@ -47,7 +47,7 @@ function recentRow(c, known, notes) {
 
 function recentSection(files, state, notes) {
   const commits = (state && state.knowledge && state.knowledge.recent) || [];
-  if (!commits.length) return section('Recent changes', null, h('p', { class: 'om-meta brain-quiet' }, 'Nothing recent to show.'));
+  if (!commits.length) return section('Recent changes', null, h('p', { class: 'om-data-s brain-quiet' }, 'Nothing recent to show.'));
   const known = new Set(files);
   return section('Recent changes', `${commits.length} commits`, h('div', { class: 'om-list' }, commits.map((c) => recentRow(c, known, notes))));
 }
@@ -74,13 +74,13 @@ export async function render(ctx) {
     return h('div', { class: 'app-page' }, errorState(e.message || "Couldn't read the brain.", () => ctx.reload()));
   }
 
-  const head = h('header', { class: 'brain-head' },
-    h('h1', { class: 'om-display om-h1' }, 'Brain'),
+  const head = h('header', { class: 'om-band-main brain-head' },
+    h('h1', { class: 'om-display-m' }, 'Brain'),
     searchButton());
 
   if (!files.length) {
-    return h('div', { class: 'app-page brain' }, head,
-      emptyState('The brain is empty', 'Nothing has been written yet, or this token reaches none of it.'));
+    return layers(head,
+      h('section', { class: 'om-sheet' }, emptyState('The brain is empty', 'Nothing has been written yet, or this token reaches none of it.')));
   }
 
   const state = await store.ready().catch(() => null);
@@ -89,5 +89,5 @@ export async function render(ctx) {
     recentSection(files, state, notes),
     section('Everything', `${files.length} files`, h('div', { class: 'om-list' }, top.rows)),
   ];
-  return h('div', { class: 'app-page brain' }, head, healthLine(ctx.onCleanup), frame(files, '', main));
+  return layers([head, healthLine(ctx.onCleanup)], frame(files, '', main));
 }

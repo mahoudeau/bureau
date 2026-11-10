@@ -34,12 +34,16 @@ export function viewToggle(ctx, setRaw) {
 
 export function notFound(path, message) {
   const name = baseOf(path).replace(/\.[^.]+$/, '');
-  return h('div', { class: 'app-page brain' },
-    h('p', { class: 'om-display om-d50 om-dither-type brain-404', 'aria-hidden': 'true' }, '404'),
-    h('h1', { class: 'om-display om-h1 brain-404-title' }, message ? 'Out of reach' : 'No such note'),
-    h('p', { class: 'brain-404-path' }, path),
-    h('p', null, message || "Nothing in the brain has that path. It may have moved to the attic."),
-    h('div', { class: 'om-cluster om-cluster-3' },
-      h('a', { class: 'om-btn', href: '/brain' }, 'Back to the brain'),
-      h('button', { type: 'button', class: 'om-btn', onClick: () => openPalette(name) }, `Search for ${name}`)));
+  // Dithered type put text on a pattern. The 404 is plain now, in a sheet.
+  return h('div', { class: 'app-layers brain' },
+    h('div', { class: 'om-ground om-field-ground' },
+      h('div', { class: 'om-work-single' },
+        h('section', { class: 'om-sheet om-sheet-body om-stack om-stack-3' },
+          h('p', { class: 'om-display-xl brain-404', 'aria-hidden': 'true' }, '404'),
+          h('h1', { class: 'om-display-m' }, message ? 'Out of reach' : 'No such note'),
+          h('p', { class: 'om-data brain-404-path' }, path),
+          h('p', null, message || "Nothing in the brain has that path. It may have moved to the attic."),
+          h('div', { class: 'om-cluster om-cluster-3' },
+            h('a', { class: 'om-btn om-btn-primary', href: '/brain' }, 'Back to the brain'),
+            h('button', { type: 'button', class: 'om-btn', onClick: () => openPalette(name) }, `Search for ${name}`))))));
 }

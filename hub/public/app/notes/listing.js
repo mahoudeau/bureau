@@ -45,7 +45,7 @@ function compartments(files, current) {
     const y = ORDER.indexOf(b);
     return (x === -1 ? 99 : x) - (y === -1 ? 99 : y) || a.localeCompare(b);
   });
-  return h('nav', { class: 'brain-comps', 'aria-label': 'Compartments' },
+  return h('nav', { class: 'om-sheet brain-comps', 'aria-label': 'Compartments' },
     h('a', { class: 'brain-comp', href: '/brain', 'aria-current': current ? null : 'page' },
       h('span', null, 'Brain'), h('span', { class: 'brain-count' }, files.length)),
     names.map((name) => h('a', {
@@ -68,14 +68,21 @@ export function row({ href, title, summary, path, date }) {
     h('span', { class: 'brain-row-age' }, date ? timeTag(date) : ''),
   ];
   return href
-    ? h('a', { class: 'om-list-row brain-row', href }, body)
-    : h('div', { class: 'om-list-row brain-row brain-row-still' }, body);
+    ? h('a', { class: 'om-row brain-row', href }, body)
+    : h('div', { class: 'om-row om-row-static brain-row' }, body);
 }
 
 export function section(label, side, ...content) {
-  return h('section', { class: 'brain-section' },
-    h('div', { class: 'om-bar' }, h('h2', { class: 'om-label' }, label), side ? h('span', { class: 'om-meta' }, side) : null),
+  return h('section', { class: 'om-sheet brain-section' },
+    h('header', { class: 'om-titlebar' }, h('h2', null, label), side ? h('span', { class: 'om-data-s' }, side) : null),
     content);
+}
+
+// The page under the top bar: a band with the head, then the ground.
+export function layers(band, ...ground) {
+  return h('div', { class: 'app-layers brain' },
+    h('div', { class: 'om-band' }, h('div', { class: 'om-band-inner om-stack om-stack-3' }, band)),
+    h('div', { class: 'om-ground om-field-ground' }, h('div', { class: 'om-container' }, ground)));
 }
 
 export async function folderRows(files, prefix) {

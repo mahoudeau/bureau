@@ -7,7 +7,7 @@ import { errorState, toast } from '../ui.js';
 import { parseMarkdown, plainText, renderDocument } from '../markdown.js';
 import { baseOf, extOf, listFiles, notesFor, resolverFor, brainHref } from '../notes/data.js';
 import { fileBody, rawOf } from '../notes/file-view.js';
-import { folderRows, frame, section, summarize } from '../notes/listing.js';
+import { folderRows, frame, layers, section, summarize } from '../notes/listing.js';
 import { buildMargin, factLine } from '../notes/margin.js';
 
 async function copyText(text) {
@@ -33,9 +33,7 @@ async function folderPage(ctx, files, path) {
   ctx.title(path);
   const { rows, folders, files: count } = await folderRows(files, path);
   const label = [folders ? `${folders} folder${folders === 1 ? '' : 's'}` : null, count ? `${count} file${count === 1 ? '' : 's'}` : null].filter(Boolean).join(', ');
-  return h('div', { class: 'app-page brain' },
-    h('header', { class: 'brain-head' }, crumbs(path), h('span')),
-    h('h1', { class: 'om-display om-h1 brain-folder-title' }, baseOf(path)),
+  return layers([crumbs(path), h('h1', { class: 'om-display-m brain-folder-title' }, baseOf(path))],
     frame(files, path, section(path, label, h('div', { class: 'om-list' }, rows))));
 }
 
@@ -66,16 +64,19 @@ function shell(ctx, path, { title, summary, line, body, raw, margin, tools }) {
   const wanted = raw !== null && ctx.query.get('raw') === '1';
   if (wanted) setRaw(true);
 
-  return h('div', { class: 'app-page brain brain-note-page' },
-    h('header', { class: 'brain-head' }, crumbs(path), h('div', { class: 'om-cluster om-cluster-3 brain-tools' }, toggle, copyPathButton(path), tools)),
+  // The note's template: the way back and the tools in the band, the note in a
+  // reading sheet on the ground, the margin beside it.
+  const view = layers(h('div', { class: 'om-band-top brain-head' }, crumbs(path), h('div', { class: 'om-cluster om-cluster-3 brain-tools' }, toggle, copyPathButton(path), tools)),
     h('div', { class: margin ? 'brain-note' : 'brain-note brain-note-solo' },
-      h('article', { class: 'brain-doc' },
+      h('article', { class: 'om-sheet brain-doc' },
         h('header', { class: 'brain-doc-head' },
-          h('h1', { class: 'om-display brain-title' }, title),
+          h('h1', { class: 'om-display-l brain-title' }, title),
           summary ? h('p', { class: 'brain-summary' }, summary) : null,
           line),
         page, rawBox),
       margin));
+  view.classList.add('brain-note-page');
+  return view;
 }
 
 async function notePage(ctx, files, path, file) {
@@ -92,7 +93,7 @@ async function notePage(ctx, files, path, file) {
   const resolver = resolverFor(path, files, notes);
   const body = renderDocument(doc, resolver);
   const summary = doc.frontmatter.summary ? plainText(doc.frontmatter.summary) : null;
-  if (!doc.blocks.length) body.append(h('p', { class: 'om-meta' }, 'This note has no body.'));
+  if (!doc.blocks.length) body.append(h('p', { class: 'om-data-s' }, 'This note has no body.'));
   return shell(ctx, path, {
     title,
     summary,

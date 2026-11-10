@@ -55,7 +55,7 @@ function csvView(text) {
       h('table', { class: 'om-table' },
         h('thead', null, h('tr', null, head.map((c) => h('th', { scope: 'col' }, c)))),
         h('tbody', null, shown.map((r) => h('tr', null, r.map((c) => h('td', null, c))))))),
-    cut ? h('p', { class: 'om-meta' }, `Showing the first ${MAX_CSV_ROWS} rows. The raw view has the rest.`) : null);
+    cut ? h('p', { class: 'om-data-s' }, `Showing the first ${MAX_CSV_ROWS} rows. The raw view has the rest.`) : null);
 }
 
 function textView(text, ext) {
@@ -84,12 +84,12 @@ export function fileBody(path, file) {
   if (file.content_base64 !== undefined) {
     const size = sizeOf(base64Size(file.content_base64));
     if (ext === 'pdf') {
-      return h('div', { class: 'om-panel om-stack brain-file-card' },
+      return h('div', { class: 'om-sheet om-sheet-body om-stack brain-file-card' },
         h('p', { class: 'om-label' }, `PDF, ${size}`),
         h('p', { style: 'margin:0' }, baseOf(path)),
         h('div', { class: 'om-cluster om-cluster-3' }, h('a', { class: 'om-btn om-btn-primary', dataset: { secureHref: rawUrl(path) }, target: '_blank', rel: 'noopener' }, 'Open the PDF'), downloadLink(path, 'Download')));
     }
-    return h('div', { class: 'om-panel om-stack brain-file-card' },
+    return h('div', { class: 'om-sheet om-sheet-body om-stack brain-file-card' },
       h('p', { class: 'om-label' }, `Binary file, ${size}`),
       h('p', { style: 'margin:0' }, "This one can't be shown here."),
       h('div', null, downloadLink(path, 'Download')));

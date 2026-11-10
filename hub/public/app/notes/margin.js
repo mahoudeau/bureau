@@ -9,7 +9,9 @@ const MAX_TOC = 200;
 const MAX_LINKS = 30;
 
 function block(title, ...content) {
-  return h('section', { class: 'brain-margin-block' }, h('h2', { class: 'om-label' }, title), content);
+  return h('section', { class: 'om-sheet brain-margin-block' },
+    h('header', { class: 'om-titlebar' }, h('h2', null, title)),
+    h('div', { class: 'om-sheet-body' }, content));
 }
 
 function factsBlock(front) {
@@ -77,14 +79,14 @@ function claimsBlock(doc) {
   return block('Claims',
     h('p', { class: 'brain-big' }, h('strong', null, total), ` claim${total === 1 ? '' : 's'}, ${sourced} with a source`),
     h('span', { class: 'om-meter', style: { '--value': pct }, role: 'img', 'aria-label': `${pct}% sourced` }, h('i')),
-    fileSource && own < total ? h('p', { class: 'om-meta' }, `${own} carry their own, the file's source covers the rest.`) : null);
+    fileSource && own < total ? h('p', { class: 'om-data-s' }, `${own} carry their own, the file's source covers the rest.`) : null);
 }
 
 function linkList(items, limit, render) {
   const shown = items.slice(0, limit);
   return [
     h('ul', { class: 'brain-links' }, shown.map((x) => h('li', null, render(x)))),
-    items.length > limit ? h('p', { class: 'om-meta' }, `And ${items.length - limit} more.`) : null,
+    items.length > limit ? h('p', { class: 'om-data-s' }, `And ${items.length - limit} more.`) : null,
   ];
 }
 
@@ -115,8 +117,8 @@ function linksOutBlock(doc, resolver, notes) {
   if (!internal.size && !external.size && !broken) return null;
   return block('Links out',
     internal.size ? linkList([...internal], MAX_LINKS, (f) => noteLink(f, notes)) : null,
-    external.size ? h('p', { class: 'om-meta' }, `Outside: ${[...external].slice(0, 6).join(', ')}${external.size > 6 ? `, and ${external.size - 6} more` : ''}`) : null,
-    broken ? h('p', { class: 'om-meta' }, `${broken} ${broken === 1 ? "doesn't" : "don't"} resolve.`) : null);
+    external.size ? h('p', { class: 'om-data-s' }, `Outside: ${[...external].slice(0, 6).join(', ')}${external.size > 6 ? `, and ${external.size - 6} more` : ''}`) : null,
+    broken ? h('p', { class: 'om-data-s' }, `${broken} ${broken === 1 ? "doesn't" : "don't"} resolve.`) : null);
 }
 
 // Worked out on request, because the hub keeps no backlinks and it means
@@ -130,20 +132,20 @@ function linksHereBlock(path, notes, ctx) {
     fill(body,
       found.sources.length
         ? linkList(found.sources, MAX_LINKS, (f) => noteLink(f, notes))
-        : h('p', { class: 'om-meta' }, 'Nothing links here.'),
-      h('p', { class: 'om-meta brain-quiet' }, `From ${found.scanned} notes. Journal days aren't counted.`));
+        : h('p', { class: 'om-data-s' }, 'Nothing links here.'),
+      h('p', { class: 'om-data-s brain-quiet' }, `From ${found.scanned} notes. Journal days aren't counted.`));
     return true;
   }
 
   function scan() {
-    const progress = h('p', { class: 'om-meta', role: 'status' }, 'Reading the notes');
+    const progress = h('p', { class: 'om-data-s', role: 'status' }, 'Reading the notes');
     fill(body, h('div', { class: 'om-wait' }), progress);
     buildGraph({
       signal: ctx.signal,
       onProgress: (done, total) => { progress.textContent = `Read ${done} of ${total}`; },
     }).then(() => { show(); }).catch((e) => {
       if (e.name === 'AbortError') return;
-      fill(body, h('p', { class: 'om-meta' }, e.message || "Couldn't read the notes."), askButton());
+      fill(body, h('p', { class: 'om-data-s' }, e.message || "Couldn't read the notes."), askButton());
     });
   }
 
@@ -151,12 +153,12 @@ function linksHereBlock(path, notes, ctx) {
     return h('button', { type: 'button', class: 'om-btn', onClick: scan }, 'Find links here');
   }
 
-  if (!show()) fill(body, h('p', { class: 'om-meta' }, 'Reads every note once. A few seconds, the first time.'), askButton());
+  if (!show()) fill(body, h('p', { class: 'om-data-s' }, 'Reads every note once. A few seconds, the first time.'), askButton());
   return block('Links here', body);
 }
 
 export function buildMargin({ doc, path, resolver, notes, ctx }) {
-  return h('aside', { class: 'brain-margin', 'aria-label': 'About this note' },
+  return h('aside', { class: 'om-rail brain-margin', 'aria-label': 'About this note' },
     h('div', { class: 'brain-margin-in' },
       factsBlock(doc.frontmatter),
       tocBlock(doc.headings, ctx.onCleanup),
@@ -168,5 +170,5 @@ export function buildMargin({ doc, path, resolver, notes, ctx }) {
 export const factLine = (doc) => {
   const front = doc.frontmatter;
   const parts = [front.belief, front.volatility, front.version ? `v${front.version}` : null, doc.claims.length ? `${doc.claims.length} claims` : null].filter(Boolean);
-  return parts.length ? h('p', { class: 'brain-factline om-meta' }, parts.join(' / ')) : null;
+  return parts.length ? h('p', { class: 'brain-factline om-data-s' }, parts.join(' / ')) : null;
 };

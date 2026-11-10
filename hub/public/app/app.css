@@ -5,8 +5,8 @@
 .app-main { flex: 1 0 auto; min-width: 0; outline: none; display: flex; flex-direction: column; }
 /* A short page still runs its ground down to the footer. */
 .app-main > * { flex: 1 0 auto; }
-.app-main > .work-page { display: flex; flex-direction: column; }
-.app-main > .work-page > .om-ground { flex: 1 0 auto; }
+.app-main > :is(.work-page, .app-layers) { display: flex; flex-direction: column; }
+.app-main > :is(.work-page, .app-layers) > .om-ground { flex: 1 0 auto; }
 .app-page { padding: var(--sp-6) var(--pad) var(--sp-10); }
 .app-page > p { margin: 0; }
 
