@@ -20,7 +20,18 @@ Models come and go. The knowledge your agents build up about you and your projec
 
 A small Node server (the hub) that owns all coordination state. Every agent, dashboard, and mirror talks to it over one plain HTTP API.
 
-- **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for missions marked boss-gate. A mission keeps its goal, its owner, its gate and a log of what the agent did, so you can read what happened a week later.
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/media/desk-light.jpg">
+  <img src="docs/media/desk.jpg" alt="The Bureau Desk: what needs you on top, with Review, Answer and Send back on each row, the work in flight by project, recent events, and on the right the office in a window and the team with their roles.">
+</picture>
+
+*The Desk at `/`, with demo data: what needs you, what's in flight, and the office and the team on the side.*
+
+- **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for missions marked boss-gate.
+
+  <img src="docs/media/mission.jpg" alt="A mission page in review: two items to rule on with Accept, Reject and Later, the brief and the agent's evidence on the side, and the decision bar pinned at the bottom.">
+
+  *A mission is a page: its goal, its owner, its gate, the agent's evidence and a log of what it did, so you can read what happened a week later.*
 - **Roster with heartbeats.** Who is alive, who is idle, who went dark.
 - **Message bus.** Agents leave each other messages; handoffs work even when sessions are never alive at the same time.
 - **Knowledge brain.** Agents write markdown; the hub commits it to a git repo with the agent as author. History, blame, and rollback come free, and the whole brain is clonable anywhere. Files you drop or edit by hand get swept into git too. A recipe the librarian filed:
@@ -41,9 +52,13 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
   ```
 
   A write to `recipes/` like this one needs the frontmatter above, and every line needs a source of its own or the file's `source:`, or the hub refuses it with 422. The `source:` is the mission the recipe came from. In a note like this one, without `format: 0.3`, the hub only checks that a source is well formed: `t-1` passes even before mission t-1 exists ([docs/brain-format.md](docs/brain-format.md) has the rules).
-- **Goals, a lead and a critic.** File a `goal:` with a concrete bar (reference URLs, images, examples). A lead agent splits it into missions small enough to build and judge one by one, and a critic agent with fresh context checks each delivery against its acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. The roles can be separate agents on a schedule, or one agent you work with live. Either way, a boss-gate mission waits at your gate, and in strict mode the hub holds that gate on the mission's status. You approve, or send it back with a note the agent reads as its correction.
+- **Goals, a lead and a critic.** File a `goal:` with a concrete bar (reference URLs, images, examples). A lead agent splits it into missions small enough to build and judge one by one, and a critic agent with fresh context checks each delivery against its acceptance criteria: pass, or send back with the exact gaps. The builder never grades itself. The roles can be separate agents on a schedule, or one agent you work with live. Either way, a boss-gate mission waits at your gate, and in strict mode the hub holds that gate on the mission's status.
+
+  <img src="docs/media/review.jpg" width="320" alt="The review on a phone: an item with Accept, Reject and Later and a comment field, and the decision bar with Send back, and Approve locked until every item is ruled.">
+
+  *Your gate, on a phone: rule on each item, then approve, or send it back with a note the agent reads as its correction.*
 - **Pair mode.** When you work live with one agent and approve in the chat, the mission closes `done` with your exact words quoted in its log. No second click in a dashboard. `review` stays for work finished while you're away, and for irreversible steps you haven't approved yet.
-- **Two views of the same events.** A dashboard at `/` and a Game Boy-inspired pixel office at `/office` (4-shade palettes, dithering, hand-drawn tiles), both fed by one SSE stream. The dashboard is ink on paper: a status is a dither pattern and a word. Every mission, goal, project and brain note is a page with its own URL, and Cmd-K searches all of it.
+- **Two views of the same events.** A dashboard at `/` and a Game Boy-inspired pixel office at `/office` (hand-drawn tiles, four 4-shade palettes, grey by default and picked in Settings), both fed by one SSE stream. The dashboard is ink on paper and dither: a status is a pattern and a word, images are dithered, and nothing fades. Every mission, goal, project and brain note is a page with its own URL, and Cmd-K searches all of it.
 
 The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will. The staff are shift prompts in [connectors/cowork/](connectors/cowork/), so a fresh hub's office stays empty until an agent registers. The MCP door's tool text and instructions use the name on the token, so a token minted for `dana` reads `dana`. `consul` stays the default in two places: the context hook (set `BUREAU_AGENT` to change it) and the old pre-strict MCP URL.
 

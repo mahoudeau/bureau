@@ -142,9 +142,17 @@ export function liveness(a) {
 
 const hasAll = (caps, ...want) => want.every((w) => caps.includes(w));
 
-// Role is a label read from capabilities. The live lead carries planning and
-// decomposition, not the word "lead"; the live critic review and verification.
-export function roleOf(a) {
+// The roles set in Settings are the real ones: in strict mode they're the only
+// source. `set` is that agent's list from /api/settings when the credential
+// can read it. Without it, the label is read from capabilities: the live lead
+// carries planning and decomposition, not the word "lead"; the live critic
+// review and verification.
+const ROLE_WORDS = [['lead', 'Lead'], ['critic', 'Critic'], ['librarian', 'Librarian'], ['curator', 'Curator']];
+export function roleOf(a, set) {
+  if (Array.isArray(set)) {
+    const hit = ROLE_WORDS.find(([key]) => set.includes(key));
+    return hit ? hit[1] : 'Builder';
+  }
   const caps = a.capabilities || [];
   if (caps.includes('lead') || hasAll(caps, 'planning', 'decomposition')) return 'Lead';
   if (caps.includes('critic') || hasAll(caps, 'review', 'verification')) return 'Critic';

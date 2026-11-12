@@ -208,8 +208,10 @@
 
   // ---- settings: palette + super-pixel scale (both persisted) ------------
   var PAL_KEY = 'bureau_office_palette', SCALE_KEY = 'bureau_office_scale';
+  // Grey by default; the boss picks another in Settings, Appearance, or
+  // with P here. The dashboard writes the same key.
   var palKey = localStorage.getItem(PAL_KEY);
-  if (!A.PALETTES[palKey]) palKey = 'olive';
+  if (!A.PALETTES[palKey]) palKey = 'pocket';
   var SCALES = ['auto', 2, 3, 4, 6];
   var scaleSetting = localStorage.getItem(SCALE_KEY) || 'auto';
   if (SCALES.indexOf(scaleSetting === 'auto' ? 'auto' : +scaleSetting) === -1) scaleSetting = 'auto';
@@ -280,6 +282,10 @@
     fit();
   });
   applyCssPalette();
+  // A choice made in Settings (another tab, or the Desk's window) shows at once.
+  addEventListener('storage', function (e) {
+    if (e.key === PAL_KEY && A.PALETTES[e.newValue]) { palKey = e.newValue; applyCssPalette(); }
+  });
   // P cycles the palette, S cycles the pixel scale (the buttons are
   // hidden chrome now; the keys are the switchboard).
   document.addEventListener('keydown', function (e) {
