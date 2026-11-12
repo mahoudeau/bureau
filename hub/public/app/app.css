@@ -1,0 +1,44 @@
+/* The app's own layout. Anything generic belongs in omako-ds instead. */
+
+#app { display: flex; flex-direction: column; min-height: 100vh; }
+#app > .om-footline { margin-top: auto; }
+.app-main { flex: 1 0 auto; min-width: 0; outline: none; display: flex; flex-direction: column; }
+/* A short page still runs its ground down to the footer. */
+.app-main > * { flex: 1 0 auto; }
+.app-main > :is(.work-page, .app-layers) { display: flex; flex-direction: column; }
+.app-main > :is(.work-page, .app-layers) > .om-ground { flex: 1 0 auto; }
+.app-page { padding: var(--sp-6) var(--pad) var(--sp-10); }
+.app-page > p { margin: 0; }
+
+/* The wordmark: one CSS pixel per cell keeps its checker crisp. */
+.app-brand { flex: none; line-height: 0; }
+/* The side hangs below the letters, so the box sits a pixel low to look centred. */
+.app-wordmark { display: block; flex: none; position: relative; top: 1px; }
+.app-wordmark-paper { fill: var(--paper); }
+.app-wordmark-ink { fill: var(--ink); }
+
+.app-nav { flex: 1 1 auto; min-width: 0; }
+.app-setup { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin-left: auto; }
+.app-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); margin-left: auto; }
+.app-tools[hidden], .om-nav[hidden], .app-live[hidden] { display: none; }
+.app-live { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.app-status { display: inline-flex; align-items: center; gap: var(--sp-2); }
+
+/* The ground holds the long shadow, so on a phone it's clipped, not scrolled. */
+.app-signin { position: relative; overflow: hidden; }
+.app-signin h1 { margin: 0; }
+.app-signin [hidden] { display: none; }
+/* The long shadow reaches 80px down and right, so the note clears it. Text
+   never sits on the ground's dots, or on the shadow. */
+.app-signin-note { position: relative; justify-self: center; width: max-content; max-width: 100%; margin: calc(80px + var(--sp-2)) auto 0; padding: 2px 6px; background: var(--paper); }
+
+@media (max-width: 720px) {
+  .app-kbd { display: none; }
+  /* Two short rows: brand and tools, then the links in one line that scrolls. */
+  .om-top { gap: var(--sp-1) var(--sp-3); padding: var(--sp-1) var(--pad); border-bottom-width: var(--rule-md); }
+  .app-tools { flex-wrap: nowrap; gap: var(--sp-2); }
+  .app-nav { order: 3; flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .app-nav::-webkit-scrollbar { display: none; }
+  .app-nav a { flex: none; padding: 3px 8px; }
+  .app-setup { flex-wrap: nowrap; margin-left: 0; }
+}

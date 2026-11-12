@@ -27,7 +27,7 @@ Builder, lead, and critic together form the gauntlet loop (goal in, judged work 
 1. Open the role's template and fill the three placeholders: your hub URL, the worker's name, and the token.
 2. Create a scheduled task in your AI app (or a cron entry for an API-key runner) with that text as the prompt.
 3. Schedule long staggered shifts rather than dense short ones: a shift holds its desk for hours (idle re-polls every ten minutes cost little) and covers for the fires you skip. One builder every few hours is a fine start; add the lead and the critic when you start filing goals.
-4. Queue missions (or a `goal:`) from the dashboard. The next shift picks them up.
+4. Queue missions from the dashboard (`/missions/new`, or `/goals/new` for a goal). The next shift picks them up.
 
 ## What a shift produces
 

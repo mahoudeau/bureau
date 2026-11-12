@@ -69,7 +69,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 - RULE-KNOWLEDGE-27: When a mission's status becomes `done`, `failed` or `discarded`, its `work/<t-id>/` folder is deleted whole. This runs inside the mission update itself, so every door that closes a mission does it: PATCH, MCP `update_mission`, a review link. A removal error is logged and never undoes the close. (source: hub/lib/store.js updateTask(), hub/lib/work.js removeMission())
 - RULE-KNOWLEDGE-28: At boot, folders under the work store whose mission is closed or unknown are deleted. (source: hub/lib/store.js init(), hub/lib/work.js sweep())
 - RULE-KNOWLEDGE-29: On MCP, `write_work` and `read_work` mirror `POST` and `GET /api/work` with the same checks. (source: hub/server.js mcpToolCall() write_work, read_work)
-- RULE-KNOWLEDGE-30: An artifact URL that names a work image (`work/<t-id>/x.png`) renders in the dashboards from `/api/work` instead of `/api/knowledge`. Review links follow RULE-REVIEW-19. (source: hub/public/index.html, hub/public/v2/media.js, hub/public/v2/peek-panel.js, hub/public/v2/awaiting-merge.js)
+- RULE-KNOWLEDGE-30: An artifact URL that names a work image (`work/<t-id>/x.png`) renders in the dashboard from `/api/work` instead of `/api/knowledge`. Review links follow RULE-REVIEW-19. (source: hub/public/app/hub-auth.js imageUrl())
 
 ## Journeys
 

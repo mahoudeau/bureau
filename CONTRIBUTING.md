@@ -12,7 +12,7 @@ cp .env.example .env    # Windows: copy. Set BUREAU_TOKEN and uncomment BUREAU_B
 node server.js          # reads .env, listens on PORT or 8100
 ```
 
-State goes to `hub/data/` and the brain (a git repo the hub commits to) to `hub/brain/`. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. The dashboard is at `/`, the office at `/office`.
+State goes to `hub/data/` and the brain (a git repo the hub commits to) to `hub/brain/`. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. The dashboard is at `/`, the office at `/office`. The dashboard is plain ES modules in `hub/public/app/` and CSS in `hub/public/omako-ds/`, with no build step: edit a file and reload.
 
 ## Run the tests
 

@@ -1,0 +1,75 @@
+/* The pages a link opens, usually on a phone: /r/<token> and /m/<token>.
+   Server-rendered, no script. On OMAKO DS's layers: the title in the band, the
+   page in one sheet on the ground, with controls a thumb can hit. */
+
+.lp { display: flex; flex-direction: column; min-height: 100vh; --ctl-h: 44px; --ctl-fs: 15px; }
+.lp-top { justify-content: space-between; flex-wrap: nowrap; }
+.lp-status { display: inline-flex; align-items: center; gap: var(--sp-2); flex: none; }
+/* The wordmark: one CSS pixel per cell keeps its checker crisp. */
+.lp-brand { line-height: 0; }
+/* The side hangs below the letters, so the box sits a pixel low to look centred. */
+.app-wordmark { display: block; flex: none; position: relative; top: 1px; }
+.app-wordmark-paper { fill: var(--paper); }
+.app-wordmark-ink { fill: var(--ink); }
+
+.lp-inner { width: 100%; max-width: 640px; margin: 0 auto; }
+.lp-title { margin: 0; overflow-wrap: anywhere; }
+/* Room for the long shadow (om-cast reaches 80px down and right), and the
+   ground clips it on a phone instead of scrolling sideways. */
+.lp-ground { position: relative; flex: 1 0 auto; padding-bottom: calc(var(--sp-8) + 80px); overflow: hidden; }
+.lp-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+  gap: var(--sp-3);
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+.lp-main p, .lp-main ol, .lp-main ul, .lp-main pre, .lp-main figure, .lp-main blockquote { margin: 0; }
+.lp-mission { font-weight: 700; overflow-wrap: anywhere; }
+.lp-help { font: 400 13px/18px var(--font-text); }
+.lp-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+.lp-asked { padding: var(--sp-1) 0 var(--sp-1) var(--sp-3); border-left: var(--rule) solid var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+/* A link that is gone: the cross pattern, the exception. */
+.lp-strip { display: block; height: 10px; border: var(--rule-sm) solid var(--ink); }
+
+.lp-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.lp-submit { width: 100%; }
+/* 16px keeps a phone from zooming into the field. */
+.lp .om-input, .lp .om-textarea { font-size: 16px; }
+
+.lp-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-2); min-width: 0; margin: 0; padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); }
+.lp-item legend { padding: 0 var(--sp-1); overflow-wrap: anywhere; }
+.lp-op { font: 400 13px/18px var(--font-text); overflow-wrap: anywhere; }
+.lp-op code { font-family: var(--font-mono); font-weight: 700; }
+.lp-pre { max-height: 50vh; overflow: auto; padding: var(--sp-2); border: var(--rule-sm) solid var(--ink); font: 400 13px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Accept, Reject, Later: a choice. Hover shows the dither bar, the choice is solid. */
+.lp-verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: var(--rule-sm) solid var(--ink); }
+.lp-verdict { position: relative; cursor: pointer; }
+.lp-verdict + .lp-verdict { border-left: var(--rule-sm) solid var(--ink); }
+.lp-verdict input { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; opacity: 0; cursor: pointer; }
+.lp-verdict span { position: relative; display: flex; align-items: center; justify-content: center; min-height: var(--ctl-h); font: 600 15px/1.2 var(--font-text); }
+.lp-verdict input:checked + span { background: var(--ink); color: var(--paper); }
+.lp-verdict:hover span::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+.lp-verdict input:focus-visible + span { outline: 3px solid var(--ink); outline-offset: 2px; }
+
+.lp-figure img { display: block; width: 100%; height: auto; border: var(--rule-sm) solid var(--ink); }
+.lp-figure figcaption { padding-top: var(--sp-1); overflow-wrap: anywhere; }
+
+.lp-block { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--sp-1); }
+.lp-block h2 { padding-bottom: var(--sp-1); border-bottom: var(--rule-md) solid var(--ink); }
+.lp-rows { padding: 0; list-style: none; }
+.lp-rows li { padding: var(--sp-2) 0; border-bottom: var(--rule-sm) solid var(--ink); overflow-wrap: anywhere; }

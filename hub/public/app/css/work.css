@@ -1,0 +1,371 @@
+/* Desk, board and mission pages, on OMAKO DS's layers: ground, sheets, one
+   raised sheet for what needs you, the rail, and the dock. */
+
+.work-page [hidden] { display: none !important; }
+.work-page p { margin: 0; }
+.work-page h1, .work-page h2 { margin: 0; }
+.work-none { padding: var(--sp-2) 0; }
+.work-kbd { flex: none; }
+@media (hover: none), (max-width: 720px) { .work-kbd, .work-keys { display: none !important; } }
+
+/* Refusals: what the hub said, as written. The edge is the only ornament. */
+.work-refusal {
+  border-left: var(--rule) solid var(--ink);
+  padding: var(--sp-1) var(--sp-2);
+  font: 700 13px/18px var(--font-text);
+  overflow-wrap: anywhere;
+}
+
+/* Sections */
+/* An auto grid track grows to its widest child, and one long title then widens
+   the page. Every stacking grid here says what it means. */
+.work-section, .work-main, .work-rail, .work-list, .work-groups, .work-cards, .work-lane, .work-lane-body,
+.work-swims, .work-swim, .work-board-page, .work-items,
+.work-artifacts, .work-payload, .work-new, .work-new-form, .work-batch, .work-kids {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* A section is a sheet. Lists sit flush inside it, everything else gets the
+   sheet's padding. */
+.work-section { display: grid; min-width: 0; }
+.work-section > div:empty { display: none; }
+.work-section .om-empty { padding: var(--sp-3) var(--sp-4); }
+.work-section > .work-fold { padding: var(--sp-2) var(--sp-3); border-top: var(--rule-sm) solid var(--ink); }
+.work-list { display: grid; }
+.work-list > * + * { border-top: var(--rule-sm) solid var(--ink); }
+.work-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); padding: var(--sp-1) var(--sp-3); border-top: var(--rule-sm) solid var(--ink); font: 400 12px/16px var(--font-mono); }
+.work-foot:empty { display: none; }
+.work-page .om-empty { gap: var(--sp-1); }
+.work-fold summary {
+  cursor: pointer;
+  padding: 2px 0;
+  font: 700 12px/16px var(--font-text);
+  list-style: none;
+}
+.work-fold summary::-webkit-details-marker { display: none; }
+.work-fold summary::before { content: "+ "; }
+.work-fold[open] summary::before { content: "- "; }
+.work-fold summary:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+
+/* Images */
+.work-thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(220px, 100%), 1fr)); gap: var(--sp-2); }
+.work-thumbs-small { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); margin-top: var(--sp-2); }
+.work-thumb { display: block; border: var(--rule-sm) solid var(--ink); color: inherit; text-decoration: none; min-width: 0; cursor: zoom-in; }
+.work-thumb:hover { outline: var(--rule-sm) solid var(--ink); }
+.work-thumb img { display: block; width: 100%; height: 160px; object-fit: cover; object-position: top; background: var(--paper); }
+.work-thumbs-small .work-thumb img { height: 64px; }
+.work-thumb-cap { display: block; padding: 2px var(--sp-1); border-top: var(--rule-sm) solid var(--ink); font: 400 10px/14px var(--font-mono); }
+
+/* ---- The Desk ---- */
+
+/* Needs me now is the raised sheet: decisions only, and only the next one's
+   button is solid. Everything else on the Desk is a plain sheet or the rail. */
+.work-needs-head h1 { margin: 0; font: 700 16px/20px var(--font-text); }
+.work-needs-head .om-btn-ghost { color: inherit; }
+.work-clear { padding: var(--sp-5); }
+
+.work-needs-list { display: grid; grid-template-columns: minmax(0, 1fr); }
+.work-need { min-width: 0; }
+.work-need + .work-need { border-top: var(--rule-sm) solid var(--ink); }
+.work-need > .om-need { border-top: 0; }
+.work-need-pick { width: 16px; height: 16px; display: inline-flex; }
+/* A project label is whatever someone typed. It breaks rather than widens. */
+.work-need-meta > *, .om-group-head > *, .om-band-meta > *, .work-swim-head > * { min-width: 0; overflow-wrap: anywhere; }
+.work-need-asked { flex: 1 1 200px; font-weight: 700; }
+/* Two equal slots, so the main action lines up down the list. */
+.work-need-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-1); }
+.work-need-actions > .om-btn { width: 100%; }
+/* The note under a row lines up with the title: tick, swatch, then text. */
+.work-need-tray { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: var(--sp-2); padding: 0 var(--sp-5) var(--sp-3) calc(var(--sp-5) + 16px + 14px + var(--sp-3) * 2); }
+.work-need .work-refusal { margin: 0 var(--sp-5) var(--sp-3) calc(var(--sp-5) + 16px + 14px + var(--sp-3) * 2); }
+
+.work-batch { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-5); border-top: var(--rule-md) solid var(--ink); }
+.work-item-batch { margin-top: var(--sp-2); border: var(--rule-md) solid var(--ink); }
+.work-item-pick { flex: none; }
+.work-batch-why { font: 400 12px/16px var(--font-text); }
+.work-batch-list { margin: 0; padding: 0; list-style: none; max-height: 160px; overflow-y: auto; font: 400 12px/18px var(--font-text); }
+
+.work-groups { display: grid; }
+.work-group { min-width: 0; }
+.work-group + .work-group > .om-group-head { border-top: var(--rule-sm) solid var(--ink); }
+.work-row .om-row-meta { flex: none; }
+.work-row-word { min-width: 72px; }
+
+.work-event .work-event-time { order: -1; min-width: 64px; }
+.work-event-label { font-weight: 400; }
+
+.work-pr { padding: 6px var(--sp-3); min-width: 0; }
+.work-pr-line { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; min-height: 22px; }
+.work-pr-no { flex: none; }
+.work-pr-title { color: inherit; text-decoration: none; font: 400 13px/18px var(--font-text); }
+.work-pr-title:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+
+/* The office window: a frame around someone else's room. */
+.work-office-title { color: inherit; text-decoration: none; }
+.work-office-title:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.work-office-frame { position: relative; }
+.work-office-frame iframe { display: block; width: 100%; aspect-ratio: 16 / 9; border: 0; }
+.work-office-open { position: absolute; inset: 0; cursor: pointer; }
+
+.work-msg { padding: 6px var(--sp-3); min-width: 0; }
+.work-msg-open {
+  display: flex;
+  gap: var(--sp-2);
+  align-items: baseline;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: 400 13px/18px var(--font-text);
+  text-align: left;
+  cursor: pointer;
+}
+.work-msg-open:hover .work-msg-text { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 3px; }
+.work-msg-open .om-swatch { width: 10px; height: 10px; }
+.work-msg-text { flex: 1; min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.work-msg.is-unread .work-msg-text { font-weight: 700; }
+.work-msg-meta { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); padding-left: calc(10px + var(--sp-2)); }
+.work-msg-meta > * { min-width: 0; overflow-wrap: anywhere; }
+
+.work-agent { padding: 4px var(--sp-3); min-width: 0; }
+.work-agent-line { display: grid; grid-template-columns: auto minmax(0, max-content) auto minmax(0, 1fr); align-items: center; gap: var(--sp-2); font: 400 13px/18px var(--font-text); }
+.work-agent.is-quiet .om-strong { font-weight: 400; }
+.work-agent-doing { text-align: right; }
+.work-fleet { padding: 2px 0 0 calc(14px + var(--sp-2)); }
+
+/* ---- The board ---- */
+
+/* The band holds the title, the toolbar and the filters; the lanes sit on the
+   ground, and each card is a sheet. */
+.work-board-head { align-items: center; }
+.work-board-head h1 { margin: 0; }
+.work-toolbar { display: flex; align-items: center; gap: var(--sp-2); flex-wrap: wrap; }
+.work-toolbar-label { margin-left: var(--sp-1); }
+.work-new-link { margin-left: var(--sp-2); }
+.work-filters { display: flex; flex-wrap: wrap; gap: var(--sp-1) var(--sp-3); align-items: center; }
+.work-picked:empty { display: none; }
+
+.work-menu-wrap { position: relative; }
+.work-menu {
+  position: absolute;
+  z-index: var(--z-sticky);
+  top: calc(100% + 4px);
+  left: 0;
+  width: min(280px, calc(100vw - 2 * var(--pad)));
+  max-height: 60vh;
+  overflow-y: auto;
+  display: grid;
+  padding: var(--sp-1);
+  border: var(--rule-md) solid var(--ink);
+  background: var(--paper);
+  box-shadow: 4px 4px 0 var(--ink);
+}
+.work-menu-item { display: flex; padding: 3px var(--sp-1); min-width: 0; }
+.work-menu-item:hover { background: var(--ink); color: var(--paper); }
+.work-menu-foot { border-top: var(--rule-sm) solid var(--ink); margin-top: var(--sp-1); padding-top: var(--sp-1); }
+
+.work-lanes { display: flex; gap: var(--sp-3); align-items: flex-start; min-width: 0; }
+.work-lane { flex: 1 1 0; min-width: 0; display: grid; gap: var(--sp-1); }
+/* The lane's dither, a strip over its column. */
+.work-lane-strip { display: block; height: 10px; border: var(--rule-sm) solid var(--ink); }
+.work-lane.is-collapsed { flex: 0 0 118px; }
+.work-lane-head,
+.work-swim-head {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  background: var(--paper);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+/* The head folds the lane: hover underlines its name, like a link. */
+.work-lane-head:hover .om-label, .work-swim-head:hover .om-label { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
+.work-lane-count { font: 700 12px/16px var(--font-mono); margin-right: auto; }
+.work-lane-word { flex: none; }
+.work-caret::before { content: "-"; font-weight: 700; }
+.is-collapsed > button .work-caret::before, .is-collapsed > .work-lane-head .work-caret::before { content: "+"; }
+.work-lane-body { display: grid; gap: var(--sp-1); }
+.work-cards { display: grid; gap: var(--sp-1); }
+/* Text never sits on the ground's dots. */
+.work-lane-foot .om-btn { width: 100%; background: var(--paper); }
+.work-lane-none { padding: var(--sp-1) 4px; background: var(--paper); }
+
+.work-card { gap: 3px; min-width: 0; padding: 6px var(--sp-2); }
+.work-card-top { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; }
+.work-card-id { font: 700 12px/16px var(--font-mono); }
+.work-card-word { display: none; }
+.work-card-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font: 600 13px/18px var(--font-text);
+}
+.work-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px var(--sp-2); min-width: 0; }
+.work-card-meta .om-clip { max-width: 100%; }
+.work-card-count { font-variant-numeric: tabular-nums; }
+
+.work-swims { display: grid; gap: var(--sp-4); }
+.work-swim { display: grid; gap: var(--sp-2); min-width: 0; }
+.work-swim-head { border-bottom: var(--rule-md) solid var(--ink); padding: 4px var(--sp-2); }
+
+/* ---- A mission ---- */
+
+/* Band, ground, raised sheet, rail and dock all come from OMAKO DS. This is only
+   what fits them to the hub's real data. */
+.app-main:has(> .work-mission) { display: flex; flex-direction: column; }
+.work-mission { flex: 1 0 auto; display: flex; flex-direction: column; min-width: 0; }
+.work-ground { flex: 1 0 auto; }
+/* The dock is the end of the page, so the footer steps aside for it. */
+#app:has(.om-dock:not([hidden])) > .om-footline { display: none; }
+/* Real rails run taller than the window, and a pinned one could never be read to its end. */
+.work-mission .om-rail { position: static; }
+.work-mission .om-props dd { overflow-wrap: anywhere; }
+
+.work-head { flex: 1 1 320px; }
+.work-m-title { overflow-wrap: anywhere; }
+.work-ask {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  max-width: var(--measure);
+  overflow-wrap: anywhere;
+}
+.work-note-form { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); max-width: var(--page-narrow); }
+.work-note-form .om-input { flex: 1 1 280px; width: auto; }
+.work-note-form .work-refusal { flex: 1 0 100%; }
+.work-more { position: relative; }
+.work-more-menu { position: absolute; top: calc(100% + 4px); right: 0; z-index: var(--z-sticky); }
+
+.om-rail .work-thumbs { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+.om-rail .work-thumb img { height: 88px; }
+
+.work-body { min-width: 0; overflow-wrap: anywhere; }
+.work-body.is-folded { max-height: 320px; overflow: hidden; border-bottom: var(--rule-sm) dashed var(--ink); }
+.work-body-more { margin-top: var(--sp-1); }
+.work-plain { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+
+.work-artifacts { margin: 0; padding: 0; list-style: none; display: grid; }
+.work-artifact { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); padding: 3px 0; border-bottom: var(--rule-sm) solid var(--ink); font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.work-artifact:last-child { border-bottom: 0; }
+.work-artifact-path { flex: 1; min-width: 0; }
+
+/* The queue. Every row stays built; only the one under the cursor opens. */
+.work-keys { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); }
+.work-items { margin: 0; padding: 0; list-style: none; display: grid; }
+.work-item { min-width: 0; border-top: var(--rule-sm) solid var(--ink); scroll-margin: 64px 0 132px; }
+.work-items > .work-item:first-child { border-top: 0; }
+.work-item-row { display: flex; align-items: stretch; min-width: 0; }
+.work-item-row > .om-queue-row { flex: 1 1 auto; min-width: 0; border-top: 0; }
+.work-item-pick { flex: none; padding-left: var(--sp-5); }
+.work-item-row:has(.work-item-pick) > .om-queue-row { padding-left: var(--sp-3); }
+.om-queue-row:hover .om-tag-solid { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+.work-item-static { cursor: default; }
+.work-item-static:hover, .work-item.is-cursor .om-queue-row:hover { background: var(--paper); color: var(--ink); }
+.work-item.is-cursor .om-queue-row { cursor: default; }
+.work-item-static:hover .om-tag-solid, .work-item.is-cursor .om-queue-row:hover .om-tag-solid { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.work-item-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.work-item.is-cursor .work-item-title, .work-items.is-all-open .work-item-title { font: 700 18px/24px var(--font-text); white-space: normal; overflow-wrap: anywhere; }
+.work-item-id { margin-right: var(--sp-1); }
+.work-item-state { flex: none; }
+.work-item-detail { display: none; padding-top: 0; }
+.work-item.is-cursor .work-item-detail, .work-items.is-all-open .work-item-detail { display: grid; }
+.work-item-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* Nothing ruled yet: Enter accepts, so Accept carries the "about to" dither
+   bar. Never solid: an unruled item must not look ruled. */
+.work-item.is-cursor .work-verdicts:not(:has([aria-pressed="true"])) [data-verdict="approved"]::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 5px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+.work-pre { margin: 0; max-height: 240px; overflow: auto; padding: var(--sp-2); font: 400 12px/18px var(--font-mono); white-space: pre; }
+.work-payload { display: grid; gap: var(--sp-2); min-width: 0; }
+.work-payload-file { min-width: 0; overflow-wrap: anywhere; }
+.work-payload-seal { display: flex; flex-wrap: wrap; gap: 0 var(--sp-3); }
+.work-item-said { font-size: 13px; }
+.work-item-batch { margin-top: 0; padding: var(--sp-3) var(--sp-5); border: 0; border-top: var(--rule-md) solid var(--ink); }
+
+.work-log-text { min-width: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+.work-fact-sub { display: block; font-size: 12px; }
+.work-kids { margin: 0; padding: 0; list-style: none; display: grid; }
+.work-kid { display: flex; align-items: center; gap: var(--sp-1); color: inherit; text-decoration: none; min-width: 0; }
+.work-kid:hover { background: var(--ink); color: var(--paper); }
+.om-props .om-meter { margin-bottom: var(--sp-1); }
+
+/* What the hub said, right where the ruling was made. */
+.work-dock > .work-refusal, .work-dock > .work-bar-result { grid-column: 1 / -1; }
+
+/* ---- New mission ---- */
+
+.work-new-form { display: grid; gap: var(--sp-4); }
+.work-new-pair { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: var(--sp-3); }
+.work-new-body { min-height: 260px; }
+.work-new-thumbs { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.work-new-thumb { position: relative; margin: 0; width: 96px; height: 96px; border: var(--rule-sm) solid var(--ink); }
+.work-new-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.work-new-thumb .om-btn { position: absolute; top: 0; right: 0; }
+.work-new-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2); }
+
+/* ---- Width ---- */
+
+@media (max-width: 860px) {
+  .work-lanes { flex-direction: column; align-items: stretch; }
+  .work-lane, .work-lane.is-collapsed { flex: none; }
+  .work-card-word { display: inline; }
+}
+
+/* A thumb is bigger than a pointer. */
+@media (max-width: 720px) {
+  .work-page:not(.work-mission) { --ctl-h: 40px; --row-h: 40px; }
+  .work-page .om-chip { padding: 5px 9px; }
+  .work-page .om-seg button { padding: 8px 12px; }
+  .work-row { --row-h: 36px; }
+
+  .work-need-head { align-items: start; }
+  .work-need-pick { width: 18px; height: 18px; }
+  .work-need-pick input { width: 18px; height: 18px; }
+  .work-need-actions > :only-child { grid-column: 1 / -1; }
+  .work-need-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .work-need-tray { grid-template-columns: minmax(0, 1fr) auto; padding: 0 var(--sp-3) var(--sp-3); }
+  .work-need-tray .om-input { grid-column: 1 / -1; }
+  .work-need .work-refusal { margin: 0 var(--sp-3) var(--sp-3); }
+  .work-batch { padding-inline: var(--sp-3); }
+
+  .work-row-word { display: none; }
+
+  .work-toolbar { width: 100%; }
+  .work-new-link { margin-left: auto; }
+  .work-event:nth-child(n+9) { display: none; }
+  .work-event .work-event-time { min-width: 0; }
+
+  .work-item-pick { padding-left: var(--sp-3); }
+  .work-item-batch { padding-inline: var(--sp-3); }
+  .work-verdicts { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .work-dock .om-dock-actions > :only-child { grid-column: 1 / -1; }
+  .work-thumb img { height: 180px; }
+  .work-new-actions .work-new-hint { display: none; }
+  .work-new-actions .om-btn { flex: 1 1 auto; }
+}

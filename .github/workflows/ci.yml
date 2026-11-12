@@ -107,9 +107,19 @@ jobs:
         run: bash test/storage.sh
 
       # The security findings, each with a check seen failing before its fix.
-      # Self-contained: its own hubs on ports 8201 to 8214.
+      # Self-contained: its own hubs on ports 8201 to 8214 and 8216.
       - name: Security (test/security.test.js)
         run: node test/security.test.js
+
+      # The dashboard's markdown: every feature, what must never run, hostile
+      # input on a clock. No hub needed.
+      - name: Markdown (test/markdown.test.js)
+        run: node test/markdown.test.js
+
+      # Every file the app shell and the stylesheets name exists and is served,
+      # so a missing module fails here. Self-contained: its own hub on port 8215.
+      - name: Assets (test/assets.test.js)
+        run: node test/assets.test.js
 
       - name: Hub log
         if: always()
@@ -274,6 +284,12 @@ jobs:
 
       - name: Security (test/security.test.js)
         run: node test/security.test.js
+
+      - name: Markdown (test/markdown.test.js)
+        run: node test/markdown.test.js
+
+      - name: Assets (test/assets.test.js)
+        run: node test/assets.test.js
 
       - name: Hub log
         if: failure() || cancelled()

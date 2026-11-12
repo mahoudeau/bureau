@@ -22,6 +22,23 @@ The brain has its own history in git. The state file is what the steps below pro
 
 No `npm install`, ever. The hub has no dependencies.
 
+## The new dashboard (unreleased)
+
+One dashboard replaces the two old ones. The API, the agents, the review links and the office's own URL don't change.
+
+**What moves.**
+
+- `/` is the Desk: what needs you, what's in flight, your messages, the office in a window.
+- A mission, a goal, a project and a brain note are each a page with a URL (`/missions/t-42`, `/brain/knowledge/x.md`). The side panels are gone.
+- Projects moved to `/projects`. Approval, roles and agent tokens are at `/settings`.
+- Static files are served from `/app/` and `/omako-ds/`. If you put a cache or a path rule in front of the hub, check that those two reach it.
+
+**Old links redirect.** `/v2` and `/v2/styleguide` answer 301 to `/`, and `/index.html` serves the Desk. A browser keeps the `#token=` fragment across the redirect. A link that pointed inside the old dashboard lands on the Desk.
+
+**Reload open tabs.** A tab still showing the old dashboard keeps asking for files that are gone. The token stays in the browser, so you don't sign in again.
+
+**Themes.** The dashboard has system, paper and ink. The four Game Boy themes are office only now, in the office's own palette switcher. A theme you picked in the old dashboard isn't carried over.
+
 ## Before you deploy this release to a live hub
 
 This release changes where the hub listens and which browser origins it answers. Behind a platform proxy (alwaysdata is the case written out here, with `bureau.mathieu.dev` as the public name), get these right before the new code runs. Getting them wrong means a site that answers 502, or a dashboard that gets 403 on every write, and nothing in the repo can see your server's settings for you.
@@ -122,7 +139,7 @@ These change what a running hub accepts. Check them before you restart.
 1. **A real token is required.** With neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN` set, a placeholder from `.env.example` in either, or the two set to the same value, the hub prints why and exits. Strict mode with no `BUREAU_TOKEN` is fine: that is the end of the upgrade above. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. For a demo on one machine only, `BUREAU_ALLOW_INSECURE_LOCAL=1` starts it anyway, and it refuses any bind that is not loopback.
 2. **The default bind is `127.0.0.1`**, not all interfaces. A host that injects `IP` is unaffected, and so is the Docker image, which sets `HOST=0.0.0.0`. Anything else that reaches the hub from another machine needs `HOST=0.0.0.0` (or `HOST=::`) in `hub/.env`. Behind a platform proxy, see **Before you deploy this release to a live hub**.
 3. **CORS is no longer `*`.** Same-origin pages work as before. A page on another origin needs `BUREAU_ALLOWED_ORIGINS=https://that.example`, comma-separated. Behind a reverse proxy that rewrites `Host`, set `BUREAU_PUBLIC_URL` so the hub knows its own name, or dashboard writes and SSE tickets answer 403.
-4. **`?token=` is gone.** Any script calling the API with it must send `Authorization: Bearer <token>` instead. Dashboard links that carried the token use the fragment now: `/#token=...`, `/v2#token=...`.
+4. **`?token=` is gone.** Any script calling the API with it must send `Authorization: Bearer <token>` instead. Dashboard links that carried the token use the fragment now: `/#token=...`.
 5. **The data folder is private.** At every boot the hub sets it to `0700` and the files in it to `0600` (POSIX only). A backup job reading it as another user needs to run as the hub's user.
 6. **The intake sweep leaves out names the path guard refuses** (a `.git` segment at any depth, Windows-reserved names). They stay on disk, named once in the log, until you rename them.
 

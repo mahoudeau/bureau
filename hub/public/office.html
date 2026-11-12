@@ -105,10 +105,9 @@
 <body>
 <style>
   [data-mini] #hud, [data-mini] #ticker, [data-mini] #btn-min { display: none !important; }
-  /* mini obeys the same whole-number law as the full office: fit() picks
-     the largest integer scale the iframe allows and letterboxes it. A box
-     narrower than one art pixel per device pixel shows a centered 1x crop
-     instead of a smeared downscale. */
+  /* mini obeys the same whole-number law as the full office, but covers
+     instead of letterboxing: fit() picks the smallest integer scale that
+     fills the iframe, and the centred overflow is cropped. */
   [data-mini] #stage { padding: 0; overflow: hidden; }
   [data-mini] .bubble { display: none; }
 </style>
@@ -123,7 +122,7 @@
   <span class="leg" id="leg-working" data-icon="folder-working"><canvas></canvas><span class="n">0</span></span>
   <span class="leg" id="leg-review" data-icon="folder-review"><canvas></canvas><span class="n">0</span></span>
   <span class="leg" id="leg-done" data-icon="folder-done"><canvas></canvas><span class="n">0</span></span>
-  <!-- boss order 2026-08-23: no menu nav on the office — the palette and
+  <!-- boss order 2026-08-23: no menu nav on the office: the palette and
        scale settings live on the P and S keys (and on /office/assets);
        the only chrome is the minimize icon, fixed top right. The buttons
        stay in the DOM hidden because the settings logic drives them. -->
@@ -131,7 +130,7 @@
   <button id="btn-scale" title="Pixel scale" hidden>AUTO</button>
   <span id="conn">connecting</span>
 </div>
-<a id="btn-min" href="/v2" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
+<a id="btn-min" href="/" title="Minimize back to the dashboard" aria-label="Minimize back to the dashboard">&ndash;</a>
 <div id="ticker">&gt; Opening the office...</div>
 <div id="gate" hidden>
   <div>BUREAU · STAFF ENTRANCE</div>
@@ -139,13 +138,13 @@
   <button id="gate-go">CLOCK IN</button>
 </div>
 <script src="/office/assets.js"></script>
-<script src="/v2/hub-auth.js"></script>
+<script src="/app/hub-auth.js"></script>
 <script>
 'use strict';
 (function () {
   var A = window.OfficeAssets;
   var W = 384, H = 216, TILE = 8;
-  // t-278: mini mode — embedded in the dashboard's agents rail as a
+  // t-278: mini mode: embedded in the Desk's office window as a
   // same-origin iframe (shares bureau_token localStorage). Chrome hides,
   // the canvas letterboxes into whatever box the parent gives us; the
   // integer-scaling law holds (a 208px rail at dpr 2 yields a clean 1x
@@ -153,7 +152,7 @@
   var MINI = new URLSearchParams(location.search).has('mini');
   if (MINI) document.documentElement.setAttribute('data-mini', '');
   // ttfText caches glyph runs; anything drawn before the vendored font
-  // finished loading is a fallback-font render frozen forever — flush the
+  // finished loading is a fallback-font render frozen forever, so flush the
   // cache the moment the real font lands (the rAF loop repaints after).
   if (document.fonts && document.fonts.load) {
     document.fonts.load('8px OfficePixel').then(function () { A.clearTtfCache(); }).catch(function () {});
@@ -245,8 +244,10 @@
   function fit() {
     var dpr = window.devicePixelRatio || 1;
     if (MINI) {
-      // no bands in mini; below 1x we crop at 1x rather than smear
-      var m = Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)));
+      // no bands in mini, and no letterbox: the scale rounds up so the
+      // office covers the window, and the centred overflow is cropped.
+      // Still whole device pixels per art pixel, never a smear.
+      var m = Math.max(1, Math.ceil(Math.max(innerWidth * dpr / W, innerHeight * dpr / H)));
       SCALE = m;
       cv.style.width = (m * W / dpr) + 'px';
       cv.style.height = (m * H / dpr) + 'px';
@@ -397,7 +398,7 @@
   // behind the boss gate plus blocked missions waiting on the boss's
   // answer. Critic-gate reviews wait on the critic; a block whose last
   // note says "waiting on: t-N" for a still-open mission waits on that
-  // mission (same rule as v2/needs-me-now.js).
+  // mission (same rule as app/desk/model.js).
   function blockedOnMission(t, byId) {
     var log = t.log || [], last = log[log.length - 1];
     var m = last && /waiting on:\s*(t-\d+)/i.exec(last.note || '');
@@ -733,7 +734,7 @@
     A.drawSprite(ctx, mon, p, d.x + 34, d.y - 12);
     // Nameplate: PRESENT agents (active or idle) floating above the
     // screen; only the offline/absent lose their plate (boss refinement:
-    // sol idled and her name vanished — presence, not activity, owns it).
+    // sol idled and her name vanished: presence, not activity, owns it).
     if (ag && ag.state !== 'offline') {
       // full name when it fits in 14 glyphs (64px, well clear of the next
       // desk), else the first 13 and an ellipsis
@@ -781,7 +782,7 @@
     var carryY = headY - 9;
     var emoteY = a.carry ? carryY - 9 : headY - 9;
     // 2x super-size (boss: the 10-wide parts were dwarfed by the
-    // furniture): integer scale, feet stay on the same line — the
+    // furniture): integer scale, feet stay on the same line, the
     // sprite grows upward and outward from the old 16-box.
     if (key) {
       var cnv = A.sprite(key, p);
@@ -820,8 +821,8 @@
   function go(href) { location.href = href; }
   function hotspots() {
     var list = [
-      { label: 'Mission board: open the mission list', rect: { x: 24, y: 6, w: 80, h: 32 }, act: function () { go('/v2#board'); } },
-      { label: 'Brain shelf: open the brain', rect: { x: 8, y: 52, w: 40, h: 52 }, act: function () { go('/v2#brain'); } },
+      { label: 'Mission board: open the mission list', rect: { x: 24, y: 6, w: 80, h: 32 }, act: function () { go('/missions'); } },
+      { label: 'Brain shelf: open the brain', rect: { x: 8, y: 52, w: 40, h: 52 }, act: function () { go('/brain'); } },
     ];
     DESK_SLOTS.forEach(function (d) {
       var ag = AGENTS.find(function (a) { return a.desk === d; });
@@ -831,7 +832,7 @@
     });
     list.push({ label: 'Boss door: ' + (reviewCount + blockedCount) + ' waiting for you (' + reviewCount +
       ' to review, ' + blockedCount + ' to answer). Open the review inbox',
-      rect: { x: 250, y: 174, w: 66, h: 36 }, act: function () { go('/v2#review'); } }); // door, mat and bench
+      rect: { x: 250, y: 174, w: 66, h: 36 }, act: function () { go('/'); } }); // door, mat and bench
     return list;
   }
   function inRect(r, x, y) { return x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h; }
@@ -871,7 +872,7 @@
       '<div class="name">' + person(ag.name) + '</div>' +
       '<div>' + esc(act) + (ag.state === 'idle' && ag.activity !== 'idle' ? ' (idle)' : '') + '</div>' +
       '<div>' + (m
-        ? esc(m.how) + ': <a href="/v2#mission=' + encodeURIComponent(m.t.id) + '">' + titled(m.t, 60) + '</a>'
+        ? esc(m.how) + ': <a href="/missions/' + encodeURIComponent(m.t.id) + '">' + titled(m.t, 60) + '</a>'
         : 'No mission in hand') + '</div>' +
       '<button type="button" aria-label="Close">x</button>';
     cardEl.setAttribute('aria-label', ag.name);
@@ -973,9 +974,15 @@
   }
   function connectSSE() {
     var conn = document.getElementById('conn');
+    var lost = false;
     BureauHub.events({
-      up: function () { conn.textContent = 'LIVE'; conn.classList.add('live'); },
-      down: function () { conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); },
+      // Whatever happened while the stream was gone, nobody told the office.
+      up: function () {
+        conn.textContent = 'LIVE'; conn.classList.add('live');
+        if (lost) { lost = false; refreshState(); }
+      },
+      down: function () { lost = true; conn.textContent = 'STREAM LOST'; conn.classList.remove('live'); },
+      ended: function () { localStorage.removeItem('bureau_token'); location.reload(); },
       wire: function (es) {
         ['agent.registered', 'agent.heartbeat', 'agent.removed',
          'task.created', 'task.claimed', 'task.updated', 'task.done', 'task.failed',
@@ -1007,7 +1014,7 @@
     }).catch(function () { tick('Could not reach the hub'); });
   }
   (function gate() {
-    token = localStorage.getItem('bureau_token');
+    token = BureauHub.takeUrlToken() || localStorage.getItem('bureau_token');
     if (token) return boot();
     var g = document.getElementById('gate');
     g.hidden = false;

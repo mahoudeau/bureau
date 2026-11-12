@@ -158,7 +158,7 @@ curl -s -X POST http://localhost:8100/api/knowledge -H "Authorization: Bearer $T
 
 ## 6. Hand over to the user
 
-- Dashboard: http://localhost:8100/ . It prompts for a token once and stores it in the browser. Paste the boss token.
+- Dashboard: http://localhost:8100/ . It sends you to `/sign-in` once and stores the token in the browser. Paste the boss token.
 - Pixel office: http://localhost:8100/office . Same token, same storage. It's empty until an agent registers.
 - MCP connector URL for chat apps: from `bureau/hub`, `node tools/token.js mint <agent> <project,...>` prints the agent's token and its `MCP URL`. The URL itself is the credential; treat it like the token. It uses `BUREAU_PUBLIC_URL` as its base when that's set. Setup steps are in `connectors/chat/README.md`.
 - Scheduled workers: `connectors/cowork/README.md`.
