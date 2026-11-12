@@ -4,9 +4,9 @@ Where Bureau could be listed, what each place wants, and whether it fits. Draft,
 
 ## The awkward part
 
-Most MCP directories expect one of two things: a package that runs locally over stdio, or one public URL that anyone can call. Bureau is neither. Every install is its own hub, and its MCP door lives at `https://<your-host>/mcp/<capability-token>`. The token is the auth. There is no shared endpoint to list, and the URL must never be public.
+Most MCP directories expect one of two things: a package that runs locally over stdio, or one public URL that anyone can call. Bureau is neither. Every install is its own hub, and its MCP door lives at `https://<your-host>/mcp/agent/<name>`. The address holds no secret: the client signs in (OAuth, RFC 9728 metadata) and the hub's owner allows the app. A hub without sign-in still uses `https://<your-host>/mcp/<capability-token>`, where the token is the auth and the URL must never be public. Either way, there is no shared endpoint to list.
 
-So the honest listing is "self-host it, then paste your own URL". Places that can say that fit. Places that want to call the server themselves don't, unless we run a public demo hub with throwaway data.
+So the honest listing is "self-host it, then add your own address". Places that can say that fit. Places that want to call the server themselves don't, unless we run a public demo hub with throwaway data.
 
 ## The places
 
@@ -17,7 +17,7 @@ So the honest listing is "self-host it, then paste your own URL". Places that ca
 | Glama (glama.ai/mcp/servers) | Indexes public GitHub repos, or the "Add server" form | A server it can build and start in its own container to run checks. Reported to expect stdio. | Weak. Bureau has no stdio mode, so the checks likely fail and the score stays low. |
 | awesome-mcp-servers (punkpeye) | Pull request adding one line | A Glama listing and its score badge on the line | Only as far as Glama fits |
 | mcp.so | Pull request or its submit form | One line: name, link, description | Yes, it's just a link |
-| Smithery (smithery.ai) | Paste a public HTTPS URL, or `smithery mcp publish` | A Streamable HTTP endpoint where initialize and tools/list work without auth. It proxies the traffic. | No, not without a public demo hub. Listing a real hub would publish its capability URL. |
+| Smithery (smithery.ai) | Paste a public HTTPS URL, or `smithery mcp publish` | A Streamable HTTP endpoint where initialize and tools/list work without auth. It proxies the traffic. | No, not without a public demo hub. A real hub answers initialize only after sign-in. |
 | Docker MCP catalog (docker/mcp-registry) | Pull request | An image and a catalog entry. Remote support unverified. | Unclear, check before spending time |
 | Other awesome lists (wong2/awesome-mcp-servers, awesome-selfhosted) | Pull request | A line and their own criteria. awesome-selfhosted wants a working, maintained project with a Docker or install path. | awesome-selfhosted fits the "self-hosted" story better than any MCP list |
 
@@ -30,12 +30,12 @@ From v0.2.0 on, every `v*` tag builds the hub image for amd64 and arm64 and push
 `server.json` at the repo root is the draft for the official registry. It lists one remote and no package:
 
 ```
-https://{hub_host}/mcp/{capability_token}
+https://{hub_host}/mcp/agent/{agent}
 ```
 
-`hub_host` is required, `capability_token` is required and secret. A client that reads the registry asks the user for both and builds the URL. `websiteUrl` points at the Docker section of the README, which is where the image is.
+`hub_host` is required, `agent` is required and defaults to `consul`. Neither is secret. A client that reads the registry asks the user for both, builds the URL, and signs in. Until 0.5.0 the remote was `https://{hub_host}/mcp/{capability_token}`, with the token as a secret variable; that address only works on a hub without sign-in now, so the entry no longer lists it. `websiteUrl` points at the Docker section of the README, which is where the image is.
 
-It passes the registry's own validators (`ValidateServerJSON`, schema plus semantic checks), run locally from the registry's source. Nothing was sent to the registry.
+The capability-token version passed the registry's own validators (`ValidateServerJSON`, schema plus semantic checks), run locally from the registry's source. The sign-in version has not been run through them yet. Nothing was sent to the registry.
 
 ### What the registry accepts
 
@@ -47,7 +47,7 @@ It passes the registry's own validators (`ValidateServerJSON`, schema plus seman
 
 ### Why no package entry yet
 
-A package with `streamable-http` transport needs a URL, and every `{name}` in that URL must be one of the package's environment variables or arguments. A capability token is minted on the running hub and only its hash is kept, so there's no variable to point at. The validator fails that shape: `template variables in URL http://localhost:8100/mcp/{capability_token} reference undefined variables`.
+A package with `streamable-http` transport needs a URL, and every `{name}` in that URL must be one of the package's environment variables or arguments. With sign-in, a local package would also need a hub paired with an issuer before the first call. Without it, a capability token is minted on the running hub and only its hash is kept, so there's no variable to point at. The validator fails that shape: `template variables in URL http://localhost:8100/mcp/{capability_token} reference undefined variables`.
 
 Two ways out:
 

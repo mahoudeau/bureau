@@ -1,4 +1,4 @@
-// Messages to the boss, with inbox treatment. They rang his Discord when sent,
+// Messages to the boss, with inbox treatment. They are news, not decisions,
 // so they never count as waiting on him.
 //
 // Read state lives in this browser: the hub has no read flag and this isn't

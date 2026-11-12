@@ -22,7 +22,7 @@ const note = (title, lines) => `---\ntitle: ${title}\nsummary: About ${title}.\n
 async function main() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-context-'));
   const env = { ...process.env, PORT: String(HUB_PORT), HOST: '127.0.0.1', BUREAU_TOKEN: TOKEN, BUREAU_DATA_DIR: path.join(dir, 'data'), BUREAU_BRAIN_DIR: path.join(dir, 'brain'),
-    BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
+    BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
   const hub = spawn(process.execPath, [path.join(__dirname, '..', 'hub', 'server.js')], { env, stdio: 'ignore' });
   const api = async (method, p, body) => {
     const r = await fetch(BASE + p, { method, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });

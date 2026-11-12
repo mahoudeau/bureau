@@ -33,7 +33,7 @@ async function boot(name, port, extraEnv, seed) {
   fs.mkdirSync(path.join(d, 'data'), { recursive: true });
   if (seed) fs.writeFileSync(path.join(d, 'data', 'state.json'), JSON.stringify(seed));
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: d, PORT: String(port), HOST: '127.0.0.1',
-    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), ...extraEnv };
+    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), ...extraEnv };
   const child = spawn(process.execPath, [HUB], { env, stdio: 'ignore' });
   hubs.push(child);
   const base = `http://127.0.0.1:${port}`;
@@ -139,12 +139,12 @@ async function main() {
   r = await worker('GET', '/api/state');
   check('nor in the state snapshot', r.status === 200 && r.json.tasks.every(scrubbed));
   r = await boss('GET', `/api/tasks/${t.id}`);
-  check('the boss sees them', r.status === 200 && !!r.json.task.review_links, r.json && r.json.task && Object.keys(r.json.task));
-  const link = (r.json.task.review_links || t.links || {}).approve;
-  const page = await fetch(`${strict.base}/r/${link && link.token}`, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: '' });
-  check('the capability link still approves, as human', page.status === 200);
+  // Capability links are gone (doc 30, D12): nobody sees them, the boss included.
+  check('no mission carries capability links any more', r.status === 200 && scrubbed(r.json.task), r.json && r.json.task && Object.keys(r.json.task));
+  check('the old review link route is gone', (await fetch(`${strict.base}/r/${'a'.repeat(32)}`, { method: 'POST' })).status === 404);
+  r = await boss('PATCH', `/api/tasks/${t.id}`, { agent: 'human', status: 'done', note: 'approved from the dashboard' });
   const after = (await boss('GET', `/api/tasks/${t.id}`)).json.task;
-  check('and the log says approve by human', after.status === 'done' && after.log.slice(-1)[0].by === 'human' && after.log.slice(-1)[0].kind === 'approve', after.log && after.log.slice(-1));
+  check('the boss approves from the API, and the log says approve by human', after.status === 'done' && after.log.slice(-1)[0].by === 'human' && after.log.slice(-1)[0].kind === 'approve', after.log && after.log.slice(-1));
   r = await boss('PATCH', `/api/tasks/${TA}`, { agent: 'someone', note: 'x' });
   check('the boss credential does not impersonate an agent', r.status === 403, r);
 
@@ -208,8 +208,6 @@ async function main() {
   check('HOLE-B4: an agent cannot set a verdict', r.status === 400, r);
   r = await boss('GET', `/api/tasks/${withItems}`);
   check('the item is still proposed', r.json.task.items[0].verdict === 'proposed', r.json.task.items);
-  const form = await (await fetch(`${strict.base}/r/${r.json.task.review_links && r.json.task.review_links.approve.token}`)).text();
-  check('HOLE-B4b: the review page shows no pre-checked item', !/value="approved" checked/.test(form));
   r = await boss('PATCH', `/api/tasks/${withItems}`, { agent: 'human', verdicts: [{ id: 'i1', verdict: 'approved' }], status: 'done' });
   check('the boss sets verdicts and approves', r.status === 200, r);
 
@@ -300,6 +298,27 @@ async function main() {
   check('MCP capture with a foreign tag is refused', m.isError, m);
   m = await workerMcp('update_mission', { id: TB, note: 'x' });
   check('MCP update_mission on another project is refused', m.isError, m);
+  // The three tools the routine charters asked for (doc 30, t-523)
+  const leaseTask = (await boss('POST', '/api/tasks', { title: 'Lease renewal Quokka', project: 'alpha' })).json.task.id;
+  m = await workerMcp('update_mission', { id: leaseTask, note: 'x', lease_minutes: 60 });
+  check('MCP lease_minutes is refused on a mission the caller does not hold', m.isError && /holder/.test(m.text), m);
+  m = await workerMcp('claim_mission', { id: leaseTask, lease_minutes: 5 });
+  const firstLease = !m.isError && JSON.parse(m.text).task.lease_until;
+  m = await workerMcp('update_mission', { id: leaseTask, status: 'in_progress', lease_minutes: 600 });
+  const renewed = (await boss('GET', `/api/tasks/${leaseTask}`)).json.task;
+  check('MCP lease_minutes renews the holder\'s lease', !m.isError && firstLease && renewed.lease_until > firstLease && Date.parse(renewed.lease_until) - Date.now() > 590 * 60000, { m, firstLease, now: renewed.lease_until });
+  m = await workerMcp('update_mission', { id: leaseTask, status: 'review', lease_minutes: 60 });
+  check('MCP lease_minutes on a move to review is refused', m.isError && /holds no lease/.test(m.text), m);
+  m = await workerMcp('update_mission', { id: leaseTask, lease_minutes: 0 });
+  check('MCP lease_minutes out of range is refused', m.isError, m);
+  m = await workerMcp('list_missions_full', { title: 'quokka' });
+  check('MCP list_missions_full filters by title, any case', !m.isError && JSON.parse(m.text).missions.length === 1 && JSON.parse(m.text).missions[0].id === leaseTask, m);
+  const PIXEL = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+  await boss('POST', '/api/knowledge', { file: 'projects/alpha/pixel.png', author: 'human', encoding: 'base64', content: PIXEL });
+  m = await workerMcp('read_knowledge', { file: 'projects/alpha/pixel.png' });
+  check('MCP read_knowledge returns a binary file as base64, byte for byte', !m.isError && JSON.parse(m.text).content_base64 === PIXEL && JSON.parse(m.text).type === 'image/png', m);
+  m = await workerMcp('read_knowledge', { file: 'projects/alpha/pixel.png', section: 'Now' });
+  check('and refuses a section of it', m.isError && /binary/.test(m.text), m);
   m = await oldMcp('whoami');
   check('the old MCP URL keeps working in strict mode, as consul', !m.isError && JSON.parse(m.text).agent === 'consul', m);
   const closeTry = await boss('POST', '/api/tasks', { title: 'old url', project: 'alpha' });
@@ -404,9 +423,10 @@ async function interactions({ strict, boss, worker, shared, roamer, anon, old, l
   await sleep(100);
   await parked();
   const bs = eventData((await bossSaw).text, 'task.review'), ss = eventData((await shSaw).text, 'task.review'), rs = eventData((await roSaw).text, 'task.review');
-  check('a boss ticket stream carries the capability links', !!(bs && bs.review_links), bs && Object.keys(bs));
-  check('a shared ticket stream never does', !!(ss && !ss.review_links && !ss.view_token), ss && Object.keys(ss));
-  check('a ["*"] agent ticket stream never does: the ticket did not widen it', !!(rs && !rs.review_links && !rs.answer_link && !rs.view_token), rs && Object.keys(rs));
+  // No capability links exist any more (doc 30, D12): no stream carries one.
+  check('a boss ticket stream sees the review', !!(bs && bs.status === 'review' && scrubbed(bs)), bs && Object.keys(bs));
+  check('a shared ticket stream sees it too, with no link', !!(ss && scrubbed(ss)), ss && Object.keys(ss));
+  check('a ["*"] agent ticket stream sees it too, with no link', !!(rs && scrubbed(rs)), rs && Object.keys(rs));
   r = await openEvents(strict, bossTicket);
   check('a ticket is good once', r.status === 401, r.status);
   await r.body.cancel().catch(() => {});
@@ -559,6 +579,14 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['GET', '/api/memory/health', null, { boss: A, agent: D, shared: A, legacy: A }],
     ['POST', '/api/work', () => ({ file: `work/${TA}/row.md`, content: 'x' }), { boss: A, agent: A, shared: A, legacy: A }],
     ['GET', `/api/work?task=${TA}`, null, { boss: A, agent: A, shared: A, legacy: A }],
+    // Sign-in (doc 30): who am I for everyone; apps, sessions and the pairing for the boss.
+    ['GET', '/api/me', null, { boss: A, agent: A, shared: A, legacy: A }],
+    ['GET', '/api/apps', null, { boss: A, agent: D, shared: D, legacy: A }],
+    ['POST', '/api/apps/app-00000000', () => ({ status: 'allowed' }), { boss: A, agent: D, shared: D, legacy: A }],
+    ['DELETE', '/api/apps/app-00000000', null, { boss: A, agent: D, shared: D, legacy: A }],
+    ['GET', '/api/sessions', null, { boss: A, agent: D, shared: D, legacy: A }],
+    ['POST', '/api/sessions/revoke-all', () => ({}), { boss: A, agent: D, shared: D, legacy: A }],
+    ['GET', '/api/omako', null, { boss: A, agent: D, shared: D, legacy: A }],
   ];
   const creds = { boss, agent: worker, shared };
   const callRow = async (c, method, p, b) => {
@@ -618,6 +646,17 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     memory_health: [{}, null, 'alsoDeniedInScope'],
     write_work: [{ file: `work/${parkId}/m.md`, content: 'x' }, { file: `work/${TB}/m.md`, content: 'x' }],
     read_work: [{ task: parkId }, { task: TB }],
+    // The shift tools (doc 30, D16)
+    clock_in: [{ kind: 'cowork' }, null],
+    heartbeat: [{ activity: 'idle', note: 'row' }, null],
+    read_inbox: [{}, null],
+    send_message: [{ to: 'human', body: 'row', task_id: parkId }, { to: 'human', body: 'row', task_id: TB }],
+    claim_mission: [{}, { id: TB }],
+    get_mission: [{ id: parkId }, { id: TB }],
+    list_missions_full: [{ status: 'queued' }, null],
+    read_settings: [{}, null],
+    read_journal: [{}, null],
+    recent_activity: [{ limit: 5 }, null],
   };
   const list = await (await fetch(`${legacy.base}/mcp/${new URL((await old('GET', '/api/mcp')).json.url).pathname.split('/').pop()}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) })).json();
   const names = list.result.tools.map((t) => t.name);

@@ -4,7 +4,7 @@ Glue for local coding sessions (Claude Code or any agent with a shell) working t
 
 ## What exists
 
-- **`hub.sh`**: one authenticated hub call: `sh hub.sh METHOD PATH [JSON]`. Reads the hub URL from `BUREAU_URL` or `~/.bureau-url` (no default: it refuses to guess where to send your token) and the token from `BUREAU_TOKEN_FILE` (default `~/.bureau-token`). The point of routing every call through one script is the permission model below.
+- **`hub.sh`**: one authenticated hub call: `sh hub.sh METHOD PATH [JSON]`. Reads the hub URL from `BUREAU_URL` or `~/.bureau-url` (no default: it refuses to guess where to send your token). The token, first found wins: your `bureau login` sign-in for that hub and `BUREAU_AGENT` (default `consul`); the file named in `BUREAU_TOKEN_FILE`, when you set it; on a Mac, the Keychain item `bureau-hub` (account: the agent); then `~/.bureau-token`. `context-hook.js` reads them in the same order, after a `BUREAU_TOKEN` set in its environment. The point of routing every call through one script is the permission model below.
 - **`project-of.sh`**: resolves which Bureau project a directory belongs to. Resolution order: a `.bureau` marker file at the git root (its content is the project id), then a map file (`~/.bureau-projects`, lines of `path prefix = project id`, longest prefix wins), then `unresolved`, at which point the agent decides once against the hub's registry and records the decision with `project-of.sh set <dir> <id>`. Decisions are stored, announced in the mission's first note, and corrected by editing one line.
 - **`context-hook.js`**: a Claude Code hook that makes the context call on each prompt (below).
 
@@ -16,7 +16,17 @@ Glue for local coding sessions (Claude Code or any agent with a shell) working t
 
 The goal: the agent files missions, notes, and debriefs silently, while consequential actions (deploys, commits) keep their permission prompts.
 
-1. **Token and address**: put your agent's token in `~/.bureau-token`, `chmod 600`, and your hub's address in `~/.bureau-url` (e.g. `http://localhost:8100`). On a strict hub that is a minted token (`node hub/tools/token.js mint consul <projects>`); not the boss token. If the agent is not `consul`, set `BUREAU_AGENT` for the context hook.
+1. **Address and sign-in**: put your hub's address in `~/.bureau-url` (e.g. `http://localhost:8100`). Then sign in as your agent with the CLI (`../cli/README.md`):
+
+   ```sh
+   node /path/to/bureau/connectors/cli/bureau.js login --agent consul
+   ```
+
+   Approve on the page it opens. The sign-in goes to the Keychain on a Mac and refreshes itself; `hub.sh` and the context hook pick it up. If the agent is not `consul`, set `BUREAU_AGENT` for both.
+
+   The hub's owner allows the CLI as that agent once, on the Desk. Until then `hub.sh` gets 403 `app_pending`.
+
+   **Fallback, a token**: on a hub without sign-in, use a minted token (`node hub/tools/token.js mint consul <projects>`), never the boss token. On a Mac, keep it in the Keychain: `security add-generic-password -s bureau-hub -a consul -w` asks for it, so it never lands in your shell history or a file. Elsewhere, put it in `~/.bureau-token`, `chmod 600`. Once you switch to `bureau login`, delete the file and the Keychain item: the sign-in wins anyway, and a long-lived token left lying around is one more thing to leak.
 2. **Scripts**: keep this directory in a stable path (a clone of the bureau repo works).
 3. **Allowlist** in Claude Code's user settings (`~/.claude/settings.json`), adjusting paths:
 
@@ -32,7 +42,7 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
 }
 ```
 
-`Monitor` lets the agent watch a blocked mission and resume the moment you answer from your phone.
+`Monitor` lets the agent watch a blocked mission and resume the moment you answer, from the dashboard on any device.
 
 4. **Convention** in your global `CLAUDE.md` (the envoy's default name is consul; rename if you like):
 
@@ -45,7 +55,7 @@ The goal: the agent files missions, notes, and debriefs silently, while conseque
 
 ## The context call on every prompt
 
-`context-hook.js` asks the hub for passages that match each prompt and hands them to the model. It finds the project the way `project-of.sh` does and reads the hub's address and token from the same files. If the hub is slow or absent, the prompt goes through without it. Add this to `~/.claude/settings.json`, with your path:
+`context-hook.js` asks the hub for passages that match each prompt and hands them to the model. It finds the project the way `project-of.sh` does and reads the hub's address from the same file. For the token it reads your `bureau login` sign-in directly. When the access token has 30 seconds or less left, it tries one refresh with a 400 ms limit; if that does not work, it uses the token file or the `bureau-hub` Keychain item, as `hub.sh` does. If the hub is slow or absent, the prompt goes through without it. Add this to `~/.claude/settings.json`, with your path:
 
 ```json
 {

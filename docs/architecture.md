@@ -7,12 +7,12 @@
 Three outcomes drive every design decision below:
 
 1. **Autonomy.** Agents should make progress without the boss present. That means a durable task queue that outlives any single session, and wake-up mechanisms so agents pick work up on their own.
-2. **Visibility.** A live dashboard showing who is working on what, plus an activity feed you can skim from any device. Chat mirrors (e.g. Discord) are optional output adapters.
+2. **Visibility.** A live dashboard showing who is working on what, plus an activity feed you can skim from any device, signed in. The Desk is where work waits for you; the hub sends no outside notifications.
 3. **A portable brain.** Everything the agents learn (decisions, conventions, project state, "how we do things here") accumulates as plain markdown in a git repo. If you ever change vendors, the brain moves with you: any model can read markdown.
 
 ## 2. Core principle: the hub owns state, everything else is an adapter
 
-The single most important decision: **the Node server (the hub) is the source of truth**, and every surface (agent sessions, chat mirrors, the dashboard, the pixel office, a future any-vendor agent) talks to it over one plain HTTP API.
+The single most important decision: **the Node server (the hub) is the source of truth**, and every surface (agent sessions, chat apps, the dashboard, the pixel office, a future any-vendor agent) talks to it over one plain HTTP API.
 
 ```
                         ┌─────────────────────────────┐
@@ -24,12 +24,12 @@ The single most important decision: **the Node server (the hub) is the source of
   cloud sessions ───────┤  • Activity log             │
    via curl / sched.    │  • Knowledge writes ────────┼── git ──> brain/ repo (markdown)
                         │                             │
-  any-vendor agents ────┤  • Adapters:                ├── webhook ──> chat mirror
-   (plain HTTP)         │      Discord, pokes         │
+  any-vendor agents ────┤  • Adapters:                ├── webhook ──> agent runtimes
+   (plain HTTP)         │      pokes                  │
                         └─────────────────────────────┘
 ```
 
-Chat is demoted on purpose: a mirror, never the brain. Message length caps, rate limits, and unqueryable state make chat platforms a bad source of truth. If you stop caring about the mirror, you delete the adapter and nothing else changes.
+Chat is demoted on purpose: a place agents work from, never the brain. Message length caps, rate limits, and unqueryable state make chat platforms a bad source of truth. The hub used to mirror events to a Discord channel; that went in 0.5.0, and nothing else had to change.
 
 ## 3. The building blocks
 
@@ -78,9 +78,9 @@ Two conventions do a lot of heavy lifting: every task completion **must** append
 
 ### 3.5 Dashboard + activity feed
 
-One app served by the hub, with real URLs and no build step: plain ES modules from `hub/public/app/`, styled by `hub/public/omako-ds/`. It asks for a token once and keeps it in the browser. Server-Sent Events push task changes, heartbeats, messages and knowledge commits, so the page is live, and a 60-second poll covers a dropped stream. `/` is the Desk (what needs the boss, what's in flight, messages, the team, the office in a window). Missions, goals, projects, brain notes and settings each have their own page. Works on a phone.
+One app served by the hub, with real URLs and no build step: plain ES modules from `hub/public/app/`, styled by `hub/public/omako-ds/`. On a hub with sign-in it sends you to your issuer (OMAKO by default) and keeps a 30-day session cookie; without, it asks for a token once and keeps it in the browser. Server-Sent Events push task changes, heartbeats, messages and knowledge commits, so the page is live, and a 60-second poll covers a dropped stream. `/` is the Desk (what needs the boss, what's in flight, messages, the team, the office in a window). Missions, goals, projects, brain notes and settings each have their own page. Works on a phone.
 
-The mission page is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A blocked mission gets an **Answer** instead. The capability links, `/r/<token>` and `/m/<token>`, are the phone surface: server-rendered pages that work with no script, whose only script is the hub's own dither (omako-ds), under a CSP that allows nothing else. A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
+The mission page is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A blocked mission gets an **Answer** instead. On a phone it is the same page: sign in there and rule. An owner rules, and so does a person given the `approver` role; a `viewer` only reads. A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
 
 ### 3.6 The gauntlet (optional roles over the same queue)
 
@@ -90,26 +90,26 @@ A goal marked `## Mode: perpetual` never finishes on its own: it advances in **t
 
 ### 3.7 Adapters
 
-Every hub event goes through one function, `broadcast()` in `server.js`, which sends it to the SSE stream and hands it to each adapter. The hub ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. It also ships **outbound pokes** (`lib/poke.js`, a no-op unless `BUREAU_POKES` is set): config-driven webhooks that fire on matching transitions so agent runtimes can be summoned the moment work changes hands instead of polling on a schedule (see the pokes paragraph in `protocol.md`). Planned, nothing built: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
+Every hub event goes through one function, `broadcast()` in `server.js`, which sends it to the SSE stream and hands it to each adapter. The hub ships **outbound pokes** (`lib/poke.js`, a no-op unless `BUREAU_POKES` is set): config-driven webhooks that fire on matching transitions so agent runtimes can be summoned the moment work changes hands instead of polling on a schedule (see the pokes paragraph in `protocol.md`). Planned, nothing built: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
 
 ## 4. How agents connect
 
 Connectors are the vendor glue; the hub never knows them (see `protocol.md`).
 
 - **Editor sessions** (e.g. Claude Code): `hub.sh` makes the agent's own calls (claim, update, message, write knowledge), and a `UserPromptSubmit` hook feeds the context call on each prompt. Hooks that report activity verbs automatically are planned, not built.
-- **Cloud/scheduled sessions**: no install needed, the hub is plain HTTP, so sessions use curl. A recurring scheduled task with a standing prompt ("fetch your queued tasks and inbox; if there is work, claim, do, report, complete or park in review") turns the queue into an engine that runs unattended.
-- **Chat apps with no shell** (desktop or web assistants): the hub's `/mcp` door. One capability URL in the app's connector settings, and every conversation can open missions, post progress, and file knowledge under the same rules; the server's own instructions teach the session the shift discipline.
+- **Cloud/scheduled sessions**: no install needed. Each routine gets its own signed-in MCP connector and works through its tools; a hub without sign-in can still be driven with curl. A recurring scheduled task with a standing prompt ("fetch your queued tasks and inbox; if there is work, claim, do, report, complete or park in review") turns the queue into an engine that runs unattended.
+- **Chat apps with no shell** (desktop or web assistants): the hub's MCP door. The agent's address, `/mcp/agent/<name>`, in the app's connector settings, a sign-in, and the owner's Allow on the Desk, and every conversation can open missions, post progress, and file knowledge under the same rules; the server's own instructions teach the session the shift discipline.
 - **Anything else**: register, claim, post updates, write knowledge. The calls are in `protocol.md` and the README.
 
 ## 5. Security, deliberately boring
 
-Strict mode (`BUREAU_BOSS_TOKEN` set): one boss credential, which the dashboard signs in with, and per-agent tokens minted by the boss, stored hashed, each bound to one agent name and a list of projects. The hub applies identity and project walls from the credential on every route and MCP tool (`docs/protocol.md`, "Who can do what", and `test/authz.test.js`). Legacy mode (only `BUREAU_TOKEN`) keeps one shared secret and declared identities, and exists for upgrades. Run it behind HTTPS (your host's front end or a reverse proxy). Path validation confines knowledge writes to `brain/`. All API responses send `Cache-Control: no-store`; polling endpoints also accept POST (some agent runtimes cache GETs).
+Sign-in (OMAKO Accounts by default, any OpenID issuer, or none): people sign in to the dashboard as owner, approver or viewer, and each agent signs in through an app the owner allowed, with a short-lived token for its own address. No secret in a URL or a prompt. Strict mode (`BUREAU_BOSS_TOKEN` set): one boss credential, kept as the break-glass, and per-agent tokens minted by the boss for hubs without sign-in and for CI, stored hashed, each bound to one agent name and a list of projects. The hub applies identity and project walls from the credential on every route and MCP tool (`docs/protocol.md`, "Who can do what", and `test/authz.test.js`). Legacy mode (only `BUREAU_TOKEN`) keeps one shared secret and declared identities, and exists for upgrades. Run it behind HTTPS (your host's front end or a reverse proxy). Path validation confines knowledge writes to `brain/`. All API responses send `Cache-Control: no-store`; polling endpoints also accept POST (some agent runtimes cache GETs).
 
 **One important caution:** the hub pipes text written by agents (and possibly by chat users) into other agents' contexts. Treat hub content as *data, not instructions* in your standing prompts, and keep the human `review` gate on anything irreversible (deploys, sends, purchases).
 
 ## 6. Deployment
 
-The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_BOSS_TOKEN` and `BUREAU_TOKEN` (and optionally `DISCORD_WEBHOOK_URL` and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
+The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_BOSS_TOKEN` (and optionally `BUREAU_PUBLIC_URL` with a pairing for sign-in, and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
 
 JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable. If the queue ever gets big, swapping `lib/store.js` for SQLite is a contained change.
 
@@ -130,16 +130,18 @@ hub/
   lib/index.js         # in-memory search over the brain
   lib/context.js       # the context call
   lib/health.js        # memory health
-  lib/discord.js       # outbound webhook mirror (no-op if not configured)
+  lib/oidc.js          # sign-in: agent tokens, the dashboard's code flow, people's roles
+  lib/jwt.js           # JWT checks against the issuer's keys, zero dependencies
+  lib/omako.js         # the pairing with OMAKO Accounts
   lib/poke.js          # outbound wake-up pokes, the summoner (no-op if not configured)
   lib/glossary.js      # French words for a question asked in French, mapped to the English notes
   lib/wordmark.js      # the pixel wordmark for server-rendered pages
-  tools/               # brain-lint.js, token.js, migrate-claims.js, shadow-fr.js, wordmark.js
+  tools/               # brain-lint.js, token.js, omako.js, export.js, import.js, migrate-claims.js, shadow-fr.js, wordmark.js
   public/app/          # the dashboard: ES modules, no build
   public/omako-ds/     # the design system
   public/office*       # the pixel office
   .env.example
-connectors/            # cowork, claude-code, chat
+connectors/            # cowork, claude-code, chat, cli
 mockups/office.html    # pixel office mockup (scripted choreography)
 docs/                  # architecture, protocol, task flows, office design
 test/                  # conformance (dummy-agent.sh), lint, evals, node tests

@@ -6,7 +6,7 @@ import { fill, h } from '../dom.js';
 import { statusLabel } from '../status.js';
 import { timeTag, toast } from '../ui.js';
 
-export const BOSS_ONLY = 'Sign in with the boss token to change this';
+export const BOSS_ONLY = 'Only an owner changes this. Sign in as an owner, or with the boss token';
 
 // What to show for a refused write. The hub's words, except a 403 on something
 // only the boss can do, where the words would only name the rule.

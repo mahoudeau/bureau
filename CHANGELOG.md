@@ -6,6 +6,35 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-12
+
+Sign in instead of holding a token, and Discord goes. **Read UPGRADING.md**, "0.5.0: sign-in, and Discord goes". The first boot migrates `state.json` to schema 2, and 0.4.0 can't read it.
+
+### Security
+- **Sign-in, with OMAKO Accounts or any OpenID issuer.** Pair a hub with OMAKO (`node hub/tools/omako.js pair`), or set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET`. Without an issuer the hub works on tokens, as before.
+- **The dashboard and the office sign in with a session cookie**, `bureau_session`: HttpOnly, SameSite=Lax, 30 days, stored hashed. The code exchange happens on the server, and the browser never holds the issuer's tokens or the boss token. The token form stays behind "Use a token instead", for when the issuer is down.
+- **People have roles:** owner, approver, viewer, set in `settings.members` or seeded with `BUREAU_OIDC_OWNERS`, or read from the OMAKO workspace (`hub_role`). An approver rules on reviews and answers blocked missions; a viewer reads. Every write by a person records their email as `via`.
+- **One sign-in door per agent**, `/mcp/agent/<name>`, an OAuth resource (RFC 9728 metadata, `WWW-Authenticate`). The token works on `/api/*` as that agent too. Tokens are checked by the hub with the issuer's keys and no dependency (EdDSA, ES256, RS256, `typ: at+jwt`, audience, expiry, scope). `human` and `system` never sign in as agents.
+- **Every app waits for an owner.** The first call from an app the hub hasn't seen leaves it pending on the Desk ("Claude wants to act as sol") with Allow and Deny. Until then MCP offers one tool, `access`, and `/api/*` answers 403 `app_pending`.
+- `global.mcp_token_urls: false` closes every `/mcp/<token>` door. A token minted after that carries no `mcp_url`.
+- Agents' sign-in project lists follow project renames and deletes.
+
+### Added
+- **`bureau login`** (`connectors/cli/`): signs a terminal in as one agent with the device flow, and keeps the tokens in the macOS Keychain (a 0600 file elsewhere). `hub.sh` and the context hook read it before any token file.
+- `GET /api/me`, `GET /api/apps`, `POST/DELETE /api/apps/:id`, `GET /api/sessions`, `POST /api/sessions/revoke-all`, `GET /api/omako`, and the public `GET /.well-known/bureau`.
+- Settings, Sign-in: members and their roles, each agent's sign-in, and the apps.
+- **Shift tools on MCP**, so a routine does through its connector what it did with curl: `clock_in`, `heartbeat`, `read_inbox`, `send_message`, `claim_mission`, `get_mission`, `list_missions_full` (with a `title` filter), `read_settings`, `read_journal`, `recent_activity`. `update_mission` takes `lease_minutes` to renew a lease. `read_knowledge` returns images and PDFs as `content_base64`.
+- **Export and import:** `node hub/tools/export.js <folder>` and `node hub/tools/import.js <folder>` move a hub, with its brain's git history and without its secrets.
+- `test/oidc.test.js`, `test/cli.test.js`, `test/export.test.js`.
+
+### Changed
+- The routine charters in `connectors/cowork/` work through MCP tools and their own connector, not curl and a shared token.
+- `docker-compose.yml` no longer requires `BUREAU_TOKEN`, and passes the sign-in variables.
+
+### Removed
+- **Discord:** `hub/lib/discord.js`, `DISCORD_WEBHOOK_URL` and the `notify` setting. The Desk is where you see what needs you.
+- **Review, answer and view links:** `/r/<token>`, `/r/<token>/img` and `/m/<token>` answer 404, and the migration drops `review_links`, `answer_link` and `view_token` from every mission.
+
 ## [0.4.0] - 2026-11-12
 
 One dashboard replaces the two old ones. **Read UPGRADING.md**, "0.4.0: the new dashboard".

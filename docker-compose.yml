@@ -1,9 +1,14 @@
-# Bureau hub, one service. Put BUREAU_TOKEN and BUREAU_BOSS_TOKEN in a .env
-# file next to this one, then: docker compose up -d
-# BUREAU_BOSS_TOKEN turns strict mode on (see UPGRADING.md); without it the hub
-# runs in legacy mode and warns at boot.
-# Optional in the same .env: BUREAU_PORT (host port), BUREAU_PUBLIC_URL,
-# DISCORD_WEBHOOK_URL, BUREAU_POKES, BUREAU_SWEEP_MS. See hub/.env.example.
+# Bureau hub, one service. Put BUREAU_BOSS_TOKEN in a .env file next to this
+# one, then: docker compose up -d
+# BUREAU_BOSS_TOKEN is the owner's break-glass credential and turns strict
+# mode on (see UPGRADING.md). BUREAU_TOKEN, the old shared token, is optional:
+# leave it out unless an agent still needs it. The hub refuses to start with
+# neither.
+# Sign-in (docs/protocol.md, "MCP with sign-in"): BUREAU_PUBLIC_URL, and
+# either a pairing with OMAKO (node hub/tools/omako.js pair, inside the
+# container) or BUREAU_OIDC_ISSUER with BUREAU_OIDC_CLIENT_ID and _SECRET.
+# Optional in the same .env: BUREAU_PORT (host port), BUREAU_OIDC_OWNERS,
+# BUREAU_POKES, BUREAU_SWEEP_MS. See hub/.env.example.
 # Paths, HOST and PORT are fixed by the image on purpose.
 services:
   bureau:
@@ -12,10 +17,13 @@ services:
     ports:
       - "${BUREAU_PORT:-8100}:8100"
     environment:
-      BUREAU_TOKEN: ${BUREAU_TOKEN:?set BUREAU_TOKEN in .env}
+      BUREAU_TOKEN: ${BUREAU_TOKEN:-}
       BUREAU_BOSS_TOKEN: ${BUREAU_BOSS_TOKEN:-}
       BUREAU_PUBLIC_URL: ${BUREAU_PUBLIC_URL:-}
-      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      BUREAU_OIDC_ISSUER: ${BUREAU_OIDC_ISSUER:-}
+      BUREAU_OIDC_CLIENT_ID: ${BUREAU_OIDC_CLIENT_ID:-}
+      BUREAU_OIDC_CLIENT_SECRET: ${BUREAU_OIDC_CLIENT_SECRET:-}
+      BUREAU_OIDC_OWNERS: ${BUREAU_OIDC_OWNERS:-}
       BUREAU_POKES: ${BUREAU_POKES:-}
       BUREAU_SWEEP_MS: ${BUREAU_SWEEP_MS:-60000}
     volumes:

@@ -105,14 +105,11 @@ check "removing an unknown name is 404" "$(curl -s -o /dev/null -w '%{http_code}
 check "removal is curation, not a ban: the name re-registers clean" "$(api POST /api/agents/register '{"name":"probe-1","kind":"dummy"}')" '"name": "probe-1"'
 check "re-registered entry is back on the roster" "$(agents_section | grep -c '"name": "probe-1"')" '^1$'
 
-echo "4. blocked pauses the lease; the boss answers via capability link; work resumes"
+echo "4. blocked pauses the lease; the boss answers from the API (the dashboard's call); work resumes"
 check "blocked" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"blocked","note":"waiting on: bean delivery"}')" '"blocked"'
 check "blocked clears lease" "$(api GET "/api/tasks/$TID")" '"lease_until": null'
-AN_TOKEN=$(api GET "/api/tasks/$TID" | grep -A2 '"answer_link"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "answer link issued" "$AN_TOKEN" '[a-f0-9]'
-check "answer form renders" "$(curl -s "$BUREAU_URL/r/$AN_TOKEN")" 'Answer'
-check "empty answer refused" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$AN_TOKEN" --data 'note=')" '400'
-check "answer re-queues the mission" "$(curl -s -X POST "$BUREAU_URL/r/$AN_TOKEN" --data-urlencode 'note=beans are in the cupboard, second shelf')" 'Answer filed'
+check "no answer link is minted any more" "$(api GET "/api/tasks/$TID" | grep -c answer_link || true)" '^0$'
+check "answer re-queues the mission" "$(api PATCH "/api/tasks/$TID" '{"agent":"human","status":"queued","note":"beans are in the cupboard, second shelf"}')" '"queued"'
 check "answer reached the log" "$(api GET "/api/tasks/$TID")" 'second shelf'
 check "answered mission is reserved for the asker" "$(api GET "/api/tasks/$TID")" '"reserved_for": "menace"'
 check "strangers cannot claim a reserved mission" "$(api POST /api/tasks/claim '{"agent":"stranger"}')" 'queue_empty'
@@ -132,7 +129,7 @@ check "append state" "$(api POST /api/knowledge '{"file":"projects/demo/STATE.md
 check "read back" "$(api GET '/api/knowledge?file=agents/menace.md')" 'dummy conformance agent'
 check "git log has author" "$(api GET /api/state)" '"author": "menace"'
 
-echo "6b. projects: default name, rename moves tasks and brain, view link"
+echo "6b. projects: default name, rename moves tasks and brain"
 TP=$(api POST /api/tasks '{"title":"Dust the pixel plants"}')
 check "project defaults to general" "$TP" '"project": "general"'
 check "projects listing carries ids" "$(api GET /api/projects)" '"id": "demo"'
@@ -155,36 +152,29 @@ check "bad project name rejected" "$(curl -s -o /dev/null -w '%{http_code}' -X P
 check "rename moves tasks" "$(api POST /api/projects/rename '{"from":"demo","to":"ops"}')" '"renamed": 1'
 check "task carries new project" "$(api GET "/api/tasks/$TID")" '"project": "ops"'
 check "brain folder moved" "$(api GET '/api/knowledge?file=projects/ops/STATE.md')" 'coffee machine refilled'
-VIEW_TOKEN=$(api GET "/api/tasks/$TID" | grep -o '"view_token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "view page renders the record" "$(curl -s "$BUREAU_URL/m/$VIEW_TOKEN")" 'Refill the coffee machine'
-check "bad view token is 404" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/m/00000000000000000000000000000000")" '404'
+check "missions carry no view link" "$(api GET "/api/tasks/$TID" | grep -c view_token || true)" '^0$'
+check "the old view page route is gone" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/m/00000000000000000000000000000000")" '404'
 
-echo "7. review gate: park, send back via capability link, approve via capability link"
+echo "7. review gate: park, the boss sends back and approves from the API (the dashboard's calls)"
 check "park in review" "$(api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"review","note":"ready for sign-off"}')" '"review"'
 DETAIL=$(api GET "/api/tasks/$TID")
-check "review links issued" "$DETAIL" 'review_links'
-SB_TOKEN=$(echo "$DETAIL" | grep -A2 '"sendback"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "link page renders without acting" "$(curl -s "$BUREAU_URL/r/$SB_TOKEN")" 'Send back'
-check "still in review after GET" "$(api GET "/api/tasks/$TID")" '"review"'
-check "sendback without note refused" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$SB_TOKEN" --data 'note=')" '400'
-check "sendback with note re-queues" "$(curl -s -X POST "$BUREAU_URL/r/$SB_TOKEN" --data-urlencode 'note=more beans, fewer pixels')" 'Sent back'
+check "no review links are minted any more" "$(echo "$DETAIL" | grep -c review_links || true)" '^0$'
+check "send back with a note re-queues" "$(api PATCH "/api/tasks/$TID" '{"agent":"human","status":"queued","note":"more beans, fewer pixels"}')" '"queued"'
 check "note reached the log" "$(api GET "/api/tasks/$TID")" 'more beans, fewer pixels'
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TID\"}" > /dev/null
 api PATCH "/api/tasks/$TID" '{"agent":"menace","status":"review","note":"fixed per the note"}' > /dev/null
-AP_TOKEN=$(api GET "/api/tasks/$TID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "approve via link" "$(curl -s -X POST "$BUREAU_URL/r/$AP_TOKEN")" 'Approved'
+check "approve" "$(api PATCH "/api/tasks/$TID" '{"agent":"human","status":"done","note":"approved from the dashboard"}')" '"done"'
 check "task is done" "$(api GET "/api/tasks/$TID")" '"done"'
-check "used link is dead" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$AP_TOKEN")" '410'
+check "the old review link route is gone" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000")" '404'
 
-echo "7b. itemized review: proposals filed, per-item verdicts via capability link"
+echo "7b. itemized review: proposals filed, per-item verdicts with the approve"
 TI=$(api POST /api/tasks '{"title":"Curation proposals","project":"ops","priority":2,"gate":"critic"}')
 TIID=$(echo "$TI" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
 api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TIID\"}" > /dev/null
 check "items filed with server ids" "$(api PATCH "/api/tasks/$TIID" '{"agent":"menace","items":[{"title":"Promote the coffee fact","body":"- [fact] the beans are pixels"},{"title":"Compact the ops STATE"}]}')" '"id": "i2"'
 api PATCH "/api/tasks/$TIID" '{"agent":"menace","status":"review","note":"proposal set ready"}' > /dev/null
-IT_AP=$(api GET "/api/tasks/$TIID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "review page renders the items" "$(curl -s "$BUREAU_URL/r/$IT_AP")" 'Promote the coffee fact'
-check "verdicts ride the approve" "$(curl -s -X POST "$BUREAU_URL/r/$IT_AP" --data 'v_i1=approved&v_i2=rejected&c_i2=not+yet+convinced')" 'Approved'
+check "the mission shows the items" "$(api GET "/api/tasks/$TIID")" 'Promote the coffee fact'
+check "verdicts ride the approve" "$(api PATCH "/api/tasks/$TIID" '{"agent":"human","status":"done","note":"approved from the dashboard","verdicts":[{"id":"i1","verdict":"approved"},{"id":"i2","verdict":"rejected","comment":"not yet convinced"}]}')" '"done"'
 IT_DETAIL=$(api GET "/api/tasks/$TIID")
 check "approval persisted on the item" "$IT_DETAIL" '"verdict": "approved"'
 check "rejection comment persisted" "$IT_DETAIL" 'not yet convinced'
@@ -193,10 +183,10 @@ check "verdicts reached the log" "$IT_DETAIL" 'verdicts: i1 approved'
 echo "7c. history at write time: from/to on status changes, agent fallback, the boss's kind"
 # The boss's hand, read back from the log entries sections 4, 7 and 7b wrote
 TID_LOG=$(api GET "/api/tasks/$TID")
-check "a review-link approve carries kind approve" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"kind": "approve"'
-check "the approve records from review" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"from": "review"'
-check "the approve records to done" "$(echo "$TID_LOG" | grep -A3 '"note": "approved via link"')" '"to": "done"'
-check "a review-link send-back carries kind send_back" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"kind": "send_back"'
+check "the boss's approve carries kind approve" "$(echo "$TID_LOG" | grep -A3 '"note": "approved from the dashboard"')" '"kind": "approve"'
+check "the approve records from review" "$(echo "$TID_LOG" | grep -A3 '"note": "approved from the dashboard"')" '"from": "review"'
+check "the approve records to done" "$(echo "$TID_LOG" | grep -A3 '"note": "approved from the dashboard"')" '"to": "done"'
+check "the boss's send-back carries kind send_back" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"kind": "send_back"'
 check "the send-back records to queued" "$(echo "$TID_LOG" | grep -A3 '"note": "more beans, fewer pixels"')" '"to": "queued"'
 check "an answer carries kind answer, from blocked" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"from": "blocked"'
 check "an answer carries kind answer" "$(echo "$TID_LOG" | grep -A3 '"note": "beans are in the cupboard')" '"kind": "answer"'
@@ -348,19 +338,9 @@ check "raw read serves the right content-type" "$(curl -si "$BUREAU_URL/api/know
 check "off-whitelist extension refused" "$(api POST /api/knowledge '{"file":"projects/ops/references/tool.exe","content":"x","author":"menace"}')" 'only .md'
 PNG_APPEND="{\"file\":\"projects/ops/references/pixel.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"mode\":\"append\"}"
 check "base64 append refused" "$(api POST /api/knowledge "$PNG_APPEND")" 'replace-only'
-TE=$(api POST /api/tasks '{"title":"Evidence renders inline","project":"ops","priority":2,"gate":"critic"}')
-TEID=$(echo "$TE" | grep -o '"id": "t-[0-9]*"' | head -1 | grep -o 't-[0-9]*')
-api POST /api/tasks/claim "{\"agent\":\"menace\",\"id\":\"$TEID\"}" > /dev/null
-api PATCH "/api/tasks/$TEID" '{"agent":"menace","artifact":{"label":"screenshot","url":"projects/ops/references/pixel.png"},"status":"review","note":"evidence attached"}' > /dev/null
-EV_TOKEN=$(api GET "/api/tasks/$TEID" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "review page renders evidence inline" "$(curl -s "$BUREAU_URL/r/$EV_TOKEN")" '<img src="/r/'
-check "capability image route serves the bytes" "$(curl -si "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/ops/references/pixel.png" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
-check "bad capability gets no image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000/img?file=projects/ops/references/pixel.png")" '404'
-# A live link reaches only the images its own mission cites, never the rest of the brain
-OTHER_BODY="{\"file\":\"projects/other/references/secret.png\",\"content\":\"$PNG_B64\",\"encoding\":\"base64\",\"author\":\"menace\"}"
-api POST /api/knowledge "$OTHER_BODY" > /dev/null
-check "a live link cannot reach an image its mission does not cite" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$EV_TOKEN/img?file=projects/other/references/secret.png")" '404'
-curl -s -X POST "$BUREAU_URL/r/$EV_TOKEN" > /dev/null
+# The capability image route went with the review links (doc 30, D12): the
+# dashboard shows evidence through the API, behind the credential.
+check "the old capability image route is gone" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/00000000000000000000000000000000/img?file=projects/ops/references/pixel.png")" '404'
 
 echo "8e. intake sweep: hand-dropped brain files become commits (needs CONF_BRAIN_DIR)"
 if [ -n "${CONF_BRAIN_DIR:-}" ]; then
@@ -445,9 +425,9 @@ check "bad role refused" "$(api PATCH /api/settings '{"agents":{"menace":{"roles
 check "bad librarian schedule refused" "$(api PATCH /api/settings '{"global":{"librarian":{"schedule":"3am"}}}')" 'HH:MM'
 check "a refused patch applies nothing" "$(api GET /api/settings)" '"global": {}'
 
-check "PATCH sets global dashboard" "$(api PATCH /api/settings '{"global":{"approval":"dashboard","notify":"review","librarian":{"schedule":"03:00","gap_missions_per_week":5}}}')" '"approval": "dashboard"'
+check "PATCH sets global dashboard" "$(api PATCH /api/settings '{"global":{"approval":"dashboard","store_prompts_days":1,"librarian":{"schedule":"03:00","gap_missions_per_week":5}}}')" '"approval": "dashboard"'
 check "GET round-trips it" "$(api GET /api/settings)" '"gap_missions_per_week": 5'
-check "merge is key by key" "$(api PATCH /api/settings '{"global":{"notify":"none"}}')" '"approval": "dashboard"'
+check "merge is key by key" "$(api PATCH /api/settings '{"global":{"store_prompts_days":0}}')" '"approval": "dashboard"'
 check "settings.changed logged" "$(api GET /api/state)" '"type": "settings.changed"'
 check "the event carries before and after" "$(api GET /api/state | grep -A30 'settings.changed' | tr -d ' \n')" '"before":{'
 
@@ -515,7 +495,7 @@ check "the capabilities are stored anyway" "$(agents_section | grep -A6 '"name":
 check "the capability log says the tag grants nothing" "$(api GET /api/state | grep -A12 '"name": "upstart"')" 'grant nothing'
 check "a self-registered lead is ignored once roles exist" "$(api PATCH "/api/tasks/$S6" '{"agent":"upstart","gate":"critic"}')" 'only the boss or the lead'
 
-check "null clears back to no settings" "$(api PATCH /api/settings '{"global":{"approval":null,"default_gate":null,"notify":null,"librarian":null},"projects":{"ops":null},"agents":{"menace":null,"moneta":null}}' | tr -d ' \n')" '"settings":{"global":{},"projects":{},"agents":{}}'
+check "null clears back to no settings" "$(api PATCH /api/settings '{"global":{"approval":null,"default_gate":null,"store_prompts_days":null,"librarian":null},"projects":{"ops":null},"agents":{"menace":null,"moneta":null}}' | tr -d ' \n')" '"settings":{"global":{},"projects":{},"agents":{},"members":{}}'
 check "cleared: moneta's capability counts again" "$(api PATCH "/api/tasks/$S6" '{"agent":"moneta","status":"review","note":"parked by critic"}')" '"status": "review"'
 S7=$(new_claimed "Settings: cleared" menace)
 check "cleared: a self-registered lead counts again" "$(api PATCH "/api/tasks/$S7" '{"agent":"upstart","gate":"critic"}')" '"gate": "critic"'
@@ -662,16 +642,11 @@ ART="{\"agent\":\"menace\",\"artifact\":{\"label\":\"kettle shot\",\"url\":\"wor
 api PATCH "/api/tasks/$W1" "$ART" > /dev/null
 ART2="{\"agent\":\"menace\",\"artifact\":{\"label\":\"borrowed\",\"url\":\"work/$W2/theirs.png\"},\"status\":\"review\",\"note\":\"evidence attached\"}"
 api PATCH "/api/tasks/$W1" "$ART2" > /dev/null
-WT=$(api GET "/api/tasks/$W1" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-WPAGE=$(curl -s "$BUREAU_URL/r/$WT")
-check "the review page shows the cited work image" "$WPAGE" "work%2F$W1%2Fshot.png"
-check "and the mission's uncited work image" "$WPAGE" "work%2F$W1%2Fextra.png"
-check "but not another mission's, even cited" "$(echo "$WPAGE" | grep -c "theirs.png" || true)" '^0$'
-check "the link serves its own work image" "$(curl -si "$BUREAU_URL/r/$WT/img?file=work/$W1/extra.png" | LC_ALL=C tr -d '\r')" 'content-type: image/png'
-check "the link refuses another mission's work image" "$(curl -s -o /dev/null -w '%{http_code}' "$BUREAU_URL/r/$WT/img?file=work/$W2/theirs.png")" '404'
+check "the mission lists its cited work image" "$(api GET "/api/tasks/$W1")" "work/$W1/shot.png"
 check "evidence survives while the mission is in review" "$(code GET "/api/work?file=work/$W1/shot.png")" '^200$'
-check "approve via the link" "$(curl -s -X POST "$BUREAU_URL/r/$WT")" 'Approved'
-check "closed by a review link: the evidence is gone" "$(code GET "/api/work?file=work/$W1/shot.png")" '^404$'
+W1_DONE='{"agent":"human","status":"done","note":"approved from the dashboard"}'
+check "the boss approves" "$(api PATCH "/api/tasks/$W1" "$W1_DONE")" '"done"'
+check "closed by the boss: the evidence is gone" "$(code GET "/api/work?file=work/$W1/shot.png")" '^404$'
 check "the whole folder is gone" "$(api GET "/api/work?task=$W1" | grep -c "work/$W1" || true)" '^0$'
 check "another mission's evidence is untouched" "$(code GET "/api/work?file=work/$W2/theirs.png")" '^200$'
 B=$(wb "work/$W1/late.md" "x")
@@ -745,28 +720,23 @@ check "apply refused while the mission is in progress" "$(api POST "/api/tasks/$
 B='{"agent":"consul","status":"review","after_approval":"return","note":"3 items, 2 with payloads"}'
 P1PARK=$(api PATCH "/api/tasks/$P1" "$B")
 check "parked in review with after_approval return" "$P1PARK" '"after_approval": "return"'
-check "parking issued review links" "$P1PARK" '"review_links"'
+check "parking issues no review links any more" "$(echo "$P1PARK" | grep -c '"review_links"' || true)" '^0$'
 B='{"agent":"human","status":"done","note":"approved","verdicts":[{"id":"i1","verdict":"approved"},{"id":"i2","verdict":"approved"}]}'
 check "approve with an undecided item is refused on PATCH (400)" "$(code PATCH "/api/tasks/$P1" "$B")" '^400$'
 check "the refusal names the undecided item" "$(api PATCH "/api/tasks/$P1" "$B")" 'undecided items: i3'
 P1D=$(api GET "/api/tasks/$P1")
 check "the refused approve changed nothing: still in review" "$P1D" '"status": "review"'
 check "and its verdicts were not recorded" "$(echo "$P1D" | grep -c '"verdict": "approved"' || true)" '^0$'
-P1AP=$(echo "$P1D" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-P1PAGE=$(curl -s "$BUREAU_URL/r/$P1AP")
-check "the review page says approving returns the mission to its agent" "$P1PAGE" 'Approving returns this mission to menace'
-check "the review page shows the exact payload text" "$P1PAGE" 'the kettle hums at 3am'
-check "approve with an undecided item is refused on the review link (400)" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved')" '^400$'
-check "the link page names the undecided item" "$(curl -s -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved')" 'undecided items: i3'
-check "still in review after the refused link" "$(api GET "/api/tasks/$P1")" '"status": "review"'
-check "approve via the link with every item decided" "$(curl -s -X POST "$BUREAU_URL/r/$P1AP" --data 'v_i1=approved&v_i2=approved&v_i3=rejected&c_i3=no+attic+copy')" 'Back with menace'
+check "the mission shows the exact payload text" "$P1D" 'the kettle hums at 3am'
+B='{"agent":"human","status":"done","note":"approved from the dashboard","verdicts":[{"id":"i1","verdict":"approved"},{"id":"i2","verdict":"approved"},{"id":"i3","verdict":"rejected","comment":"no attic copy"}]}'
+check "approve with every item decided" "$(api PATCH "/api/tasks/$P1" "$B")" '"status": "approved"'
 P1D=$(api GET "/api/tasks/$P1")
 check "after_approval return lands on approved, not done" "$P1D" '"status": "approved"'
 check "the holder keeps the mission" "$P1D" '"assignee": "menace"'
 check "approved holds no lease" "$P1D" '"lease_until": null'
-check "the approve is logged from review" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"from": "review"'
-check "to approved" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"to": "approved"'
-check "with kind approve" "$(echo "$P1D" | grep -A4 '"note": "approved via link"')" '"kind": "approve"'
+check "the approve is logged from review" "$(echo "$P1D" | grep -A4 '"note": "approved from the dashboard"')" '"from": "review"'
+check "to approved" "$(echo "$P1D" | grep -A4 '"note": "approved from the dashboard"')" '"to": "approved"'
+check "with kind approve" "$(echo "$P1D" | grep -A4 '"note": "approved from the dashboard"')" '"kind": "approve"'
 check "the work folder survives the approval" "$(api GET "/api/work?file=work/$P1/draft.md")" 'the staged draft'
 B="{\"file\":\"work/$P1/after.md\",\"content\":\"x\"}"
 check "the work store still takes writes" "$(code POST /api/work "$B")" '^200$'
@@ -857,9 +827,7 @@ echo "14b. Later is a ruling; curated payloads are linted when filed"
 L1=$(new_claimed "M4: one item deferred" menace)
 api PATCH "/api/tasks/$L1" '{"agent":"menace","items":[{"title":"Defer me"},{"title":"Take me"}]}' > /dev/null
 api PATCH "/api/tasks/$L1" '{"agent":"consul","status":"review"}' > /dev/null
-LTOK=$(api GET "/api/tasks/$L1" | grep -A2 '"approve"' | grep -o '"token": "[a-f0-9]*"' | grep -o '[a-f0-9]\{32\}')
-check "on the review page, items nobody ruled on start with no choice selected" "$(curl -s "$BUREAU_URL/r/$LTOK" | grep -c ' checked' || true)" '^0$'
-check "the page offers Later as a verdict" "$(curl -s "$BUREAU_URL/r/$LTOK")" 'value="later"'
+check "items nobody ruled on stay proposed" "$(api GET "/api/tasks/$L1" | grep -c '"verdict": "proposed"')" '^2$'
 B='{"agent":"human","status":"done","note":"approved","verdicts":[{"id":"i1","verdict":"later"},{"id":"i2","verdict":"approved"}]}'
 check "an approval with one item deferred (later) goes through" "$(api PATCH "/api/tasks/$L1" "$B")" '"status": "done"'
 check "the deferred item keeps the verdict later" "$(api GET "/api/tasks/$L1" | grep -A3 '"title": "Defer me"')" '"verdict": "later"'

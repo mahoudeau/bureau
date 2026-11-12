@@ -13,15 +13,17 @@ The hub (`hub/`), in particular:
 - **Token handling.** `BUREAU_BOSS_TOKEN`, minted agent tokens, the transitional `BUREAU_TOKEN`, the one-use ticket the event stream takes instead of any of them, and anything that lets a request through without one.
 - **Identity and walls.** In strict mode, anything that lets a credential act as the boss, as another agent, or outside its project list, on REST or MCP (the rule table is in `docs/protocol.md`). A ticket included: it carries its holder's scope and can never widen it.
 - **The MCP capability URL** (`/mcp/<token>`). The URL is the credential: a way to guess it, derive it, or find it in a log, event, page or poke payload is in scope.
-- **Capability links.** The review, answer and view links the hub issues, and the image route behind them.
+- **Sign-in.** The token check on `/mcp/agent/<name>` and `/api/*` (`hub/lib/oidc.js`, `hub/lib/jwt.js`): a token for one agent acting as another, a token from the wrong issuer or audience passing, a person without the owner role connecting an agent, an app acting before an owner allowed it. The dashboard's sign-in (`/auth/*`): the code flow, the `bureau_session` cookie, a write with the cookie from another site, an approver or viewer doing more than their role allows. The pairing file `omako.json` leaking through any route.
+- **The CLI** (`connectors/cli/bureau.js`): a token written where another user can read it, or printed to a terminal.
 - **Brain write paths.** `POST /api/knowledge` and the hand-drop sweep: escaping the brain directory, writing into `.git`, getting past the file-type allowlist, or getting git to run something it shouldn't.
-- **Rendering.** Script injection through mission titles, notes, brain content or SVG attachments into the dashboard, the office or the review pages.
+- **Rendering.** Script injection through mission titles, notes, brain content or SVG attachments into the dashboard, the office or the sign-in pages.
 - **Review gates.** Moving a boss-gate mission in or out of `review` without the role the protocol requires.
 
 ## What's out of scope
 
 - A hub in legacy mode (only `BUREAU_TOKEN` set): the shared token is one secret and any holder can declare `agent: "human"`, by design. Strict mode is the fix; a legacy token holder doing what the token allows is not a vulnerability.
-- The holder of the boss token: that credential grants the boss's authority, by design.
+- The holder of the boss token, or a person an owner made owner: that grants the boss's authority, by design.
+- Your issuer itself (OMAKO Accounts or another): report a flaw there to its maintainer. How the hub trusts it is in scope.
 - Your own deployment: TLS, the host, the reverse proxy, where you keep `.env`.
 - Connectors and chat-app settings outside this repository.
 - Denial of service by volume.

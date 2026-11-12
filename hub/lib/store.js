@@ -19,6 +19,14 @@ const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: 
 const MIGRATIONS = [
   // 0 -> 1: the field itself, plus the top-level keys older files may lack.
   s => { for (const k of Object.keys(EMPTY)) if (s[k] === undefined) s[k] = structuredClone(EMPTY[k]); },
+  // 1 -> 2 (doc 30, D12): Discord and the capability links are gone. Missions
+  // lose their review, answer and view links; settings lose notify.
+  s => {
+    for (const t of s.tasks || []) { delete t.review_links; delete t.answer_link; delete t.view_token; }
+    const st = s.settings || {};
+    if (st.global) delete st.global.notify;
+    for (const p of Object.values(st.projects || {})) if (p) delete p.notify;
+  },
 ];
 const SCHEMA_VERSION = MIGRATIONS.length;
 
@@ -472,6 +480,13 @@ function deleteProject(id) {
   const open = s.tasks.filter(t => t.project === id && t.status !== 'done' && t.status !== 'failed' && t.status !== 'discarded').length;
   if (open) return { error: `project has ${open} open mission(s); finish or move them first` };
   s.projects = s.projects.filter(p => p.id !== id);
+  // A deleted project leaves agents' sign-in lists; an agent left with none
+  // loses sign-in rather than keeping an empty, invalid list (doc 30, M3).
+  for (const a of Object.values((s.settings && s.settings.agents) || {})) {
+    if (!a || !a.oauth || !Array.isArray(a.oauth.projects)) continue;
+    a.oauth.projects = a.oauth.projects.filter((p) => p !== id);
+    if (!a.oauth.projects.length) delete a.oauth;
+  }
   save();
   // Closed missions keep their project id for history; the brain folder is never touched.
   return { deleted: true };
@@ -520,8 +535,6 @@ function createTask({ title, body, priority, project, created_by, gate }) {
     lease_until: null,
     log: [],
     artifacts: [],
-    // Read-only capability: the mission record page (/m/<token>), linked from pings.
-    view_token: crypto.randomBytes(16).toString('hex'),
   };
   load().tasks.push(t);
   save();
@@ -543,12 +556,12 @@ function renameProject(from, to) {
     if (!policies[to]) policies[to] = policies[from];
     delete policies[from];
   }
+  // Agents' sign-in project lists follow too, like the tokens' (doc 30, M3).
+  for (const a of Object.values((s.settings && s.settings.agents) || {})) {
+    if (a && a.oauth && Array.isArray(a.oauth.projects)) a.oauth.projects = [...new Set(a.oauth.projects.map((p) => (p === from ? to : p)))];
+  }
   save();
   return n;
-}
-
-function findByViewToken(token) {
-  return load().tasks.find(t => t.view_token === token) || null;
 }
 
 function expireLeases() {
@@ -672,13 +685,20 @@ function canCurate(s, agentName) {
 // cannot close boss-gate work (updateTask); the other knobs keep their defaults.
 const APPROVALS = ['dashboard', 'in-session', 'critic'];
 const GATES = ['boss', 'critic'];
-const NOTIFY = ['all', 'review', 'blocked', 'none'];
 const ROLES = ['lead', 'critic', 'librarian', 'curator'];
+// People who sign in to the dashboard (doc 30, C3, Q5): owner (the boss),
+// approver (rules on reviews and blocked missions), viewer (reads).
+const MEMBER_ROLES = ['owner', 'approver', 'viewer'];
+// Agent names the sign-in door never serves: the boss and the system.
+const RESERVED_OAUTH_AGENT = /^(human|system)$/;
+const OAUTH_AGENT_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
 
 function settingsOf(s) {
   const st = s.settings || {};
-  return { global: st.global || {}, projects: st.projects || {}, agents: st.agents || {} };
+  return { global: st.global || {}, projects: st.projects || {}, agents: st.agents || {}, members: st.members || {} };
 }
+// Owners named in the environment (BUREAU_OIDC_OWNERS) count as members too.
+const envOwners = () => (process.env.BUREAU_OIDC_OWNERS || '').split(/[\s,]+/).filter(Boolean).map((o) => (o.includes('@') ? o.toLowerCase() : o));
 // Project override wins over global. approval stays undefined when nobody set
 // it, which is how the hub tells "dashboard by default" from "dashboard by choice".
 function effectiveSettings(s, project) {
@@ -687,7 +707,6 @@ function effectiveSettings(s, project) {
   return {
     approval: p.approval ?? g.approval,
     default_gate: p.default_gate ?? g.default_gate ?? 'boss',
-    notify: p.notify ?? g.notify ?? 'all',
   };
 }
 
@@ -698,11 +717,12 @@ function checkPolicyKeys(obj, where, isGlobal) {
     if (v === null) continue; // null clears the key
     if (k === 'approval') { if (!APPROVALS.includes(v)) return `${where}.approval: use one of ${APPROVALS.join(', ')}`; }
     else if (k === 'default_gate') { if (!GATES.includes(v)) return `${where}.default_gate: use one of ${GATES.join(', ')}`; }
-    else if (k === 'notify') { if (!NOTIFY.includes(v)) return `${where}.notify: use one of ${NOTIFY.join(', ')}`; }
     // The journal free-text window (M2): true or unset keeps it open, false closes it
     else if (k === 'journal_free_text' && isGlobal) { if (typeof v !== 'boolean') return `${where}.journal_free_text: true or false`; }
     // true: an agent closing a mission done must have captured something under it, or say it learned nothing
     else if (k === 'require_capture' && isGlobal) { if (typeof v !== 'boolean') return `${where}.require_capture: true or false`; }
+    // false: the MCP door that takes a minted token in its URL (/mcp/<token>) is closed; sign-in only (doc 30)
+    else if (k === 'mcp_token_urls' && isGlobal) { if (typeof v !== 'boolean') return `${where}.mcp_token_urls: true or false`; }
     // Days the hub keeps the text of context calls. Unset or 0: it keeps none.
     else if (k === 'store_prompts_days' && isGlobal) { if (!Number.isInteger(v) || v < 0 || v > 365) return `${where}.store_prompts_days: an integer from 0 to 365`; }
     else if (k === 'librarian' && isGlobal) {
@@ -734,7 +754,17 @@ function mergeInto(target, patch) {
 function patchSettings(patch) {
   const s = load();
   if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return { error: 'settings patch must be an object' };
-  for (const k of Object.keys(patch)) if (!['global', 'projects', 'agents'].includes(k)) return { error: `unknown section ${k}; use global, projects, agents` };
+  for (const k of Object.keys(patch)) if (!['global', 'projects', 'agents', 'members'].includes(k)) return { error: `unknown section ${k}; use global, projects, agents, members` };
+  if (patch.members !== undefined) {
+    if (!patch.members || typeof patch.members !== 'object' || Array.isArray(patch.members)) return { error: 'members must be an object keyed by email or the issuer\'s subject id' };
+    for (const [key, v] of Object.entries(patch.members)) {
+      if (!key || key.length > 200 || /\s/.test(key)) return { error: `members.${key}: an email or a subject id, no spaces` };
+      if (v === null) continue;
+      if (typeof v !== 'object' || Array.isArray(v)) return { error: `members.${key} must be an object: {"role": "owner"}` };
+      for (const mk of Object.keys(v)) if (mk !== 'role') return { error: `members.${key}: unknown key ${mk}` };
+      if (!MEMBER_ROLES.includes(v.role)) return { error: `members.${key}.role: use one of ${MEMBER_ROLES.join(', ')}` };
+    }
+  }
   if (patch.global !== undefined) { const e = checkPolicyKeys(patch.global, 'global', true); if (e) return { error: e }; }
   if (patch.projects !== undefined) {
     if (!patch.projects || typeof patch.projects !== 'object' || Array.isArray(patch.projects)) return { error: 'projects must be an object keyed by project id' };
@@ -750,23 +780,43 @@ function patchSettings(patch) {
       if (v === null) continue;
       if (typeof v !== 'object' || Array.isArray(v)) return { error: `agents.${name} must be an object` };
       for (const [k, r] of Object.entries(v)) {
-        if (k !== 'roles') return { error: `agents.${name}: unknown key ${k}` };
         if (r === null) continue;
-        if (!Array.isArray(r) || r.some(x => !ROLES.includes(x))) return { error: `agents.${name}.roles: an array of ${ROLES.join(', ')}` };
+        if (k === 'roles') {
+          if (!Array.isArray(r) || r.some(x => !ROLES.includes(x))) return { error: `agents.${name}.roles: an array of ${ROLES.join(', ')}` };
+        } else if (k === 'oauth') {
+          // Sign-in through the issuer (lib/oidc.js) for this agent, and the
+          // projects it reaches that way: ["*"] or project ids.
+          if (!OAUTH_AGENT_NAME.test(name)) return { error: `agents.${name}.oauth: an agent name in lowercase letters, digits, - or _` };
+          // human is the boss and system writes lease expiries: a door named
+          // after either would let a token act as them (doc 30, M3).
+          if (RESERVED_OAUTH_AGENT.test(name)) return { error: `agents.${name}.oauth: ${name} is reserved and never signs in as an agent` };
+          if (typeof r !== 'object' || Array.isArray(r)) return { error: `agents.${name}.oauth must be an object: {"projects": [...]}` };
+          for (const ok of Object.keys(r)) if (ok !== 'projects') return { error: `agents.${name}.oauth: unknown key ${ok}` };
+          const pr = r.projects;
+          if (!Array.isArray(pr) || !pr.length || pr.some(x => typeof x !== 'string')) return { error: `agents.${name}.oauth.projects: a non-empty array of project ids, or ["*"]` };
+          const unknown = pr.filter(x => x !== '*' && !s.projects.some(pj => pj.id === x));
+          if (unknown.length) return { error: `agents.${name}.oauth.projects: unknown project ${unknown.join(', ')}` };
+        } else return { error: `agents.${name}: unknown key ${k}` };
       }
     }
   }
   const before = structuredClone(settingsOf(s));
   const next = structuredClone(before);
   if (patch.global) mergeInto(next.global, patch.global);
-  for (const sec of ['projects', 'agents']) {
+  for (const sec of ['projects', 'agents', 'members']) {
     for (const [id, v] of Object.entries(patch[sec] || {})) {
-      if (v === null) { delete next[sec][id]; continue; }
-      next[sec][id] = mergeInto(next[sec][id] || {}, v);
-      if (!Object.keys(next[sec][id]).length) delete next[sec][id];
+      const key = sec === 'members' && id.includes('@') ? id.toLowerCase() : id;
+      if (v === null) { delete next[sec][key]; continue; }
+      next[sec][key] = mergeInto(next[sec][key] || {}, v);
+      if (!Object.keys(next[sec][key]).length) delete next[sec][key];
     }
   }
   if (next.global.librarian && !Object.keys(next.global.librarian).length) delete next.global.librarian;
+  // A hub with sign-in keeps at least one owner, or nobody could sign in to
+  // fix it (the boss token stays as the break-glass, but that is the server's).
+  const hadOwner = envOwners().length || Object.values(before.members).some((m) => m && m.role === 'owner');
+  const hasOwner = envOwners().length || Object.values(next.members).some((m) => m && m.role === 'owner');
+  if (hadOwner && !hasOwner) return { error: 'members: at least one owner must stay (in settings or BUREAU_OIDC_OWNERS)' };
   s.settings = next;
   logEvent('settings.changed', { before, after: next });
   // Role changes get their own event, like capability changes (t-356)
@@ -780,8 +830,14 @@ function patchSettings(patch) {
       rolesChanged.push(change);
     }
   }
+  // Which agents' sign-in turned on or off: the hub tells its issuer (lib/omako.js).
+  const oauthChanged = [];
+  for (const name of names) {
+    const b = !!(before.agents[name] && before.agents[name].oauth), a = !!(next.agents[name] && next.agents[name].oauth);
+    if (b !== a) oauthChanged.push({ name, on: a });
+  }
   save();
-  return { settings: next, before, rolesChanged };
+  return { settings: next, before, rolesChanged, oauthChanged };
 }
 // The librarian's own digest (t-356): a mission titled "<name>: ..." by an
 // agent holding the librarian role (settings, else its tag) is a proposal set the boss rules
@@ -891,7 +947,9 @@ function unappliedItems(t) {
   return (t.items || []).filter(it => it.verdict === 'approved' && it.payload && !it.applied_at).map(it => it.id);
 }
 
-function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session, after_approval, nothing_learned }) {
+// via: the person behind a human action (the signed-in email), recorded on
+// the log entry so "human" is never anonymous once people sign in (doc 30, D5).
+function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, priority, title, body, items, verdicts, gate, approved_in_session, after_approval, nothing_learned, via }) {
   const s = load();
   const t = s.tasks.find(x => x.id === id);
   if (!t) return { error: 'not_found' };
@@ -1082,12 +1140,6 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
       if (after_approval === 'return') t.after_approval = 'return';
       else delete t.after_approval;
     }
-    // Capability links exist exactly while the task sits in review; any transition out consumes them.
-    if (status === 'review') t.review_links = makeReviewLinks();
-    else delete t.review_links;
-    // Same pattern for blocked: an answer link, so the boss can reply from any channel.
-    if (status === 'blocked') t.answer_link = { token: crypto.randomBytes(16).toString('hex'), exp: new Date(Date.now() + 7 * 86400_000).toISOString() };
-    else delete t.answer_link;
     // Unified reservations: an answer or a send-back returns the mission to its
     // previous holder, who has the context (a lingering builder claims it back
     // within its shift). claimTask lets cowork reservations lapse after a TTL;
@@ -1107,6 +1159,7 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
   const entry = { ts: nowISO(), by: agent, note: note || (status ? `status → ${status}` : 'updated') };
   if (status && status !== prevStatus) { entry.from = prevStatus; entry.to = status; }
   if (agent === 'human') entry.kind = humanKind(kind, prevStatus, status, verdicts);
+  if (via) entry.via = String(via).slice(0, 200);
   t.log.push(entry);
   if (chatApproved) {
     t.log.push({ ts: nowISO(), by: agent, note: `approved by boss in session: "${quote}" (recorded by ${agent})` });
@@ -1182,28 +1235,101 @@ function applyItem({ id, agent, item }, writeOp) {
   return { task: t, item: it };
 }
 
-// ---- Review capability links ----
-// Single-use by construction: updateTask clears review_links on any transition out of review.
-function makeReviewLinks() {
-  const exp = new Date(Date.now() + 7 * 86400_000).toISOString();
-  return {
-    approve: { token: crypto.randomBytes(16).toString('hex'), exp },
-    sendback: { token: crypto.randomBytes(16).toString('hex'), exp },
-  };
+// ---- Apps signed in as agents (doc 30, D13) ----
+// An app (an OAuth client: claude.ai, the CLI, a routine's connector) acts as
+// an agent only once the hub's owner allowed it for that agent. The first
+// call from an unknown app records it as pending; the owner rules on the Desk.
+const appsOf = (s) => (s.oauth_apps = s.oauth_apps || []);
+const APP_STATUSES = ['pending', 'allowed', 'denied'];
+function findApp(clientId, agent) {
+  return appsOf(load()).find((a) => a.client_id === clientId && a.agent === agent) || null;
+}
+// Records a first sighting, or refreshes the name and last use of a known one.
+function seeApp({ client_id, agent, name, verified, sub }) {
+  const s = load();
+  let a = appsOf(s).find((x) => x.client_id === client_id && x.agent === agent);
+  const now = nowISO();
+  if (!a) {
+    // A flood of made-up client ids can't grow state without end.
+    if (appsOf(s).filter((x) => x.status === 'pending').length >= 50) return null;
+    a = { id: `app-${crypto.randomBytes(4).toString('hex')}`, client_id: String(client_id).slice(0, 200), agent, name: name ? String(name).slice(0, 120) : null, verified: !!verified, status: 'pending', first_seen: now, last_used: now, seen_by: sub ? String(sub).slice(0, 200) : null, ruled_by: null, ruled_at: null };
+    appsOf(s).push(a);
+    logEvent('app.pending', { id: a.id, agent, name: a.name || a.client_id });
+    save();
+    return a;
+  }
+  if (name && a.name !== name) a.name = String(name).slice(0, 120);
+  a.verified = !!verified;
+  if (!a.last_used || Date.now() - Date.parse(a.last_used) > 60_000) { a.last_used = now; save(); }
+  return a;
+}
+function listApps() { return appsOf(load()).slice(); }
+function ruleApp(id, status, by) {
+  if (!APP_STATUSES.includes(status) || status === 'pending') return { error: 'status: allowed or denied' };
+  const s = load();
+  const a = appsOf(s).find((x) => x.id === id);
+  if (!a) return { error: 'not_found' };
+  a.status = status; a.ruled_by = by ? String(by).slice(0, 200) : null; a.ruled_at = nowISO();
+  logEvent(`app.${status}`, { id: a.id, agent: a.agent, name: a.name || a.client_id, by: a.ruled_by });
+  save();
+  return { app: a };
+}
+function forgetApp(id) {
+  const s = load();
+  const before = appsOf(s).length;
+  s.oauth_apps = appsOf(s).filter((x) => x.id !== id);
+  if (s.oauth_apps.length === before) return { error: 'not_found' };
+  logEvent('app.forgotten', { id });
+  save();
+  return { forgotten: true };
 }
 
-function findByReviewToken(token) {
+// ---- Dashboard sessions (doc 30, C4) ----
+// The cookie holds a random token; the hub keeps only its SHA-256. 30 days.
+const SESSION_DAYS = 30;
+const sessionsOf = (s) => (s.sessions = s.sessions || []);
+const sessionView = ({ hash: _h, id_token: _i, ...rest }) => rest;
+function createSession({ sub, email, name, role, id_token, issuer }) {
   const s = load();
-  for (const t of s.tasks) {
-    const l = t.review_links;
-    if (l) {
-      if (l.approve.token === token) return { task: t, action: 'done', exp: l.approve.exp, kind: 'approve' };
-      if (l.sendback.token === token) return { task: t, action: 'queued', exp: l.sendback.exp, kind: 'sendback' };
-    }
-    if (t.answer_link && t.answer_link.token === token) return { task: t, action: 'queued', exp: t.answer_link.exp, kind: 'answer' };
-  }
-  return null;
+  const token = crypto.randomBytes(32).toString('base64url');
+  const now = nowISO();
+  // Expired sessions go when a new one is made: no separate sweep needed.
+  s.sessions = sessionsOf(s).filter((x) => x.expires_at > now);
+  const rec = { id: `ses-${crypto.randomBytes(4).toString('hex')}`, hash: tokenHash(token), sub: String(sub), email: email ? String(email).toLowerCase() : null, name: name ? String(name).slice(0, 120) : null, role, issuer: issuer || null, id_token: id_token || null, created_at: now, last_seen: now, expires_at: new Date(Date.now() + SESSION_DAYS * 86400_000).toISOString() };
+  s.sessions.push(rec);
+  logEvent('session.started', { id: rec.id, name: rec.email || rec.sub, kind: role });
+  save();
+  return { token, session: sessionView(rec) };
 }
+function findSession(token) {
+  if (typeof token !== 'string' || !token) return null;
+  const s = load();
+  if (!s.sessions || !s.sessions.length) return null;
+  const hash = Buffer.from(tokenHash(token), 'hex');
+  const now = nowISO();
+  let hit = null;
+  for (const x of s.sessions) if (crypto.timingSafeEqual(hash, Buffer.from(x.hash, 'hex')) && x.expires_at > now) hit = x;
+  if (hit && Date.now() - Date.parse(hit.last_seen) > 60_000) { hit.last_seen = now; save(); }
+  return hit;
+}
+function endSession(token) {
+  const s = load();
+  const h = tokenHash(token);
+  const x = sessionsOf(s).find((y) => y.hash === h);
+  s.sessions = sessionsOf(s).filter((y) => y.hash !== h);
+  save();
+  return x || null;
+}
+// sub: end that person's sessions; none: everyone's.
+function endSessions(sub) {
+  const s = load();
+  const before = sessionsOf(s).length;
+  s.sessions = sub ? sessionsOf(s).filter((x) => x.sub !== sub) : [];
+  logEvent('session.ended_all', { note: `${before - s.sessions.length} session(s)`, name: sub || 'everyone' });
+  save();
+  return before - s.sessions.length;
+}
+function listSessions() { return sessionsOf(load()).filter((x) => x.expires_at > nowISO()).map(sessionView); }
 
 // ---- Messages ----
 function postMessage({ from, to, body, task_id }) {
@@ -1227,8 +1353,10 @@ module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   authMode, mintToken, listTokens, revokeToken, findAgentToken, isLead,
   StorageError, SCHEMA_VERSION, STATE_FILE,
-  createTask, claimTask, updateTask, expireLeases, findByReviewToken, applyCheck, applyItem, payloadHash,
-  renameProject, createProject, updateProject, deleteProject, findByViewToken, PROJECT_RE,
+  createTask, claimTask, updateTask, expireLeases, applyCheck, applyItem, payloadHash,
+  renameProject, createProject, updateProject, deleteProject, PROJECT_RE,
+  findApp, seeApp, listApps, ruleApp, forgetApp, envOwners, MEMBER_ROLES, RESERVED_OAUTH_AGENT, OAUTH_AGENT_NAME,
+  createSession, findSession, endSession, endSessions, listSessions,
   postMessage, getMessages, TASK_STATUSES, TERMINAL_STATUSES, ACTIVITIES,
   patchSettings, settingsOf, effectiveSettings, rolesConfigured, ignoredRoleTags, canCurate, SETTINGS_ROLES_NOTE,
 };

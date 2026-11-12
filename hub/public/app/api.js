@@ -1,5 +1,7 @@
-// Every call to the hub. Bearer token on, errors turned into sentences, and a
-// 401 sends you back to sign in.
+// Every call to the hub. Errors turned into sentences, and a 401 sends you back
+// to sign in. Two ways to be signed in: the session cookie from "Sign in with
+// OMAKO" (HttpOnly, so this code never sees it; the browser sends it), or a
+// token pasted on the sign-in page, kept here and sent as a Bearer header.
 
 const KEY = 'bureau_token';
 
@@ -57,9 +59,20 @@ export function nextPath(search = location.search, base = location.href) {
 }
 
 // A full page load on purpose: it drops the event stream and all held state.
-export function signOut() {
-  clearToken();
-  location.assign('/sign-in');
+// A signed-in session ends on the hub, then at the issuer.
+export async function signOut() {
+  if (getToken()) {
+    clearToken();
+    location.assign('/sign-in');
+    return;
+  }
+  let next = '/sign-in';
+  try {
+    const r = await fetch('/auth/logout', { method: 'POST', headers: { accept: 'application/json' } });
+    const j = await r.json();
+    if (j && typeof j.next === 'string') next = j.next;
+  } catch { /* the cookie may already be gone: the sign-in page it is */ }
+  location.assign(next);
 }
 
 let leaving = false;
@@ -82,7 +95,8 @@ function sentence(status, body) {
 // stored one), keepSession (a 401 throws instead of leaving for sign-in).
 async function send(path, opts = {}) {
   const { method = 'GET', body, headers, signal, token = getToken(), keepSession = false } = opts;
-  const allHeaders = { authorization: `Bearer ${token}`, ...headers };
+  // No token: the session cookie goes by itself (same origin).
+  const allHeaders = { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers };
   let payload = body;
   if (body !== undefined && typeof body !== 'string' && !(body instanceof Blob) && !(body instanceof FormData)) {
     payload = JSON.stringify(body);

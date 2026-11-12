@@ -5,7 +5,7 @@
 # The hub itself loads ./.env and maps a host-injected IP to its listen
 # address (lib/env.js), so this only moves into the hub folder and starts it.
 # `node server.js` does the same on any OS.
-# Secrets (BUREAU_TOKEN, BUREAU_PUBLIC_URL, DISCORD_WEBHOOK_URL) belong in the
+# Secrets (BUREAU_BOSS_TOKEN, BUREAU_TOKEN, BUREAU_OIDC_CLIENT_SECRET) belong in the
 # host's environment configuration, never in the repo.
 cd "$(dirname "$0")" || exit 1
 exec node server.js

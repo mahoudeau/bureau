@@ -25,6 +25,31 @@ function note(msg) {
 function readFirst(file) {
   try { return fs.readFileSync(file, 'utf8').trim(); } catch { return ''; }
 }
+// On a Mac the token can live in the Keychain (service bureau-hub, account the
+// agent's name), as hub.sh reads it. Empty when there is no such item.
+function fromKeychain(agent) {
+  if (process.platform !== 'darwin') return '';
+  try {
+    return require('child_process').execFileSync('security',
+      ['find-generic-password', '-s', process.env.BUREAU_KEYCHAIN_SERVICE || 'bureau-hub', '-a', agent, '-w'],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 500 }).trim();
+  } catch { return ''; }
+}
+// The sign-in from `bureau login`, read straight from its store (the Keychain
+// item bureau-login, or the file with BUREAU_LOGIN_STORE=file). Used while it
+// has more than 30 s left. Past that, one refresh with a 400 ms limit; if that
+// fails or another refresh is running, empty, and the older sources take over.
+async function fromLogin(base, agent) {
+  try {
+    const cli = require(path.join(__dirname, '..', 'cli', 'bureau.js'));
+    const rec = await cli.fresh(base, agent, { early: 30, timeoutMs: 400, storeTimeoutMs: 300, wait: false });
+    return rec.access_token;
+  } catch (e) {
+    const why = String(e && e.message);
+    if (!why.startsWith('not signed in')) note(`sign-in not used: ${why.slice(0, 120)}`);
+    return '';
+  }
+}
 function gitRoot(dir) {
   for (let d = dir; ; d = path.dirname(d)) {
     if (fs.existsSync(path.join(d, '.git'))) return d;
@@ -59,8 +84,14 @@ function readStdin() {
 async function main() {
   const input = JSON.parse(await readStdin());
   const base = (process.env.BUREAU_URL || readFirst(path.join(HOME, '.bureau-url'))).replace(/\/$/, '');
-  const token = process.env.BUREAU_TOKEN || readFirst(process.env.BUREAU_TOKEN_FILE || path.join(HOME, '.bureau-token'));
-  if (!base || !token) return note('no hub address or token');
+  if (!base) return note('no hub address');
+  const agent = process.env.BUREAU_AGENT || 'consul';
+  // A token file named in BUREAU_TOKEN_FILE is a choice, so it beats the older
+  // Keychain item; the default file comes last.
+  const named = process.env.BUREAU_TOKEN_FILE;
+  const token = process.env.BUREAU_TOKEN || await fromLogin(base, agent)
+    || (named && readFirst(named)) || fromKeychain(agent) || readFirst(path.join(HOME, '.bureau-token'));
+  if (!token) return note('no token');
   // Only a compaction loses the passages. A startup has nothing to forget, a
   // resume still holds them, and /clear starts under a new session id.
   const starting = input.hook_event_name === 'SessionStart';

@@ -15,7 +15,9 @@
   var token = function () {
     try { return localStorage.getItem('bureau_token') || ''; } catch (e) { return ''; }
   };
-  var auth = function () { return { authorization: 'Bearer ' + token() }; };
+  // No token: signed in with the session cookie, which the browser sends by
+  // itself on this origin, to fetch and to EventSource alike.
+  var auth = function () { var t = token(); return t ? { authorization: 'Bearer ' + t } : {}; };
 
   // A token handed over in a link: the fragment never reaches the hub or a log.
   function takeUrlToken() {
@@ -66,7 +68,9 @@
       if (refused || current || asking || document.hidden) return;
       var mine = ++attempt;
       asking = true;
-      fetch('/api/events/ticket', { method: 'POST', headers: auth() }).then(function (r) {
+      // With the session cookie no ticket is needed: the stream takes the cookie.
+      var ticketed = !!token();
+      (ticketed ? fetch('/api/events/ticket', { method: 'POST', headers: auth() }) : Promise.resolve({ ok: true, status: 200, json: function () { return { ticket: null }; } })).then(function (r) {
         if (mine !== attempt) return null;
         asking = false;
         // The token is no good any more. Nothing here will bring it back.
@@ -86,7 +90,7 @@
         return r.json();
       }).then(function (t) {
         if (!t || mine !== attempt) return;
-        var es = new EventSource('/api/events?ticket=' + encodeURIComponent(t.ticket));
+        var es = new EventSource(t.ticket ? '/api/events?ticket=' + encodeURIComponent(t.ticket) : '/api/events');
         current = es;
         es.onopen = function () { if (opts.up) opts.up(); };
         es.onerror = function () {

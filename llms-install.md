@@ -50,8 +50,9 @@ The `node -e` line fills `BUREAU_TOKEN` and uncomments `BUREAU_BOSS_TOKEN` with 
 | `BUREAU_BRAIN_DIR` | `hub/brain` | Where the brain's git repo lives. Created on first boot. |
 | `BUREAU_WORK_DIR` | `hub/work` | The work store: open missions' evidence, plain files, deleted when a mission closes. |
 | `BUREAU_BACKUP_INTERVAL_MS`, `BUREAU_BACKUP_KEEP`, `BUREAU_DAILY_KEEP` | 3600000, 24, 7 | Rolling `state.json` backups: how often, how many hourly, how many daily. |
-| `BUREAU_PUBLIC_URL` | unset | Public base URL. Used in review links and in the MCP connector URL. |
-| `DISCORD_WEBHOOK_URL` | unset | Optional: mirror notable events to a Discord channel. |
+| `BUREAU_PUBLIC_URL` | unset | The hub's public address. Used in the MCP addresses; sign-in needs it. |
+| `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID`, `BUREAU_OIDC_CLIENT_SECRET` | unset | Optional: sign-in through an OpenID issuer. With OMAKO, run `node tools/omako.js pair` instead. See section 6. |
+| `BUREAU_OIDC_OWNERS` | unset | Emails or subject ids of the hub's owners, for sign-in. |
 | `BUREAU_POKES` | unset | Optional: outbound wake-up webhooks, a JSON array. See `docs/protocol.md`. |
 | `BUREAU_SWEEP_MS` | 60000 | Lease-expiry and standing-work sweep interval. |
 | `BUREAU_RESERVATION_TTL_MIN` | 30 | Minutes before a `cowork` agent's reservation lapses. Tests set 0.02. |
@@ -164,7 +165,8 @@ curl -s -X POST http://localhost:8100/api/knowledge -H "Authorization: Bearer $T
 
 - Dashboard: http://localhost:8100/ . It sends you to `/sign-in` once and stores the token in the browser. Paste the boss token.
 - Pixel office: http://localhost:8100/office . Same token, same storage. It's empty until an agent registers.
-- MCP connector URL for chat apps: from `bureau/hub`, `node tools/token.js mint <agent> <project,...>` prints the agent's token and its `MCP URL`. The URL itself is the credential; treat it like the token. It uses `BUREAU_PUBLIC_URL` as its base when that's set. Setup steps are in `connectors/chat/README.md`.
+- MCP connector URL for chat apps on a hub without sign-in: from `bureau/hub`, `node tools/token.js mint <agent> <project,...>` prints the agent's token and its `MCP URL`. The URL itself is the credential; treat it like the token. It uses `BUREAU_PUBLIC_URL` as its base when that's set. Setup steps are in `connectors/chat/README.md`.
+- Sign-in, once the hub has a public https address: the user runs `node tools/omako.js pair` on the server, opens the link it prints and confirms with their OMAKO account. The tool writes the hub's client to `data/omako.json` and prints no secret. Set `BUREAU_OIDC_OWNERS` to the user's email and restart. From then on they sign in with OMAKO, agents connect at `https://<hub>/mcp/agent/<name>` or with `bureau login` (`connectors/cli/`), and the user allows each app on the Desk. Don't run the pairing for them without asking: it binds their hub to their account. The rules are in `docs/protocol.md`, "Sign-in".
 - Scheduled workers: `connectors/cowork/README.md`.
 - Tell the user where their data is: `hub/data/state.json` and `hub/brain/`, both gitignored.
 

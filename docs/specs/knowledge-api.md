@@ -66,10 +66,10 @@ What the hub does with the brain: a folder of markdown and small attachments und
 - RULE-KNOWLEDGE-24: A work path is `work/<t-id>/<name>`. A `..` segment anywhere is refused before normalizing, and the file types are the brain's (RULE-KNOWLEDGE-03). Anything else answers 400. (source: hub/lib/work.js parse())
 - RULE-KNOWLEDGE-25: `POST /api/work` takes `file` and `content`, with `mode` and `encoding` as in RULE-KNOWLEDGE-06 and RULE-KNOWLEDGE-07 (append, base64 replace only, 5MB cap). The mission must exist (404 otherwise) and must not be `done`, `failed` or `discarded` (409). The curated-compartment wall does not apply. (source: hub/server.js workWriteRefusal(), POST /api/work route)
 - RULE-KNOWLEDGE-26: `GET /api/work?file=` answers like RULE-KNOWLEDGE-11 and RULE-KNOWLEDGE-12 (`content`, `content_base64`, or bytes with `raw=1`), 404 when missing. Without `file` it lists every work file, or one mission's with `task=<t-id>`, as `work/<t-id>/...` paths. (source: hub/server.js GET /api/work route, hub/lib/work.js listWork())
-- RULE-KNOWLEDGE-27: When a mission's status becomes `done`, `failed` or `discarded`, its `work/<t-id>/` folder is deleted whole. This runs inside the mission update itself, so every door that closes a mission does it: PATCH, MCP `update_mission`, a review link. A removal error is logged and never undoes the close. (source: hub/lib/store.js updateTask(), hub/lib/work.js removeMission())
+- RULE-KNOWLEDGE-27: When a mission's status becomes `done`, `failed` or `discarded`, its `work/<t-id>/` folder is deleted whole. This runs inside the mission update itself, so every door that closes a mission does it: PATCH, MCP `update_mission`. A removal error is logged and never undoes the close. (source: hub/lib/store.js updateTask(), hub/lib/work.js removeMission())
 - RULE-KNOWLEDGE-28: At boot, folders under the work store whose mission is closed or unknown are deleted. (source: hub/lib/store.js init(), hub/lib/work.js sweep())
 - RULE-KNOWLEDGE-29: On MCP, `write_work` and `read_work` mirror `POST` and `GET /api/work` with the same checks. (source: hub/server.js mcpToolCall() write_work, read_work)
-- RULE-KNOWLEDGE-30: An artifact URL that names a work image (`work/<t-id>/x.png`) renders in the dashboard from `/api/work` instead of `/api/knowledge`. Review links follow RULE-REVIEW-19. (source: hub/public/app/hub-auth.js imageUrl())
+- RULE-KNOWLEDGE-30: An artifact URL that names a work image (`work/<t-id>/x.png`) renders in the dashboard from `/api/work` instead of `/api/knowledge`. (The review links' image route, RULE-REVIEW-19, is gone with doc 30.) (source: hub/public/app/hub-auth.js imageUrl())
 
 ## Journeys
 
@@ -79,7 +79,7 @@ What the hub does with the brain: a folder of markdown and small attachments und
 4. **A fresh install.** The hub boots on an empty folder: it creates the repo and its root commit, so `GET /api/state` shows `brain created` instead of a git error (RULE-KNOWLEDGE-01, RULE-KNOWLEDGE-18, RULE-KNOWLEDGE-14).
 5. **A worker learns something general.** It may not write `knowledge/` (RULE-KNOWLEDGE-20), so it appends a line to `journal/` (open). The librarian proposes the note as a review item, the boss approves, and the librarian writes it (RULE-KNOWLEDGE-20).
 6. **Pair mode.** The boss gave consul the `curator` role. In a chat, he tells consul to file a recipe; consul writes `recipes/` over MCP and the commit is consul's (RULE-KNOWLEDGE-22, RULE-KNOWLEDGE-10).
-7. **Evidence for a round.** A builder posts screenshots to `work/t-12/` (RULE-KNOWLEDGE-25), cites one as an artifact and parks the mission. The critic and the boss see them on the review page (RULE-REVIEW-19). The boss approves: the mission is `done` and the folder is gone (RULE-KNOWLEDGE-27).
+7. **Evidence for a round.** A builder posts screenshots to `work/t-12/` (RULE-KNOWLEDGE-25), cites one as an artifact and parks the mission. The critic and the boss see them on the mission's page (RULE-KNOWLEDGE-30). The boss approves: the mission is `done` and the folder is gone (RULE-KNOWLEDGE-27).
 
 ## Edge cases
 

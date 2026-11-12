@@ -39,11 +39,11 @@ The full rules, ruled on 11 November 2026, are in OMAKO DS (README, "Dither"). `
 | Fold | signing in, once a session |
 | Dock band | the mission page, while there's more to scroll |
 
-The review, record and 404 pages run the same dither: they load `omako-ds/js/dither.js` and `app/lp-dither.js`, which starts it. Their CSP allows only the hub's own files (`script-src 'self'`, nothing inline). Without it they still work: the long shadow falls back to its two CSS steps and images show as they are.
+The server-rendered pages (sign-in errors, "not a member", sign out, the 404) run the same dither: they load `omako-ds/js/dither.js` and `app/lp-dither.js`, which starts it. Their CSP allows only the hub's own files (`script-src 'self'`, nothing inline). Without it they still work: the long shadow falls back to its two CSS steps and images show as they are.
 
 ### Status
 
-A status is a swatch and a word. The mapping is the app's, in `hub/public/app/status.js`, never in omako-ds. The server-rendered pages hold the same pairs, and a test keeps the two in step.
+A status is a swatch and a word. The mapping is the app's, in `hub/public/app/status.js`, never in omako-ds.
 
 | Status | Pattern |
 |---|---|
@@ -57,9 +57,9 @@ A status is a swatch and a word. The mapping is the app's, in `hub/public/app/st
 | failed | cross |
 | discarded | d0 |
 
-### The capability pages
+### The server-rendered pages
 
-`/r/<token>` and `/m/<token>` are opened from a phone. They're server-rendered and work with no script; the hub's own dither is the only script they load. They take omako-ds through stylesheet links. Controls are at least 44px tall there.
+The sign-in pages the hub serves itself (`/auth/*`, the 404) work with no script; the hub's own dither is the only script they load. They take omako-ds through stylesheet links. Controls are at least 44px tall there. The review and record pages that used to live at `/r/` and `/m/` are gone: a phone uses the dashboard, signed in.
 
 ## The office
 

@@ -45,6 +45,8 @@ CONF_BRAIN_DIR=/tmp/bureau-test/brain ./test/dummy-agent.sh
 ./test/brain-lint.sh
 ```
 
+**Sign-in** (`node test/oidc.test.js`) starts its own hubs and a fake issuer that signs its own tokens, so it needs no OMAKO account and no network: agent doors, app approval, the dashboard's session, roles. `node test/cli.test.js` does the same for `bureau login`, and `node test/export.test.js` moves a hub out and back in. Your hub never needs a real issuer to run the tests.
+
 A new hub feature comes with checks in `test/dummy-agent.sh`. If curl can't reach it, it's designed wrong (see `docs/protocol.md`).
 
 ## Hard rules
