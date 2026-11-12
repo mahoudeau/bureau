@@ -23,17 +23,18 @@ One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboa
 
 ### Changed
 - `/r/<token>` and `/m/<token>` use omako-ds, phone first. They and the 404 now load the hub's own dither script and nothing else (`script-src 'self'`, no inline script), and still work without it.
-- Dashboard text is JetBrains Mono, page titles Archivo. A status is a dither pattern and a word, and there is no hue anywhere.
-- Themes are system, paper and ink. The four Game Boy themes stay in the office.
+- Interface text is Archivo, data is JetBrains Mono, page titles are Archivo Expanded. A status is a dither pattern and a word, and there is no hue anywhere.
+- Themes are system, paper and ink. The four Game Boy palettes stay in the office, which now starts in pocket grey; pick another in Settings, Appearance.
 - Times on the dashboard are to the minute.
 - After a ruling, the review moves to the next thing that needs you.
 - In the palette, Enter opens the highlighted result. Making a mission is its own row, or Cmd/Ctrl+Enter.
 
 ### Removed
 - `hub/public/index.html`, `hub/public/v2.html` and `hub/public/v2/`, with the old design system, its fonts (Fraunces, Inter) and its icons (Lucide). `/v2` and `/v2/styleguide` redirect to `/`.
-- The dashboard screenshots in the README, which showed the old one.
+- The dashboard screenshots in the README, which showed the old one. New ones of the Desk (light and dark), a mission in review and the review on a phone take their place, from a demo hub.
 
 ### Fixed
+- The Desk's team list read each agent's role from its self-declared capabilities. It reads the roles set in Settings now, as the Agents page does, and falls back to capabilities only for a credential that can't read Settings.
 - `/m/<token>` no longer answers 500 for a log entry with no time, and no longer prints `Pundefined` for a mission with no priority.
 - Renaming a project moves its settings to the new id, in the same write. They used to stay under the old id.
 - A token that gets no event stream (403 on the ticket) stops asking every 3 seconds. The dashboard stays on polling and says so.

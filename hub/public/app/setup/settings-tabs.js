@@ -32,7 +32,38 @@ export function appearance() {
     }, THEME_WORDS[name])));
   }
   paint();
-  return section('Theme', null, seg, hint);
+  return h('div', { class: 'set-sections' }, section('Theme', null, seg, hint), officePalette());
+}
+
+// The office keeps its own four-shade palettes; the dashboard stays ink and
+// paper. Same key as office.html, which follows a change made here at once.
+const OFFICE_KEY = 'bureau_office_palette';
+const OFFICE_PALETTES = [['pocket', 'Grey'], ['olive', 'Olive'], ['dmg', 'Green'], ['amber', 'Amber']];
+const OFFICE_HINT = { pocket: 'Pocket grey. The default.', olive: 'Olive, the first office.', dmg: 'The original pea green.', amber: 'Warm amber, like an old monitor.' };
+
+function officePalette() {
+  const read = () => {
+    let v = null;
+    try { v = localStorage.getItem(OFFICE_KEY); } catch { /* no storage: the default */ }
+    return OFFICE_PALETTES.some(([k]) => k === v) ? v : 'pocket';
+  };
+  const hint = h('p', { class: 'om-data-s set-hint' });
+  const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Office palette' });
+  function paint() {
+    const now = read();
+    hint.textContent = OFFICE_HINT[now];
+    seg.replaceChildren(...OFFICE_PALETTES.map(([key, word]) => h('button', {
+      type: 'button',
+      'aria-pressed': key === now ? 'true' : 'false',
+      onClick() {
+        try { localStorage.setItem(OFFICE_KEY, key); } catch { /* it just won't stick */ }
+        paint();
+        seg.querySelector('[aria-pressed="true"]').focus();
+      },
+    }, word)));
+  }
+  paint();
+  return section('Office palette', null, seg, hint);
 }
 
 // ---- Approval ----

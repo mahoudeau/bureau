@@ -7,9 +7,9 @@ Two surfaces, one event stream: the dashboard at `/` and the pixel office at `/o
 The dashboard is built on OMAKO DS, with a copy in `hub/public/omako-ds/`. Plain CSS, no build, no dependency. Its licence terms are in `NOTICE.md` in that folder.
 
 - **Ink, paper and dither. No hue.** Inversion is the only colour. Dark mode swaps the two.
-- **Hover is inversion, and it's instant.** Nothing floats, nothing is rounded. A shadow is hard ink or dither.
-- **Mono for all text, Archivo for page titles only.** Hierarchy comes from weight and size.
-- **Two registers.** Poster has 4px rules and big Archivo, for pages people read once. Desk is `data-density="compact"`: 1px rules, mono, hierarchy by weight. The dashboard is desk.
+- **Hover runs on dither, and it's instant.** Dither means about to, solid means chosen: a button lifts over a dithered L, a choice shows a dither bar, a row inverts with a dithered edge, and keyboard focus is a dither ring. Links get a heavy underline. Nothing floats, nothing is rounded. A shadow is hard ink or dither.
+- **Archivo for the interface and reading text, JetBrains Mono for data, Archivo Expanded for page titles.** Hierarchy comes from layers (ground, sheet, raised, dock, overlay), weight and size.
+- **Two registers.** Poster has 4px rules and big Archivo, for pages people read once. Desk is `data-density="compact"`: 1px rules, hierarchy by layer and weight. The dashboard is desk.
 - **Every object is a page with a URL.** A mission, a goal, a project, a brain note. No side panels. The command palette is the one overlay.
 - **Themes are system, paper and ink.**
 - **Every page works at phone width.**
@@ -69,7 +69,7 @@ The office is drawn in the register of the 1989 Game Boy: four shades on screen 
 - **Charm from the constraints.** Chunky pixels, a tile grid and a small screen are the point. Smoothness goes into easing and choreography: a folder carried to the board, a card left at the boss's door.
 - The office animates only the generic activity verbs (docs/protocol.md), never vendor events.
 - **Canvas:** 384x216 logical pixels, upscaled by whole device pixels, `image-rendering: pixelated`. The viewer can set the scale; auto picks the largest that fits.
-- **Palettes:** four, switchable by the viewer: olive, DMG pea-green, pocket gray and amber, each also available inverted. These belong to the office. The dashboard doesn't have them.
+- **Palettes:** four: pocket grey (the default), olive, DMG pea-green and amber, each also available inverted for the alarm. Pick one in Settings, Appearance, or press P in the office. They belong to the office; the dashboard stays ink and paper.
 - **Art:** hand-drawn 4-shade sprites, authored as indexed pixel maps in `hub/public/office-assets.js` and browsable at `/office/assets`. No image files.
 - **Guarded in CI:** `test/office-guard.sh` checks that every draw stays on the 384x216 canvas and every pixel is one of the palette's four shades, at every phase and view.
 - **Type:** OfficePixel (`hub/public/office-font.ttf`) for everything in the office. Crisp text lives in HTML overlays (bubbles, ticker, HUD), not on the canvas.

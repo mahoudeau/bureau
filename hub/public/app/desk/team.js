@@ -2,6 +2,7 @@
 // Visitors are counted, not listed: /agents has them.
 
 import { h, fill } from '../dom.js';
+import * as api from '../api.js';
 import { emptyState, relativeTime } from '../ui.js';
 import { isVisitor, liveness, roleOf, teamOf } from './model.js';
 import { keyed } from './keyed.js';
@@ -14,6 +15,11 @@ const LOOK = {
 };
 const SHOW = 10;
 
+// Roles from Settings, when this credential may read them (the boss's may;
+// an agent token gets 403 and the label falls back to capabilities).
+let roles = null;
+const rolesOf = (a) => (roles && roles[a.name] ? roles[a.name].roles : undefined);
+
 function agentRow(a) {
   const live = liveness(a);
   const look = LOOK[live];
@@ -23,7 +29,7 @@ function agentRow(a) {
     h('div', { class: 'work-agent-line' },
       h('span', { class: `om-swatch ${look.dither}`, role: 'img', 'aria-label': look.word, title: look.word }),
       h('span', { class: 'om-strong om-clip' }, a.name),
-      h('span', { class: 'om-tag' }, roleOf(a)),
+      h('span', { class: 'om-tag' }, roleOf(a, rolesOf(a))),
       h('span', { class: 'work-agent-doing om-data-s om-clip' }, a.activity || look.word.toLowerCase())),
     fleet.length ? h('div', { class: 'work-fleet om-data-s' }, fleet.map((s) => h('div', { class: 'om-clip' }, s.label, s.activity ? `: ${s.activity}` : ''))) : null);
 }
@@ -33,14 +39,20 @@ export function teamSection() {
   const quiet = h('div', null);
   const foot = h('div', { class: 'work-foot' });
   const node = section('Team', h('a', { class: 'om-link om-caption', href: '/agents' }, 'All agents'), quiet, list, foot);
+  let last = null;
+  api.get('/api/settings').then((r) => {
+    roles = (r && r.settings && r.settings.agents) || {};
+    if (last) paint(last);
+  }, () => { /* not the boss's credential: capabilities it is */ });
 
   function paint(state) {
+    last = state;
     const all = (state && state.agents) || [];
     const team = teamOf(all);
     const shown = team.slice(0, SHOW);
     keyed(list, shown, {
       key: (a) => a.name,
-      sig: (a) => [a.activity, liveness(a), roleOf(a), a.sub_agents, relativeTime(a.last_seen)],
+      sig: (a) => [a.activity, liveness(a), roleOf(a, rolesOf(a)), a.sub_agents, relativeTime(a.last_seen)],
       create: agentRow,
     });
     if (team.length) quiet.replaceChildren();
