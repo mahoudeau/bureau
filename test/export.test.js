@@ -38,6 +38,10 @@ async function main() {
   const t = (await api(PORT_A, 'POST', '/api/tasks', { title: 'Water the plants', project: 'garden' })).task;
   await api(PORT_A, 'POST', '/api/knowledge', { file: 'projects/garden/STATE.md', content: '# Garden\n\nThe ferns like shade (fake).\n', author: 'human' });
   await api(PORT_A, 'POST', '/api/tokens', { agent: 'gardener', projects: ['garden'] });
+  // Windows has no SIGTERM: the kill skips the last save, so wait for the
+  // token to reach the disk before stopping the hub.
+  const stateFile = path.join(dir, 'a', 'data', 'state.json');
+  for (let i = 0; i < 50 && !/"agent_tokens"\s*:\s*\[\s*\{/.test(fs.readFileSync(stateFile, 'utf8')); i++) await sleep(100);
   await stop(a);
 
   console.log('1. export');
