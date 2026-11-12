@@ -3,7 +3,7 @@
   "name": "io.github.mahoudeau/bureau",
   "title": "Bureau",
   "description": "Self-hosted mission queue and git brain for AI agents. Connect with your own hub's MCP URL.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "websiteUrl": "https://github.com/mahoudeau/bureau#run-it-with-docker",
   "repository": {
     "url": "https://github.com/mahoudeau/bureau",
@@ -20,7 +20,7 @@
           "placeholder": "bureau.example.com"
         },
         "capability_token": {
-          "description": "48 hex characters. GET /api/mcp with your BUREAU_TOKEN prints the full URL.",
+          "description": "The agent token's capability. Minting a token (node hub/tools/token.js mint, or Settings, Tokens) prints its full MCP URL.",
           "isRequired": true,
           "isSecret": true
         }

@@ -12,7 +12,7 @@ curl --version
 
 On Windows, run the steps in PowerShell or cmd, and type `curl.exe` instead of `curl` in Windows PowerShell 5.1 (there `curl` is an alias for `Invoke-WebRequest`). The `-d '{...}'` examples below use bash quoting; in PowerShell, send the same JSON with `Invoke-RestMethod -Method Post -Uri <url> -Headers @{ Authorization = "Bearer $env:TOKEN" } -ContentType application/json -Body '<json>'`.
 
-- Node must be 18 or newer. The hub uses global `fetch` and `structuredClone`. Production runs Node 22; CI tests on 22.
+- Node must be 18 or newer. The hub uses global `fetch` and `structuredClone`. Production runs Node 22; CI tests on 22 and on 18.
 - git is required. The hub calls the `git` binary to keep the brain (its knowledge store) as a git repo, and exits at boot without it.
 - There are no npm dependencies. Do not run `npm install`; there is no `package.json`.
 
@@ -44,8 +44,12 @@ The `node -e` line fills `BUREAU_TOKEN` and uncomments `BUREAU_BOSS_TOKEN` with 
 | `BUREAU_TOKEN` | empty | Bearer token for every `/api/` call in legacy mode; in strict mode it acts only as an agent. One of the two is required: with neither set, or a placeholder from `.env.example` in either, the hub refuses to start. `BUREAU_ALLOW_INSECURE_LOCAL=1` is the opt-in for a demo on loopback. |
 | `PORT` | 8100 | Listen port. |
 | `IP` | `127.0.0.1` | Bind address, passed to the hub as `HOST`. An `IP` set by the host beats a `HOST` line in `.env`. |
+| `HOST` | `127.0.0.1` | Bind address when the host sets no `IP`. `0.0.0.0` serves other machines, `::` for hosts that want IPv6. |
+| `BUREAU_ALLOWED_ORIGINS` | unset | Comma-separated browser origins allowed to call the API. Same origin always works. |
 | `BUREAU_DATA_DIR` | `hub/data` | Where `state.json` (missions, roster, messages, log) lives. |
 | `BUREAU_BRAIN_DIR` | `hub/brain` | Where the brain's git repo lives. Created on first boot. |
+| `BUREAU_WORK_DIR` | `hub/work` | The work store: open missions' evidence, plain files, deleted when a mission closes. |
+| `BUREAU_BACKUP_INTERVAL_MS`, `BUREAU_BACKUP_KEEP`, `BUREAU_DAILY_KEEP` | 3600000, 24, 7 | Rolling `state.json` backups: how often, how many hourly, how many daily. |
 | `BUREAU_PUBLIC_URL` | unset | Public base URL. Used in review links and in the MCP connector URL. |
 | `DISCORD_WEBHOOK_URL` | unset | Optional: mirror notable events to a Discord channel. |
 | `BUREAU_POKES` | unset | Optional: outbound wake-up webhooks, a JSON array. See `docs/protocol.md`. |

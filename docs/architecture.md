@@ -25,7 +25,7 @@ The single most important decision: **the Node server (the hub) is the source of
    via curl / sched.    │  • Knowledge writes ────────┼── git ──> brain/ repo (markdown)
                         │                             │
   any-vendor agents ────┤  • Adapters:                ├── webhook ──> chat mirror
-   (plain HTTP)         │      Discord, email, ntfy…  │
+   (plain HTTP)         │      Discord, pokes         │
                         └─────────────────────────────┘
 ```
 
@@ -80,7 +80,7 @@ Two conventions do a lot of heavy lifting: every task completion **must** append
 
 One app served by the hub, with real URLs and no build step: plain ES modules from `hub/public/app/`, styled by `hub/public/omako-ds/`. It asks for a token once and keeps it in the browser. Server-Sent Events push task changes, heartbeats, messages and knowledge commits, so the page is live, and a 60-second poll covers a dropped stream. `/` is the Desk (what needs the boss, what's in flight, messages, the team, the office in a window). Missions, goals, projects, brain notes and settings each have their own page. Works on a phone.
 
-The mission page is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). The capability links, `/r/<token>` and `/m/<token>`, are the phone surface: server-rendered pages that work with no script, whose only script is the hub's own dither (omako-ds), under a CSP that allows nothing else. A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
+The mission page is the review surface: full log + artifacts, with **Approve** (→ done) and **Send back** (→ re-queued with the boss's note, which the agent reads as its correction). A blocked mission gets an **Answer** instead. The capability links, `/r/<token>` and `/m/<token>`, are the phone surface: server-rendered pages that work with no script, whose only script is the hub's own dither (omako-ds), under a CSP that allows nothing else. A mission can also carry review **items**, independent proposals the boss accepts, rejects, or defers one by one with a comment; verdicts persist on the mission, so a worker's next session applies exactly what was approved. This is how the librarian's curation runs review-gated.
 
 ### 3.6 The gauntlet (optional roles over the same queue)
 
@@ -90,7 +90,7 @@ A goal marked `## Mode: perpetual` never finishes on its own: it advances in **t
 
 ### 3.7 Adapters
 
-Every hub event flows through one internal `events` bus. Adapters subscribe to it. The hub ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. It also ships **outbound pokes** (`lib/poke.js`, a no-op unless `BUREAU_POKES` is set): config-driven webhooks that fire on matching transitions so agent runtimes can be summoned the moment work changes hands instead of polling on a schedule (see the pokes paragraph in `protocol.md`). Planned, nothing built: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
+Every hub event goes through one function, `broadcast()` in `server.js`, which sends it to the SSE stream and hands it to each adapter. The hub ships a **Discord webhook mirror** (a no-op unless configured): notable events are posted to a channel. It also ships **outbound pokes** (`lib/poke.js`, a no-op unless `BUREAU_POKES` is set): config-driven webhooks that fire on matching transitions so agent runtimes can be summoned the moment work changes hands instead of polling on a schedule (see the pokes paragraph in `protocol.md`). Planned, nothing built: inbound chat commands, email/ntfy digests, a weekly summary written by an agent itself.
 
 ## 4. How agents connect
 
@@ -118,6 +118,9 @@ JSON-file storage is a feature at this stage, not a shortcut: at one-person scal
 ```
 hub/
   server.js            # zero-dep Node HTTP server: API, SSE, the MCP door, static pages
+  version.js           # the version /api/health reports
+  lib/env.js           # reads hub/.env; the listen address
+  lib/security.js      # boot refusals, origin checks, the page CSPs
   lib/store.js         # JSON state with atomic writes (tasks, agents, messages, tokens, log)
   lib/auth.js          # credentials, identity, the project walls
   lib/knowledge.js     # brain/ writes + git commits, lint on write
@@ -129,7 +132,9 @@ hub/
   lib/health.js        # memory health
   lib/discord.js       # outbound webhook mirror (no-op if not configured)
   lib/poke.js          # outbound wake-up pokes, the summoner (no-op if not configured)
-  tools/brain-lint.js, tools/token.js
+  lib/glossary.js      # French words for a question asked in French, mapped to the English notes
+  lib/wordmark.js      # the pixel wordmark for server-rendered pages
+  tools/               # brain-lint.js, token.js, migrate-claims.js, shadow-fr.js, wordmark.js
   public/app/          # the dashboard: ES modules, no build
   public/omako-ds/     # the design system
   public/office*       # the pixel office

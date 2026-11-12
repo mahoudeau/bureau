@@ -8,4 +8,4 @@ authors:
     website: "https://www.mathieu.dev"
 repository-code: "https://github.com/mahoudeau/bureau"
 license: AGPL-3.0
-abstract: "Self-hosted bureau for AI agents: a durable mission queue with claim and lease semantics, a human review gate, an earned brain stored as plain markdown in git, and a 16-bit pixel office rendering the same event stream."
+abstract: "Self-hosted bureau for AI agents: a durable mission queue with claim and lease semantics, a human review gate, an earned brain stored as plain markdown in git, a dashboard in ink, paper and dither, and a 4-shade pixel office rendering the same event stream."

@@ -6,7 +6,9 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
-One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboard".
+## [0.4.0] - 2026-11-12
+
+One dashboard replaces the two old ones. **Read UPGRADING.md**, "0.4.0: the new dashboard".
 
 ### Added
 - **The Desk, at `/`.** What needs you, what's in flight, PRs awaiting merge, your messages, the team, and the office in a window.
@@ -31,7 +33,12 @@ One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboa
 
 ### Removed
 - `hub/public/index.html`, `hub/public/v2.html` and `hub/public/v2/`, with the old design system, its fonts (Fraunces, Inter) and its icons (Lucide). `/v2` and `/v2/styleguide` redirect to `/`.
-- The dashboard screenshots in the README, which showed the old one. New ones of the Desk (light and dark), a mission in review and the review on a phone take their place, from a demo hub.
+- The dashboard screenshots in the README, which showed the old one. New ones of the Desk (paper, and paper beside ink), a mission in review and the review on a phone take their place, from a demo hub.
+
+### Docs
+- The README leads with the paper theme, shows both themes, and has a step-by-step install: tokens, start, sign in, mint the agent's token, connect it.
+- A new README section, "Accounts and sign-in": today you self-host and sign in with a token. Sign in with OMAKO and a hosted Bureau are next, with no date and no price.
+- `llms-install.md`, `UPGRADING.md`, `CONTRIBUTING.md`, `docs/architecture.md`, `docs/task-flows.md`, `docs/distribution.md` and the connector guides match the code again.
 
 ### Fixed
 - The Desk's team list read each agent's role from its self-declared capabilities. It reads the roles set in Settings now, as the Agents page does, and falls back to capabilities only for a credential that can't read Settings.
@@ -193,7 +200,8 @@ The baseline: what Bureau was when versioning started. Everything here predates 
 - `brain-lint` (`hub/tools/brain-lint.js`) and its acceptance test `test/brain-lint.sh`.
 - `test/dummy-agent.sh`, the curl-only conformance script, and `test/pokes.sh`.
 
-[Unreleased]: https://github.com/mahoudeau/bureau/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/mahoudeau/bureau/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/mahoudeau/bureau/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/mahoudeau/bureau/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/mahoudeau/bureau/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/mahoudeau/bureau/releases/tag/v0.1.0

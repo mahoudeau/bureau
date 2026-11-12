@@ -23,7 +23,7 @@ So the honest listing is "self-host it, then paste your own URL". Places that ca
 
 ## The image
 
-From v0.2.0 on, every `v*` tag builds the hub image for amd64 and arm64 and pushes it to `ghcr.io/mahoudeau/bureau` as `0.2.0`, `0.2` and `latest` (`.github/workflows/release-image.yml`). Older tags have no image. The image carries `io.modelcontextprotocol.server.name=io.github.mahoudeau/bureau`, which is how the registry checks that an image belongs to a server entry.
+From v0.2.0 on, every `v*` tag builds the hub image for amd64 and arm64 and pushes it to `ghcr.io/mahoudeau/bureau` under its version, for v0.4.0 that's `0.4.0`, `0.4` and `latest` (`.github/workflows/release-image.yml`). Older tags have no image. The image carries `io.modelcontextprotocol.server.name=io.github.mahoudeau/bureau`, which is how the registry checks that an image belongs to a server entry.
 
 ## server.json
 
@@ -43,7 +43,7 @@ It passes the registry's own validators (`ValidateServerJSON`, schema plus seman
 - **What a remote can't be.** It must be `https`, and the host can't be `localhost`, `127.0.0.1` or `*.localhost`. The template gets filled with placeholders before that check, so `{hub_host}` passes.
 - **Two servers can't share a remote URL.** The registry checks this on the literal string, template and all. Ours is unique.
 - **"Publicly accessible".** The docs say a remote "MUST be publicly accessible at its specified URL". Nothing enforces it at publish time, and the moderation policy only removes "non-functioning servers". A per-user host is the documented multi-tenant pattern, so it reads as allowed. Outside census scripts that probe registry endpoints will just skip us or count us broken.
-- **OCI packages.** The image must sit on Docker Hub, ghcr.io, Quay or a few cloud registries. Its label must match `name`. The tag goes inside `identifier` (`ghcr.io/mahoudeau/bureau:0.2.0`), and a separate `version` field is refused. `transport` is required.
+- **OCI packages.** The image must sit on Docker Hub, ghcr.io, Quay or a few cloud registries. Its label must match `name`. The tag goes inside `identifier` (`ghcr.io/mahoudeau/bureau:0.4.0`), and a separate `version` field is refused. `transport` is required.
 
 ### Why no package entry yet
 
@@ -56,7 +56,7 @@ Two ways out:
    ```json
    {
      "registryType": "oci",
-     "identifier": "ghcr.io/mahoudeau/bureau:0.2.0",
+     "identifier": "ghcr.io/mahoudeau/bureau:0.4.0",
      "runtimeHint": "docker",
      "transport": { "type": "streamable-http", "url": "http://localhost:8100/mcp/{BUREAU_MCP_TOKEN}" },
      "environmentVariables": [
@@ -73,7 +73,7 @@ Recommendation: option 2, remote only.
 
 ## Open points
 
-- **Version.** `server.json` and the hub's MCP `serverInfo` both say `0.3.0`, and the newest git tag is `v0.2.0`. Tag before publishing. Each registry publish needs a new version.
+- **Version.** `server.json` and the hub's MCP `serverInfo` both carry the hub's version (`hub/version.js`), and each release is tagged. Each registry publish needs a new version.
 - **Icons.** None yet.
 - **Glama checks.** Whether Glama can be told the server is remote-only, or will just mark it as failing.
 - **A demo hub.** Smithery and Glama scoring both want something they can call. A public hub with fake data, reset nightly, would unlock both. It's also a thing to run and watch.
@@ -91,6 +91,6 @@ Recommendation: option 2, remote only.
 
 ## Suggested order
 
-1. Official registry, after tagging v0.2.0. It feeds the downstream directories for free.
+1. Official registry, from a tagged release. It feeds the downstream directories for free.
 2. mcp.so and awesome-selfhosted, plain lines.
 3. Glama and the awesome-mcp-servers line only if a demo hub exists.

@@ -39,7 +39,7 @@ The full rules, ruled on 11 November 2026, are in OMAKO DS (README, "Dither"). `
 | Fold | signing in, once a session |
 | Dock band | the mission page, while there's more to scroll |
 
-The review, record and 404 pages run the same dither through `app/lp-dither.js`, the only script their CSP allows (`script-src 'self'`, nothing inline). Without it they still work: the long shadow falls back to its two CSS steps and images show as they are.
+The review, record and 404 pages run the same dither: they load `omako-ds/js/dither.js` and `app/lp-dither.js`, which starts it. Their CSP allows only the hub's own files (`script-src 'self'`, nothing inline). Without it they still work: the long shadow falls back to its two CSS steps and images show as they are.
 
 ### Status
 
