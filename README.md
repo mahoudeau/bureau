@@ -192,7 +192,7 @@ docker run -d -p 8100:8100 -e BUREAU_BOSS_TOKEN=... -e BUREAU_TOKEN=... -v burea
 
 The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.
 
-Prebuilt images, amd64 and arm64, are published for `v*` tags from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.2.0`. Use one in place of `bureau` above to skip the build. The newest tag is v0.2.0, from before strict mode, so the steps on this page need a build from this repo until the next tag.
+Prebuilt images, amd64 and arm64, are published for `v*` tags from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.3.0`. Use one in place of `bureau` above to skip the build. Strict mode starts at v0.3.0, so the steps on this page need that tag or later.
 
 ## The core calls
 
