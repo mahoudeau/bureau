@@ -369,8 +369,10 @@ export async function mcp(ctx, health) {
     }
     if (strict) {
       parts.push(section('Connecting a new client', null,
-        h('p', null, 'An MCP connector is one agent. Mint it a token and use the MCP URL that comes with it.'),
-        h('div', null, h('a', { class: 'om-btn', href: '/settings?tab=tokens' }, 'Tokens'))));
+        h('p', null, 'An MCP connector is one agent. With sign-in on, turn it on for that agent and add the agent\'s address as a connector: no secret in it, and you allow the app on the Desk. Without sign-in, mint the agent a token and use the MCP URL that comes with it.'),
+        h('div', { class: 'om-cluster om-cluster-2' },
+          h('a', { class: 'om-btn om-btn-primary', href: '/settings?tab=signin' }, 'Sign-in'),
+          h('a', { class: 'om-btn', href: '/settings?tab=tokens' }, 'Tokens'))));
     }
     box.replaceChildren(...parts);
   };

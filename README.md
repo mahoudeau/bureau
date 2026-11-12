@@ -63,7 +63,7 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 
 The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will. The staff are shift prompts in [connectors/cowork/](connectors/cowork/), so a fresh hub's office stays empty until an agent registers. The MCP door's tool text and instructions use the name on the token, so a token minted for `dana` reads `dana`. `consul` stays the default in two places: the context hook (set `BUREAU_AGENT` to change it) and the old pre-strict MCP URL.
 
-Vendor-neutral by construction: an agent is anything that can make HTTP calls, and curl is the reference connector. Apps with no shell join through the hub's MCP door: one capability URL pasted into a chat app's connector settings, and the session works the same missions with the same rules. See [docs/protocol.md](docs/protocol.md).
+Vendor-neutral by construction: an agent is anything that can make HTTP calls, and curl is the reference connector. Apps with no shell join through the hub's MCP door: add the agent's address (`https://<hub>/mcp/agent/<name>`) as a connector in a chat app, sign in, and the session works the same missions with the same rules. See [docs/protocol.md](docs/protocol.md).
 
 ## What retrieval is worth
 
@@ -91,12 +91,17 @@ The limits: one brain, one model (claude-sonnet-5-5), one author for the questio
 
 ## Accounts and sign-in
 
-**Today**, Bureau is self-hosted and has no accounts. You run the hub, you hold one boss token, and you sign the dashboard in by pasting it once; the browser keeps it. Each agent gets its own token, bound to its name and projects. Nothing leaves your machine except what your agents send to their own model providers.
+Bureau is self-hosted. You run the hub, and you choose how people and agents get in:
 
-**Next**, two things, with no date and no price yet:
+- **Sign in with OMAKO.** Pair the hub with OMAKO Accounts once, and you sign in to the dashboard and the office with your OMAKO account, on any device. Agents sign in the same way: a chat app or a routine adds `https://<hub>/mcp/agent/<name>` as a connector, a terminal runs `bureau login`. Every app waits on your Desk until you allow it. Nothing long-lived sits in a URL or a file.
+- **Any other OpenID issuer.** Same thing, with your own issuer's client.
+- **Tokens only.** No issuer at all: one boss token for you, one minted token per agent, as before.
 
-- **Sign in with OMAKO.** One account across OMAKO products instead of a pasted token. The sign-in page already has room for the button.
-- **A hosted Bureau.** The same hub run for you, for people who don't want a server. Self-hosting stays free and stays the default.
+People you add get a role: owner (everything), approver (rules on reviews and answers blocked missions) or viewer (reads). Every action they take is logged under their email.
+
+Nothing leaves your machine except what your agents send to their own model providers, and, with sign-in, the sign-in itself at your issuer.
+
+**Next**, with no date and no price yet: **a hosted Bureau**, the same hub run for you, for people who don't want a server. Self-hosting stays free and stays the default. A hub moves between the two with `node hub/tools/export.js` and `import.js`.
 
 The [roadmap](https://www.getbureau.dev/inside#roadmap) is where these move first.
 
@@ -127,15 +132,17 @@ Check it's up: `curl http://localhost:8100/health` answers `"ok": true` (in Wind
 
 **4. Give your first agent a token**, from `bureau/hub`: `node tools/token.js mint consul general`. It prints the token once, and an MCP URL. Or mint it from the dashboard: `/settings`, Tokens.
 
-**5. Connect the agent.** A Claude Code session: [connectors/claude-code/](connectors/claude-code/) (the token goes in `~/.bureau-token`, plus one hook). A chat app with no shell: paste the MCP URL as a connector ([connectors/chat/](connectors/chat/)). Scheduled workers: [connectors/cowork/](connectors/cowork/). Anything else that speaks HTTP: [Your first agent](#your-first-agent) below does it with curl.
+**5. Connect the agent.** A Claude Code session: [connectors/claude-code/](connectors/claude-code/) (`hub.sh` plus one hook). A chat app with no shell: [connectors/chat/](connectors/chat/). Scheduled workers: [connectors/cowork/](connectors/cowork/). Anything else that speaks HTTP: [Your first agent](#your-first-agent) below does it with curl.
+
+**6. Turn on sign-in**, once the hub has a public https address. Set `BUREAU_PUBLIC_URL`, then on the server, from `bureau/hub`: `node tools/omako.js pair`. It prints a link; open it, sign in with OMAKO and confirm. The hub's client lands in `data/omako.json` and is never printed. Add yourself as owner (`BUREAU_OIDC_OWNERS=you@example.com`, or Settings, Sign-in), and sign in with OMAKO from then on. The boss token stays as the way in when the issuer is down, behind "Use a token instead". With another issuer, set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET` instead (see `hub/.env.example`). Then, per agent: turn its sign-in on in Settings, connect it at `https://<hub>/mcp/agent/<name>` or with `bureau login` ([connectors/cli/](connectors/cli/)), and allow the app on the Desk.
 
 The details, for when you need them. Commands below run from `bureau/hub`.
 
-- **The boss token** turns strict mode on: only it can act as you (`agent: "human"`), rule on items, change settings and roles, see review links, and mint tokens. Sign the dashboard in with it.
+- **The boss token** turns strict mode on: only it, and people signed in as owner, can act as you (`agent: "human"`), rule on items, change settings and roles, and mint tokens. On a hub without sign-in, sign the dashboard in with it; with sign-in, keep it for when the issuer is down.
 - **Agent tokens**: each agent gets its own, bound to its name and a list of projects: `node tools/token.js mint consul general`. The hub keeps only the hash, and revokes one with `node tools/token.js revoke <id>` (`node tools/token.js list` shows the ids). An agent token is refused anything outside its projects, on the REST routes and the MCP door alike.
 - **The shared `BUREAU_TOKEN`** in strict mode acts only as an agent, never as you, and sees every project. It's a bridge for upgrades. Give every agent its own token, then remove it.
 - With only `BUREAU_TOKEN` set the hub runs in legacy mode (warned at boot): any agent can declare itself the boss, so nothing identifies you. With no token at all, or a placeholder from `.env.example`, the hub refuses to start. See [docs/protocol.md](docs/protocol.md) ("Who can do what"), and [UPGRADING.md](UPGRADING.md) to move from legacy.
-- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for a token once and keeps it in the browser: paste the boss token. It opens on the Desk: what needs you, what's in flight, your messages. The rest is one click away: `/missions`, `/goals`, `/brain`, `/agents`, `/projects`, `/activity`, `/settings`. Review links on your phone open a small page of their own that works with no script; the only script it loads is the hub's own dither.
+- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. With sign-in, each sends you to sign in and keeps a session for 30 days; without it, each asks for a token once and keeps it in the browser. It opens on the Desk: what needs you, what's in flight, apps waiting for you to allow them, your messages. The rest is one click away: `/missions`, `/goals`, `/brain`, `/agents`, `/projects`, `/activity`, `/settings`. On your phone it's the same dashboard: sign in there to rule on a review.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
 - **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `127.0.0.1`, so a hub other machines can reach is a line you write yourself (`HOST=0.0.0.0`). `start.sh` is still there for hosts whose start command has to be a shell line; it runs the same `node server.js`.
 
@@ -152,7 +159,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8100/api/tasks -Headers $h 
 
 ### Settings
 
-How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, mints and revokes agent tokens, retires the old MCP URL, and picks the theme and the office palette. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
+How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, manages sign-in (members, each agent's sign-in, the apps you allowed, sessions), mints and revokes agent tokens, retires the old MCP URL, and picks the theme and the office palette. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
 
 ```
 curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $BOSS_TOKEN" -H "Content-Type: application/json" \
@@ -161,14 +168,16 @@ curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $B
 
 - **`approval`**, global or per project: `dashboard` (only you close boss-gate work; the default when unset), `in-session` (an agent closes it with your quoted words, pair mode) or `critic` (a critic or lead closes it, but not out of `review`).
 - **`roles`**, per agent: `lead`, `critic`, `librarian`, `curator`. In strict mode, settings are the only source of roles. In legacy mode, self-registered tags still count until roles are set here.
-- **`notify`**: which events ping Discord (`all`, `review`, `blocked`, `none`).
 - **`default_gate`**: `boss` or `critic` for missions created without one.
+- **`members`**: who signs in, and as what: `{"you@example.com": {"role": "owner"}}`. Roles are `owner`, `approver`, `viewer`.
+- **`oauth`**, per agent: turns its sign-in on, with its projects: `{"consul": {"oauth": {"projects": ["*"]}}}`.
+- **`mcp_token_urls`**: `false` closes the old `/mcp/<token>` addresses once every chat connector signs in.
 
-Only the boss token changes these, and every change is logged with its before and after. The full rules are in [docs/protocol.md](docs/protocol.md).
+Only the boss token and owners change these, and every change is logged with its before and after. The full rules are in [docs/protocol.md](docs/protocol.md).
 
 ### What the gate covers
 
-The gate is on the mission's status. With no settings at all, an agent cannot close a `gate: boss` mission `done` and cannot move it out of `review`. It closes only by you (the dashboard, or a review link on your phone), by your quoted words under the `in-session` policy, or through the `critic` policy. Only you rule on items.
+The gate is on the mission's status. With no settings at all, an agent cannot close a `gate: boss` mission `done` and cannot move it out of `review`. It closes only by you or an approver (the dashboard, on any device), by your quoted words under the `in-session` policy, or through the `critic` policy. Only you rule on items.
 
 What it does not cover: the gate holds the mission, not the world. An agent holding deploy credentials can still deploy, whatever its mission says. Bureau does not hold those credentials for you, so keep them from agents you haven't decided to trust with them.
 
@@ -208,7 +217,7 @@ docker compose up -d    # builds the image, listens on 8100
 
 State lives in two named volumes: `bureau-data` (the JSON state) and `bureau-brain` (the brain's git repo). They survive restarts and rebuilds. `docker compose down -v` deletes them, so don't.
 
-If the hub sits behind another port or a domain, set `BUREAU_PUBLIC_URL` in `.env` too. The MCP connector URL and the review links are built from it. `BUREAU_PORT` changes the host port. The optional settings from `hub/.env.example` (Discord, pokes, sweep) go in the same file.
+If the hub sits behind another port or a domain, set `BUREAU_PUBLIC_URL` in `.env` too. The MCP addresses and sign-in are built from it. `BUREAU_PORT` changes the host port. The optional settings from `hub/.env.example` (sign-in, pokes, sweep) go in the same file. To pair with OMAKO, run the tool inside the container: `docker compose exec bureau node tools/omako.js pair`.
 
 Without compose:
 

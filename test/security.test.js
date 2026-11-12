@@ -118,27 +118,21 @@ async function finding2() {
   check('the HTML 404 allows only this hub\'s own scripts', missing.code === 404 && ownScriptsOnly(missing.headers.get('content-security-policy') || ''), missing.headers.get('content-security-policy'));
   check('the HTML 404 has no inline script and no inline handler', scriptsAreFiles(missing.text) && !/\son[a-z]+\s*=\s*["']/i.test(missing.text));
 
-  const hostile = '<script>alert(1)</script><img src=x onerror=alert(2)>';
-  const t = (await h.api('POST', '/api/tasks', { title: hostile, body: hostile, project: 'general', gate: 'critic' })).json.task;
-  await h.api('POST', '/api/agents/register', { name: 'sec-worker', kind: 'test' });
-  await h.api('POST', '/api/tasks/claim', { agent: 'sec-worker', id: t.id });
-  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', note: hostile, artifact: { label: hostile, url: 'javascript:alert(3)' } });
-  await h.api('PATCH', `/api/tasks/${t.id}`, { agent: 'sec-worker', status: 'review', note: hostile, items: [{ title: hostile, body: hostile }] });
-  const parked = (await h.api('GET', `/api/tasks/${t.id}`)).json;
-  const approveToken = (parked.task || parked).review_links.approve.token;
-  const pages = { [`/m/${t.view_token}`]: 'a mission record page', [`/r/${approveToken}`]: 'a review page', '/r/00000000000000000000000000000000': 'a dead review link' };
+  // The server-rendered pages left after the link pages went (doc 30, D12):
+  // the sign-in steps under /auth/.
+  const pages = { '/auth/logout': 'the sign-out page', '/auth/login': 'the sign-in page of a hub without sign-in' };
   for (const [route, label] of Object.entries(pages)) {
     const page = await h.api('GET', route, undefined, { authorization: '' });
     const csp = page.headers.get('content-security-policy') || '';
     check(`${label} carries a CSP`, /default-src 'none'/.test(csp), csp);
     check(`${label} allows only this hub's own scripts`, ownScriptsOnly(csp), csp);
     check(`${label} has no inline script`, scriptsAreFiles(page.text), page.text.slice(0, 300));
-    check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text.replace(/&lt;[^]*?&gt;/g, '')), page.text.slice(0, 300));
+    check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text), page.text.slice(0, 300));
     check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/css\/all\.css">/.test(page.text), page.text.slice(0, 300));
   }
-  const record = await h.api('GET', `/m/${t.view_token}`, undefined, { authorization: '' });
-  check('mission text is escaped on the record page', record.text.includes('&lt;script&gt;alert(1)&lt;/script&gt;') && !record.text.includes('<script>alert(1)'), record.text.slice(0, 400));
-  check('an artifact url that is not http(s) is no link', !/href="javascript:/i.test(record.text), record.text.slice(0, 400));
+  for (const gone of [`/m/${'a'.repeat(32)}`, `/r/${'a'.repeat(32)}`, `/r/${'a'.repeat(32)}/img?file=x.png`]) {
+    check(`${gone.split('?')[0]} is gone`, (await h.api('GET', gone, undefined, { authorization: '' })).code === 404);
+  }
   await stop(h);
 }
 
@@ -529,25 +523,9 @@ async function activeContent() {
   check('every blob: URL made was an allowed type', made.length > 0 && made.every((t) => allowed.includes(t)), made);
 }
 
-async function missionRecord() {
-  console.log('12. the mission record page takes old records as they are');
-  const { dir } = hubEnv('f12', 8216);
-  const view = 'a'.repeat(32);
-  fs.mkdirSync(path.join(dir, 'data'), { recursive: true });
-  fs.writeFileSync(path.join(dir, 'data', 'state.json'), JSON.stringify({ schema_version: 1, seq: 2, agents: [], messages: [], log: [], projects: [{ id: 'general', label: 'General' }],
-    tasks: [{ id: 't-1', title: 'Old record', status: 'done', project: 'general', view_token: view, log: [{ by: 'someone', note: 'an entry with no timestamp' }, { ts: '2026-01-02T03:04:05.000Z', by: 'other', note: 'dated' }] }] }));
-  const h = await boot('f12', 8216);
-  const page = await h.api('GET', `/m/${view}`, undefined, { authorization: '' });
-  check('a log entry with no ts is not a 500', page.code === 200, page.code);
-  check('the entry is on the page', page.text.includes('an entry with no timestamp'), page.text.slice(0, 300));
-  check('a dated entry keeps its date', page.text.includes('01-02 03:04'), page.text.slice(0, 600));
-  check('a missing priority prints nothing', !page.text.includes('Pundefined') && !page.text.includes('Pnull'), page.text.slice(0, 600));
-  await stop(h);
-}
-
 async function main() {
   try {
-    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4, redirects, activeContent, missionRecord };
+    const all = { finding1, finding2, finding3, finding5, finding6, finding7, finding8, finding9, finding4, redirects, activeContent };
     const only = process.env.SEC_ONLY; // SEC_ONLY=finding4 runs just that section
     for (const [name, fn] of Object.entries(all)) if (!only || only === name) await fn();
   } finally {

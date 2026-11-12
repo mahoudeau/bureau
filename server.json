@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.mahoudeau/bureau",
   "title": "Bureau",
-  "description": "Self-hosted mission queue and git brain for AI agents. Connect with your own hub's MCP URL.",
-  "version": "0.4.0",
+  "description": "Self-hosted mission queue and git brain for AI agents. Connect to your own hub and sign in.",
+  "version": "0.5.0",
   "websiteUrl": "https://github.com/mahoudeau/bureau#run-it-with-docker",
   "repository": {
     "url": "https://github.com/mahoudeau/bureau",
@@ -12,17 +12,18 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://{hub_host}/mcp/{capability_token}",
+      "url": "https://{hub_host}/mcp/agent/{agent}",
       "variables": {
         "hub_host": {
           "description": "Your hub's host, the one in BUREAU_PUBLIC_URL",
           "isRequired": true,
           "placeholder": "bureau.example.com"
         },
-        "capability_token": {
-          "description": "The agent token's capability. Minting a token (node hub/tools/token.js mint, or Settings, Tokens) prints its full MCP URL.",
+        "agent": {
+          "description": "The agent this connector acts as. Its sign-in must be on in the hub's Settings; you sign in when you connect, and allow the app on the Desk.",
           "isRequired": true,
-          "isSecret": true
+          "default": "consul",
+          "placeholder": "consul"
         }
       }
     }

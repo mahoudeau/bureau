@@ -116,6 +116,51 @@ function takeTicket(ticket, now = Date.now()) {
   return v && v.exp > now ? v.principal : null;
 }
 
+// ---- Cookies (doc 30, C4) ----
+function parseCookies(header) {
+  const out = {};
+  for (const part of String(header || '').split(';')) {
+    const i = part.indexOf('=');
+    if (i < 1) continue;
+    const k = part.slice(0, i).trim();
+    if (!(k in out)) { try { out[k] = decodeURIComponent(part.slice(i + 1).trim()); } catch { /* malformed: skipped */ } }
+  }
+  return out;
+}
+// The sign-in flow's state rides in a signed cookie for ten minutes. The key
+// is made at boot: a restart in the middle of a sign-in means signing in again.
+const COOKIE_KEY = crypto.randomBytes(32);
+function signValue(obj) {
+  const body = Buffer.from(JSON.stringify(obj)).toString('base64url');
+  const mac = crypto.createHmac('sha256', COOKIE_KEY).update(body).digest('base64url');
+  return `${body}.${mac}`;
+}
+function readSigned(value) {
+  const [body, mac] = String(value || '').split('.');
+  if (!body || !mac) return null;
+  const want = crypto.createHmac('sha256', COOKIE_KEY).update(body).digest('base64url');
+  if (mac.length !== want.length || !crypto.timingSafeEqual(Buffer.from(mac), Buffer.from(want))) return null;
+  try { return JSON.parse(Buffer.from(body, 'base64url').toString('utf8')); } catch { return null; }
+}
+// Secure unless the hub is plain http on a loopback name (local development).
+function cookieAttrs(req, { path: p = '/', maxAge } = {}) {
+  const host = portless(req.headers.host);
+  let secure = true;
+  try { secure = new URL(process.env.BUREAU_PUBLIC_URL || '').protocol === 'https:' || !isLoopback(host); } catch { secure = !isLoopback(host); }
+  return [`Path=${p}`, 'HttpOnly', 'SameSite=Lax', secure ? 'Secure' : null, maxAge !== undefined ? `Max-Age=${maxAge}` : null].filter(Boolean).join('; ');
+}
+// A write made with a session cookie must come from a page of this hub: the
+// Origin header is required, not merely allowed (a cookie travels by itself).
+function cookieWriteAllowed(req, policy) {
+  return req.headers.origin !== undefined && policy.permits(req);
+}
+// Where to land after sign-in: a path on this hub, never another site.
+function localNext(next) {
+  const n = String(next || '/');
+  if (!n.startsWith('/') || n.startsWith('//') || n.includes('\\') || /^\/[\t\n\r ]/.test(n) || n.startsWith('/auth/') || n.startsWith('/sign-in')) return '/';
+  return n.slice(0, 2000);
+}
+
 // An error the caller can act on. Anything else stays in the server log.
 const requestError = (status, message) => Object.assign(new Error(message), { status, expose: true });
 // A plain Error thrown on purpose carries a message written for the caller. A
@@ -126,4 +171,5 @@ function publicMessage(e) {
   return e.message;
 }
 
-module.exports = { TOKEN_HINT, DEMO_VAR, isPlaceholder, isLoopback, bootRefusal, insecureCredentials, loopbackRequest, originPolicy, dashboardPage, PAGE_CSP, issueTicket, takeTicket, requestError, publicMessage };
+module.exports = { TOKEN_HINT, DEMO_VAR, isPlaceholder, isLoopback, bootRefusal, insecureCredentials, loopbackRequest, originPolicy, dashboardPage, PAGE_CSP, issueTicket, takeTicket, requestError, publicMessage,
+  parseCookies, signValue, readSigned, cookieAttrs, cookieWriteAllowed, localNext };

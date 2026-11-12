@@ -29,10 +29,12 @@ const routes = [
   { path: '/settings', title: 'Settings', load: () => import('./pages/settings.js') },
 ];
 
+// Signed in with a pasted token (kept here) or with the session cookie (which
+// this code can't see): with no token, the page loads and the hub decides. Its
+// first 401 sends the browser to sign in (api.sessionEnded).
 function guard(route, url) {
   if (url.pathname === '/sign-in') return api.getToken() ? api.nextPath(url.search) : null;
   if (route.public) return null;
-  if (!api.getToken()) return api.signInPath();
   store.start();
   return null;
 }

@@ -1,6 +1,6 @@
 // lib/poke.js: optional outbound wake-up pokes (the summoner's bell).
 // Set BUREAU_POKES to a JSON array of subscriptions to enable; otherwise every
-// call is a silent no-op, exactly like the Discord mirror. A poke is a wake-up
+// call is a silent no-op. A poke is a wake-up
 // bell, never an authenticated surface: payloads are trimmed and never carry
 // capability links or tokens. The hub knows URLs, never vendors.
 //
@@ -39,9 +39,8 @@ try {
   console.error('[poke] BUREAU_POKES is not valid JSON; pokes disabled:', e.message);
 }
 
-// Whitelisted payload: the full task record carries capability links
-// (view_token, review_links, answer_link) which must never leave the hub
-// through a poke.
+// Whitelisted payload: a poke carries what a woken agent needs to find its
+// work, never the full task record.
 function payloadFor(type, data, extra) {
   const d = data || {};
   return {

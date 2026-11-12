@@ -11,7 +11,7 @@ What the hub does with a mission from filing to close. Format: `docs/brain-forma
 
 ## Actors
 
-- **The boss**: the human. Acts as `agent: "human"`, from the dashboard (signed in with the boss credential in strict mode) or a capability link. Which credential may declare `human`, and everything else about identity, is in `docs/protocol.md`, "Who can do what".
+- **The boss**: the human. Acts as `agent: "human"`, from the dashboard (signed in as an owner or an approver, or with the boss credential) or by a quoted approval in a chat. Which credential may declare `human`, and everything else about identity, is in `docs/protocol.md`, "Who can do what".
 - **Pool workers**: agents registered with `kind: "cowork"`, interchangeable shift workers.
 - **The envoy**: any non-cowork agent (by default consul), whose context lives outside a shift.
 - **The lead**: the agent holding the `lead` role: from settings once any agent has roles there, from its `capabilities` otherwise.

@@ -22,6 +22,38 @@ The brain has its own history in git. The state file is what the steps below pro
 
 No `npm install`, ever. The hub has no dependencies.
 
+## 0.5.0: sign-in, and Discord goes
+
+People and agents can now sign in with OMAKO Accounts, or any OpenID issuer, instead of holding a token. Discord, the review and answer links and the view links are gone. The full rules are in [docs/protocol.md](docs/protocol.md), "Sign-in".
+
+**What your hub does on the first boot.** It migrates `state.json` from schema 1 to 2, after keeping a copy as `state.json.pre-migrate-<time>`. The migration drops `review_links`, `answer_link` and `view_token` from every mission, and `notify` from settings. Old `/r/` and `/m/` links answer 404. `DISCORD_WEBHOOK_URL` is ignored: remove it from your environment. A hub on 0.4.0 can't read the migrated file; to go back, restore the pre-migrate copy.
+
+Nothing else changes until you set sign-in up. The boss token, minted tokens, the shared `BUREAU_TOKEN` and the old `/mcp/<token>` URL keep working, so you can move one door at a time.
+
+**You rule from the dashboard now.** With the pings gone, the Desk is where you see what needs you. Sign in on your phone once and approve from there.
+
+**Turn on sign-in.** On the server, with the new code running:
+
+1. Set `BUREAU_PUBLIC_URL` to the hub's https address, if it isn't set already.
+2. Pair with OMAKO: `node hub/tools/omako.js pair`. Open the link it prints, sign in, confirm the workspace. The hub's client is written to `<data dir>/omako.json` (0600) and never printed. `node hub/tools/omako.js status` checks it. With another issuer, skip this and set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET`; the redirect to register is `<BUREAU_PUBLIC_URL>/auth/callback`.
+3. Name yourself owner: `BUREAU_OIDC_OWNERS=you@example.com` in the environment, then restart. Owners can add other people later in Settings, Sign-in.
+4. Open the dashboard and click "Sign in with OMAKO". A token you pasted before still works until you sign out; "Use a token instead" keeps the boss token as the way in when the issuer is down.
+
+**Move each agent to sign-in.** One at a time, checking each works before the next:
+
+1. Settings, Sign-in: turn on sign-in for the agent and pick its projects. A paired hub tells OMAKO about the new address by itself.
+2. Connect it. A chat app: add `https://<hub>/mcp/agent/<name>` as a connector and sign in. A routine: one connector per routine, the same way. Claude Code: `node connectors/cli/bureau.js login --hub https://<hub>`; `hub.sh` and the hook pick the sign-in up before any token file.
+3. Allow the app on the Desk. Until you do, the connector sees one tool, `access`, that says it is waiting.
+
+**Retire the old credentials** once every agent signs in:
+
+- The old MCP URL: `DELETE /api/mcp` with the boss token, or Settings. Then set `{"global": {"mcp_token_urls": false}}`: every `/mcp/<token>` address answers 404.
+- The shared token: remove `BUREAU_TOKEN` from the environment and restart. `docker-compose.yml` no longer requires it. Keep `BUREAU_BOSS_TOKEN`: the hub needs one of the two to start, and it is your break-glass.
+- Minted tokens nothing uses any more: `node hub/tools/token.js list`, then `revoke <id>`. Keep the ones CI uses.
+- Token files on your machines (`~/.bureau-token` and the like): delete them once `hub.sh` works from `bureau login`.
+
+**Moving a hub.** `node hub/tools/export.js <folder>` writes the state, settings and the brain (as a git bundle) to one folder, with the old MCP URL, sessions, the OMAKO pairing and minted tokens left out (`--keep-tokens` keeps the tokens). `node hub/tools/import.js <folder>` loads it into a fresh hub. It refuses a running hub, a hub that already has state or a brain, and an export from a newer Bureau. On the new hub, pair again and allow the apps again.
+
 ## 0.4.0: the new dashboard
 
 One dashboard replaces the two old ones. The API, the agents, the review links and the office's own URL don't change.
@@ -130,7 +162,7 @@ and make sure pair-mode agents carry the boss's words in `approved_in_session`. 
 
    Run it on the hub's machine (it reads `BUREAU_BOSS_TOKEN` from `hub/.env`), or set `BUREAU_URL` and `BUREAU_BOSS_TOKEN` in the environment. Put the token in that agent's `~/.bureau-token` (or its `{{BUREAU_TOKEN}}` in a cowork routine). `hub.sh` and the context hook read the same file; a hook whose agent is not `consul` needs `BUREAU_AGENT` set. For a chat connector, replace the URL with the token's `mcp_url` (same connector, new URL). List `general` too if the agent files `Propose project:` missions. An agent token that declares another name gets 403: fix the agent's name, not the check.
 
-5. **Retire the shared credentials** when `node hub/tools/token.js list` shows every agent's token in use and `shared_token_last_used` has gone quiet (it resets at restart). `DELETE /api/mcp` with the boss token retires the old MCP URL. Remove `BUREAU_TOKEN` from the environment (`docker-compose.yml` still requires one to be set; give it a value nobody holds) and restart. Anything still sending it then answers 401.
+5. **Retire the shared credentials** when `node hub/tools/token.js list` shows every agent's token in use and `shared_token_last_used` has gone quiet (it resets at restart). `DELETE /api/mcp` with the boss token retires the old MCP URL. Remove `BUREAU_TOKEN` from the environment and restart (before 0.5.0, `docker-compose.yml` required one: give it a value nobody holds). Anything still sending it then answers 401.
 
 **Roll back.** Unset `BUREAU_BOSS_TOKEN` and restart: back in legacy, with the shared token. Tokens stay in `state.json` and work again if you turn strict back on, unless revoked. No schema changed: the same `state.json` runs the older code, which ignores the fields it doesn't know.
 

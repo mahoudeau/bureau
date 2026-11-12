@@ -134,7 +134,8 @@
 <div id="ticker">&gt; Opening the office...</div>
 <div id="gate" hidden>
   <div>BUREAU · STAFF ENTRANCE</div>
-  <input id="gate-token" type="password" placeholder="access token" autocomplete="off">
+  <a id="gate-signin" href="/sign-in?next=%2Foffice">SIGN IN</a>
+  <input id="gate-token" type="password" placeholder="or paste a token" autocomplete="off">
   <button id="gate-go">CLOCK IN</button>
 </div>
 <script src="/office/assets.js"></script>
@@ -957,9 +958,15 @@
   }
 
   // ---- live wiring (unchanged) -------------------------------------------
+  // A pasted token goes as a Bearer header; with none, the session cookie from
+  // signing in goes by itself (same origin).
   function api(path) {
-    return fetch(path, { headers: { Authorization: 'Bearer ' + token } }).then(function (r) {
-      if (r.status === 401) { localStorage.removeItem('bureau_token'); location.reload(); throw new Error('401'); }
+    return fetch(path, { headers: token ? { Authorization: 'Bearer ' + token } : {} }).then(function (r) {
+      if (r.status === 401) {
+        if (token) { localStorage.removeItem('bureau_token'); location.reload(); }
+        else location.assign('/sign-in?next=' + encodeURIComponent('/office'));
+        throw new Error('401');
+      }
       return r.json();
     });
   }
@@ -1022,6 +1029,13 @@
   (function gate() {
     token = BureauHub.takeUrlToken() || localStorage.getItem('bureau_token');
     if (token) return boot();
+    // Signed in to the dashboard: the session cookie opens the office too.
+    fetch('/api/me').then(function (r) {
+      if (r.ok) return boot();
+      showGate();
+    }).catch(showGate);
+  })();
+  function showGate() {
     var g = document.getElementById('gate');
     g.hidden = false;
     document.getElementById('gate-go').addEventListener('click', function () {
@@ -1033,7 +1047,7 @@
     document.getElementById('gate-token').addEventListener('keydown', function (e) {
       if (e.key === 'Enter') document.getElementById('gate-go').click();
     });
-  })();
+  }
 
   // ---- main loop ----------------------------------------------------------
   var last = performance.now();

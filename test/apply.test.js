@@ -34,7 +34,7 @@ async function main() {
   console.log('2. end to end: tamper with state.json between filing and apply');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-apply-'));
   const env = { ...process.env, PORT: String(HUB_PORT), BUREAU_TOKEN: TOKEN, BUREAU_DATA_DIR: path.join(dir, 'data'),
-    BUREAU_BRAIN_DIR: path.join(dir, 'brain'), BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', DISCORD_WEBHOOK_URL: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
+    BUREAU_BRAIN_DIR: path.join(dir, 'brain'), BUREAU_WORK_DIR: path.join(dir, 'work'), BUREAU_POKES: '', BUREAU_ENV_FILE: path.join(dir, 'no.env') };
   const api = async (method, p, body) => {
     const r = await fetch(BASE + p, { method, headers: { authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
     return { code: r.status, body: await r.json() };

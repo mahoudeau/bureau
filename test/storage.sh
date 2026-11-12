@@ -61,11 +61,11 @@ wait_up "$PORT_A"
 check "/health answers without a token" "$(curl -s "http://127.0.0.1:$PORT_A/health")" '"ok": true'
 check "/health keeps the version to itself" "$(curl -s "http://127.0.0.1:$PORT_A/health" | grep -c '"version"')" '^0$'
 check "/api/health refuses without a token" "$(curl -s "http://127.0.0.1:$PORT_A/api/health")" 'unauthorized'
-check "/api/health carries version and schema with the token" "$(api "$PORT_A" GET /api/health)" '"schema_version": 1'
+check "/api/health carries version and schema with the token" "$(api "$PORT_A" GET /api/health)" '"schema_version": 2'
 api "$PORT_A" POST /api/tasks '{"title":"Backup canary mission"}' >/dev/null
 # Wait for the debounced write rather than a fixed sleep (a slow CI runner lost that race)
 for i in $(seq 1 30); do grep -q 'Backup canary mission' "$DIR/a/data/state.json" 2>/dev/null && break; sleep 0.1; done
-check "state.json carries schema_version" "$(cat "$DIR/a/data/state.json")" '"schema_version": 1'
+check "state.json carries schema_version" "$(cat "$DIR/a/data/state.json")" '"schema_version": 2'
 check "daily snapshot taken at boot" "$(ls "$DIR/a/data")" 'state.json.daily-'
 
 echo "2. rolling backups rotate and cap"
@@ -127,13 +127,13 @@ echo '{"schema_version":1,"tasks":[]}' > "$DIR/m/data/state.json.bak.1"
 check "missing state with backups refused" "$(boot_refused m)" 'exit:1'
 check "refusal points at the backups" "$(cat "$DIR/m.log")" 'backups exist'
 
-echo "9. a version 0 file migrates to 1 with a pre-migrate copy"
+echo "9. a version 0 file migrates to the current schema with a pre-migrate copy"
 mkdir -p "$DIR/v/data"
 echo '{"tasks":[{"id":"t-1","title":"Legacy mission","status":"queued","priority":3,"project":"old","created_at":"2026-01-01T00:00:00.000Z","log":[],"artifacts":[]}],"seq":1,"projects":["old"]}' > "$DIR/v/data/state.json"
 start_hub v "$PORT_A"; HUB_A=$LAST_PID
 wait_up "$PORT_A"
-check "migration logged" "$(cat "$DIR/v.log")" 'from schema 0 to 1'
-check "state.json now at schema 1" "$(cat "$DIR/v/data/state.json")" '"schema_version": 1'
+check "migration logged" "$(cat "$DIR/v.log")" 'from schema 0 to 2'
+check "state.json now at schema 2" "$(cat "$DIR/v/data/state.json")" '"schema_version": 2'
 PRE=$(ls "$DIR/v/data" | grep pre-migrate || true)
 check "pre-migrate copy kept" "$PRE" 'state.json.pre-migrate-'
 check "pre-migrate copy is the old file" "$(yes_if "$(grep schema_version "$DIR/v/data/$PRE" 2>/dev/null)")" 'no'

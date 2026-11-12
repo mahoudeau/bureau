@@ -15,9 +15,10 @@ const brainIndex = require('./lib/index');
 const contextCall = require('./lib/context');
 const { KINDS } = require('./lib/claims');
 const work = require('./lib/work');
-const discord = require('./lib/discord');
 const poke = require('./lib/poke');
 const auth = require('./lib/auth');
+const oidc = require('./lib/oidc');
+const omako = require('./lib/omako');
 const { VERSION } = require('./version');
 
 const security = require('./lib/security');
@@ -48,17 +49,10 @@ function broadcast(type, data, extra) {
   if (type === 'knowledge.written' || type === 'journal.captured') brainIndex.touch(data && data.file);
   else if (/^project\./.test(type)) brainIndex.invalidate();
   store.logEvent(type, summarize(type, data));
-  // S2-f: notify from settings, the mission's project overriding global
-  discord.mirror(type, data, store.effectiveSettings(store.load(), data && data.project).notify);
   poke.send(type, data, extra);
-  const line = (d) => `event: ${type}\ndata: ${JSON.stringify(d)}\n\n`;
-  const full = line(data);
-  let cut = null;
-  for (const [res, who] of sseClients) {
-    try {
-      // Only the boss and a legacy bearer receive the capability fields
-      res.write(who.kind === 'boss' || who.kind === 'legacy' ? full : (cut = cut || line(auth.taskView(who, data))));
-    } catch { sseClients.delete(res); }
+  const line = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const [res] of sseClients) {
+    try { res.write(line); } catch { sseClients.delete(res); }
   }
 }
 // Settings, roles and tokens go only to the credentials that can already read
@@ -129,71 +123,18 @@ function serveNotFound(res) {
   res.end(fs.readFileSync(path.join(__dirname, 'public', 'app', '404.html')));
 }
 function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
-// The pages a link opens, usually on a phone: review (/r/) and record (/m/).
-// Server-rendered; the only script is omako-ds's dither (security.PAGE_CSP),
-// and everything works without it. Status is the same dither and word as
-// hub/public/app/status.js; test/assets.test.js keeps the two in step.
-const STATUS_LOOK = {
-  queued: { word: 'Queued', dither: 'om-d12' },
-  claimed: { word: 'Claimed', dither: 'om-d25' },
-  in_progress: { word: 'In progress', dither: 'om-d50' },
-  blocked: { word: 'Blocked', dither: 'om-hatch' },
-  approved: { word: 'Approved', dither: 'om-bars' },
-  review: { word: 'Review', dither: 'om-d75' },
-  done: { word: 'Done', dither: 'om-d100' },
-  failed: { word: 'Failed', dither: 'om-cross' },
-  discarded: { word: 'Discarded', dither: 'om-d0' },
-};
-function statusMark(status) {
-  const look = STATUS_LOOK[status] || { word: String(status || 'Unknown'), dither: 'om-d0' };
-  return `<span class="lp-status"><span class="om-swatch ${look.dither}" aria-hidden="true"></span><span class="om-label">${escHtml(look.word)}</span></span>`;
-}
+// The few server-rendered pages: sign-in errors and the sign-out step
+// (/auth/*). The only script is omako-ds's dither (security.PAGE_CSP), and
+// everything works without it.
 // The OMAKO mark sits in the credit at the foot; the brand is Bureau's wordmark.
 const PAGE_MARK = '<svg class="om-mark" viewBox="-1.5 -1.5 103 103" aria-hidden="true"><path fill-rule="evenodd" d="M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z"/></svg>';
 const WORDMARK = require('./lib/wordmark');
 const CREDIT = `<a class="om-credit" href="https://www.omako.fr" target="_blank" rel="noopener">${PAGE_MARK}<span>An <strong>OMAKO</strong> product</span></a>`;
-const GONE_BAND = '<div class="lp-strip om-cross" aria-hidden="true"></div>';
-const missionLine = task =>`<p class="lp-mission"><span class="om-strong">${escHtml(task.id)}</span> ${escHtml(task.title)}</p>`;
-// title is HTML already: callers escape what came from a mission.
-function sendPage(res, code, title, bodyHtml, status) {
-  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="/app/favicon-16.png" sizes="16x16" type="image/png"><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"><script src="/omako-ds/js/dither.js" defer></script><script src="/app/lp-dither.js" defer></script></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand lp-brand">${WORDMARK}</span>${status ? statusMark(status) : ''}</header><div class="om-band"><div class="lp-inner"><h1 class="om-display-m lp-title">${title}</h1></div></div><main class="om-ground om-field-ground lp-ground"><div class="om-cast om-sheet-body lp-main">${bodyHtml}</div></main><footer class="om-footline">${CREDIT}</footer></body></html>`;
-  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
+// title and bodyHtml are HTML already: callers escape anything that came in.
+function sendPage(res, code, title, bodyHtml, extraHeaders) {
+  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="/app/favicon-16.png" sizes="16x16" type="image/png"><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"><script src="/omako-ds/js/dither.js" defer></script><script src="/app/lp-dither.js" defer></script></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand lp-brand">${WORDMARK}</span></header><div class="om-band"><div class="lp-inner"><h1 class="om-display-m lp-title">${title}</h1></div></div><main class="om-ground om-field-ground lp-ground"><div class="om-cast om-sheet-body lp-main">${bodyHtml}</div></main><footer class="om-footline">${CREDIT}</footer></body></html>`;
+  res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer', ...(extraHeaders || {}) });
   res.end(html);
-}
-// Review evidence: artifacts that point at brain images render inline, served
-// through the link's own capability (never the hub token). The image route
-// serves only these files, so a link can't reach the rest of the brain.
-const imgOf = a => {
-  // Bounded: an agent wrote this, and the pattern backtracks on a long run
-  const m = String(a.url || a.label || '').slice(0, 2048).match(/([\w./-]+\.(?:png|jpe?g|gif))/i);
-  return m && !/^https?:/i.test(m[1]) ? m[1] : (String(a.url || '').match(/[?&]file=([\w./%-]+\.(?:png|jpe?g|gif))/i) || [])[1];
-};
-// A malformed %-escape in an artifact is that artifact's problem, not the page's.
-const decodeLoose = s => { try { return decodeURIComponent(s); } catch { return s; } };
-const citedImages = task => new Set((task.artifacts || []).map(imgOf).filter(Boolean).map(decodeLoose));
-// The work store joins the rule: a link may also show the images in its own
-// mission's work/<t-id>/ folder, cited or not, and never another mission's.
-// A brain path still has to be cited.
-const IMG_RE = /\.(png|jpe?g|gif)$/i;
-function evidenceAllowed(task, file) {
-  const owner = work.taskOf(file);
-  if (owner) return owner === task.id;
-  return !/^work\//i.test(file) && citedImages(task).has(file);
-}
-function evidenceFiles(task) {
-  const out = [];
-  for (const a of task.artifacts || []) {
-    const raw = imgOf(a);
-    const f = raw && decodeLoose(raw);
-    if (f && evidenceAllowed(task, f) && !out.some(x => x.file === f)) out.push({ file: f, label: a.label || f });
-  }
-  let own = [];
-  try { own = work.listWork(task.id); } catch { own = []; }
-  for (const f of own) if (IMG_RE.test(f) && !out.some(x => x.file === f)) out.push({ file: f, label: f });
-  return out;
-}
-function readEvidence(file) {
-  return work.taskOf(file) ? work.readWorkRaw(file) : knowledge.readKnowledgeRaw(file);
 }
 
 // Curated compartments: refused before anything touches disk or git.
@@ -301,35 +242,6 @@ function workWriteRefusal(file) {
   return null;
 }
 
-function reviewForm(task, action, token, err, kind) {
-  const lastNote = (task.log || []).slice(-1)[0];
-  const context = kind === 'answer' && lastNote ? `<blockquote class="lp-asked">${escHtml(lastNote.note)}</blockquote>` : '';
-  const noteField = action === 'queued'
-    ? `<p class="lp-help">${kind === 'answer' ? 'Your answer goes to the mission log; the next shift resumes with it.' : 'A note is required: the agent reads it as its correction.'}</p><textarea class="om-textarea" name="note" aria-label="${kind === 'answer' ? 'Your answer' : 'Note for the agent'}" placeholder="${kind === 'answer' ? 'Your answer' : 'What should change?'}"></textarea>`
-    : '';
-  // Itemized review: each proposal gets its own verdict. Later is a decision
-  // (deferred to the next digest); an item nobody ruled on starts with no
-  // choice selected, so an approval cannot defer or accept it by default.
-  // A payload is shown as it will be written: the exact text the boss approves.
-  const payloadBlock = it => it.payload ? it.payload.ops.map(o =>
-    `<p class="lp-op">${o.op === 'append' ? 'Appends to' : 'Writes'} <code>${escHtml(o.file)}</code>:</p><pre class="lp-pre">${escHtml(o.content)}</pre>`).join('') +
-    `<p class="om-data-s">sha256 ${escHtml(String(it.payload_sha256 || '').slice(0, 12))}</p>` : '';
-  const verdictChoice = (it, value, word) =>
-    `<label class="lp-verdict"><input type="radio" name="v_${it.id}" value="${value}"${it.verdict === value ? ' checked' : ''}><span>${word}</span></label>`;
-  const itemBlocks = (kind !== 'answer' && Array.isArray(task.items) && task.items.length)
-    ? task.items.map(it => `<fieldset class="lp-item"><legend class="om-strong">${escHtml(it.id)} · ${escHtml(it.title)}</legend>${it.body ? `<pre class="lp-pre">${escHtml(it.body)}</pre>` : ''}${payloadBlock(it)}${
-        it.verdict !== 'proposed' ? `<p class="om-data-s">already ${escHtml(it.verdict)}${it.comment ? `: ${escHtml(it.comment)}` : ''}</p>` : ''
-      }<div class="lp-verdicts">${verdictChoice(it, 'approved', 'Accept')}${verdictChoice(it, 'rejected', 'Reject')}${verdictChoice(it, 'later', 'Later')}</div><input class="om-input" type="text" name="c_${it.id}" aria-label="Comment on ${escHtml(it.id)}" placeholder="Comment (optional)" value="${escHtml(it.comment || '')}"></fieldset>`).join('')
-    : '';
-  const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
-  const evidence = evidenceFiles(task).map(({ file, label }) =>
-    `<figure class="lp-figure"><a class="om-pic" href="/r/${token}/img?file=${encodeURIComponent(file)}" target="_blank" rel="noopener"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"></a><figcaption class="om-data-s">${escHtml(label)}</figcaption></figure>`).join('');
-  const returns = action === 'done' && kind !== 'answer' && task.after_approval === 'return'
-    ? `<p class="lp-help">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
-  const refused = err ? `<div class="om-banner" role="alert"><div class="om-banner-edge om-cross" aria-hidden="true"></div><div class="om-banner-body om-strong">${escHtml(err)}</div></div>` : '';
-  return `${refused}${missionLine(task)}${context}${returns}${evidence}<form class="lp-form" method="POST" action="/r/${token}">${itemBlocks}${noteField}<button class="om-btn om-btn-primary lp-submit">${verb} ${escHtml(task.id)}</button></form>`;
-}
-
 // The principal behind a request, or null. Credentials travel in the
 // Authorization header only: a URL ends up in logs and histories.
 function principalOf(req) {
@@ -339,6 +251,131 @@ function principalOf(req) {
 function ticketHolder(ticket) {
   const p = security.takeTicket(ticket);
   return p && auth.stillCurrent(p) ? p : null;
+}
+
+// ---- Sign-in (doc 30) ----
+const SESSION_COOKIE = 'bureau_session', FLOW_COOKIE = 'bureau_oidc';
+// The role of a signed-in person, read again on every request so a change in
+// Settings takes effect at once: settings.members, then BUREAU_OIDC_OWNERS,
+// then the role the issuer gave at sign-in (an OMAKO workspace role).
+function sessionRole(sess) {
+  const members = store.settingsOf(store.load()).members;
+  const byKey = members[sess.sub] || (sess.email && members[sess.email]);
+  if (byKey) return byKey.role;
+  const owners = store.envOwners();
+  if (owners.includes(sess.sub) || (sess.email && owners.includes(sess.email))) return 'owner';
+  const c = oidc.config();
+  return sess.issuer && sess.issuer === c.issuer && store.MEMBER_ROLES.includes(sess.role) ? sess.role : null;
+}
+// A signed-in person as a principal (C3): the owner is the boss (human), an
+// approver rules as human with less reach, a viewer reads. via names them.
+function sessionPrincipal(token) {
+  const sess = store.findSession(token);
+  if (!sess) return null;
+  const role = sessionRole(sess);
+  if (!role) return null;
+  const base = { projects: '*', session: true, sessionId: sess.id, role, email: sess.email, via: sess.email || sess.sub };
+  if (role === 'owner') return { kind: 'boss', name: 'human', ...base };
+  if (role === 'approver') return { kind: 'approver', name: 'human', ...base };
+  return { kind: 'viewer', name: null, ...base };
+}
+async function principalFor(req, url, p) {
+  const h = req.headers['authorization'] || '';
+  if (h.startsWith('Bearer ')) {
+    const t = h.slice(7);
+    // An agent's sign-in token: its audience names the agent (C3).
+    if (oidc.looksLikeJwt(t) && oidc.config().on) return oidc.agentPrincipal(t);
+    return auth.fromBearer(t);
+  }
+  const cookie = security.parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  if (cookie) { const s = sessionPrincipal(cookie); if (s) return s; }
+  if (store.authMode() === 'open') return auth.fromBearer(null);
+  if (req.method === 'GET' && p === '/api/events') return ticketHolder(url.searchParams.get('ticket'));
+  return null;
+}
+
+// An app signed in as an agent but not allowed yet (or denied): MCP gets one
+// tool that says so, so the client stops asking to sign in again (D13).
+function mcpWaitingRoom(msg, err) {
+  if (!msg || msg.id === undefined) return null; // notifications need no answer
+  const text = err.code === 'app_denied'
+    ? `${err.message}. Nothing else is open to this app. An owner can change it in Bureau's Settings, under Sign-in.`
+    : `${err.message}. Once an owner allows it, this app works as ${err.agent} with no further sign-in.`;
+  const ok = (result) => ({ jsonrpc: '2.0', id: msg.id, result });
+  if (msg.method === 'initialize') return ok({ protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'bureau', version: VERSION }, instructions: text });
+  if (msg.method === 'tools/list') return ok({ tools: [{ name: 'access', description: 'Why this app cannot work in Bureau yet, and what unlocks it.', inputSchema: { type: 'object', properties: {} } }] });
+  if (msg.method === 'tools/call') return ok({ content: [{ type: 'text', text }], isError: true });
+  if (msg.method === 'ping') return ok({});
+  return { jsonrpc: '2.0', id: msg.id, error: { code: -32601, message: text } };
+}
+
+function setCookie(res, name, value, attrs) {
+  const prev = res.getHeader('set-cookie');
+  const line = `${name}=${encodeURIComponent(value)}; ${attrs}`;
+  res.setHeader('set-cookie', prev ? [].concat(prev, line) : [line]);
+}
+const signInError = (res, code, message) => sendPage(res, code, 'Sign-in',
+  `<p>${escHtml(message)}</p><p><a class="om-btn om-btn-primary" href="/sign-in">Back to sign-in</a></p>`);
+async function readForm(req) {
+  return new Promise((resolve, reject) => {
+    let d = ''; req.on('data', (c) => { d += c; if (d.length > 1e4) { reject(security.requestError(413, 'body too large')); req.destroy(); } });
+    req.on('end', () => resolve(new URLSearchParams(d))); req.on('error', reject);
+  });
+}
+
+// /auth/login, /auth/callback, /auth/logout (C4).
+async function authRoute(req, res, url, p) {
+  const c = oidc.config();
+  if (req.method === 'GET' && p === '/auth/login') {
+    if (!c.webOn) return signInError(res, 404, 'Sign-in is not set up on this hub. Use a token instead.');
+    const next = security.localNext(url.searchParams.get('next'));
+    let a;
+    try { a = await oidc.authorizeRequest(next); } catch (e) {
+      console.error('[auth] login:', e.message);
+      return signInError(res, 502, 'Can\'t reach the sign-in service right now. Try again in a minute, or use a token instead.');
+    }
+    setCookie(res, FLOW_COOKIE, security.signValue(a.flow), security.cookieAttrs(req, { path: '/auth', maxAge: 600 }));
+    res.writeHead(302, { location: a.url, 'cache-control': 'no-store' });
+    return res.end();
+  }
+  if (req.method === 'GET' && p === '/auth/callback') {
+    const flow = security.readSigned(security.parseCookies(req.headers.cookie)[FLOW_COOKIE]);
+    setCookie(res, FLOW_COOKIE, '', security.cookieAttrs(req, { path: '/auth', maxAge: 0 }));
+    if (!c.webOn) return signInError(res, 404, 'Sign-in is not set up on this hub.');
+    let who;
+    try { who = await oidc.completeSignIn(url.searchParams, flow); } catch (e) {
+      console.error('[auth] callback:', e.message);
+      return signInError(res, 400, `Sign-in failed: ${e.message}.`);
+    }
+    if (!who.role) {
+      store.logEvent('session.refused', { name: who.email || who.sub });
+      return sendPage(res, 403, 'Not a member', `<p>You signed in as ${escHtml(who.email || who.sub)}, but this account isn't a member of this hub. Ask an owner to add you in Settings.</p><form method="POST" action="/auth/logout"><button class="om-btn">Sign out</button></form>`);
+    }
+    // Only a role the issuer vouched for (an OMAKO workspace role) is kept on
+    // the session; a role from Settings is read again on every request, so a
+    // removal there takes effect at once.
+    const s = store.createSession({ sub: who.sub, email: who.email, name: who.name, role: who.roleSource === 'claim' ? who.role : null, id_token: who.id_token, issuer: c.issuer });
+    setCookie(res, SESSION_COOKIE, s.token, security.cookieAttrs(req, { path: '/', maxAge: 30 * 86400 }));
+    res.writeHead(303, { location: security.localNext(flow && flow.next), 'cache-control': 'no-store' });
+    return res.end();
+  }
+  if (p === '/auth/logout') {
+    // A GET only shows the button, so another site can't sign anyone out.
+    if (req.method === 'GET') return sendPage(res, 200, 'Sign out', '<form method="POST" action="/auth/logout"><button class="om-btn om-btn-primary">Sign out of Bureau</button></form>');
+    if (req.method === 'POST') {
+      if (!security.cookieWriteAllowed(req, ORIGINS)) return signInError(res, 403, 'Sign out from this hub\'s own page.');
+      const token = security.parseCookies(req.headers.cookie)[SESSION_COOKIE];
+      const ended = token ? store.endSession(token) : null;
+      setCookie(res, SESSION_COOKIE, '', security.cookieAttrs(req, { path: '/', maxAge: 0 }));
+      const back = ended && c.webOn ? await oidc.endSessionUrl(ended.id_token) : '/sign-in';
+      // The dashboard signs out with fetch (its CSP keeps form posts on this
+      // hub): it gets the next address as JSON and goes there itself.
+      if (/application\/json/.test(String(req.headers.accept || ''))) return send(res, 200, { next: back });
+      res.writeHead(303, { location: back, 'cache-control': 'no-store' });
+      return res.end();
+    }
+  }
+  return send(res, 404, { error: 'not found' });
 }
 // A review item's payload lands in the brain once approved, so it has to stay
 // inside the credential's walls when it is filed. Null when fine.
@@ -410,69 +447,26 @@ const server = http.createServer(async (req, res) => {
     // and schema sit behind the token on /api/health (boss ruling 2026-10-01).
     if (p === '/health') return send(res, 200, { ok: true, uptime: process.uptime() });
 
-    // Capability-scoped image serving: a valid review link may render the brain
-    // attachments its mission cites, without ever exposing the hub token. Only
-    // those files, and only while the link is live: before, any link reached
-    // every image in the brain, other entities' included. Its own mission's
-    // work store images count too (evidenceAllowed).
-    const mReviewImg = p.match(/^\/r\/([a-f0-9]{32})\/img$/);
-    if (mReviewImg && req.method === 'GET') {
-      const found = store.findByReviewToken(mReviewImg[1]);
-      if (!found || Date.parse(found.exp) < Date.now()) return send(res, 404, { error: 'not found' });
-      const file = url.searchParams.get('file') || '';
-      if (!evidenceAllowed(found.task, file)) return send(res, 404, { error: 'not found' });
-      const r = readEvidence(file);
-      if (r === null || !r.binary) return send(res, 404, { error: 'not found' });
-      res.writeHead(200, { 'content-type': r.type, 'cache-control': 'no-store' });
-      return res.end(r.buf);
+    // ----- Sign-in discovery (doc 30): public, nothing secret -----
+    // What the CLI needs to sign in to this hub (C5).
+    if (req.method === 'GET' && p === '/.well-known/bureau') return send(res, 200, oidc.discovery());
+    // The pairing proof OMAKO fetches to know this hub controls its address (C1).
+    if (req.method === 'GET' && p === '/.well-known/omako-hub-challenge') {
+      const ch = oidc.challengeText();
+      if (!ch) return send(res, 404, { error: 'not found' });
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
+      return res.end(ch);
     }
 
-    // ----- review capability links (the token IS the auth; GET renders, POST acts) -----
-    // GET must never mutate: chat clients unfurl links, and a side-effecting GET
-    // would let a preview fetch approve a mission.
-    const mReview = p.match(/^\/r\/([a-f0-9]{32})$/);
-    if (mReview) {
-      const found = store.findByReviewToken(mReview[1]);
-      const expectStatus = found && (found.kind === 'answer' ? 'blocked' : 'review');
-      if (!found || found.task.status !== expectStatus)
-        return sendPage(res, 410, 'Link no longer valid', `${GONE_BAND}<p>This link was already used, or the mission has moved on.</p>`);
-      if (found.exp < new Date().toISOString())
-        return sendPage(res, 410, 'Link expired', `${GONE_BAND}<p>This link has expired. Handle the mission from the dashboard.</p>`);
-      const { task, action, kind } = found;
-      const title = kind === 'answer' ? 'Answer the worker' : action === 'done' ? 'Approve this mission?' : 'Send this mission back?';
-      if (req.method === 'GET')
-        return sendPage(res, 200, title, reviewForm(task, action, mReview[1], null, kind), task.status);
-      if (req.method === 'POST') {
-        const raw = await new Promise((resolve, reject) => {
-          let d = ''; req.on('data', c => { d += c; if (d.length > 1e5) { reject(security.requestError(413, 'body too large')); req.destroy(); } });
-          req.on('end', () => resolve(d)); req.on('error', reject);
-        });
-        const form = new URLSearchParams(raw);
-        const note = (form.get('note') || '').trim();
-        if (action === 'queued' && !note)
-          return sendPage(res, 400, title, reviewForm(task, action, mReview[1], kind === 'answer' ? 'The answer is required.' : 'The note is required.', kind), task.status);
-        // Per-item verdicts ride along with the overall action (no choice = still proposed)
-        const verdicts = (task.items || []).map(it => {
-          const v = form.get(`v_${it.id}`), c = (form.get(`c_${it.id}`) || '').trim();
-          return (v === 'approved' || v === 'rejected' || v === 'later' || c) ? { id: it.id, ...(v ? { verdict: v } : {}), ...(c ? { comment: c } : {}) } : null;
-        }).filter(Boolean);
-        const logKind = kind === 'sendback' ? 'send_back' : kind; // approve, send_back, answer
-        const r = store.updateTask({ id: task.id, agent: 'human', kind: logKind, status: action, note: note || 'approved via link', ...(verdicts.length ? { verdicts } : {}) });
-        // A refusal (an undecided item, say) shows the form again with the
-        // reason; the link stays live because nothing changed.
-        if (r.error) return sendPage(res, 400, title, reviewForm(task, action, mReview[1], r.error, kind), task.status);
-        broadcast(statusEvent(action, r.task), { ...r.task, note: note || 'approved via link' }, { by: 'human', prev_status: r.prev_status });
-        const returned = r.task.status === 'approved';
-        return sendPage(res, 200, kind === 'answer' ? 'Answer filed' : action === 'done' ? 'Approved' : 'Sent back',
-          `${missionLine(task)}<p>${kind === 'answer' ? 'Back on the board; the next shift resumes with your answer.' : returned ? `Back with ${escHtml(r.task.assignee || 'its agent')}, who applies the approved items exactly as filed, then closes it.` : action === 'done' ? 'Filed to done. The team keeps moving.' : 'Back on the board with your note attached.'}</p>`, r.task.status);
-      }
-    }
+    // ----- Dashboard sign-in (doc 30, C4): code flow + PKCE on the server -----
+    if (p.startsWith('/auth/')) return authRoute(req, res, url, p);
 
     // ----- MCP: the hub as a connector (Streamable HTTP transport, stateless) -----
-    // Chat surfaces have no shell; this door lets them work the Bureau as consul.
-    // Auth is the capability URL itself: GET /api/mcp (Bearer) reveals it.
+    // Chat surfaces have no shell. This door takes a minted token in the URL,
+    // for hubs without sign-in; settings global.mcp_token_urls false closes it.
     const mMcp = p.match(/^\/mcp\/([a-f0-9]{48})$/);
     if (mMcp) {
+      if (store.settingsOf(store.load()).global.mcp_token_urls === false) return send(res, 404, { error: 'not found' });
       const who = auth.fromMcpToken(mMcp[1], store.load().mcp_token);
       if (!who) return send(res, 404, { error: 'not found' });
       if (req.method !== 'POST') return send(res, 405, { error: 'POST JSON-RPC messages here' });
@@ -482,22 +476,43 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, reply);
     }
 
-    // ----- mission record page (read-only capability; linked from pings) -----
-    const mView = p.match(/^\/m\/([a-f0-9]{32})$/);
-    if (req.method === 'GET' && mView) {
-      const t = store.findByViewToken(mView[1]);
-      if (!t) return sendPage(res, 404, 'Not found', `${GONE_BAND}<p>No mission record behind this link.</p>`);
-      const logs = (t.log || []).map(l =>
-        `<li><p class="om-data-s">${l.ts ? `${escHtml(String(l.ts).slice(5, 16).replace('T', ' '))} ` : ''}<span class="om-strong">${escHtml(l.by)}</span></p><p class="lp-text">${escHtml(l.note)}</p></li>`).join('');
-      const arts = (t.artifacts || []).map(a => {
-        const linkable = a.url && /^https?:\/\//i.test(a.url);
-        return `<li>${linkable ? `<a class="om-link" href="${escHtml(a.url)}" target="_blank" rel="noopener">${escHtml(a.label || a.url)}</a>` : escHtml(a.label || a.url || '')}</li>`;
-      }).join('');
-      return sendPage(res, 200, `${escHtml(t.id)} · ${escHtml(t.title)}`,
-        `<p class="om-data-s">${[t.priority === undefined || t.priority === null ? '' : `P${escHtml(t.priority)}`, escHtml(t.assignee || ''), escHtml(t.project || '')].filter(Boolean).join(' · ')}</p>` +
-        (t.body ? `<p class="lp-text">${escHtml(t.body)}</p>` : '') +
-        (arts ? `<section class="lp-block"><h2 class="om-label">Artifacts</h2><ul class="lp-rows">${arts}</ul></section>` : '') +
-        `<section class="lp-block"><h2 class="om-label">Log</h2>${logs ? `<ol class="lp-rows">${logs}</ol>` : '<p>No log yet.</p>'}</section>`, t.status);
+    // ----- MCP with sign-in: one address per agent, no secret in it (lib/oidc.js) -----
+    // The client finds where to sign in from the resource metadata, signs in at
+    // the issuer (OMAKO), and comes back with a token for this one address.
+    const mPrm = p.match(/^\/\.well-known\/oauth-protected-resource\/mcp\/agent\/([^/]+)$/);
+    if (req.method === 'GET' && mPrm) {
+      const agent = mPrm[1];
+      if (!oidc.config().on || !oidc.validAgent(agent)) return send(res, 404, { error: 'not found' });
+      return send(res, 200, oidc.resourceMetadata(agent));
+    }
+    const mAgentMcp = p.match(/^\/mcp\/agent\/([^/]+)$/);
+    if (mAgentMcp) {
+      const agent = mAgentMcp[1];
+      if (!oidc.config().on || !oidc.validAgent(agent)) return send(res, 404, { error: 'not found' });
+      if (req.method !== 'POST') return send(res, 405, { error: 'POST JSON-RPC messages here' });
+      const bearer = (req.headers.authorization || '').match(/^Bearer\s+(\S+)$/i);
+      let who;
+      try {
+        who = await oidc.agentPrincipal(bearer ? bearer[1] : '', agent);
+      } catch (e) {
+        if (!(e instanceof oidc.AuthError)) throw e;
+        if (e.status === 404) return send(res, 404, { error: 'not found' });
+        // An app waiting for the owner, or denied: answer MCP with one tool
+        // that says so, instead of a 401 the client would answer by signing in
+        // again and again (Dossier's pattern).
+        if (e.code === 'app_pending' || e.code === 'app_denied') {
+          const msg = await readBody(req);
+          const reply = mcpWaitingRoom(msg, e);
+          if (reply === null) { res.writeHead(202, { 'cache-control': 'no-store' }); return res.end(); }
+          return send(res, 200, reply);
+        }
+        res.setHeader('www-authenticate', oidc.challenge(agent, e));
+        return send(res, e.status, { error: e.message });
+      }
+      const msg = await readBody(req);
+      const reply = await mcpHandle(msg, who);
+      if (reply === null) { res.writeHead(202, { 'cache-control': 'no-store' }); return res.end(); }
+      return send(res, 200, reply);
     }
 
     // /mcp/ is a JSON-RPC door like /api/: a client there can't read a web page.
@@ -507,17 +522,29 @@ const server = http.createServer(async (req, res) => {
     // and a text/plain POST from any website reaches this line without a preflight.
     if (!ORIGINS.permits(req)) return send(res, 403, { error: 'origin not allowed: add it to BUREAU_ALLOWED_ORIGINS' });
     if (DEMO_HUB && !security.loopbackRequest(req)) return send(res, 403, { error: 'this hub has no real token and answers loopback only' });
-    // The one route a browser cannot reach with a header. A ticket opens only
-    // this, as the credential that minted it, and only while that one stands.
-    const who = principalOf(req) || (req.method === 'GET' && p === '/api/events' ? ticketHolder(url.searchParams.get('ticket')) : null);
+    // Who is calling: a bearer (an agent's sign-in token, a minted token, the
+    // boss token), else the dashboard's session cookie, else, on the event
+    // stream only, a ticket (EventSource cannot set a header).
+    let who;
+    try {
+      who = await principalFor(req, url, p);
+    } catch (e) {
+      if (!(e instanceof oidc.AuthError)) throw e;
+      if (e.agent) res.setHeader('www-authenticate', oidc.challenge(e.agent, e));
+      return send(res, e.status === 404 ? 401 : e.status, { error: e.message, ...(e.code ? { code: e.code } : {}) });
+    }
     if (!who) return send(res, 401, { error: 'unauthorized' });
+    // A write made with the session cookie must come from this hub's own pages.
+    if (who.session && req.method !== 'GET' && !security.cookieWriteAllowed(req, ORIGINS)) return send(res, 403, { error: 'a signed-in write needs this hub\'s own origin' });
     // Every route answers to the table in lib/auth.js. No rule, no route.
     const rule = auth.ruleFor(req.method, p);
     if (!rule) return send(res, 404, { error: 'not found' });
-    const denied = auth.checkRule(rule, who);
+    const denied = auth.checkRule(rule, who, req.method, p);
     if (denied) return send(res, denied.status, { error: denied.error });
     if (p === '/api/health')
       return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime() });
+    if (p === '/api/me')
+      return send(res, 200, { kind: who.kind, name: who.name, projects: who.projects, role: who.role || (who.kind === 'boss' ? 'owner' : null), email: who.email || null, via: who.via || null, session: !!who.session, sign_in: oidc.config().webOn });
 
     // ----- SSE stream -----
     if (req.method === 'POST' && p === '/api/events/ticket') return send(res, 200, security.issueTicket(who));
@@ -626,6 +653,8 @@ const server = http.createServer(async (req, res) => {
     // ----- settings (S2): policy knobs -----
     if (req.method === 'GET' && p === '/api/settings') {
       const all = store.settingsOf(store.load());
+      // Who may sign in is the owner's business; approvers and viewers see the rest.
+      if (who.kind === 'approver' || who.kind === 'viewer') { const { members: _m, ...rest } = all; return send(res, 200, { settings: rest }); }
       if (auth.seesAll(who) && who.kind !== 'agent') return send(res, 200, { settings: all });
       // An agent token reads the global policy, its own entry and its projects'.
       return send(res, 200, { settings: {
@@ -640,8 +669,34 @@ const server = http.createServer(async (req, res) => {
       if (r.error) return send(res, 400, r);
       bossEvent('settings.changed', { before: r.before, after: r.settings });
       for (const change of r.rolesChanged) bossEvent('agent.roles_changed', change);
-      return send(res, 200, { settings: r.settings });
+      // A paired hub tells OMAKO which agent addresses to accept (C1). A
+      // failure there doesn't undo the setting: the answer says what happened.
+      const issuer = r.oauthChanged.length ? await omako.syncAgents(r.oauthChanged) : null;
+      return send(res, 200, { settings: r.settings, ...(issuer ? { issuer } : {}) });
     }
+
+    // ----- sign-in: apps acting as agents, sessions, the pairing (doc 30) -----
+    if (req.method === 'GET' && p === '/api/apps') return send(res, 200, { apps: store.listApps() });
+    const mApp = p.match(/^\/api\/apps\/(app-[a-f0-9]+)$/);
+    if (req.method === 'POST' && mApp) {
+      const b = await readBody(req);
+      const r = store.ruleApp(mApp[1], b.status, who.via || who.name || 'boss');
+      if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
+      bossEvent(`app.${r.app.status}`, { id: r.app.id, agent: r.app.agent, name: r.app.name || r.app.client_id });
+      return send(res, 200, r);
+    }
+    if (req.method === 'DELETE' && mApp) {
+      const r = store.forgetApp(mApp[1]);
+      if (r.error) return send(res, 404, r);
+      return send(res, 200, r);
+    }
+    if (req.method === 'GET' && p === '/api/sessions') return send(res, 200, { sessions: store.listSessions().map((x) => ({ ...x, current: x.id === who.sessionId })) });
+    if (req.method === 'POST' && p === '/api/sessions/revoke-all') {
+      const b = await readBody(req);
+      const ended = store.endSessions(b.sub || null);
+      return send(res, 200, { ended });
+    }
+    if (req.method === 'GET' && p === '/api/omako') return send(res, 200, await omako.status());
 
     // ----- agent tokens (strict mode, boss only: the rule table) -----
     if (req.method === 'POST' && p === '/api/tokens') {
@@ -652,7 +707,9 @@ const server = http.createServer(async (req, res) => {
       store.logEvent('token.minted', minted);
       bossEvent('token.minted', minted);
       const base = (process.env.BUREAU_PUBLIC_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
-      return send(res, 200, { token: r.token, mcp_url: `${base}/mcp/${r.token}`, ...r.record, note: 'shown once: the hub keeps only its hash' });
+      // With token URLs closed, /mcp/<token> answers 404: hand out no address that cannot work.
+      const urlsOpen = store.settingsOf(store.load()).global.mcp_token_urls !== false;
+      return send(res, 200, { token: r.token, ...(urlsOpen ? { mcp_url: `${base}/mcp/${r.token}` } : {}), ...r.record, note: urlsOpen ? 'shown once: the hub keeps only its hash' : 'shown once: the hub keeps only its hash. Token URLs are closed on this hub, so there is no mcp_url: use it as a bearer token' });
     }
     if (req.method === 'GET' && p === '/api/tokens') {
       return send(res, 200, { tokens: store.listTokens(), shared_token_last_used: auth.sharedLastUsed() });
@@ -760,7 +817,15 @@ const server = http.createServer(async (req, res) => {
       if (a.error) return send(res, 403, { error: a.error });
       const walls = payloadRefusal(who, b.items);
       if (walls) return send(res, 403, { error: walls });
-      const r = store.updateTask({ ...b, agent: a.name || undefined, id: mTask[1] });
+      // An approver rules (C3): verdicts, approve, send back, answer, a note.
+      // Nothing that edits the mission itself.
+      if (who.kind === 'approver') {
+        const extra = Object.keys(b).filter((k) => !['agent', 'status', 'note', 'verdicts', 'kind'].includes(k));
+        if (extra.length) return send(res, 403, { error: `an approver rules on missions; ${extra.join(', ')} needs an owner` });
+        if (b.status && !(t && ((t.status === 'review' && ['done', 'approved', 'queued'].includes(b.status)) || (t.status === 'blocked' && b.status === 'queued'))))
+          return send(res, 403, { error: 'an approver approves or sends back a mission in review, or answers a blocked one' });
+      }
+      const r = store.updateTask({ ...b, agent: a.name || undefined, id: mTask[1], via: who.via });
       if (r.error) return send(res, r.error === 'not_found' ? 404 : 400, r);
       broadcast(statusEvent(b.status, r.task), { ...r.task, note: b.note }, { by: r.by, prev_status: r.prev_status });
       return send(res, 200, { task: auth.taskView(who, r.task), prev_status: r.prev_status });
@@ -977,17 +1042,28 @@ const MCP_TOOLS = [
   { name: 'list_missions', description: 'List missions, optionally filtered by status: queued, claimed, in_progress, blocked, review, approved, done, failed, discarded. Omit status, or pass all, for every mission. approved means the boss approved it and it is back with its holder to apply the approved items.', inputSchema: { type: 'object', properties: { status: { type: 'string' } }, additionalProperties: false } },
   { name: 'create_mission', description: 'Open a mission before starting substantive work. The project must exist (see list_projects); unknown ids are refused. gate: boss (default) or critic decides who rules its review. Need a project that does not exist? Never invent an id: file a proposal instead, a mission in general titled "Propose project: <label>", body carrying the proposed id, entity, repo and why, parked at the boss (status review if your capabilities allow it, otherwise blocked with a note starting "waiting on: boss approval"). The boss creates the project in the dashboard and closes the proposal; only then does the id exist.', inputSchema: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, project: { type: 'string' }, priority: { type: 'integer' }, gate: { type: 'string', enum: ['boss', 'critic'] } }, required: ['title', 'project'], additionalProperties: false } },
   { name: 'start_mission', description: 'Claim a mission by id as consul and mark it in progress.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, note: { type: 'string' } }, required: ['id'], additionalProperties: false } },
-  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. A gate:boss mission closes done only under the project\'s approval policy: when the boss approved the work in this conversation and the policy is in-session, set done and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), park it in review for him instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page; an item that changes the brain carries payload {ops: [{op: write|append, file, content}]}, the exact text, hashed when filed and never changed after. after_approval: "return", on the update that parks the mission in review, sends it back to you as approved instead of done when the boss approves; apply each approved item with apply_item, then close it done. Approval is refused while any item is still proposed. gate: boss escalates a mission to the boss\'s review.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, payload: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object', properties: { op: { type: 'string', enum: ['write', 'append'] }, file: { type: 'string' }, content: { type: 'string' } }, required: ['op', 'file', 'content'] } } }, required: ['ops'] } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' }, after_approval: { type: 'string', enum: ['return'] }, nothing_learned: { type: 'boolean' } }, required: ['id'], additionalProperties: false } },
+  { name: 'update_mission', description: 'Post a progress note, change status, or attach an artifact ({label, url}). review parks it at the boss door; done means finished, verified, and nothing irreversible. A gate:boss mission closes done only under the project\'s approval policy: when the boss approved the work in this conversation and the policy is in-session, set done and put his exact words in approved_in_session; the hub logs the quote. If the project\'s policy does not take chat approvals (the hub says so), park it in review for him instead. review is for work he has not seen, or irreversible steps he has not approved in the chat. items ([{title, body}]) files proposal items the boss can accept or reject one by one on the review page; an item that changes the brain carries payload {ops: [{op: write|append, file, content}]}, the exact text, hashed when filed and never changed after. after_approval: "return", on the update that parks the mission in review, sends it back to you as approved instead of done when the boss approves; apply each approved item with apply_item, then close it done. Approval is refused while any item is still proposed. gate: boss escalates a mission to the boss\'s review. lease_minutes renews the lease on a mission you hold, from now.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, status: { type: 'string' }, note: { type: 'string' }, lease_minutes: { type: 'integer', minimum: 1, maximum: 1440 }, artifact: { type: 'object' }, items: { type: 'array', items: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, payload: { type: 'object', properties: { ops: { type: 'array', items: { type: 'object', properties: { op: { type: 'string', enum: ['write', 'append'] }, file: { type: 'string' }, content: { type: 'string' } }, required: ['op', 'file', 'content'] } } }, required: ['ops'] } }, required: ['title'] } }, gate: { type: 'string', enum: ['boss', 'critic'] }, approved_in_session: { type: 'string' }, after_approval: { type: 'string', enum: ['return'] }, nothing_learned: { type: 'boolean' } }, required: ['id'], additionalProperties: false } },
   { name: 'apply_item', description: 'Apply one approved item of an approved mission you hold: the hub checks the payload against the hash stored when it was filed and writes exactly that text to the brain as consul. The boss approved that exact text, so the curated compartments take it. Once every approved item is applied, close the mission done with update_mission.', inputSchema: { type: 'object', properties: { task: { type: 'string' }, item: { type: 'string' } }, required: ['task', 'item'], additionalProperties: false } },
   { name: 'write_knowledge', description: 'Write or append markdown to the brain as consul. Before closing a mission, append a debrief to projects/<project>/STATE.md: what changed, what was learned, next step. encoding base64 writes an attachment (png/jpg/gif/svg/pdf, 5MB cap, replace-only), e.g. goal-bar references under projects/<p>/references/. The curated compartments (knowledge/, recipes/, entities/<slug>/PROFILE.md, attic/) take the write only when the boss gave consul the librarian or curator role in settings; otherwise the hub refuses it, and the learning goes to the journal for the librarian, with capture. Mission evidence goes to write_work, not here.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, message: { type: 'string' }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'capture', description: 'Record one thing learned in the journal, as consul. kind is one of fact, gotcha, step, rule, why, decision, preference, correction, question, process, pattern; text is the claim, one line, 2000 characters at most; evidence is one line saying how you know; tags are words without #; confidence is observed (default), stated (you were told) or inferred (you concluded it). The hub stamps the id, by, the time and your mission (when you hold several, mission picks one of them), writes the record to journal/<yyyy-mm-dd>.md, and returns it.', inputSchema: { type: 'object', properties: { kind: { type: 'string', enum: KINDS }, text: { type: 'string' }, evidence: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } }, confidence: { type: 'string', enum: ['observed', 'stated', 'inferred'] }, mission: { type: 'string' } }, required: ['kind', 'text', 'evidence'], additionalProperties: false } },
-  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}. section (a heading, or part of one) returns just that section and the frontmatter. claim (an id like c-8k2m1q) returns one claim and its evidence, each source resolved.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' }, section: { type: 'string' }, claim: { type: 'string' } }, additionalProperties: false } },
+  { name: 'read_knowledge', description: 'Read a brain file, or list files under a directory with {dir}. section (a heading, or part of one) returns just that section and the frontmatter. claim (an id like c-8k2m1q) returns one claim and its evidence, each source resolved. A binary file (an image, a PDF) comes back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, dir: { type: 'string' }, section: { type: 'string' }, claim: { type: 'string' } }, additionalProperties: false } },
   { name: 'get_context', description: 'Call this first on any request. Returns the passages from the Bureau brain this request needs, inside a token budget, and a map of related knowledge you can read with read_knowledge. Pass the request text, and the project if you know it.', inputSchema: { type: 'object', properties: { request: { type: 'string' }, project: { type: 'string' }, task: { type: 'string' }, session: { type: 'string' }, budget: { type: 'number' } }, required: ['request'], additionalProperties: false } },
   { name: 'brain_map', description: 'One line per brain file this project can see: path, title, summary, size in tokens. Without project, global knowledge and recipes only.', inputSchema: { type: 'object', properties: { project: { type: 'string' } }, additionalProperties: false } },
   { name: 'search_knowledge', description: 'Search the brain. Returns passages with their file and section, best first. Give project to include that project\'s files; without it, only global knowledge and recipes are searched.', inputSchema: { type: 'object', properties: { q: { type: 'string' }, project: { type: 'string' }, k: { type: 'number' } }, required: ['q'], additionalProperties: false } },
   { name: 'memory_health', description: 'The memory health block, the same JSON as GET /api/memory/health: status (ok or attention) with its reasons, lint errors, unreadable journal blocks and capture volume, approved items not applied yet, stale claims, contradictions, and provenance coverage. Read-only.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
+  // The shift tools (doc 30, D16): what a routine did with curl, now through its own signed-in connector.
+  { name: 'clock_in', description: 'Register on the roster as consul at the start of a shift. kind says what runs you (cowork for a cloud routine); capabilities are tags you declare, which grant nothing once roles are set in Settings: the answer says so.', inputSchema: { type: 'object', properties: { kind: { type: 'string' }, capabilities: { type: 'array', items: { type: 'string' } } }, additionalProperties: false } },
+  { name: 'heartbeat', description: 'Say you are alive and what you are doing, every few minutes during a shift. activity is one honest word (thinking, reading, editing, testing, waiting, idle); note is one line.', inputSchema: { type: 'object', properties: { activity: { type: 'string' }, note: { type: 'string' }, sub_agents: { type: 'array', items: { type: 'object' } } }, additionalProperties: false } },
+  { name: 'read_inbox', description: 'Read consul\'s messages (to consul, to everyone, or from consul), oldest first, the last 200. since (an ISO time) keeps only newer ones.', inputSchema: { type: 'object', properties: { since: { type: 'string' } }, additionalProperties: false } },
+  { name: 'send_message', description: 'Send a message as consul. to is an agent name, human for the boss, or * for everyone; task_id ties it to a mission.', inputSchema: { type: 'object', properties: { to: { type: 'string' }, body: { type: 'string' }, task_id: { type: 'string' } }, required: ['body'], additionalProperties: false } },
+  { name: 'claim_mission', description: 'Claim a mission as consul and get its briefing. With id, that mission; without, the next one from the pool that consul may take (reservations first). Sets a lease (lease_minutes, default the hub\'s). Then mark it in_progress with update_mission.', inputSchema: { type: 'object', properties: { id: { type: 'string' }, lease_minutes: { type: 'integer' } }, additionalProperties: false } },
+  { name: 'get_mission', description: 'One mission in full: body, status, gate, assignee, items with their verdicts and payloads, artifacts and the log.', inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'], additionalProperties: false } },
+  { name: 'list_missions_full', description: 'Missions with filters, as GET /api/tasks: status, assignee, project, and title (words the title contains, any case). Returns the summary fields plus reserved_for, gate, updated time and item counts.', inputSchema: { type: 'object', properties: { status: { type: 'string' }, assignee: { type: 'string' }, project: { type: 'string' }, title: { type: 'string' } }, additionalProperties: false } },
+  { name: 'read_settings', description: 'The policy that applies to consul: the global settings, consul\'s own entry (roles, sign-in) and the settings of the projects consul reaches.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+  { name: 'read_journal', description: 'Journal records as JSON (kind, text, evidence, by, mission, at, confidence, tags, id), filtered by day (yyyy-mm-dd), kind, mission, author or since (an ISO time). Records of projects outside consul\'s list are left out.', inputSchema: { type: 'object', properties: { day: { type: 'string' }, kind: { type: 'string' }, mission: { type: 'string' }, author: { type: 'string' }, since: { type: 'string' } }, additionalProperties: false } },
+  { name: 'recent_activity', description: 'What happened lately on the hub: the roster and the last events (brain writes, mission changes), as the dashboard sees them, cut to consul\'s projects.', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } }, additionalProperties: false } },
 ];
 
 // The MCP credential is one agent with its own projects: every call below acts
@@ -1041,10 +1117,16 @@ function mcpToolCall(name, a = {}, who) {
       return { id: u.task.id, status: u.task.status, lease_until: u.task.lease_until, context: briefingFor(u.task) };
     }
     case 'update_mission': {
-      mcpWalled(who, a.id);
+      const held = mcpWalled(who, a.id);
       const walls = payloadRefusal(who, a.items);
       if (walls) throw new Error(walls);
-      const r = store.updateTask({ id: a.id, agent: me, status: a.status, note: a.note, artifact: a.artifact, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session, after_approval: a.after_approval, nothing_learned: a.nothing_learned });
+      if (a.lease_minutes !== undefined) {
+        if (!(Number.isInteger(a.lease_minutes) && a.lease_minutes >= 1 && a.lease_minutes <= 1440)) throw new Error('lease_minutes is a whole number from 1 to 1440');
+        if (!held || held.assignee !== me) throw new Error(`lease_minutes: only the holder renews a lease, and ${a.id} is not held by ${me}`);
+        const after = a.status || held.status;
+        if (after !== 'claimed' && after !== 'in_progress') throw new Error(`lease_minutes: a mission ${after} holds no lease`);
+      }
+      const r = store.updateTask({ id: a.id, agent: me, status: a.status, note: a.note, artifact: a.artifact, lease_minutes: a.lease_minutes, items: a.items, gate: a.gate, approved_in_session: a.approved_in_session, after_approval: a.after_approval, nothing_learned: a.nothing_learned, via: who.via });
       if (r.error) throw new Error(r.error);
       broadcast(statusEvent(a.status, r.task), { ...r.task, note: a.note }, { by: me, prev_status: r.prev_status });
       return { id: r.task.id, status: r.task.status };
@@ -1089,6 +1171,11 @@ function mcpToolCall(name, a = {}, who) {
       }
       if (a.file) {
         if (!auth.canRead(who, a.file)) throw new Error(`${a.file} is outside this credential's projects`);
+        const raw = knowledge.readKnowledgeRaw(a.file);
+        if (raw && raw.binary) {
+          if (a.section) throw new Error(`${a.file} is a binary file: it has no sections`);
+          return { file: a.file, type: raw.type, content_base64: raw.buf.toString('base64') };
+        }
         const content = knowledge.readKnowledge(a.file);
         if (content === null) throw new Error('not found');
         if (a.section) {
@@ -1128,6 +1215,68 @@ function mcpToolCall(name, a = {}, who) {
       const r = work.readWorkRaw(a.file);
       if (r === null) throw new Error('not found');
       return r.binary ? { file: a.file, content_base64: r.buf.toString('base64') } : { file: a.file, content: r.buf.toString('utf8') };
+    }
+    // ---- the shift tools (doc 30, D16), the same rules as their REST routes ----
+    case 'clock_in': {
+      const ag = store.upsertAgent({ name: me, kind: a.kind, capabilities: a.capabilities });
+      broadcast('agent.registered', ag);
+      const ignored = store.ignoredRoleTags(store.load(), a.capabilities);
+      return { agent: ag, ...(ignored ? { note: store.SETTINGS_ROLES_NOTE } : {}) };
+    }
+    case 'heartbeat': {
+      let ag = store.heartbeat(me, a.note, a.activity, a.sub_agents);
+      if (!ag) { store.upsertAgent({ name: me }); ag = store.heartbeat(me, a.note, a.activity, a.sub_agents); }
+      if (ag && ag.error) throw new Error(ag.error);
+      broadcast('agent.heartbeat', { ...ag, activity: ag.activity });
+      return { agent: ag };
+    }
+    case 'read_inbox': return { messages: store.getMessages({ forAgent: me, since: a.since }).slice(-200) };
+    case 'send_message': {
+      if (!a.body) throw new Error('body required');
+      if (a.task_id) mcpWalled(who, a.task_id);
+      const m = store.postMessage({ from: me, to: a.to, body: a.body, task_id: a.task_id });
+      broadcast('message.posted', m);
+      return { message: m };
+    }
+    case 'claim_mission': {
+      if (a.id) mcpWalled(who, a.id);
+      const r = store.claimTask({ id: a.id, agent: me, lease_minutes: a.lease_minutes, projects: auth.seesAll(who) ? undefined : who.projects });
+      if (r.error) throw new Error(r.error);
+      if (!r.task) return r;
+      store.upsertAgent({ name: me });
+      broadcast('task.claimed', r.task);
+      return { ...r, context: briefingFor(r.task) };
+    }
+    case 'get_mission': {
+      const t = mcpWalled(who, a.id);
+      if (!t) throw new Error(`no mission ${a.id}`);
+      return { task: auth.taskView(who, t) };
+    }
+    case 'list_missions_full': {
+      let ts = s.tasks.filter((t) => auth.seesTask(who, t));
+      if (a.status && a.status !== 'all') ts = ts.filter((t) => t.status === a.status);
+      if (a.assignee) ts = ts.filter((t) => t.assignee === a.assignee);
+      if (a.project) ts = ts.filter((t) => t.project === a.project);
+      if (a.title) {
+        const q = String(a.title).toLowerCase();
+        ts = ts.filter((t) => String(t.title || '').toLowerCase().includes(q));
+      }
+      return { missions: ts.map((t) => ({ id: t.id, title: t.title, status: t.status, project: t.project, assignee: t.assignee, reserved_for: t.reserved_for || null, gate: t.gate, priority: t.priority, created_at: t.created_at, updated_at: (t.log && t.log.length ? t.log[t.log.length - 1].ts : t.created_at), items: (t.items || []).length })) };
+    }
+    case 'read_settings': {
+      const all = store.settingsOf(s);
+      return { settings: { global: all.global, agents: { [me]: all.agents[me] || {} }, projects: Object.fromEntries(Object.entries(all.projects).filter(([id]) => auth.projectAllowed(who, id))) } };
+    }
+    case 'read_journal': {
+      const r = journal.list({ day: a.day, kind: a.kind, mission: a.mission, author: a.author, since: a.since });
+      if (r.error) throw new Error(r.error);
+      return auth.seesAll(who) ? r : { records: r.records.filter((x) => recordVisible(who, x)), invalid: [] };
+    }
+    case 'recent_activity': {
+      const n = Math.min(Math.max(Number(a.limit) || 100, 1), 500);
+      const seen = new Set(s.tasks.filter((t) => auth.seesTask(who, t)).map((t) => t.id));
+      const log = auth.seesAll(who) ? s.log : s.log.filter((e) => e.id && seen.has(e.id));
+      return { agents: s.agents.map((x) => ({ name: x.name, kind: x.kind, activity: x.activity, last_seen: x.last_seen })), log: log.slice(-n) };
     }
     default: throw new Error(`unknown tool: ${name}`);
   }

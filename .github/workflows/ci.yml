@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Node 22 LTS matches production (alwaysdata). The hub needs Node 18 or
-      # newer: global fetch (lib/poke.js, lib/discord.js) and structuredClone
+      # newer: global fetch (lib/poke.js, lib/oidc.js) and structuredClone
       # (lib/store.js).
       - uses: actions/setup-node@v4
         with:
@@ -87,11 +87,6 @@ jobs:
       - name: Pokes (test/pokes.sh)
         run: sh test/pokes.sh
 
-      # The Discord notify policy: a decision table and an end-to-end run
-      # against a local sink, no webhook needed.
-      - name: Notify (test/notify.test.js)
-        run: node test/notify.test.js
-
       # Approval pins the text: a payload edited in state.json after filing
       # fails the hash. Self-contained: starts its own hub on port 8192.
       - name: Apply (test/apply.test.js)
@@ -101,6 +96,21 @@ jobs:
       # of every route and MCP tool. Self-contained: ports 8188 and 8189.
       - name: Authorization (test/authz.test.js)
         run: node test/authz.test.js
+
+      # Sign-in on the MCP door, against a fake issuer that signs its own
+      # tokens. Self-contained: ports 8193 and 8194.
+      - name: Sign-in (test/oidc.test.js)
+        run: node test/oidc.test.js
+
+      # A whole hub out to a folder and into a fresh hub, secrets left out.
+      - name: Export and import (test/export.test.js)
+        run: node test/export.test.js
+
+      # bureau login, token, logout, hub.sh and the context hook on top of it,
+      # against a fake issuer and a fake hub. The file store under a temporary
+      # home, never a keychain. Self-contained: ports 8196 and 8197.
+      - name: CLI sign-in (test/cli.test.js)
+        run: node test/cli.test.js
 
       # Self-contained: starts its own hubs on ports 4711 and 4712.
       - name: Storage (test/storage.sh)
@@ -264,9 +274,6 @@ jobs:
       - name: Journal round trip (test/journal.test.js)
         run: node test/journal.test.js
 
-      - name: Notify (test/notify.test.js)
-        run: node test/notify.test.js
-
       - name: Apply (test/apply.test.js)
         run: node test/apply.test.js
 
@@ -281,6 +288,15 @@ jobs:
 
       - name: Authorization (test/authz.test.js)
         run: node test/authz.test.js
+
+      - name: Sign-in (test/oidc.test.js)
+        run: node test/oidc.test.js
+
+      - name: Export and import (test/export.test.js)
+        run: node test/export.test.js
+
+      - name: CLI sign-in (test/cli.test.js)
+        run: node test/cli.test.js
 
       - name: Security (test/security.test.js)
         run: node test/security.test.js

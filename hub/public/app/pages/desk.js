@@ -13,6 +13,7 @@ import { mergeSection } from '../desk/merge.js';
 import { inboxSection } from '../desk/inbox.js';
 import { teamSection } from '../desk/team.js';
 import { officeWindow } from '../desk/office.js';
+import { appsSection } from '../desk/apps.js';
 
 // What the feed says. Heartbeats aren't here: eight agents pinging is noise.
 const VERBS = {
@@ -131,6 +132,7 @@ export async function render(ctx) {
   ctx.title('Desk');
   await store.ready();
 
+  const apps = appsSection(ctx);
   const needs = needsSection(ctx);
   const flight = inFlightSection();
   const merge = mergeSection(ctx, () => store.getState());
@@ -143,10 +145,12 @@ export async function render(ctx) {
   const page = h('div', { class: 'work-page work-desk' },
     h('div', { class: 'om-ground om-field-ground' },
       h('div', { class: 'om-workspace' },
-        h('div', { class: 'om-work work-main' }, needs.node, flight.node, merge.node, recent.node),
+        h('div', { class: 'om-work work-main' }, apps.node, needs.node, flight.node, merge.node, recent.node),
         h('aside', { class: 'om-rail work-rail', 'aria-label': 'The office, inbox and team' }, officeWindow(), inbox.node, team.node))));
 
+  apps.paint();
   ctx.onCleanup(store.subscribe((state) => {
+    apps.paint();
     needs.paint();
     flight.paint(state);
     merge.paint();

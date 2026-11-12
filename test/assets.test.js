@@ -123,14 +123,15 @@ async function main() {
     hub.kill('SIGKILL');
   }
 
-  console.log('4. the status words and patterns match on both surfaces');
+  // The server-rendered status marks went with the link pages (doc 30, D12):
+  // app/status.js is the one place a status gets its word and pattern.
+  console.log('4. the status words and patterns live in one place');
   const look = (text) => Object.fromEntries([...text.matchAll(/^\s*(\w+): \{ word: '([^']+)', dither: '([^']+)'/gm)].map((m) => [m[1], `${m[2]}/${m[3]}`]));
   const app = read('app/status.js');
   const fromApp = look(app.slice(app.indexOf('export const STATUSES'), app.indexOf('export const LANES')));
-  const server = fs.readFileSync(path.join(ROOT, 'hub', 'server.js'), 'utf8');
-  const fromServer = look(server.slice(server.indexOf('const STATUS_LOOK'), server.indexOf('function statusMark')));
   check('the app lists statuses', Object.keys(fromApp).length === 9, fromApp);
-  check('server.js maps each status as app/status.js does', JSON.stringify(Object.entries(fromApp).sort()) === JSON.stringify(Object.entries(fromServer).sort()), { fromApp, fromServer });
+  const server = fs.readFileSync(path.join(ROOT, 'hub', 'server.js'), 'utf8');
+  check('server.js keeps no second copy', !server.includes('STATUS_LOOK'));
 
   console.log(`\npassed ${pass}, failed ${fail}`);
 }
