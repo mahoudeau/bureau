@@ -14,6 +14,10 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - **Project walls enforced from the credential**, on every read and write, REST and MCP: `?file=`, `?section=`, `?claim=`, `/map`, `/search`, `/api/context` (a `task:` of another project no longer switches scope), mission reads and updates, the work store, `/api/journal`, and capture tags. An `/api/` route with no rule in the table is a 404.
 - **MCP's credential is one agent with its own project list.** A minted token is its MCP URL; the old URL keeps working in strict mode as `consul`, never as `human`, until `DELETE /api/mcp` retires it.
 - **The gate, in every mode.** A `gate: boss` mission now cannot reach `done` or leave `review` except by the boss, a review link, or the explicit approval policy. **With no settings at all an agent no longer closes boss-gate work `done` (RULE-MISSIONS-24 changed).** `review` to `in_progress`, `failed`, `discarded`, `blocked` or `claimed` by an agent is refused. Agents can no longer file `verdicts`. A boss gate cannot be lowered to `critic` while in `review`. See UPGRADING.md for what agents relying on the old unset behaviour must do.
+- A malformed request target (`GET // HTTP/1.1`) took the process down. It answers 400 now, and an unhandled rejection or exception is logged instead of ending the hub.
+- The v2 brain browser rendered note markdown without escaping it. It escapes first, links are http(s) or brain paths only, and every dashboard page carries a Content-Security-Policy with a per-response nonce.
+- The pattern that found headings was quadratic, and a note could stall boot for most of a minute. The same class is gone from claims parsing, brain-lint and the id migration, and headings are capped at 2,000 characters.
+- `git add` and `git mv` take paths after `--`, `.git` is refused in every path segment, and the intake sweep leaves out what the path guard refuses.
 
 ### Added
 - Claim ids (Brain Format v0.3). `hub/tools/migrate-claims.js <brain> [--write]` moves curated notes to `format: 0.3`: every claim on one line, every claim with a `^c-` id, its text unchanged. It is safe to run twice.
@@ -23,28 +27,6 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `reads.mcp` in the memory health block: the MCP sessions that did work without calling `get_context`. The MCP door has no session id, so a session is one agent's calls with no gap over 60 minutes. The log gains the tool's name for each work call, and nothing it was given.
 - The context call answers in three states: `state` is `none`, `adjacent` or `answered`, with `uncovered` for the query terms no passage covers. A direct call or MCP is told "nothing on this" in one line. The Claude Code hook and mission briefings stay silent.
 - A French shadow: `hub/tools/shadow-fr.js <brain>` writes `.index/shadow-fr.json`, French search terms per passage keyed by a hash of its text. Commit it with the brain. The hub searches these terms and never serves them. No file means no change.
-
-### Fixed
-- A young brain answers short questions. Below the 620 chunks the floors were set on, they now shrink with what a rare word can score there, and an unknown word no longer outweighs the known ones. A long question sharing one word with a note still gets nothing.
-- `miss` is no longer true when every relevant passage was held back as already sent in the session, so the memory health block stops counting repeats as misses.
-
-### Changed
-- `context-hook.js` also runs on `SessionStart` with the `compact` matcher and clears the hub's no-repeat memory for that session, so passages lost to a compaction can be served again. **Add the `SessionStart` entry from `connectors/claude-code/README.md` to your settings.** Other `SessionStart` sources are ignored.
-- A `POST /api/context` with `reset: true` and an empty `request` is logged as a reset and no longer counts as a call.
-- **The hub refuses to start with neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN`, a placeholder in either, or the two set to the same value.** Strict mode with no `BUREAU_TOKEN` is the end of the upgrade and boots. `BUREAU_ALLOW_INSECURE_LOCAL=1` is the opt-in for a demo on loopback. The default bind is `127.0.0.1`. See UPGRADING.md, "Before you deploy this release to a live hub".
-- **The token is no longer accepted in the query string.** `POST /api/events/ticket` issues a one-use, 60-second ticket for the event stream, carrying the identity and scope of the credential that minted it, and the dashboards fetch images with the header. A scoped agent token gets no ticket, as it gets no stream; a ticket minted before a revoke is dead, and a revoke ends the streams that token held open.
-- CORS is same-origin by default, with `BUREAU_ALLOWED_ORIGINS` for the rest. A cross-origin request to `/api/` is refused before the token is read.
-- The `rendered` context block has a random boundary per response and quotes brain text with `> `, so a note cannot close it or forge a label.
-- A 500 answers `internal error`; the detail goes to the server log.
-- `state.json`, its backups and the prompt log are `0600` in a `0700` folder, existing files included, on POSIX.
-
-### Security
-- A malformed request target (`GET // HTTP/1.1`) took the process down. It answers 400 now, and an unhandled rejection or exception is logged instead of ending the hub.
-- The v2 brain browser rendered note markdown without escaping it. It escapes first, links are http(s) or brain paths only, and every dashboard page carries a Content-Security-Policy with a per-response nonce.
-- The pattern that found headings was quadratic, and a note could stall boot for most of a minute. The same class is gone from claims parsing, brain-lint and the id migration, and headings are capped at 2,000 characters.
-- `git add` and `git mv` take paths after `--`, `.git` is refused in every path segment, and the intake sweep leaves out what the path guard refuses.
-
-### Added
 - Lint on write reaches project files. A write under `projects/` that would leave an error there (an over-long summary, a duplicate spec rule) answers 422, as curated writes already did. Project files stay as lenient as they were about everything else.
 - The work store: `GET` and `POST /api/work`, a mission's evidence under `work/<t-id>/` in `BUREAU_WORK_DIR` (default `hub/work/`). Same file types, base64 rule and 5MB cap as the brain, but plain files: no git, no lint. Writes need an open mission. The folder is deleted when the mission closes `done`, `failed` or `discarded`, whichever door closed it, and leftovers go at boot. MCP gains `write_work` and `read_work`. Review links and the dashboards show a mission's work images.
 - Settings roles `librarian` and `curator`, next to `lead` and `critic`. `curator` lets an agent write the curated compartments and nothing else.
@@ -71,6 +53,14 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - The setting `require_capture` (global, default off). When on, an agent closing its own mission `done` must have a journal record under it or send `nothing_learned: true`. The boss's closes and approvals are not affected.
 
 ### Changed
+- `context-hook.js` also runs on `SessionStart` with the `compact` matcher and clears the hub's no-repeat memory for that session, so passages lost to a compaction can be served again. **Add the `SessionStart` entry from `connectors/claude-code/README.md` to your settings.** Other `SessionStart` sources are ignored.
+- A `POST /api/context` with `reset: true` and an empty `request` is logged as a reset and no longer counts as a call.
+- **The hub refuses to start with neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN`, a placeholder in either, or the two set to the same value.** Strict mode with no `BUREAU_TOKEN` is the end of the upgrade and boots. `BUREAU_ALLOW_INSECURE_LOCAL=1` is the opt-in for a demo on loopback. The default bind is `127.0.0.1`. See UPGRADING.md, "Before you deploy this release to a live hub".
+- **The token is no longer accepted in the query string.** `POST /api/events/ticket` issues a one-use, 60-second ticket for the event stream, carrying the identity and scope of the credential that minted it, and the dashboards fetch images with the header. A scoped agent token gets no ticket, as it gets no stream; a ticket minted before a revoke is dead, and a revoke ends the streams that token held open.
+- CORS is same-origin by default, with `BUREAU_ALLOWED_ORIGINS` for the rest. A cross-origin request to `/api/` is refused before the token is read.
+- The `rendered` context block has a random boundary per response and quotes brain text with `> `, so a note cannot close it or forge a label.
+- A 500 answers `internal error`; the detail goes to the server log.
+- `state.json`, its backups and the prompt log are `0600` in a `0700` folder, existing files included, on POSIX.
 - Sol's digest opens with the health block, and anything in `attention` becomes an item or a message to the boss.
 - `test/memory-eval.sh` checks recall@5 as a floor (at or above the recorded 0.875) instead of an exact match, so a better score passes.
 - **Cutover of a journal day.** The first capture on a day whose file is v0.2 free text moves that file to `journal/<yyyy-mm-dd>.v02.md` (git mv, its own commit, content untouched) and starts a `format: 0.3` file.
@@ -97,6 +87,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - The hub finds `git.exe` on the PATH, never in the brain folder, and says clearly at boot when git is missing.
 - The boot warnings lost their emoji and suggest a token command that works without openssl.
 - The repo has a `.gitattributes`, so a Windows clone keeps the scripts and fixtures with LF endings. `hub.sh` and `project-of.sh` read token files saved by Notepad.
+- A young brain answers short questions. Below the 620 chunks the floors were set on, they now shrink with what a rare word can score there, and an unknown word no longer outweighs the known ones. A long question sharing one word with a note still gets nothing.
+- `miss` is no longer true when every relevant passage was held back as already sent in the session, so the memory health block stops counting repeats as misses.
 
 ## [0.2.0] - 2026-10-01
 
