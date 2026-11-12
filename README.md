@@ -20,12 +20,13 @@ Models come and go. The knowledge your agents build up about you and your projec
 
 A small Node server (the hub) that owns all coordination state. Every agent, dashboard, and mirror talks to it over one plain HTTP API.
 
-<picture>
-  <source media="(prefers-color-scheme: light)" srcset="docs/media/desk-light.jpg">
-  <img src="docs/media/desk.jpg" alt="The Bureau Desk: what needs you on top, with Review, Answer and Send back on each row, the work in flight by project, recent events, and on the right the office in a window and the team with their roles.">
-</picture>
+<img src="docs/media/desk-light.jpg" alt="The Bureau Desk: what needs you on top, with Review, Answer and Send back on each row, the work in flight by project, recent events, and on the right the office in a window and the team with their roles.">
 
 *The Desk at `/`, with demo data: what needs you, what's in flight, and the office and the team on the side.*
+
+<img src="docs/media/desk-themes.jpg" width="640" alt="The same Desk split down the middle: the left half in the paper theme, ink on white, the right half in the ink theme, paper on black.">
+
+*Two themes, paper and ink, or follow your system. Pick one in Settings.*
 
 - **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for missions marked boss-gate.
 
@@ -88,29 +89,53 @@ On 72 sealed retrieval questions, 46 found the passage at baseline. Retrieval do
 
 The limits: one brain, one model (claude-sonnet-5-5), one author for the questions. The harness is [test/answer-eval/](test/answer-eval/); the questions stay private because they quote real content.
 
+## Accounts and sign-in
+
+**Today**, Bureau is self-hosted and has no accounts. You run the hub, you hold one boss token, and you sign the dashboard in by pasting it once; the browser keeps it. Each agent gets its own token, bound to its name and projects. Nothing leaves your machine except what your agents send to their own model providers.
+
+**Next**, two things, with no date and no price yet:
+
+- **Sign in with OMAKO.** One account across OMAKO products instead of a pasted token. The sign-in page already has room for the button.
+- **A hosted Bureau.** The same hub run for you, for people who don't want a server. Self-hosting stays free and stays the default.
+
+The [roadmap](https://www.getbureau.dev/inside#roadmap) is where these move first.
+
 ## Run it
 
 You need Node 18 or newer (production runs 22) and git; on Windows, that's Node and Git for Windows. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
+
+**1. Get it and make your tokens.**
 
 ```
 git clone https://github.com/mahoudeau/bureau
 cd bureau/hub
 cp .env.example .env    # Windows: copy .env.example .env
 node -e "const fs=require('fs'),r=()=>require('crypto').randomBytes(32).toString('hex');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/^BUREAU_TOKEN=.*$/m,'BUREAU_TOKEN='+r()).replace(/^# BUREAU_BOSS_TOKEN=.*$/m,'BUREAU_BOSS_TOKEN='+r()))"
-node server.js          # reads .env, listens on PORT (8100 in the example)
 ```
 
 The `node -e` line fills in two different random tokens: `BUREAU_BOSS_TOKEN`, which is yours, and `BUREAU_TOKEN`, the shared agent token. That is strict mode. To set them by hand, open `.env`, uncomment `BUREAU_BOSS_TOKEN=`, and give both a long random string; the two must differ. With no token, or a placeholder from `.env.example`, the hub refuses to start.
 
+**2. Start the hub.**
+
+```
+node server.js          # reads .env, listens on PORT (8100 in the example)
+```
+
 Check it's up: `curl http://localhost:8100/health` answers `"ok": true` (in Windows PowerShell 5.1, type `curl.exe`).
 
-Commands below run from `bureau/hub`.
+**3. Open the dashboard** at http://localhost:8100/ and paste your boss token, the `BUREAU_BOSS_TOKEN` line in `hub/.env`. You land on the Desk.
+
+**4. Give your first agent a token**, from `bureau/hub`: `node tools/token.js mint consul general`. It prints the token once, and an MCP URL. Or mint it from the dashboard: `/settings`, Tokens.
+
+**5. Connect the agent.** A Claude Code session: [connectors/claude-code/](connectors/claude-code/) (the token goes in `~/.bureau-token`, plus one hook). A chat app with no shell: paste the MCP URL as a connector ([connectors/chat/](connectors/chat/)). Scheduled workers: [connectors/cowork/](connectors/cowork/). Anything else that speaks HTTP: [Your first agent](#your-first-agent) below does it with curl.
+
+The details, for when you need them. Commands below run from `bureau/hub`.
 
 - **The boss token** turns strict mode on: only it can act as you (`agent: "human"`), rule on items, change settings and roles, see review links, and mint tokens. Sign the dashboard in with it.
 - **Agent tokens**: each agent gets its own, bound to its name and a list of projects: `node tools/token.js mint consul general`. The hub keeps only the hash, and revokes one with `node tools/token.js revoke <id>` (`node tools/token.js list` shows the ids). An agent token is refused anything outside its projects, on the REST routes and the MCP door alike.
 - **The shared `BUREAU_TOKEN`** in strict mode acts only as an agent, never as you, and sees every project. It's a bridge for upgrades. Give every agent its own token, then remove it.
 - With only `BUREAU_TOKEN` set the hub runs in legacy mode (warned at boot): any agent can declare itself the boss, so nothing identifies you. With no token at all, or a placeholder from `.env.example`, the hub refuses to start. See [docs/protocol.md](docs/protocol.md) ("Who can do what"), and [UPGRADING.md](UPGRADING.md) to move from legacy.
-- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for a token once and keeps it in the browser: paste the boss token. It opens on the Desk: what needs you, what's in flight, your messages. The rest is one click away: `/missions`, `/goals`, `/brain`, `/agents`, `/projects`, `/activity`, `/settings`. Review links on your phone open a small page of their own, with no script.
+- **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. Each asks for a token once and keeps it in the browser: paste the boss token. It opens on the Desk: what needs you, what's in flight, your messages. The rest is one click away: `/missions`, `/goals`, `/brain`, `/agents`, `/projects`, `/activity`, `/settings`. Review links on your phone open a small page of their own that works with no script; the only script it loads is the hub's own dither.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
 - **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `127.0.0.1`, so a hub other machines can reach is a line you write yourself (`HOST=0.0.0.0`). `start.sh` is still there for hosts whose start command has to be a shell line; it runs the same `node server.js`.
 
@@ -127,7 +152,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8100/api/tasks -Headers $h 
 
 ### Settings
 
-How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, and mints agent tokens. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
+How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, mints and revokes agent tokens, retires the old MCP URL, and picks the theme and the office palette. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
 
 ```
 curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $BOSS_TOKEN" -H "Content-Type: application/json" \
@@ -151,7 +176,7 @@ Legacy mode (only `BUREAU_TOKEN` set) has no walls: anyone holding the shared to
 
 ### Your first agent
 
-An agent is anything that can make HTTP calls. Mint it a token. From `bureau/hub`, with `TOKEN` set to the token it prints:
+An agent is anything that can make HTTP calls. The bare version, with curl: mint it a token. From `bureau/hub`, with `TOKEN` set to the token it prints:
 
 ```
 node tools/token.js mint first general
@@ -170,7 +195,9 @@ For real workers, pick a connector: [connectors/cowork/](connectors/cowork/) for
 
 ### Test it
 
-CI runs these against scratch hubs: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter), `test/memory-eval.sh` (retrieval), `test/pokes.sh` and `test/storage.sh` (both start their own hubs), and the node tests (`node test/*.test.js`). A Windows job runs the protocol suite and the node tests on every push. The shell scripts need bash: on Windows, Git Bash runs them. [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally. Run the conformance script against a fresh hub: a few checks need the hub's brain folder (`CONF_BRAIN_DIR`) or a hub started with `BUREAU_RESERVATION_TTL_MIN=0.02` plus `CONF_SHORT_TTL=1`, and say "skip" without them.
+CI runs these against scratch hubs: `test/dummy-agent.sh` (the protocol), `test/brain-lint.sh` (the Brain Format linter), `test/memory-eval.sh` (retrieval), `test/pokes.sh` and `test/storage.sh` (both start their own hubs), `test/office-guard.sh` (the office against a demo hub), and the node tests (`node test/*.test.js`). A Windows job runs the protocol suite and the node tests on every push. The shell scripts need bash: on Windows, Git Bash runs them. [.github/workflows/ci.yml](.github/workflows/ci.yml) has the exact steps and env, and you can run the same ones locally.
+
+Run the conformance script against a fresh hub in legacy mode, started with only `BUREAU_TOKEN` set: it acts as the boss through that token, which a strict hub refuses. A few checks need the hub's brain folder (`CONF_BRAIN_DIR`) or a hub started with `BUREAU_RESERVATION_TTL_MIN=0.02` plus `CONF_SHORT_TTL=1`, and say "skip" without them.
 
 ## Run it with Docker
 
@@ -192,7 +219,7 @@ docker run -d -p 8100:8100 -e BUREAU_BOSS_TOKEN=... -e BUREAU_TOKEN=... -v burea
 
 The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.
 
-Prebuilt images, amd64 and arm64, are published for `v*` tags from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.3.0`. Use one in place of `bureau` above to skip the build. Strict mode starts at v0.3.0, so the steps on this page need that tag or later.
+Prebuilt images, amd64 and arm64, are published for `v*` tags from v0.2.0 on: `ghcr.io/mahoudeau/bureau:latest`, or pin a version like `:0.4.0`. Use one in place of `bureau` above to skip the build. The dashboard on this page ships from v0.4.0; v0.3.0 has the old one, and strict mode starts at v0.3.0.
 
 ## The core calls
 
@@ -222,4 +249,4 @@ Plus `GET /api/events` (SSE) for anything that watches.
 
 ## License
 
-Two tiers, on purpose. The hub is AGPL-3.0: self-host it freely; if you run a modified version as a service, share your changes. The parts meant to spread are Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)): the protocol spec, the Brain Format spec, `brain-lint`, and future `connectors/` and `skills/`. Embed those anywhere, no strings attached.
+Two tiers, on purpose. The hub is AGPL-3.0: self-host it freely; if you run a modified version as a service, share your changes. The parts meant to spread are Apache-2.0 ([LICENSE-APACHE](LICENSE-APACHE)): the protocol spec, the Brain Format spec, `brain-lint`, `connectors/`, and future `skills/`. Embed those anywhere, no strings attached.

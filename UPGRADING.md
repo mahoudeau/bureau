@@ -15,14 +15,14 @@ The brain has its own history in git. The state file is what the steps below pro
 1. Check the running version: `curl https://your-hub/api/health -H "Authorization: Bearer $TOKEN"` shows `version` and `schema_version`.
 2. Stop the hub. A clean stop (SIGTERM or SIGINT; Ctrl-C or closing the window on Windows) writes any pending change and releases `data/hub.lock`.
 3. Copy the state aside yourself, whatever the hub does for you: `cp hub/data/state.json hub/data/state.json.manual-<date>`.
-4. Pull the new code: `git pull` (or check out the release tag, e.g. `git checkout v0.2.0`).
+4. Pull the new code: `git pull` (or check out the release tag, e.g. `git checkout v0.4.0`).
 5. Read the release's entry in `CHANGELOG.md`, for new settings in particular.
 6. Start the hub: `node hub/server.js` (it reads `hub/.env` itself), or restart it the way your host does. `sh hub/start.sh` still works.
 7. Check the log and `/api/health`. The version is the new one; `schema_version` is the one this release expects.
 
 No `npm install`, ever. The hub has no dependencies.
 
-## The new dashboard (unreleased)
+## 0.4.0: the new dashboard
 
 One dashboard replaces the two old ones. The API, the agents, the review links and the office's own URL don't change.
 
@@ -37,13 +37,15 @@ One dashboard replaces the two old ones. The API, the agents, the review links a
 
 **Reload open tabs.** A tab still showing the old dashboard keeps asking for files that are gone. The token stays in the browser, so you don't sign in again.
 
-**Themes.** The dashboard has system, paper and ink. The four Game Boy themes are office only now, in the office's own palette switcher. A theme you picked in the old dashboard isn't carried over.
+**Themes.** The dashboard has system, paper and ink. The four Game Boy palettes belong to the office: it starts in grey, and you pick another in Settings, Appearance, or with P in the office. A theme you picked in the old dashboard isn't carried over.
 
-## Before you deploy this release to a live hub
+**Review links load one script.** `/r/`, `/m/` and the HTML 404 now allow the hub's own scripts and nothing else (`script-src 'self'`, no inline script), to draw the dither. They work the same without it.
 
-This release changes where the hub listens and which browser origins it answers. Behind a platform proxy (alwaysdata is the case written out here, with `bureau.mathieu.dev` as the public name), get these right before the new code runs. Getting them wrong means a site that answers 502, or a dashboard that gets 403 on every write, and nothing in the repo can see your server's settings for you.
+## 0.3.0 behind a platform proxy
 
-**What the hub now does.** With no `HOST` and no `IP` in its environment or `hub/.env`, the hub binds `127.0.0.1` (it used to bind `::`). A platform that injects `IP` is unaffected: `hub/lib/env.js` gives an injected `IP` priority over everything else, including a `HOST` line in `hub/.env`. On alwaysdata the platform injects `IP` and `PORT` (another Node site on the same account binds exactly `process.env.IP` and `process.env.PORT`). What must be confirmed on the machine is that the running hub site actually receives them.
+0.3.0 changed where the hub listens and which browser origins it answers. Behind a platform proxy, get these right before the new code runs. Getting them wrong means a site that answers 502, or a dashboard that gets 403 on every write, and nothing in the repo can see your server's settings for you. Below, `hub.example.com` stands for your hub's public name.
+
+**What the hub now does.** With no `HOST` and no `IP` in its environment or `hub/.env`, the hub binds `127.0.0.1` (it used to bind `::`). A platform that injects `IP` is unaffected: `hub/lib/env.js` gives an injected `IP` priority over everything else, including a `HOST` line in `hub/.env`. Many Node hosts inject `IP` and `PORT`. What must be confirmed on the machine is that the running hub actually receives them.
 
 **Do these checks on the server, while the old code is still running.**
 
@@ -60,19 +62,19 @@ This release changes where the hub listens and which browser origins it answers.
 
    ```
    HOST=::
-   BUREAU_PUBLIC_URL=https://bureau.mathieu.dev
+   BUREAU_PUBLIC_URL=https://hub.example.com
    ```
 
-   `HOST=::` is the bind the old default used, so a host that injects nothing is no worse off than before. If the IP check above shows no `IP`, this line is what keeps the site up; do not deploy without it. `BUREAU_PUBLIC_URL` is what lets the origin check recognise the dashboard: a browser sends `Origin: https://bureau.mathieu.dev`, and behind a proxy the `Host` the hub sees can be an internal address. With it set the dashboard's POSTs and SSE tickets pass whatever the proxy forwards. Without it, and with no `X-Forwarded-Host`, every dashboard write answers 403. Check it is not already there with a different value (`grep '^BUREAU_PUBLIC_URL=' hub/.env`). It also fills in review links and MCP URLs.
+   `HOST=::` is the bind the old default used, so a host that injects nothing is no worse off than before. If the IP check above shows no `IP`, this line is what keeps the site up; do not deploy without it. `BUREAU_PUBLIC_URL` is what lets the origin check recognise the dashboard: a browser sends `Origin: https://hub.example.com`, and behind a proxy the `Host` the hub sees can be an internal address. With it set the dashboard's POSTs and SSE tickets pass whatever the proxy forwards. Without it, and with no `X-Forwarded-Host`, every dashboard write answers 403. Check it is not already there with a different value (`grep '^BUREAU_PUBLIC_URL=' hub/.env`). It also fills in review links and MCP URLs.
 
-3. Confirm the tokens the new boot refusal will read: `BUREAU_TOKEN` is real, not a placeholder. `grep -c '^BUREAU_TOKEN=change-me' hub/.env` prints `0`. The hub exits at boot otherwise, and on alwaysdata a site that exits at boot answers 502.
+3. Confirm the tokens the new boot refusal will read: `BUREAU_TOKEN` is real, not a placeholder. `grep -c '^BUREAU_TOKEN=change-me' hub/.env` prints `0`. The hub exits at boot otherwise, and behind most platform proxies a site that exits at boot answers 502.
 
 **After the deploy, in order:**
 
 ```
-curl -s https://bureau.mathieu.dev/health
-curl -s -H "Authorization: Bearer $BUREAU_TOKEN" https://bureau.mathieu.dev/api/health
-curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "Origin: https://bureau.mathieu.dev" -H "Authorization: Bearer $BUREAU_TOKEN" https://bureau.mathieu.dev/api/events/ticket
+curl -s https://hub.example.com/health
+curl -s -H "Authorization: Bearer $BUREAU_TOKEN" https://hub.example.com/api/health
+curl -s -o /dev/null -w '%{http_code}\n' -X POST -H "Origin: https://hub.example.com" -H "Authorization: Bearer $BUREAU_TOKEN" https://hub.example.com/api/events/ticket
 ```
 
 The first answers `ok`, the second shows `auth: "legacy"` and the new `version`, the third prints `200` (a `403` here is the origin check refusing the public name: fix `BUREAU_PUBLIC_URL` and restart).
@@ -83,9 +85,9 @@ Each step leaves everything working. Nothing below ever needs two things to chan
 
 1. **Roles and approval policy in settings, on the old code.** Step 1 of the next section. A worker that closes its own boss-gate work should keep working after step 3 below.
 2. **The `hub/.env` lines above, on the old code.** No restart required yet.
-3. **Deploy this release with only `BUREAU_TOKEN` set.** Legacy mode: identities are still declared, the hub warns at boot. The Claude Code hook, `hub.sh`, the MCP connector URLs on claude.ai and cowork routines all carry on untouched, on the same credential. Run the three checks above. Reload open dashboard tabs: the old page asks for an event stream with the token in the URL, which is gone.
+3. **Deploy 0.3.0 or later with only `BUREAU_TOKEN` set.** Legacy mode: identities are still declared, the hub warns at boot. The Claude Code hook, `hub.sh`, the MCP connector URLs on claude.ai and cowork routines all carry on untouched, on the same credential. Run the three checks above. Reload open dashboard tabs: the old page asks for an event stream with the token in the URL, which is gone.
 4. **Set `BUREAU_BOSS_TOKEN`, restart, sign the dashboard in with it.** `/api/health` says `strict`. Every agent credential still works as before and now acts as an agent: shared-token clients on every project (the hook, `hub.sh`, routines), the old MCP URL as `consul`. The dashboard's writes need the boss token, so sign in right after the restart. On a phone or a second browser, sign in there too.
-5. **Mint and swap one agent at a time**, as in step 4 of the next section: the `~/.bureau-token` of each Claude Code machine (hook and `hub.sh` read the same file), each connector on claude.ai, each scheduled routine's token. Do a chat connector or routine one at a time, and check the next run lands before moving on. On alwaysdata set `BUREAU_URL=https://bureau.mathieu.dev` for `node hub/tools/token.js`: the platform's `PORT` is not what `hub/.env` says. A single agent that breaks is one token to fix; the rest stay on the shared token.
+5. **Mint and swap one agent at a time**, as in step 4 of the next section: the `~/.bureau-token` of each Claude Code machine (hook and `hub.sh` read the same file), each connector on claude.ai, each scheduled routine's token. Do a chat connector or routine one at a time, and check the next run lands before moving on. Behind a platform that injects `PORT`, set `BUREAU_URL=https://hub.example.com` for `node hub/tools/token.js`: the platform's `PORT` is not what `hub/.env` says. A single agent that breaks is one token to fix; the rest stay on the shared token.
 6. **Retire the shared credentials last**, step 5 of the next section. This is the only step that can lock anything out, and you do it only when nothing has used them.
 
 To go back at any point: unset `BUREAU_BOSS_TOKEN` and restart. To go back further, run the previous code; the state file is unchanged and it ignores the fields it does not know.
@@ -109,7 +111,7 @@ and make sure pair-mode agents carry the boss's words in `approved_in_session`. 
 
    ```
    curl -X PATCH https://your-hub/api/settings -H "Authorization: Bearer $BUREAU_TOKEN" -H "Content-Type: application/json" \
-     -d '{"agents":{"consul":{"roles":["critic","lead"]},"sol":{"roles":["librarian"]}},"projects":{"bureau":{"approval":"in-session"}}}'
+     -d '{"agents":{"consul":{"roles":["critic","lead"]},"sol":{"roles":["librarian"]}},"projects":{"general":{"approval":"in-session"}}}'
    ```
 
 2. **Deploy this version, with only `BUREAU_TOKEN` set.** The hub runs legacy: it warns at boot, `/api/health` says `auth: "legacy"`. `hub.sh`, the context hook, cowork routines and the old MCP URL behave as before, plus the new gate rules. Check that a mission flow you rely on still closes.
@@ -122,7 +124,7 @@ and make sure pair-mode agents carry the boss's words in `approved_in_session`. 
 4. **Mint a token per agent, one at a time**, and swap it in:
 
    ```
-   node hub/tools/token.js mint consul bureau,general     # prints the token and its MCP URL, once
+   node hub/tools/token.js mint consul general            # prints the token and its MCP URL, once
    node hub/tools/token.js mint sol '*'                   # the librarian reads every project
    ```
 
@@ -132,12 +134,12 @@ and make sure pair-mode agents carry the boss's words in `approved_in_session`. 
 
 **Roll back.** Unset `BUREAU_BOSS_TOKEN` and restart: back in legacy, with the shared token. Tokens stay in `state.json` and work again if you turn strict back on, unless revoked. No schema changed: the same `state.json` runs the older code, which ignores the fields it doesn't know.
 
-## The security release: what to check first
+## 0.3.0, the security release: what to check first
 
 These change what a running hub accepts. Check them before you restart.
 
 1. **A real token is required.** With neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN` set, a placeholder from `.env.example` in either, or the two set to the same value, the hub prints why and exits. Strict mode with no `BUREAU_TOKEN` is fine: that is the end of the upgrade above. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. For a demo on one machine only, `BUREAU_ALLOW_INSECURE_LOCAL=1` starts it anyway, and it refuses any bind that is not loopback.
-2. **The default bind is `127.0.0.1`**, not all interfaces. A host that injects `IP` is unaffected, and so is the Docker image, which sets `HOST=0.0.0.0`. Anything else that reaches the hub from another machine needs `HOST=0.0.0.0` (or `HOST=::`) in `hub/.env`. Behind a platform proxy, see **Before you deploy this release to a live hub**.
+2. **The default bind is `127.0.0.1`**, not all interfaces. A host that injects `IP` is unaffected, and so is the Docker image, which sets `HOST=0.0.0.0`. Anything else that reaches the hub from another machine needs `HOST=0.0.0.0` (or `HOST=::`) in `hub/.env`. Behind a platform proxy, see **0.3.0 behind a platform proxy**.
 3. **CORS is no longer `*`.** Same-origin pages work as before. A page on another origin needs `BUREAU_ALLOWED_ORIGINS=https://that.example`, comma-separated. Behind a reverse proxy that rewrites `Host`, set `BUREAU_PUBLIC_URL` so the hub knows its own name, or dashboard writes and SSE tickets answer 403.
 4. **`?token=` is gone.** Any script calling the API with it must send `Authorization: Bearer <token>` instead. Dashboard links that carried the token use the fragment now: `/#token=...`.
 5. **The data folder is private.** At every boot the hub sets it to `0700` and the files in it to `0600` (POSIX only). A backup job reading it as another user needs to run as the hub's user.

@@ -21,6 +21,8 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 
 **Review from anywhere:** when `BUREAU_PUBLIC_URL` is set, the review ping carries two links, approve and send back. Each opens a small confirmation page served by the hub: approve is one tap; send back asks for the note, which stays required. Links are mission-scoped, single-use, and expire after 7 days.
 
+**Answer from anywhere:** a mission parked `blocked` with a question gets an Answer link the same way. It opens a page with the question and a field for your answer; sending it re-queues the mission for its agent with your answer as the note.
+
 **Read from anywhere:** review, done, and failed pings also carry a View link: a read-only page of the full mission record (brief, artifacts, complete log), so the answer is one tap away. View links are per-mission, unguessable, and never grant actions.
 
 **Chat fallback:** tell any connected agent session "approve t-42" / "send t-42 back, the tone is wrong" and it PATCHes the hub.
@@ -33,4 +35,4 @@ Flow: agent finishes gated work → task parks in `review` → notification ping
 
 ## Statuses
 
-`queued → claimed → in_progress → review → done | failed`, plus auto-requeue on lease expiry and `blocked` for waiting-on-external or waiting-on-boss. With `after_approval: "return"`: `review → approved → done`.
+`queued → claimed → in_progress → review → done | failed`, plus auto-requeue on lease expiry and `blocked` for waiting-on-external or waiting-on-boss. With `after_approval: "return"`: `review → approved → done`. `discarded` closes a mission that was never going to be work: a duplicate, a test, or one replaced by a better-cut mission.
