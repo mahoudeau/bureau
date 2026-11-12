@@ -155,6 +155,7 @@ async function render(y) {
     if (id !== renderId) { runCleanups(); return; }
     leave = runCleanups;
     fill(outlet, node);
+    outlet.dispatchEvent(new CustomEvent('bureau:rendered', { detail: { path: url.pathname } }));
   } catch (e) {
     clearTimeout(slow);
     runCleanups();

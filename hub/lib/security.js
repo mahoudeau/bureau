@@ -81,9 +81,12 @@ function dashboardCsp(nonce) {
   return [`default-src 'none'`, `script-src 'self' 'nonce-${nonce}'`, `style-src 'self' 'unsafe-inline'`, `img-src 'self' blob: data:`, `font-src 'self'`, `connect-src 'self' https://api.github.com`,
     `frame-src 'self'`, `form-action 'self'`, `base-uri 'none'`, `object-src 'none'`, `frame-ancestors 'self'`].join('; ');
 }
-// The review and mission record pages run no script at all. Their stylesheet
-// and fonts come from omako-ds on this hub.
-const PAGE_CSP = [`default-src 'none'`, `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `img-src 'self'`, `form-action 'self'`, `base-uri 'none'`, `frame-ancestors 'none'`].join('; ');
+// The review, mission record and 404 pages run only this hub's own static
+// scripts: omako-ds's dither.js and its starter, which draw the long shadow
+// and dither the evidence. No inline script, no event handler, nothing from
+// another origin, and nothing they load can fetch (connect-src stays none).
+// Their stylesheet and fonts come from omako-ds on this hub.
+const PAGE_CSP = [`default-src 'none'`, `script-src 'self'`, `style-src 'self' 'unsafe-inline'`, `font-src 'self'`, `img-src 'self'`, `form-action 'self'`, `base-uri 'none'`, `frame-ancestors 'none'`].join('; ');
 
 // A dashboard shell, with its nonce on every script tag. The files are ours,
 // so this is a plain substitution over text no client wrote.

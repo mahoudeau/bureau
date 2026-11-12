@@ -1,5 +1,6 @@
 import { h } from '../dom.js';
 import * as api from '../api.js';
+import { foldNext } from '../motion.js';
 
 export function render(ctx) {
   const input = h('input', {
@@ -34,17 +35,20 @@ export function render(ctx) {
       return;
     }
     api.setToken(token);
+    foldNext();
     ctx.navigate(api.nextPath(), { replace: true });
   }
 
-  // The sign-in template: one raised sheet in the middle of the ground. The
-  // OMAKO button goes above the form once Bureau signs in with OMAKO.
+  // The sign-in template: one box alone on the ground, with the long shadow
+  // and the wordmark's side, the two dramatic moves the system keeps for rare
+  // pages (OMAKO DS, om-cast and om-side). The OMAKO button goes above the
+  // form once Bureau signs in with OMAKO.
   const page = h('div', { class: 'app-layers' },
     h('div', { class: 'om-ground om-center app-signin' },
       h('div', { class: 'om-center-sheet om-stack om-stack-4' },
-        h('section', { class: 'om-raised' },
-          h('header', { class: 'om-titlebar om-titlebar-active' }, h('h1', null, 'Sign in to Bureau')),
+        h('section', { class: 'om-cast app-signin-box' },
           h('form', { class: 'om-raised-body om-stack om-stack-4', onSubmit: signIn },
+            h('h1', { class: 'om-display-m om-side', dataset: { text: 'Bureau' }, 'aria-label': 'Sign in to Bureau' }, 'Bureau'),
             h('div', { class: 'om-field' },
               h('label', { class: 'om-field-label', for: 'token' }, 'Hub token'),
               input),

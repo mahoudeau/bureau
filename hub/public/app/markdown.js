@@ -1163,11 +1163,16 @@ function linkNode(n, r) {
 function imageNode(n, r) {
   const made = r.resolveImage ? r.resolveImage(n.src) : defaultImage(n.src);
   const target = typeof made === 'string' ? { src: made } : made;
+  // om-pic: shown in Atkinson dither, and a click opens the original (OMAKO DS).
   if (target && target.secure) {
-    return h('img', { alt: n.alt, title: n.title || null, dataset: { secureSrc: target.secure } });
+    return h('a', { class: 'om-pic md-pic', dataset: { secureHref: target.secure }, target: '_blank', rel: 'noopener' },
+      h('img', { alt: n.alt, title: n.title || null, dataset: { secureSrc: target.secure } }));
   }
   const src = target && target.src ? safeHref(target.src) : null;
-  if (src && !/^https?:/i.test(src)) return h('img', { alt: n.alt, title: n.title || null, src });
+  if (src && !/^https?:/i.test(src)) {
+    return h('a', { class: 'om-pic md-pic', href: src, target: '_blank', rel: 'noopener' },
+      h('img', { alt: n.alt, title: n.title || null, src }));
+  }
   // The CSP refuses images from elsewhere, and a note shouldn't phone out.
   const href = safeHref(n.src);
   if (!href || !/^https?:/i.test(href)) return n.alt || n.src;

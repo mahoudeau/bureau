@@ -2,6 +2,7 @@
 // how the app writes time.
 
 import { h } from './dom.js';
+import { appear, vanish } from './motion.js';
 
 let toasts = null;
 export function toast(message, { ms = 4000 } = {}) {
@@ -11,7 +12,8 @@ export function toast(message, { ms = 4000 } = {}) {
   }
   const el = h('div', { class: 'om-toast' }, message);
   toasts.append(el);
-  setTimeout(() => el.remove(), ms);
+  appear(el);
+  setTimeout(() => vanish(el).then(() => el.remove()), ms);
   return el;
 }
 
@@ -25,9 +27,12 @@ export function confirmDialog({ title, body = '', confirmLabel, keepLabel = 'Kee
   const id = `app-confirm-${++dialogSeq}`;
   const error = h('p', { class: 'om-field-error', role: 'alert', hidden: true });
   let busy = false;
+  let closing = false;
   const close = () => {
-    scrim.remove();
+    if (closing) return;
+    closing = true;
     if (returnTo && returnTo.isConnected) returnTo.focus();
+    vanish(scrim).then(() => scrim.remove());
   };
   const keep = h('button', { type: 'button', class: 'om-btn', onClick: close }, keepLabel);
   const confirm = h('button', {
@@ -75,6 +80,7 @@ export function confirmDialog({ title, body = '', confirmLabel, keepLabel = 'Kee
     h('div', { class: 'om-dialog-body' }, body ? h('p', null, body) : null, error),
     h('footer', { class: 'om-dialog-foot' }, keep, confirm)));
   document.body.append(scrim);
+  appear(scrim);
   keep.focus();
   return close;
 }
@@ -90,9 +96,10 @@ export function confirmButton(label, onConfirm, { title = `${label}?`, body = ''
   }, label);
 }
 
+// The headline is the quiet title style, a dithered fill (OMAKO DS, om-fill).
 export function emptyState(title, body, action) {
   return h('div', { class: 'om-empty om-stack' },
-    h('p', { class: 'om-label' }, title),
+    h('p', { class: 'om-display-s om-fill' }, title),
     body ? h('p', { style: 'margin:0' }, body) : null,
     action ? h('div', null, action) : null);
 }

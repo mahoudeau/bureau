@@ -17,11 +17,12 @@ One dashboard replaces the two old ones. **Read UPGRADING.md**, "The new dashboa
 - **Cmd-K** jumps to any page, project or mission, and searches the brain with the ranked search.
 - **OMAKO DS**, the design system. The dashboard ships a copy in `hub/public/omako-ds/`.
 - An HTML 404.
+- **Real dither.** Images in Atkinson dither, meters with a dithered edge, heat strips on Activity and Agents, a long shadow on sign-in and the link pages, and dialogs, the palette and toasts that arrive through a dither instead of a fade. Signing in folds the Desk open, once a session. The rules are in `docs/design.md`.
 - `settings.changed`, `agent.roles_changed`, `token.minted` and `token.revoked` on the event stream, for the boss credential only. A token value is never in an event.
 - `test/assets.test.js`: every file the app names exists and is served. `test/markdown.test.js` now runs in CI.
 
 ### Changed
-- `/r/<token>` and `/m/<token>` use omako-ds, phone first, still with no script.
+- `/r/<token>` and `/m/<token>` use omako-ds, phone first. They and the 404 now load the hub's own dither script and nothing else (`script-src 'self'`, no inline script), and still work without it.
 - Dashboard text is JetBrains Mono, page titles Archivo. A status is a dither pattern and a word, and there is no hue anywhere.
 - Themes are system, paper and ink. The four Game Boy themes stay in the office.
 - Times on the dashboard are to the minute.

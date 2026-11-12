@@ -5,7 +5,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 /* The dither cell has to land on whole device pixels or the pattern shimmers. */
-:root { --px: 2px; --t-step: 120ms; --ease-stamp: cubic-bezier(0.2, 0.9, 0.3, 1.4); }
+:root { --px: 2px; --t-step: 120ms; }
 @media (resolution: 1.25dppx) { :root { --px: 2.4px; } }
 @media (resolution: 1.75dppx) { :root { --px: 2.2857px; } }
 @media (resolution: 2.25dppx) { :root { --px: 2.2222px; } }
@@ -45,7 +45,26 @@
   color: var(--ink);
 }
 
-:root, [data-theme], .om-invert, .om-dock, .om-titlebar-active, .om-alert, .om-slab, .om-row, .om-queue-row, .om-wants, .om-table tr, .om-card-link, .om-menu-item, .om-tree-item {
+/* A chosen option inverts relative to where it sits, so it still shows inside
+   the dock, which is inverted already. The group hands its colours down, the
+   chosen option swaps them, and a swatch inside gets a paper line. */
+.om-seg, .om-chips, .om-listbox { --om-was-ink: var(--ink); --om-was-paper: var(--paper); }
+:is(.om-seg button, .om-chip)[aria-pressed="true"], .om-option.is-active {
+  --ink: var(--om-was-paper, var(--ink-inv));
+  --paper: var(--om-was-ink, var(--paper-inv));
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Its swatch keeps its own pattern; only the fine line turns paper, so the
+   status still reads on the solid option. */
+:is(.om-seg button, .om-chip)[aria-pressed="true"] .om-swatch {
+  --ink: var(--om-was-ink);
+  --paper: var(--om-was-paper);
+  border-color: var(--om-was-paper);
+}
+
+:root, [data-theme], .om-invert, .om-dock, .om-titlebar-active, .om-alert, .om-slab, .om-row, .om-queue-row, .om-wants, .om-table tr, .om-card-link, .om-menu-item, .om-tree-item, .om-seg button, .om-chip, .om-option, .om-chip .om-swatch, .om-seg .om-swatch {
   --dot: conic-gradient(from 270deg at var(--px) var(--px), var(--ink) 0 25%, transparent 0);
   --hole: conic-gradient(from 270deg at var(--px) var(--px), var(--paper) 0 25%, transparent 0);
 }
@@ -107,6 +126,29 @@
   .om-display-s { font-size: 18px; line-height: 22px; }
   .om-display-xl, .om-display-l, .om-display-m, .om-display-s, .om-poster { overflow-wrap: anywhere; }
 }
+/* A side for display type, the wordmark's extrusion: the same words in a 50%
+   checker, down and right, cut from the face by a paper outline. Put the
+   text in data-text too: <h1 class="om-display-l om-side" data-text="Goals">Goals</h1> */
+.om-side { position: relative; isolation: isolate; text-shadow: 1px 0 var(--paper), -1px 0 var(--paper), 0 1px var(--paper), 0 -1px var(--paper); }
+.om-side::before {
+  content: attr(data-text);
+  position: absolute;
+  top: 0.1em;
+  left: 0.08em;
+  width: 100%;
+  z-index: -1;
+  color: var(--ink);
+  text-shadow: none;
+  -webkit-mask-image: var(--dot), var(--dot);
+  mask-image: var(--dot), var(--dot);
+  -webkit-mask-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  mask-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  -webkit-mask-position: 0 0, var(--px) var(--px);
+  mask-position: 0 0, var(--px) var(--px);
+}
+/* A dithered fill for display type: solid at the top of each line, thinning
+   down. js/dither.js draws it; without the script the type stays solid. */
+.om-fill.is-dithered { color: transparent; -webkit-background-clip: text; background-clip: text; background-repeat: no-repeat; image-rendering: pixelated; }
 .om-title, .om-heading, .om-body, .om-body-l, .om-body-s, .om-caption, .om-label, .om-data, .om-data-s { margin: 0; }
 .om-label { text-transform: uppercase; }
 .om-code, .om-prose code { font-family: var(--font-mono); }
@@ -144,11 +186,13 @@
   background-size: calc(var(--px) * 8) calc(var(--px) * 8);
   background-position: 0 0, calc(var(--px) * 4) calc(var(--px) * 4);
 }
+/* The ramp is the 4x4 Bayer table: each step is the cells under a threshold
+   (2, 4, 8, 12 of 16), so every step holds the dots of the one before it. */
 .om-d25 {
   background-color: var(--paper);
-  background-image: var(--dot), var(--dot);
-  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
-  background-position: 0 0, calc(var(--px) * 2) var(--px);
+  background-image: var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0;
 }
 .om-d50 {
   background-color: var(--paper);
@@ -158,9 +202,9 @@
 }
 .om-d75 {
   background-color: var(--ink);
-  background-image: var(--hole), var(--hole);
-  background-size: calc(var(--px) * 4) calc(var(--px) * 2);
-  background-position: 0 0, calc(var(--px) * 2) var(--px);
+  background-image: var(--hole);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 var(--px);
 }
 .om-d100 { background-color: var(--ink); }
 .om-hatch, .om-cross {

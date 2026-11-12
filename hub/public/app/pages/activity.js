@@ -151,14 +151,42 @@ export async function render(ctx) {
   const feed = h('div');
   const painter = livePainter(feed, build);
 
+  // The last 24 hours as a heat strip, one cell an hour (OMAKO DS, om-heat).
+  // Heartbeats stay out unless they're shown below, so the strip and the list agree.
+  const heat = h('span', { class: 'om-heat set-heat', role: 'img' });
+  const heatLine = h('p', { class: 'om-data-s' });
+  function paintHeat() {
+    const hour = 3600000;
+    const end = Math.ceil(Date.now() / hour) * hour;
+    const counts = new Array(24).fill(0);
+    for (const e of seen.values()) {
+      if (!wanted(e)) continue;
+      const at = new Date(e.ts).getTime();
+      const i = 23 - Math.floor((end - at - 1) / hour);
+      if (i >= 0 && i < 24) counts[i] += 1;
+    }
+    const total = counts.reduce((a, b) => a + b, 0);
+    const max = Math.max(1, ...counts);
+    const busiest = counts.indexOf(Math.max(...counts));
+    const busyHour = new Date(end - (24 - busiest) * hour).getHours();
+    const line = total
+      ? `${total} event${total === 1 ? '' : 's'} in the last 24 hours, busiest from ${String(busyHour).padStart(2, '0')}:00`
+      : 'Nothing in the last 24 hours';
+    heat.dataset.values = counts.map((c) => (c / max).toFixed(2)).join(',');
+    heat.setAttribute('aria-label', `${line}. One cell per hour, oldest on the left.`);
+    heatLine.textContent = line;
+  }
+
   function paintAll() {
     paintChips();
+    paintHeat();
     painter.paint();
   }
   paintAll();
 
   ctx.onCleanup(store.subscribe((next) => {
     merge(next.log);
+    paintHeat();
     painter.paint();
   }));
   ctx.onCleanup(painter.stop);
@@ -168,5 +196,6 @@ export async function render(ctx) {
     h('div', { class: 'set-band set-toolbar' },
       chips,
       h('label', { class: 'om-check' }, toggle, 'Include heartbeats')),
+    h('section', { class: 'om-sheet om-sheet-body set-pulse' }, heatLine, heat),
     feed);
 }

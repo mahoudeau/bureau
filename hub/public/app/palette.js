@@ -14,8 +14,10 @@ import { onSearch } from './layout.js';
 import { navigate } from './router.js';
 import { getTheme, setTheme, THEMES } from './theme.js';
 import { toast } from './ui.js';
+import { appear, vanish } from './motion.js';
 import { plainText, slugify } from './markdown.js';
 import { swatch, statusWord } from './status.js';
+import { selectMenuOpen } from './select-menu.js';
 
 const PROJECT_KEY = 'bureau_palette_project';
 const DEBOUNCE_MS = 180;
@@ -508,7 +510,9 @@ function open(initial = '') {
   }
 
   function trapTab(e) {
-    const focusable = [input, projectSelect, closeBtn].filter((el) => !el.disabled);
+    // With a pointer, the project select is the system's menu button.
+    const picker = projectSelect.hidden ? projectSelect.parentElement.querySelector('.om-select-btn') : projectSelect;
+    const focusable = [input, picker, closeBtn].filter((el) => el && !el.disabled);
     const at = focusable.indexOf(document.activeElement);
     e.preventDefault();
     const next = at === -1 ? 0 : (at + (e.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
@@ -516,7 +520,8 @@ function open(initial = '') {
   }
 
   function onKey(e) {
-    if (e.isComposing) return;
+    // An open project list handles its own keys: Esc closes it, not the palette.
+    if (e.isComposing || selectMenuOpen()) return;
     if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
@@ -541,7 +546,7 @@ function open(initial = '') {
     if (controller) controller.abort();
     document.removeEventListener('keydown', onKey, true);
     off();
-    scrim.remove();
+    vanish(scrim).then(() => scrim.remove());
     if (appRoot) appRoot.inert = false;
     document.documentElement.classList.remove('pal-open');
     if (previous && previous.isConnected && previous !== document.body) previous.focus({ preventScroll: true });
@@ -574,6 +579,7 @@ function open(initial = '') {
   if (appRoot) appRoot.inert = true;
   document.documentElement.classList.add('pal-open');
   document.body.append(scrim);
+  appear(scrim);
   document.addEventListener('keydown', onKey, true);
   fillProjects();
   if (initial) session.setQuery(initial);

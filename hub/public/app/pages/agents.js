@@ -46,6 +46,33 @@ function livenessMark(state) {
     h('span', { class: 'om-label' }, word));
 }
 
+// Each agent's week, from what it wrote in mission logs: 28 cells of six
+// hours, oldest on the left (OMAKO DS, om-heat). The event feed only holds
+// the last 200 events, so the logs are the record that goes back a week.
+const BLOCK = 6 * 60 * MINUTE;
+const CELLS = 28;
+function weeks(tasks) {
+  const end = Math.ceil(Date.now() / BLOCK) * BLOCK;
+  const by = new Map();
+  for (const t of tasks) {
+    for (const entry of t.log || []) {
+      const i = CELLS - 1 - Math.floor((end - new Date(entry.ts).getTime() - 1) / BLOCK);
+      if (!entry.by || i < 0 || i >= CELLS) continue;
+      if (!by.has(entry.by)) by.set(entry.by, new Array(CELLS).fill(0));
+      by.get(entry.by)[i] += 1;
+    }
+  }
+  return by;
+}
+function weekStrip(name, counts) {
+  const total = counts ? counts.reduce((x, y) => x + y, 0) : 0;
+  const max = Math.max(1, ...(counts || [0]));
+  const label = `${name}: ${total} log entr${total === 1 ? 'y' : 'ies'} in the last 7 days, six hours a cell`;
+  return h('div', { class: 'set-agent-week' },
+    h('span', { class: 'om-heat', role: 'img', 'aria-label': label, dataset: { values: (counts || new Array(CELLS).fill(0)).map((c) => (c / max).toFixed(2)).join(',') } }),
+    h('span', { class: 'om-data-s' }, total ? `${total} this week` : 'Quiet this week'));
+}
+
 function row(a, view) {
   const state = liveness(a);
   const held = view.tasks.filter((t) => t.assignee === a.name && (t.status === 'claimed' || t.status === 'in_progress'));
@@ -69,6 +96,7 @@ function row(a, view) {
           : h('span', { class: 'om-data-s' }, a.activity || (state === 'offline' ? 'Away' : 'No mission'))),
       h('span', { class: 'om-data-s set-seen' }, a.last_seen ? `Seen ${relativeTime(a.last_seen)}` : 'Never seen'),
       confirmButton('Remove', () => view.remove(a), { title: `Remove ${a.name}?`, body: 'It leaves the roster. Its missions and history stay, and it can register again.', class: 'om-btn om-btn-danger set-remove' })),
+    weekStrip(a.name, view.weeks.get(a.name)),
     fleet.length ? h('ul', { class: 'set-fleet' }, fleet.map((f) => h('li', null,
       h('span', null, f.label), f.activity ? h('span', { class: 'om-data-s' }, f.activity) : null))) : null,
     refused ? h('p', { class: 'om-field-error set-message', role: 'alert' }, refused) : null);
@@ -124,6 +152,7 @@ export async function render(ctx) {
   const view = () => ({
     agents: state.agents || [],
     tasks: state.tasks || [],
+    weeks: weeks(state.tasks || []),
     settings,
     legacy: health.auth !== 'strict',
     errors,

@@ -78,7 +78,8 @@ function claimsBlock(doc) {
   const pct = Math.round((sourced / total) * 100);
   return block('Claims',
     h('p', { class: 'brain-big' }, h('strong', null, total), ` claim${total === 1 ? '' : 's'}, ${sourced} with a source`),
-    h('span', { class: 'om-meter', style: { '--value': pct }, role: 'img', 'aria-label': `${pct}% sourced` }, h('i')),
+    // A share, not progress: the whole bar is that much ink (OMAKO DS, om-meter-share).
+    h('span', { class: 'om-meter om-meter-share', style: { '--value': pct }, role: 'img', 'aria-label': `${pct}% sourced` }, h('i')),
     fileSource && own < total ? h('p', { class: 'om-data-s' }, `${own} carry their own, the file's source covers the rest.`) : null);
 }
 

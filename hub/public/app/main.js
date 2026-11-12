@@ -5,6 +5,8 @@ import * as store from './store.js';
 import { mountLayout } from './layout.js';
 import { startRouter } from './router.js';
 import './palette.js';
+import { startSelectMenus } from './select-menu.js';
+import { foldIfAsked } from './motion.js';
 
 const desk = () => import('./pages/desk.js');
 
@@ -43,3 +45,9 @@ window.addEventListener('hashchange', () => {
 
 const layout = mountLayout(document.getElementById('app'));
 startRouter({ routes, outlet: layout.outlet, guard, onRoute: layout.update });
+startSelectMenus();
+// Meters, heat strips, images, the long shadow, the dock band and fill
+// titles, kept drawn as pages render (OMAKO DS, js/dither.js).
+if (window.OmakoDither) window.OmakoDither.start();
+// After signing in, the first page folds open, once a session.
+layout.outlet.addEventListener('bureau:rendered', () => foldIfAsked(layout.outlet));

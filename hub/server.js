@@ -114,8 +114,9 @@ const SHELL_ROUTE = /^\/(?:index\.html|sign-in|missions(?:\/[^/]+)?|goals(?:\/[^
 const serveShell = res => servePage(res, 'app', 'index.html');
 // Static files. A segment can't hold a dot and the name holds exactly one, so
 // no `..` and no encoded slash can match. index.html and README.md can't either.
-const ASSET_ROUTE = /^\/(app|omako-ds)\/((?:[\w-]+\/)*[\w-]+\.(css|js|woff2|svg))$/;
-const ASSET_TYPES = { css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', woff2: 'font/woff2', svg: 'image/svg+xml' };
+const ASSET_ROUTE = /^\/(app|omako-ds)\/((?:[\w-]+\/)*[\w-]+\.(css|js|woff2|svg|png))$/;
+// png: the favicons, for the browsers that ignore an SVG one. A PNG runs nothing.
+const ASSET_TYPES = { css: 'text/css; charset=utf-8', js: 'text/javascript; charset=utf-8', woff2: 'font/woff2', svg: 'image/svg+xml', png: 'image/png' };
 function serveAsset(res, top, rel, ext) {
   let body;
   try { body = fs.readFileSync(path.join(__dirname, 'public', top, rel)); }
@@ -129,7 +130,8 @@ function serveNotFound(res) {
 }
 function escHtml(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 // The pages a link opens, usually on a phone: review (/r/) and record (/m/).
-// Server-rendered and script-less. Status is the same dither and word as
+// Server-rendered; the only script is omako-ds's dither (security.PAGE_CSP),
+// and everything works without it. Status is the same dither and word as
 // hub/public/app/status.js; test/assets.test.js keeps the two in step.
 const STATUS_LOOK = {
   queued: { word: 'Queued', dither: 'om-d12' },
@@ -146,12 +148,15 @@ function statusMark(status) {
   const look = STATUS_LOOK[status] || { word: String(status || 'Unknown'), dither: 'om-d0' };
   return `<span class="lp-status"><span class="om-swatch ${look.dither}" aria-hidden="true"></span><span class="om-label">${escHtml(look.word)}</span></span>`;
 }
+// The OMAKO mark sits in the credit at the foot; the brand is Bureau's wordmark.
 const PAGE_MARK = '<svg class="om-mark" viewBox="-1.5 -1.5 103 103" aria-hidden="true"><path fill-rule="evenodd" d="M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z"/></svg>';
+const WORDMARK = require('./lib/wordmark');
+const CREDIT = `<a class="om-credit" href="https://www.omako.fr" target="_blank" rel="noopener">${PAGE_MARK}<span>An <strong>OMAKO</strong> product</span></a>`;
 const GONE_BAND = '<div class="lp-strip om-cross" aria-hidden="true"></div>';
 const missionLine = task =>`<p class="lp-mission"><span class="om-strong">${escHtml(task.id)}</span> ${escHtml(task.title)}</p>`;
 // title is HTML already: callers escape what came from a mission.
 function sendPage(res, code, title, bodyHtml, status) {
-  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand">${PAGE_MARK}<span class="lp-word">Bureau</span></span>${status ? statusMark(status) : ''}</header><div class="om-band"><div class="lp-inner"><h1 class="om-display-m lp-title">${title}</h1></div></div><main class="om-ground om-field-ground lp-ground"><div class="om-sheet om-sheet-body lp-main">${bodyHtml}</div></main><footer class="om-footline"><span>Built by OMAKO</span></footer></body></html>`;
+  const html = `<!doctype html><html lang="en" data-density="compact"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>${title} · Bureau</title><link rel="icon" href="/app/favicon-32.png" sizes="32x32" type="image/png"><link rel="icon" href="/app/favicon-16.png" sizes="16x16" type="image/png"><link rel="icon" href="/app/mark.svg" type="image/svg+xml"><link rel="stylesheet" href="/omako-ds/css/all.css"><link rel="stylesheet" href="/app/css/link-pages.css"><script src="/omako-ds/js/dither.js" defer></script><script src="/app/lp-dither.js" defer></script></head><body class="om-page lp"><header class="om-top lp-top"><span class="om-brand lp-brand">${WORDMARK}</span>${status ? statusMark(status) : ''}</header><div class="om-band"><div class="lp-inner"><h1 class="om-display-m lp-title">${title}</h1></div></div><main class="om-ground om-field-ground lp-ground"><div class="om-cast om-sheet-body lp-main">${bodyHtml}</div></main><footer class="om-footline">${CREDIT}</footer></body></html>`;
   res.writeHead(code, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'content-security-policy': security.PAGE_CSP, 'referrer-policy': 'no-referrer' });
   res.end(html);
 }
@@ -318,7 +323,7 @@ function reviewForm(task, action, token, err, kind) {
     : '';
   const verb = kind === 'answer' ? 'Answer' : action === 'done' ? 'Approve' : 'Send back';
   const evidence = evidenceFiles(task).map(({ file, label }) =>
-    `<figure class="lp-figure"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"><figcaption class="om-data-s">${escHtml(label)}</figcaption></figure>`).join('');
+    `<figure class="lp-figure"><a class="om-pic" href="/r/${token}/img?file=${encodeURIComponent(file)}" target="_blank" rel="noopener"><img src="/r/${token}/img?file=${encodeURIComponent(file)}" alt="${escHtml(label)}"></a><figcaption class="om-data-s">${escHtml(label)}</figcaption></figure>`).join('');
   const returns = action === 'done' && kind !== 'answer' && task.after_approval === 'return'
     ? `<p class="lp-help">Approving returns this mission to ${escHtml(task.assignee || 'its agent')}, who applies the accepted items exactly as shown, then closes it. Every item needs a verdict first.</p>` : '';
   const refused = err ? `<div class="om-banner" role="alert"><div class="om-banner-edge om-cross" aria-hidden="true"></div><div class="om-banner-body om-strong">${escHtml(err)}</div></div>` : '';

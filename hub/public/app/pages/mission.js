@@ -8,6 +8,7 @@ import * as api from '../api.js';
 import * as store from '../store.js';
 import { statusLabel, statusWord, swatch } from '../status.js';
 import { emptyState, relativeTime, timeTag, toast } from '../ui.js';
+import { appear } from '../motion.js';
 import {
   evidenceOf, findReplacement, goalChildren, goalRef, isGoal, isTerminal, lastEntry, nextNeeding, plainArtifacts,
   prOf, projectLabel, roundOf, waitingOnId,
@@ -179,7 +180,8 @@ export async function render(ctx) {
   const dockLabel = h('span', { class: 'om-label' });
   const dockSteps = h('span', { class: 'om-steps', 'aria-hidden': 'true' });
   const dockState = h('div', { class: 'om-dock-state' }, dockLabel, dockSteps);
-  const barEl = h('div', { class: 'om-dock work-dock', role: 'region', 'aria-label': 'Decision', hidden: true });
+  // data-more: a Bayer band into the dock while there's more to scroll (OMAKO DS).
+  const barEl = h('div', { class: 'om-dock work-dock', role: 'region', 'aria-label': 'Decision', hidden: true, dataset: { more: '' } });
 
   const page = h('div', { class: 'work-page work-mission', dataset: { density: 'comfortable' } },
     h('div', { class: 'om-band' },
@@ -873,12 +875,22 @@ export async function render(ctx) {
     result.hidden = false;
   }
 
+  // When your verdict changes the dock, the new dock spreads in from the
+  // button you pressed: the screen changed because you acted (OMAKO DS motion).
+  let spreadFrom = null;
+  const sideOf = (el) => {
+    if (!el || !barEl.contains(el)) return 'center';
+    const b = el.getBoundingClientRect(); const d = barEl.getBoundingClientRect();
+    return b.left + b.width / 2 > d.left + d.width / 2 ? 'right' : 'left';
+  };
+
   // body is the PATCH; onDone decides what happens after the hub says yes.
   async function decide(body, onDone) {
     if (busy) return;
     refusal.clear();
     result.hidden = true;
     const verdicts = collectVerdicts();
+    const from = sideOf(document.activeElement);
     setBusy(true);
     let response;
     try {
@@ -889,7 +901,9 @@ export async function render(ctx) {
       return;
     }
     setBusy(false);
+    spreadFrom = from;
     await adopt(response.task);
+    spreadFrom = null;
     onDone(response.task);
   }
 
@@ -962,11 +976,14 @@ export async function render(ctx) {
     if (busy) return;
     refusal.clear();
     result.hidden = true;
+    const from = sideOf(document.activeElement);
     setBusy(true);
     rule(task.id, { verdicts }).then(async (r) => {
       setBusy(false);
       toast('Verdicts saved.');
+      spreadFrom = from;
       await adopt(r.task);
+      spreadFrom = null;
     }, (e) => {
       setBusy(false);
       if (!api.isAbort(e)) refusal.show(e.message);
@@ -1038,6 +1055,7 @@ export async function render(ctx) {
     barEl.classList.toggle('is-noting', task.status === 'blocked' || !!noteText);
     fill(barEl, refusal.el, result, dockState, noteInput, h('div', { class: 'om-dock-actions' }, spec.actions));
     paintProgress();
+    if (spreadFrom) appear(barEl, 'spread', spreadFrom);
   }
 
   // ---- Painting from live state ----

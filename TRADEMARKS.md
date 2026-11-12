@@ -6,7 +6,7 @@ OMAKO and the OMAKO logo are trademarks of Mathieu Mahoudeau, sole trader (entre
 
 ## What you can do
 
-- Run Bureau as it comes, with "Built by OMAKO" left in.
+- Run Bureau as it comes, with the "An OMAKO product" credit left in.
 - Say in plain text that your product is based on Bureau or works with it.
 - Keep the `omako-ds` folder name, the `om-` class names and any mention of OMAKO in code comments. Those are code.
 
@@ -21,7 +21,7 @@ OMAKO and the OMAKO logo are trademarks of Mathieu Mahoudeau, sole trader (entre
 
 If you publish a modified version, or run one for other people, section 7(c) of the AGPL applies:
 
-- Remove "Built by OMAKO" and any OMAKO logo from the interface.
+- Remove the "An OMAKO product" credit and any OMAKO logo from the interface.
 - Make it clear that your version is modified and isn't the original.
 
 Changes you only run for yourself don't need any of this.

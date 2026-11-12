@@ -79,7 +79,10 @@ const base64Size = (b64) => Math.max(0, Math.floor((b64.length * 3) / 4) - (b64.
 export function fileBody(path, file) {
   const ext = extOf(path);
   if (IMAGE.has(ext)) {
-    return h('figure', { class: 'brain-figure' }, h('img', { alt: baseOf(path), dataset: { secureSrc: rawUrl(path) } }));
+    // om-pic: shown in Atkinson dither, and a click opens the original (OMAKO DS).
+    return h('figure', { class: 'brain-figure' },
+      h('a', { class: 'om-pic', dataset: { secureHref: rawUrl(path) }, target: '_blank', rel: 'noopener' },
+        h('img', { alt: baseOf(path), dataset: { secureSrc: rawUrl(path) } })));
   }
   if (file.content_base64 !== undefined) {
     const size = sizeOf(base64Size(file.content_base64));

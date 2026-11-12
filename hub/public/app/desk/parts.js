@@ -50,8 +50,9 @@ export function thumb(it, { caption = true } = {}) {
   const src = window.BureauHub.imageUrl(it.img);
   const label = it.a.label || it.img;
   const when = it.a.ts ? relativeTime(it.a.ts) : '';
+  // om-pic: shown in Atkinson dither; the link opens the original (OMAKO DS).
   return h('a', { class: 'work-thumb', dataset: { secureHref: src }, target: '_blank', rel: 'noopener', title: label },
-    h('img', { dataset: { secureSrc: src }, alt: label, loading: 'lazy' }),
+    h('span', { class: 'om-pic' }, h('img', { dataset: { secureSrc: src }, alt: label, loading: 'lazy' })),
     caption ? h('span', { class: 'work-thumb-cap om-clip' }, when ? `${label} · ${when}` : label) : null);
 }
 

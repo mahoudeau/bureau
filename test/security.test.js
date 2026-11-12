@@ -112,8 +112,11 @@ async function finding2() {
     check(`${file} has no inline handler`, !/\son[a-z]+\s*=\s*["']/i.test(fs.readFileSync(path.join(ROOT, 'hub/public', file), 'utf8')));
   }
   const missing = await h.api('GET', '/no-such-page', undefined, { authorization: '' });
-  check('the HTML 404 carries the script-less CSP', missing.code === 404 && /default-src 'none'/.test(missing.headers.get('content-security-policy') || '') && !/script-src/.test(missing.headers.get('content-security-policy') || ''), missing.headers.get('content-security-policy'));
-  check('the HTML 404 has no script and no inline handler', !/<script\b/i.test(missing.text) && !/\son[a-z]+\s*=\s*["']/i.test(missing.text));
+  // The 404 and the link pages run only this hub's own static scripts (the dither).
+  const ownScriptsOnly = (csp) => /default-src 'none'/.test(csp) && (csp.match(/script-src ([^;]*)/) || [])[1] === "'self'";
+  const scriptsAreFiles = (html) => [...html.matchAll(/<script\b([^>]*)>/gi)].every((m) => /\bsrc="\/(omako-ds|app)\/[\w/-]+\.js"/.test(m[1]));
+  check('the HTML 404 allows only this hub\'s own scripts', missing.code === 404 && ownScriptsOnly(missing.headers.get('content-security-policy') || ''), missing.headers.get('content-security-policy'));
+  check('the HTML 404 has no inline script and no inline handler', scriptsAreFiles(missing.text) && !/\son[a-z]+\s*=\s*["']/i.test(missing.text));
 
   const hostile = '<script>alert(1)</script><img src=x onerror=alert(2)>';
   const t = (await h.api('POST', '/api/tasks', { title: hostile, body: hostile, project: 'general', gate: 'critic' })).json.task;
@@ -128,8 +131,8 @@ async function finding2() {
     const page = await h.api('GET', route, undefined, { authorization: '' });
     const csp = page.headers.get('content-security-policy') || '';
     check(`${label} carries a CSP`, /default-src 'none'/.test(csp), csp);
-    check(`${label} is not allowed any script`, !/script-src/.test(csp), csp);
-    check(`${label} has no script tag`, !/<script\b/i.test(page.text), page.text.slice(0, 300));
+    check(`${label} allows only this hub's own scripts`, ownScriptsOnly(csp), csp);
+    check(`${label} has no inline script`, scriptsAreFiles(page.text), page.text.slice(0, 300));
     check(`${label} has no inline handler`, !/<[^>]*\son[a-z]+\s*=/i.test(page.text.replace(/&lt;[^]*?&gt;/g, '')), page.text.slice(0, 300));
     check(`${label} loads the design system from the hub`, /<link rel="stylesheet" href="\/omako-ds\/css\/all\.css">/.test(page.text), page.text.slice(0, 300));
   }

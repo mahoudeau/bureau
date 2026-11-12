@@ -112,6 +112,67 @@
 .om-select { appearance: none; padding-right: 28px; cursor: pointer; }
 .om-select-wrap::after { content: ""; position: absolute; right: 10px; top: 50%; margin-top: -2px; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--ink); pointer-events: none; }
 
+/* Select menu. A native select opens the operating system's list, which no
+   stylesheet reaches. This is the system's own: a button that reads like a
+   select, and a list under it. The app wires it: button aria-haspopup
+   "listbox" and aria-expanded, list role "listbox", options role "option"
+   with aria-selected, .is-active on the one the keys or the pointer are on.
+   Touch screens keep the native select, whose picker suits a thumb better. */
+.om-select-wrap > .om-select-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--ctl-h);
+  padding: 0 28px 0 var(--ctl-pad);
+  border: var(--rule-sm) solid var(--ink);
+  border-radius: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 var(--ctl-fs)/1.4 var(--font-text);
+  text-align: left;
+  cursor: pointer;
+}
+.om-select-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.om-select-btn[aria-expanded="true"] { border-width: var(--rule-md); box-shadow: var(--shadow-control); }
+.om-select-wrap:has(.om-select-btn[aria-expanded="true"])::after { transform: rotate(180deg); }
+.om-listbox {
+  position: absolute;
+  /* Over the palette too, which can hold a select. */
+  z-index: var(--z-toast);
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 100%;
+  max-height: 280px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  background: var(--paper);
+  border: var(--rule-sm) solid var(--ink);
+  box-shadow: var(--shadow-menu);
+}
+.om-listbox[hidden] { display: none; }
+.om-listbox-up { top: auto; bottom: calc(100% + 6px); }
+/* An option reads like a row: the pointer or the keys give it the dither
+   edge and the inversion, the chosen one carries a check. */
+.om-option { position: relative; display: flex; align-items: center; gap: var(--sp-2); min-height: 32px; padding: 0 var(--sp-3) 0 calc(var(--sp-3) + 6px); font: 500 var(--ctl-fs)/1.3 var(--font-text); white-space: nowrap; cursor: pointer; }
+.om-option-check { flex: none; width: 12px; visibility: hidden; }
+.om-option[aria-selected="true"] { font-weight: 700; }
+.om-option[aria-selected="true"] .om-option-check { visibility: visible; }
+.om-option.is-active::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot), var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+  background-position: 0 0, var(--px) var(--px);
+}
+
 /* Dock field: a writing line on ink, so it can't pass for a button. It turns
    paper while you type in it, and stays paper while it holds text. */
 .om-dock .om-input { border: 0; border-bottom: var(--rule) solid var(--ink); background: transparent; padding-inline: 2px; }
@@ -161,6 +222,67 @@
 /* Meter and steps */
 .om-meter { position: relative; display: block; height: 10px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 4); background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2); }
 .om-meter > i { display: block; height: 100%; width: calc(var(--value, 0) * 1%); background: var(--ink); }
+/* Three kinds, by what the number is. The number always sits next to it.
+   .om-meter        progress toward done: solid to the value, then a short
+                    Bayer edge. Goals, children, steps.
+   .om-meter-share  a share that isn't heading anywhere: the whole bar is
+                    that much ink. "75% sourced".
+   .om-heat         many counts over time, one cell each, 16 greys.
+   js/dither.js draws them. Without it a meter is a hard fill and a heat
+   strip is an empty frame, so a heat strip always has its label. */
+.om-meter.is-dithered, .om-meter-share.is-dithered, .om-heat.is-dithered { background-repeat: no-repeat; image-rendering: pixelated; }
+.om-meter.is-dithered > i { display: none; }
+.om-meter-share { height: 12px; }
+.om-heat { display: block; height: 22px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); }
+
+/* Images: Atkinson dither, light kept light on both themes, and a click
+   opens the original in full colour. Wrap the img: <span class="om-pic">.
+   js/dither.js draws over it; the img stays for its alt text and size. */
+.om-pic { position: relative; display: block; min-width: 0; }
+.om-pic > img { display: block; max-width: 100%; }
+.om-pic > .om-pic-dither { position: absolute; pointer-events: none; image-rendering: pixelated; }
+
+/* The long shadow, cast at 45 degrees and thinning as it goes. Only for one
+   box alone on the ground that you see rarely: sign-in, a guest's review
+   link, the 404, first run. Never on a page you work in, never with
+   om-raised. In CSS it falls in two steps, 50% then 25%, which is what a
+   page that runs no script gets (Bureau's guest pages). js/dither.js swaps
+   in the smooth one. The box's parent isolates, so the shadow sits on the
+   ground and under the box. */
+.om-cast { position: relative; background: var(--paper); border: var(--rule) solid var(--ink); --cast: 80px; }
+:has(> .om-cast) { isolation: isolate; }
+.om-cast::before, .om-cast::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  top: calc(var(--rule) * -1);
+  left: calc(var(--rule) * -1);
+  pointer-events: none;
+  background-color: var(--paper);
+  background-image: var(--dot);
+  background-size: calc(var(--px) * 2) calc(var(--px) * 2);
+}
+/* far: 25%, the whole reach */
+.om-cast::before {
+  right: calc(var(--rule) * -1 - var(--cast));
+  bottom: calc(var(--rule) * -1 - var(--cast));
+  clip-path: polygon(0 0, calc(100% - var(--cast)) 0, 100% var(--cast), 100% 100%, var(--cast) 100%, 0 calc(100% - var(--cast)));
+}
+/* near: 50%, the first half */
+.om-cast::after {
+  right: calc(var(--rule) * -1 - var(--cast) / 2);
+  bottom: calc(var(--rule) * -1 - var(--cast) / 2);
+  background-image: var(--dot), var(--dot);
+  background-position: 0 0, var(--px) var(--px);
+  clip-path: polygon(0 0, calc(100% - var(--cast) / 2) 0, 100% calc(var(--cast) / 2), 100% 100%, calc(var(--cast) / 2) 100%, 0 calc(100% - var(--cast) / 2));
+}
+.om-cast.is-cast::before, .om-cast.is-cast::after { display: none; }
+.om-cast-shadow { position: absolute; pointer-events: none; image-rendering: pixelated; }
+
+/* The dock's edge is hard. With data-more, a Bayer band from the page into
+   the dock shows while there's more to scroll, and goes at the end. */
+.om-dock-band { position: absolute; left: 0; right: 0; bottom: 100%; width: 100%; pointer-events: none; image-rendering: pixelated; }
+.om-dock-band[hidden] { display: none; }
 .om-steps { display: inline-flex; gap: 3px; }
 .om-steps > i { display: block; width: 18px; height: 10px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); }
 .om-steps > i.is-done { background: var(--ink); }
@@ -205,7 +327,6 @@
 .om-seg button { min-height: calc(var(--ctl-h) - 2px); padding: 0 var(--ctl-pad); border: 0; border-radius: 0; background: var(--paper); color: var(--ink); font: 600 var(--ctl-fs)/1 var(--font-text); cursor: pointer; }
 .om-seg button + button { border-left: var(--rule-sm) solid var(--ink); }
 .om-seg button { position: relative; }
-.om-seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 /* A choice: hover shows a 50% dither bar along the bottom, choosing makes the
    whole option solid. Half means about to, full means chosen. Hover never
    fills an option, so nothing looks chosen before it is. */
@@ -227,7 +348,6 @@
 .om-chips { display: flex; flex-wrap: wrap; gap: var(--sp-1); }
 .om-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 24px; padding: 0 8px; border: var(--rule-sm) solid var(--ink); background: var(--paper); color: var(--ink); font: 600 12px/1 var(--font-text); cursor: pointer; text-decoration: none; }
 .om-chip { position: relative; }
-.om-chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
 .om-chip:is(:hover, .is-hover)::after { height: 3px; }
 
 /* Tabs */
@@ -261,11 +381,9 @@
 .om-banner-body { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); justify-content: space-between; padding: var(--sp-2) var(--sp-3); }
 .om-banner-body p { margin: 0; }
 
-/* Toast */
-.om-toast { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: min(360px, 100%); padding: var(--sp-2) var(--sp-3); font: 600 13px/18px var(--font-text); animation: om-stamp 0.16s var(--ease-stamp); }
+/* Toast. It comes and goes through OmakoDither.dissolve(el, { mode: 'bayer' }). */
+.om-toast { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); width: min(360px, 100%); padding: var(--sp-2) var(--sp-3); font: 600 13px/18px var(--font-text); }
 .om-toasts { position: fixed; right: var(--sp-4); bottom: var(--sp-4); z-index: var(--z-toast); display: grid; gap: var(--sp-2); }
-@keyframes om-stamp { from { transform: scale(1.06); } }
-@media (prefers-reduced-motion: reduce) { .om-toast { animation: none; } }
 
 /* Property list */
 .om-props { display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0; }

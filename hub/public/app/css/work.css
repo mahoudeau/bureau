@@ -62,7 +62,7 @@
    button is solid. Everything else on the Desk is a plain sheet or the rail. */
 .work-needs-head h1 { margin: 0; font: 700 16px/20px var(--font-text); }
 .work-needs-head .om-btn-ghost { color: inherit; }
-.work-clear { padding: var(--sp-4) var(--sp-5); font-weight: 700; }
+.work-clear { padding: var(--sp-5); }
 
 .work-needs-list { display: grid; grid-template-columns: minmax(0, 1fr); }
 .work-need { min-width: 0; }

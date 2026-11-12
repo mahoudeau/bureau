@@ -94,9 +94,14 @@
 .set-remove { min-width: 82px; }
 .set-fleet { list-style: none; margin: 0 0 var(--sp-1) 100px; padding: 2px 0 2px var(--sp-3); border-left: var(--rule-md) solid var(--ink); display: flex; flex-direction: column; gap: 1px; font-size: 13px; }
 .set-fleet li { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.set-agent-week { display: grid; grid-template-columns: minmax(0, 280px) auto; align-items: center; gap: var(--sp-2); margin: 0 0 var(--sp-1) 100px; }
+.set-agent-week .om-heat { height: 14px; }
+@media (max-width: 720px) { .set-agent-week { margin-left: 0; } }
 
 /* Activity */
 .set-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-2) var(--sp-4); }
+.set-pulse { display: grid; gap: var(--sp-2); }
+.set-heat { height: 28px; }
 .set-events { list-style: none; margin: 0; padding: 0; }
 .set-event { display: grid; grid-template-columns: 72px 128px minmax(0, 140px) minmax(0, 1fr); column-gap: var(--sp-3); align-items: baseline; padding: 4px var(--sp-3); border-bottom: var(--rule-sm) solid var(--ink); }
 .set-event-time { white-space: nowrap; }

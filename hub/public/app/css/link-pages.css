@@ -5,10 +5,18 @@
 .lp { display: flex; flex-direction: column; min-height: 100vh; --ctl-h: 44px; --ctl-fs: 15px; }
 .lp-top { justify-content: space-between; flex-wrap: nowrap; }
 .lp-status { display: inline-flex; align-items: center; gap: var(--sp-2); flex: none; }
+/* The wordmark: one CSS pixel per cell keeps its checker crisp. */
+.lp-brand { line-height: 0; }
+/* The side hangs below the letters, so the box sits a pixel low to look centred. */
+.app-wordmark { display: block; flex: none; position: relative; top: 1px; }
+.app-wordmark-paper { fill: var(--paper); }
+.app-wordmark-ink { fill: var(--ink); }
 
 .lp-inner { width: 100%; max-width: 640px; margin: 0 auto; }
 .lp-title { margin: 0; overflow-wrap: anywhere; }
-.lp-ground { flex: 1 0 auto; }
+/* Room for the long shadow (om-cast reaches 80px down and right), and the
+   ground clips it on a phone instead of scrolling sideways. */
+.lp-ground { position: relative; flex: 1 0 auto; padding-bottom: calc(var(--sp-8) + 80px); overflow: hidden; }
 .lp-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

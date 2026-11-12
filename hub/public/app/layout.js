@@ -1,8 +1,10 @@
-// The frame around every page: top bar, the slot the router fills, footer slab.
+// The frame around every page: top bar with the Bureau wordmark, the slot the
+// router fills, the footer line with the OMAKO credit.
 
 import { h, s } from './dom.js';
 import * as store from './store.js';
 import { toast } from './ui.js';
+import { wordmark } from './wordmark.js';
 
 const NAV = [
   ['Desk', '/'],
@@ -25,7 +27,8 @@ const LIVE = {
   polling: { word: 'Polling', dither: 'om-hatch', title: 'No event stream. Checking every minute' },
 };
 
-const logo = () => s('svg', { class: 'om-mark', viewBox: '-1.5 -1.5 103 103', 'aria-hidden': 'true' },
+// The OMAKO mark lives in the credit at the foot. The brand is Bureau's own.
+const omakoMark = () => s('svg', { class: 'om-mark', viewBox: '-1.5 -1.5 103 103', 'aria-hidden': 'true' },
   s('path', { 'fill-rule': 'evenodd', d: 'M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z' }));
 
 const isCurrent = (href, path) => (href === '/' ? path === '/' || path === '/index.html' : path === href || path.startsWith(`${href}/`));
@@ -62,13 +65,15 @@ export function mountLayout(root) {
   const tools = h('div', { class: 'app-tools' }, liveEl, search);
 
   const top = h('header', { class: 'om-top' },
-    h('a', { class: 'om-brand', href: '/' }, logo(), 'Bureau'),
+    h('a', { class: 'om-brand app-brand', href: '/', 'aria-label': 'Bureau, the Desk' }, wordmark('Bureau')),
     nav, tools);
 
   const outlet = h('main', { id: 'main', class: 'app-main', tabindex: '-1' });
 
   const versionEl = h('span');
-  const foot = h('footer', { class: 'om-footline' }, h('span', null, 'Built by OMAKO'), versionEl);
+  const foot = h('footer', { class: 'om-footline' },
+    h('a', { class: 'om-credit', href: 'https://www.omako.fr', target: '_blank', rel: 'noopener' }, omakoMark(), h('span', null, 'An ', h('strong', null, 'OMAKO'), ' product')),
+    versionEl);
 
   function paintLive(state, version) {
     const look = LIVE[state];

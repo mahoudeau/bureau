@@ -7,6 +7,7 @@ import { h, fill } from '../dom.js';
 import { statusWord, swatch } from '../status.js';
 import * as store from '../store.js';
 import { relativeTime, toast } from '../ui.js';
+import { appear } from '../motion.js';
 import { lastEntry, needsMe, oldestFirst, projectLabel, undecided } from './model.js';
 import { keyed } from './keyed.js';
 import { missionHref, movedOn, refusalLine, remember, keep, rule } from './parts.js';
@@ -35,7 +36,9 @@ export function needsSection(ctx) {
     },
   });
   const list = h('div', { class: 'work-needs-list' });
-  const clear = h('p', { class: 'work-clear', hidden: true }, 'Nothing needs you.');
+  // The quiet title style for an empty queue (OMAKO DS, om-fill).
+  const clear = h('div', { class: 'work-clear', hidden: true }, h('p', { class: 'om-display-s om-fill' }, 'Nothing needs you'));
+  let shownBefore = null;
   const batch = batchBar({
     getState: () => store.getState(),
     selection,
@@ -197,6 +200,9 @@ export function needsSection(ctx) {
     sort.textContent = newest ? 'Newest first' : 'Oldest first';
     sort.hidden = n < 2;
     clear.hidden = n > 0;
+    // You ruled on the last one: the empty queue spreads in, because you acted.
+    if (shownBefore > 0 && n === 0) appear(clear, 'spread');
+    shownBefore = n;
     keyed(list, rows, {
       key: (t) => t.id,
       sig: (t) => [t.title, t.status, t.gate, t.project, t.assignee, undecided(t).length, relativeTime(t.created_at), lastEntry(t) && lastEntry(t).note],

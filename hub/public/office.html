@@ -105,10 +105,9 @@
 <body>
 <style>
   [data-mini] #hud, [data-mini] #ticker, [data-mini] #btn-min { display: none !important; }
-  /* mini obeys the same whole-number law as the full office: fit() picks
-     the largest integer scale the iframe allows and letterboxes it. A box
-     narrower than one art pixel per device pixel shows a centered 1x crop
-     instead of a smeared downscale. */
+  /* mini obeys the same whole-number law as the full office, but covers
+     instead of letterboxing: fit() picks the smallest integer scale that
+     fills the iframe, and the centred overflow is cropped. */
   [data-mini] #stage { padding: 0; overflow: hidden; }
   [data-mini] .bubble { display: none; }
 </style>
@@ -245,8 +244,10 @@
   function fit() {
     var dpr = window.devicePixelRatio || 1;
     if (MINI) {
-      // no bands in mini; below 1x we crop at 1x rather than smear
-      var m = Math.max(1, Math.floor(Math.min(innerWidth * dpr / W, innerHeight * dpr / H)));
+      // no bands in mini, and no letterbox: the scale rounds up so the
+      // office covers the window, and the centred overflow is cropped.
+      // Still whole device pixels per art pixel, never a smear.
+      var m = Math.max(1, Math.ceil(Math.max(innerWidth * dpr / W, innerHeight * dpr / H)));
       SCALE = m;
       cv.style.width = (m * W / dpr) + 'px';
       cv.style.height = (m * H / dpr) + 'px';

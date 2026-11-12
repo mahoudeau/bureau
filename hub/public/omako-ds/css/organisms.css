@@ -146,7 +146,13 @@
 .om-split-handle { background-color: var(--paper); background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 4); background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2); border-inline: var(--rule-sm) solid var(--ink); cursor: col-resize; }
 
 /* Footer */
-.om-footline { display: flex; justify-content: space-between; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-2) var(--pad); border-top: var(--rule-sm) solid var(--ink); background: var(--paper); font: 400 11px/16px var(--font-mono); }
+.om-footline { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); flex-wrap: wrap; padding: var(--sp-2) var(--pad); border-top: var(--rule-sm) solid var(--ink); background: var(--paper); font: 400 11px/16px var(--font-mono); }
+/* The credit every OMAKO product carries: the mark, then "An OMAKO product"
+   in one span. Part of the identity, like the OMAKO button. */
+.om-credit { display: inline-flex; align-items: center; gap: var(--sp-2); color: inherit; text-decoration: none; font: 400 13px/18px var(--font-text); }
+.om-credit .om-mark { width: 18px; height: 18px; }
+.om-credit strong { font-weight: 700; letter-spacing: 0.02em; }
+a.om-credit:hover strong { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
 .om-slab { padding: var(--sp-8) var(--pad); }
 .om-slab a:hover { text-decoration: underline; text-decoration-thickness: 3px; text-underline-offset: 4px; }
 

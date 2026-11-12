@@ -23,6 +23,24 @@ Dither is the one source of tone: patterns of ink on paper, the way a four-colou
 3. The ramp (12, 25, 50, 75, 100) is for a quantity or an order of steps. Hatch, cross and bars break the ramp on purpose, for exceptions.
 4. Five steps is the limit of what the eye separates at a glance.
 
+The full rules, ruled on 11 November 2026, are in OMAKO DS (README, "Dither"). `omako-ds/js/dither.js` draws what CSS can't, started once in `app/main.js`; `app/motion.js` is the one place the app asks for motion. Where Bureau uses each one:
+
+| Rule | Where |
+|---|---|
+| Atkinson images, positive on both themes, a click opens the original | mission evidence, brain image files, images in notes |
+| Progress meter with a Bayer edge | goals, a goal's page, a mission's children |
+| Share meter, the whole bar that grey | a note's "claims with a source" |
+| Heat strip | Activity (events per hour, 24 hours), Agents (each agent's week from mission logs) |
+| Long shadow | sign-in, the review and record pages, the 404 |
+| Side title | the wordmark, sign-in, the 404 |
+| Fill title | empty states, "Nothing needs you" |
+| Bayer dissolve | confirm dialogs, the palette, toasts |
+| Spread | the mission dock after your verdict, the Desk when you rule on the last mission |
+| Fold | signing in, once a session |
+| Dock band | the mission page, while there's more to scroll |
+
+The review, record and 404 pages run the same dither through `app/lp-dither.js`, the only script their CSP allows (`script-src 'self'`, nothing inline). Without it they still work: the long shadow falls back to its two CSS steps and images show as they are.
+
 ### Status
 
 A status is a swatch and a word. The mapping is the app's, in `hub/public/app/status.js`, never in omako-ds. The server-rendered pages hold the same pairs, and a test keeps the two in step.
@@ -41,7 +59,7 @@ A status is a swatch and a word. The mapping is the app's, in `hub/public/app/st
 
 ### The capability pages
 
-`/r/<token>` and `/m/<token>` are opened from a phone. They're server-rendered with no script, and take omako-ds through stylesheet links. Controls are at least 44px tall there.
+`/r/<token>` and `/m/<token>` are opened from a phone. They're server-rendered and work with no script; the hub's own dither is the only script they load. They take omako-ds through stylesheet links. Controls are at least 44px tall there.
 
 ## The office
 
