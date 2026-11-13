@@ -6,6 +6,13 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.4] - 2026-11-13
+
+### Changed
+- Settings, People lists the owners named on the server (`BUREAU_OIDC_OWNERS`) above the people added in Settings, marked "Set on the server": they sign in as owners whatever Settings says. `GET /api/settings` gives owners `env_owners`.
+- The Settings header says "Signed in with the boss token" for a pasted token, so it no longer reads like an account.
+- claude.ai renamed routines to scheduled tasks. The setup guide, the preference text, the charters and the docs say scheduled task now; sol's chapter sends you to Scheduled tasks, New task. The page keeps its address, `claude.ai/code/routines`.
+
 ## [0.5.3] - 2026-11-13
 
 ### Added

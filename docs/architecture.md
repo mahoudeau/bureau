@@ -97,7 +97,7 @@ Every hub event goes through one function, `broadcast()` in `server.js`, which s
 Connectors are the vendor glue; the hub never knows them (see `protocol.md`).
 
 - **Editor sessions** (e.g. Claude Code): `hub.sh` makes the agent's own calls (claim, update, message, write knowledge), and a `UserPromptSubmit` hook feeds the context call on each prompt. Hooks that report activity verbs automatically are planned, not built.
-- **Cloud/scheduled sessions**: no install needed. Each routine gets its own signed-in MCP connector and works through its tools; a hub without sign-in can still be driven with curl. A recurring scheduled task with a standing prompt ("fetch your queued tasks and inbox; if there is work, claim, do, report, complete or park in review") turns the queue into an engine that runs unattended.
+- **Cloud/scheduled sessions**: no install needed. Each scheduled task gets its own signed-in MCP connector and works through its tools; a hub without sign-in can still be driven with curl. A recurring scheduled task with a standing prompt ("fetch your queued tasks and inbox; if there is work, claim, do, report, complete or park in review") turns the queue into an engine that runs unattended.
 - **Chat apps with no shell** (desktop or web assistants): the hub's MCP door. The agent's address, `/mcp/agent/<name>`, in the app's connector settings, a sign-in, and the owner's Allow on the Desk, and every conversation can open missions, post progress, and file knowledge under the same rules; the server's own instructions teach the session the shift discipline.
 - **Anything else**: register, claim, post updates, write knowledge. The calls are in `protocol.md` and the README.
 

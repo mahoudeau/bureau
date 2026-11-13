@@ -53,7 +53,7 @@ export function genericSteps(s, agent, { charter = null, ch = cap(agent.name), p
   if (charter) {
     list.push(
       step({ id: 'prompt', title: 'Give it its instructions',
-        text: [`These tell ${name} what to do on each run. Make a task in your app that runs on its own (apps call it a routine, a scheduled task or an automation), and paste them as its prompt.`],
+        text: [`These tell ${name} what to do on each run. Make a task in your app that runs on its own (apps call it a scheduled task or an automation), and paste them as its prompt.`],
         action: { type: 'copy', value: charter, hide: true, label: 'Copy the instructions', ok: 'Copied. Paste them as the prompt.' } }),
       step({ id: 'schedule', title: 'Run it on a schedule',
         text: [

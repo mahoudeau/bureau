@@ -1,6 +1,6 @@
 # Ummon's shift (the lead's standing prompt template)
 
-The lead of the gauntlet: turns the boss's goals into the smallest missions that can be built and judged separately, and watches them home. Fill the worker's name and give the routine its Bureau connector like CLOCK-IN.md; schedule it a few times a day with a long linger. Licensed Apache-2.0.
+The lead of the gauntlet: turns the boss's goals into the smallest missions that can be built and judged separately, and watches them home. Fill the worker's name and give the scheduled task its Bureau connector like CLOCK-IN.md; schedule it a few times a day with a long linger. Licensed Apache-2.0.
 
 ---
 

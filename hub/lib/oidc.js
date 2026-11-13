@@ -4,7 +4,7 @@
 // The plan of record is bureau-internal/30-identity-plan.md (doc 30).
 //
 // Two kinds of sign-in:
-//   - An agent, through an app (claude.ai, the CLI, a routine's connector).
+//   - An agent, through an app (claude.ai, the CLI, a scheduled task's connector).
 //     The door per agent is https://<hub>/mcp/agent/<name>; that address is
 //     the OAuth resource, signed into the token's audience, so a token for sol
 //     can never act as kassad. The same token works on /api/* as that agent.
