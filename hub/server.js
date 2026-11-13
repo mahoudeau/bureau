@@ -104,7 +104,7 @@ function servePage(res, name, ...parts) {
 }
 // One shell for every page of the app. The client routes from the URL, and
 // everything it shows comes from the API, behind the token.
-const SHELL_ROUTE = /^\/(?:index\.html|sign-in|setup|missions(?:\/[^/]+)?|goals(?:\/[^/]+)?|brain(?:\/.+)?|projects(?:\/[^/]+)?|agents|activity|settings|ds)?$/;
+const SHELL_ROUTE = /^\/(?:index\.html|sign-in|setup(?:\/agent\/[^/]+)?|missions(?:\/[^/]+)?|goals(?:\/[^/]+)?|brain(?:\/.+)?|projects(?:\/[^/]+)?|agents|activity|settings|ds)?$/;
 const serveShell = res => servePage(res, 'app', 'index.html');
 // Static files. A segment can't hold a dot and the name holds exactly one, so
 // no `..` and no encoded slash can match. index.html and README.md can't either.
@@ -147,33 +147,42 @@ function charterText(name) {
   }
   return null;
 }
-function setupStatus() {
-  const s = store.load();
-  const settings = store.settingsOf(s);
-  const c = oidc.config();
-  const apps = store.listApps();
-  const agents = {};
-  for (const [name, roles] of Object.entries(SETUP_AGENTS)) {
-    const conf = (settings.agents || {})[name] || {};
-    const mine = apps.filter((a) => a.agent === name).map((a) => ({
-      id: a.id, client_id: a.client_id, name: a.name || a.client_id, verified: !!a.verified, status: a.status, last_used: a.last_used,
-      cli: a.client_id === c.cliClientId,
-      // used after the owner allowed it: the app has really worked as this agent
-      working: a.status === 'allowed' && !!a.ruled_at && String(a.last_used) > String(a.ruled_at),
-    }));
-    const roster = (s.agents || []).find((a) => a.name === name);
-    agents[name] = {
-      on: !!conf.oauth, projects: conf.oauth ? conf.oauth.projects : null, roles: conf.roles || [], wanted_roles: roles,
-      address: c.on ? `${c.base}/mcp/agent/${name}` : null,
-      apps: mine, allowed: mine.some((a) => a.status === 'allowed'), working: mine.some((a) => a.working),
-      last_seen: roster ? roster.last_seen || null : null,
-    };
-  }
+// One agent as the guide sees it: is its sign-in on, which apps reached the
+// hub as it, and has an allowed app really worked yet.
+function setupAgent(name, wantedRoles, s, settings, c, apps) {
+  const conf = (settings.agents || {})[name] || {};
+  const mine = apps.filter((a) => a.agent === name).map((a) => ({
+    id: a.id, client_id: a.client_id, name: a.name || a.client_id, verified: !!a.verified, status: a.status, last_used: a.last_used,
+    cli: a.client_id === c.cliClientId,
+    // used after the owner allowed it: the app has really worked as this agent
+    working: a.status === 'allowed' && !!a.ruled_at && String(a.last_used) > String(a.ruled_at),
+  }));
+  const roster = (s.agents || []).find((a) => a.name === name);
   return {
-    sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), issuer: c.issuer || null, hub_url: c.base || null,
-    agents, sol_charter: charterText('sol'),
-    done: Object.values(agents).every((a) => a.on && a.allowed),
+    name, on: !!conf.oauth, projects: conf.oauth ? conf.oauth.projects : null, roles: conf.roles || [], wanted_roles: wantedRoles,
+    address: c.on ? `${c.base}/mcp/agent/${name}` : null,
+    apps: mine, allowed: mine.some((a) => a.status === 'allowed'), working: mine.some((a) => a.working),
+    last_seen: roster ? roster.last_seen || null : null,
   };
+}
+function setupBase() {
+  const s = store.load();
+  const c = oidc.config();
+  return { s, settings: store.settingsOf(s), c, apps: store.listApps(),
+    head: { sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), issuer: c.issuer || null, hub_url: c.base || null } };
+}
+function setupStatus() {
+  const { s, settings, c, apps, head } = setupBase();
+  const agents = {};
+  for (const [name, roles] of Object.entries(SETUP_AGENTS)) agents[name] = setupAgent(name, roles, s, settings, c, apps);
+  return { ...head, agents, sol_charter: charterText('sol'), done: Object.values(agents).every((a) => a.on && a.allowed) };
+}
+// The generic guide for any one agent (/setup/agent/<name>): the same facts,
+// plus its charter when the hub has one (sol), for a scheduled run.
+const SETUP_NAME = /^[a-z][a-z0-9_-]{0,31}$/;
+function setupAgentStatus(name) {
+  const { s, settings, c, apps, head } = setupBase();
+  return { ...head, agent: setupAgent(name, SETUP_AGENTS[name] || [], s, settings, c, apps), charter: charterText(name) };
 }
 // The same B at the root, for clients that only try /favicon.ico or /favicon.svg.
 const ROOT_ICONS = { '/favicon.ico': ['favicon-32.png', 'image/png'], '/favicon.svg': ['mark.svg', 'image/svg+xml'], '/apple-touch-icon.png': ['icon-512.png', 'image/png'] };
@@ -766,6 +775,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && p === '/api/omako') return send(res, 200, await omako.status());
     if (req.method === 'GET' && p === '/api/setup') return send(res, 200, setupStatus());
+    if (req.method === 'GET' && p.startsWith('/api/setup/agent/')) {
+      const name = decodeURIComponent(p.slice('/api/setup/agent/'.length));
+      if (!SETUP_NAME.test(name) || name === 'human' || name === 'system') return send(res, 400, { error: 'not an agent name: lowercase letters, digits, - or _' });
+      return send(res, 200, setupAgentStatus(name));
+    }
 
     // ----- agent tokens (strict mode, boss only: the rule table) -----
     if (req.method === 'POST' && p === '/api/tokens') {

@@ -203,6 +203,9 @@
 .wiz-value { display: flex; flex-wrap: wrap; gap: var(--sp-2); width: 100%; }
 .wiz-value code { flex: 1 1 260px; min-width: 0; padding: 10px 12px; border: var(--rule-md) solid var(--ink); font: 500 15px/22px var(--font-mono); overflow-wrap: anywhere; user-select: all; }
 .wiz-peek { width: 100%; }
+/* Folded help on a step: where the thing is in claude.ai, the terminal way. */
+.wiz-more p { margin: var(--sp-2) 0 0; }
+.wiz-more code { overflow-wrap: anywhere; font: 400 13px/20px var(--font-mono); }
 .wiz-prompt { max-height: 220px; overflow: auto; margin: 0; padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); font: 400 12px/18px var(--font-mono); white-space: pre-wrap; }
 .wiz-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; padding: var(--sp-3); border: var(--rule-md) solid var(--ink); }
 .wiz-check { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); border: var(--rule-sm) dashed var(--ink); font: 600 14px/20px var(--font-text); }

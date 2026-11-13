@@ -588,6 +588,7 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['POST', '/api/sessions/revoke-all', () => ({}), { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/omako', null, { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/setup', null, { boss: A, agent: D, shared: D, legacy: A }],
+    ['GET', '/api/setup/agent/dana', null, { boss: A, agent: D, shared: D, legacy: A }],
   ];
   const creds = { boss, agent: worker, shared };
   const callRow = async (c, method, p, b) => {

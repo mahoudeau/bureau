@@ -164,6 +164,8 @@ const RULES = [
   ['GET', /^\/api\/omako$/, 'boss'],
   // The first-run guide's status: who of consul and sol is connected.
   ['GET', /^\/api\/setup$/, 'boss'],
+  // The generic guide's status for one agent.
+  ['GET', /^\/api\/setup\/agent\/[^/]+$/, 'boss'],
 ];
 function ruleFor(method, pathname) {
   for (const [m, re, rule] of RULES) if (m === method && re.test(pathname)) return rule;

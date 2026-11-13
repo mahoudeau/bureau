@@ -46,7 +46,7 @@ export function setupBanner() {
   let bare = false;
 
   function paint(s) {
-    const show = !!s && !s.done && !bare && path !== '/setup';
+    const show = !!s && !s.done && !bare && path !== '/setup' && !path.startsWith('/setup/');
     el.hidden = !show;
     if (!show) return;
     const consul = s.agents.consul.allowed;
