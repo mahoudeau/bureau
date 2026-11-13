@@ -208,6 +208,15 @@ async function main() {
   check('a denied app gets nothing', evil.isError && /denied/.test(evil.text), evil);
   const noClient = await mcp('sol', tokenFor('sol', { client_id: undefined }), 'whoami');
   check('a token naming no app is refused', noClient.status === 401, noClient.status);
+  // The generic guide (/setup/agent/<name>) reads the same facts for any agent.
+  const guideSol = await asBoss('GET', '/api/setup/agent/sol');
+  const gs = guideSol.json && guideSol.json.agent;
+  check('the guide sees sol on, allowed and working, at its address', guideSol.status === 200 && gs.name === 'sol' && gs.on && gs.allowed && gs.working && gs.address === `${BASE}/mcp/agent/sol`, guideSol.json);
+  check('the guide hands out sol\'s charter, with its name in it', typeof guideSol.json.charter === 'string' && /\bsol\b/.test(guideSol.json.charter) && !/\{\{WORKER_NAME\}\}/.test(guideSol.json.charter));
+  const guideKassad = await asBoss('GET', '/api/setup/agent/kassad');
+  check('an agent with no charter gets none, and its app shows allowed', guideKassad.status === 200 && guideKassad.json.charter === null && guideKassad.json.agent.allowed && !guideKassad.json.agent.working, guideKassad.json);
+  check('the guide refuses a name that is not an agent', (await asBoss('GET', '/api/setup/agent/Not%20A%20Name')).status === 400 && (await asBoss('GET', '/api/setup/agent/human')).status === 400);
+  check('an agent token cannot read the guide', (await call('GET', '/api/setup/agent/sol', { bearer: tokenFor('kassad') })).status === 403);
 
   console.log('E. A good token works, as that agent, inside its walls');
   check('sol sees only general', JSON.stringify(JSON.parse(who.text).projects) === JSON.stringify(['general']), who.text);

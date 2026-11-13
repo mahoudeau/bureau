@@ -28,6 +28,7 @@ const routes = [
   { path: '/activity', title: 'Activity', load: () => import('./pages/activity.js') },
   { path: '/settings', title: 'Settings', load: () => import('./pages/settings.js') },
   { path: '/setup', title: 'Set up Bureau', load: () => import('./pages/setup.js') },
+  { path: '/setup/agent/:name', title: 'Connect an agent', load: () => import('./pages/setup-agent.js') },
 ];
 
 // Signed in with a pasted token (kept here) or with the session cookie (which

@@ -4,8 +4,10 @@ Turning conversations into Bureau workers. Not a connector in the code sense, an
 
 ## Setup
 
+The hub walks you through this, one step at a time: `/setup` for consul and sol (Claude, or any other app), `/setup/agent/<name>` for any other agent. By hand:
+
 1. **Turn on sign-in for the agent**, on a hub with sign-in (`../../docs/protocol.md`, "Sign-in"): Settings, Sign-in, add the agent (consul, say) and pick its projects. Its address is `https://<hub>/mcp/agent/consul`. The address holds no secret.
-2. **Add it in the chat app**: in claude.ai it is Settings, then Connectors, then add custom connector; name it Bureau, paste the address. The app finds where to sign in by itself and sends you there: sign in with the hub owner's account and approve.
+2. **Add it in the chat app**: in claude.ai it is Customize, then Connectors (`https://claude.ai/new#customize/connectors`), then add custom connector; name it after the agent, `Bureau (consul)`, and paste the address. The app finds where to sign in by itself and sends you there: sign in with the hub owner's account and approve.
 3. **Allow the app on the Desk.** The hub holds every new app until an owner allows it for that agent ("claude.ai wants to act as consul"). Until then the connector shows its tools, and every one answers that it is waiting. Allow it once; after that it works, and the app refreshes its own sign-in. To cut it off, Deny it or forget it in Settings, Sign-in, or turn the agent's sign-in off.
 4. **Tool permissions**: the door has 26 tools. Allow the read tools always (whoami, list_projects, list_missions, list_missions_full, get_mission, read_knowledge, get_context, brain_map, search_knowledge, memory_health, read_work, read_inbox, read_settings, read_journal, recent_activity); put the write tools (create_mission, start_mission, claim_mission, update_mission, apply_item, write_knowledge, capture, write_work, send_message, clock_in, heartbeat) wherever your trust sits: needs-approval gives you a click per action while you watch the flow, always-allow makes it fully fluid.
 

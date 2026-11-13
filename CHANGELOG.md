@@ -6,6 +6,15 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.3] - 2026-11-13
+
+### Added
+- **The setup guide works with any AI app, not only Claude.** It now asks first: Claude, walked click by click as before, or another AI app. The generic path connects consul and sol from any app that can add a remote MCP server: the address and its name, the sign-in, allowing the app, letting the tools run without asking, the instructions to paste (named for the agent, or sol's charter for a scheduled task), and the same checks before Next opens. An app with no MCP gets the terminal way, `bureau login --agent <name>`.
+- **Every other agent gets the same guide, at `/setup/agent/<name>`.** Turning an agent on in Settings, Sign-in now opens its guide, and each agent there has a Connect button (Guide, once an app is allowed). `GET /api/setup/agent/<name>` (owners) says where that agent stands, with its charter when the hub has one.
+
+### Changed
+- claude.ai moved connectors from Settings to Customize. The guide's links and the connector READMEs point to `claude.ai/new#customize/connectors`.
+
 ## [0.5.2] - 2026-11-13
 
 ### Added

@@ -119,10 +119,12 @@ export async function signin(ctx, health) {
       if (await save(body, v ? `${name} signs in` : `${name} no longer signs in`)) reload();
     });
     const address = `${origin}/mcp/agent/${name}`;
+    const connected = apps.some((a) => a.agent === name && a.status === 'allowed');
     return h('div', { class: 'set-role' },
       h('span', { class: 'om-strong set-role-name' }, name),
       select,
-      on ? h('span', { class: 'set-secret' }, h('code', { class: 'set-code' }, address), copyButton(address)) : null);
+      on ? h('span', { class: 'set-secret' }, h('code', { class: 'set-code' }, address), copyButton(address)) : null,
+      on ? h('a', { class: `om-btn${connected ? '' : ' om-btn-primary'}`, href: `/setup/agent/${encodeURIComponent(name)}` }, connected ? 'Guide' : 'Connect') : null);
   }
   // An agent that has never clocked in has no row yet: name it here.
   const newName = h('input', { class: 'om-input', id: 'agent-new', placeholder: 'consul', pattern: '[a-z][a-z0-9_-]{0,31}' });
@@ -135,11 +137,12 @@ export async function signin(ctx, health) {
       e.preventDefault();
       const name = newName.value.trim().toLowerCase();
       if (!name) return;
-      if (await save({ agents: { [name]: { oauth: { projects: [newProjects.value] } } } }, `${name} signs in`)) reload();
+      // A new agent goes straight to its guide: the address alone isn't a setup.
+      if (await save({ agents: { [name]: { oauth: { projects: [newProjects.value] } } } }, `${name} signs in`)) ctx.navigate(`/setup/agent/${encodeURIComponent(name)}`);
     },
   }, field('Agent', newName, 'Lowercase letters, digits, - or _'), field('Projects', newProjects), h('div', null, h('button', { type: 'submit', class: 'om-btn' }, 'Turn on')));
   const agentsBox = section('Agents that sign in', String(names.filter((n) => agents[n] && agents[n].oauth).length),
-    h('p', { class: 'om-data-s set-hint' }, 'Turn sign-in on for an agent, then add its address as a connector in claude.ai (or run bureau login). The address holds no secret.'),
+    h('p', { class: 'om-data-s set-hint' }, 'Turn sign-in on for an agent, then Connect walks you through adding it to your AI app. The address holds no secret.'),
     names.length ? h('div', { class: 'set-roles' }, names.map(agentRow)) : null,
     addAgent);
 
