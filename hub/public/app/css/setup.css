@@ -215,6 +215,19 @@
 .wiz-nav { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--paper); border: var(--rule-sm) solid var(--ink); }
 .wiz-nav .om-btn { min-height: 40px; }
 .wiz-done-list { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+/* claude.ai's tool permissions, drawn so the owner knows what to look for. */
+.wiz-perm { display: grid; gap: var(--sp-3); margin: 0; padding: var(--sp-3) var(--sp-4); border: var(--rule-sm) dashed var(--ink); }
+.wiz-perm-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); }
+.wiz-perm-name { font: 600 15px/20px var(--font-text); }
+.wiz-perm-icon { flex: none; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; vertical-align: middle; }
+.wiz-perm-menu { display: inline-flex; align-items: center; gap: var(--sp-2); min-height: 40px; padding: 0 var(--sp-3); background: var(--ink); color: var(--paper); font: 700 15px/1 var(--font-text); }
+.wiz-perm-seg { display: inline-flex; border: var(--rule-sm) solid var(--ink); }
+.wiz-perm-opt { display: grid; place-items: center; width: 44px; height: 38px; }
+.wiz-perm-opt + .wiz-perm-opt { border-left: var(--rule-sm) solid var(--ink); }
+.wiz-perm-opt.is-on { background: var(--ink); color: var(--paper); }
+.wiz-perm-key { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); font: 500 13px/20px var(--font-text); }
+.wiz-perm-key span { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.wiz-perm-key .wiz-perm-icon { width: 18px; height: 18px; }
 @media (max-width: 560px) {
   .wiz-choice { grid-template-columns: 1fr; }
   .wiz-card { padding: var(--sp-5) var(--sp-4); }
