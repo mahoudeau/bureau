@@ -1,8 +1,9 @@
 import { h } from '../dom.js';
 import * as api from '../api.js';
 import { foldNext } from '../motion.js';
+import { omakoMark } from '../layout.js';
 
-// Two ways in (doc 30, C4 and Q2): "Sign in with OMAKO" (or the hub's own
+// Two ways in (doc 30, C4 and Q2): "Continue with OMAKO" (or the hub's own
 // issuer), which leaves a session cookie, and a token pasted by hand, kept
 // behind "Use a token instead" for hubs without sign-in or when the issuer is
 // down.
@@ -44,14 +45,18 @@ export function render(ctx) {
   }
 
   const next = api.nextPath();
-  const issuerLink = h('a', { class: 'om-btn om-btn-primary om-btn-block', href: `/auth/login?next=${encodeURIComponent(next)}`, hidden: true }, 'Sign in with OMAKO');
+  // OMAKO's own button, placed as OMAKO DS draws it: solid ink, the O mark,
+  // "Continue with OMAKO". Products don't restyle it. Another issuer gets a
+  // plain primary "Sign in".
+  const issuerLink = h('a', { class: 'om-btn om-btn-omako om-btn-block', href: `/auth/login?next=${encodeURIComponent(next)}`, hidden: true },
+    omakoMark(), h('span', {}, 'Continue with OMAKO'));
   const tokenForm = h('form', { class: 'om-stack om-stack-4', onSubmit: signIn },
     h('div', { class: 'om-field' },
       h('label', { class: 'om-field-label', for: 'token' }, 'Hub token'),
       input),
     error,
     submit);
-  const useToken = h('button', { type: 'button', class: 'om-link app-signin-alt', hidden: true }, 'Use a token instead');
+  const useToken = h('button', { type: 'button', class: 'om-btn om-btn-ghost app-signin-alt', hidden: true }, 'Use a token instead');
   useToken.addEventListener('click', () => {
     tokenForm.hidden = false;
     useToken.hidden = true;
@@ -85,7 +90,10 @@ export function render(ctx) {
     try {
       const wk = await fetch('/.well-known/bureau', { signal: ctx.signal }).then((r) => r.json());
       hasIssuer = !!(wk && wk.sign_in);
-      if (wk && wk.issuer && !/omako\.dev/.test(wk.issuer)) issuerLink.textContent = 'Sign in';
+      if (wk && !wk.omako && !/(^|\.)omako\.dev(\/|$)/.test(String(wk.issuer || '').replace(/^https?:\/\//, ''))) {
+        issuerLink.className = 'om-btn om-btn-primary om-btn-block';
+        issuerLink.textContent = 'Sign in';
+      }
     } catch { /* no sign-in: the token it is */ }
     if (hasIssuer) {
       issuerLink.hidden = false;

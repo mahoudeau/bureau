@@ -37,13 +37,13 @@ Nothing else changes until you set sign-in up. The boss token, minted tokens, th
 1. Set `BUREAU_PUBLIC_URL` to the hub's https address, if it isn't set already.
 2. Pair with OMAKO: `node hub/tools/omako.js pair`. Open the link it prints, sign in, confirm the workspace. The hub's client is written to `<data dir>/omako.json` (0600) and never printed. `node hub/tools/omako.js status` checks it. With another issuer, skip this and set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET`; the redirect to register is `<BUREAU_PUBLIC_URL>/auth/callback`.
 3. Name yourself owner: `BUREAU_OIDC_OWNERS=you@example.com` in the environment, then restart. Owners can add other people later in Settings, Sign-in.
-4. Open the dashboard and click "Sign in with OMAKO". A token you pasted before still works until you sign out; "Use a token instead" keeps the boss token as the way in when the issuer is down.
+4. Open the dashboard and click "Continue with OMAKO". A token you pasted before still works until you sign out; "Use a token instead" keeps the boss token as the way in when the issuer is down.
 
 **Move each agent to sign-in.** One at a time, checking each works before the next:
 
 1. Settings, Sign-in: turn on sign-in for the agent and pick its projects. A paired hub tells OMAKO about the new address by itself.
 2. Connect it. A chat app: add `https://<hub>/mcp/agent/<name>` as a connector and sign in. A routine: one connector per routine, the same way. Claude Code: `node connectors/cli/bureau.js login --hub https://<hub>`; `hub.sh` and the hook pick the sign-in up before any token file.
-3. Allow the app on the Desk. Until you do, the connector sees one tool, `access`, that says it is waiting.
+3. Allow the app on the Desk. Until you do, every tool the connector shows answers that it is waiting. A connector added on 0.5.0 may still show only an `access` tool after you allow it: disconnect it and connect again once.
 
 **Retire the old credentials** once every agent signs in:
 

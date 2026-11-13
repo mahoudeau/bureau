@@ -5,6 +5,7 @@ import { h, s } from './dom.js';
 import * as store from './store.js';
 import { toast } from './ui.js';
 import { wordmark } from './wordmark.js';
+import { setupBanner } from './setup/banner.js';
 
 const NAV = [
   ['Desk', '/'],
@@ -27,8 +28,9 @@ const LIVE = {
   polling: { word: 'Polling', dither: 'om-hatch', title: 'No event stream. Checking every minute' },
 };
 
-// The OMAKO mark lives in the credit at the foot. The brand is Bureau's own.
-const omakoMark = () => s('svg', { class: 'om-mark', viewBox: '-1.5 -1.5 103 103', 'aria-hidden': 'true' },
+// The OMAKO mark lives in the credit at the foot, and in the OMAKO button on
+// sign-in. The brand is Bureau's own.
+export const omakoMark = () => s('svg', { class: 'om-mark', viewBox: '-1.5 -1.5 103 103', 'aria-hidden': 'true' },
   s('path', { 'fill-rule': 'evenodd', d: 'M50 -1.5A51.5 51.5 0 1 0 50 101.5A51.5 51.5 0 1 0 50 -1.5ZM50 37A13 13 0 1 1 50 63A13 13 0 1 1 50 37Z' }));
 
 const isCurrent = (href, path) => (href === '/' ? path === '/' || path === '/index.html' : path === href || path.startsWith(`${href}/`));
@@ -88,13 +90,18 @@ export function mountLayout(root) {
   paintLive(store.getLive(), store.getVersion());
   store.subscribeLive(paintLive);
 
+  // Until consul and sol are connected, a banner under the top bar leads back
+  // to the setup guide (setup/banner.js).
+  const banner = setupBanner();
+
   root.replaceChildren(
     h('a', { class: 'om-skip', href: '#main' }, 'Skip to the page'),
-    top, outlet, foot);
+    top, banner.el, outlet, foot);
 
   function update({ path, bare }) {
     nav.hidden = !!bare;
     tools.hidden = !!bare;
+    banner.update(path, bare);
     ALL.forEach(([, href], i) => {
       if (isCurrent(href, path)) links[i].setAttribute('aria-current', 'page');
       else links[i].removeAttribute('aria-current');

@@ -117,6 +117,63 @@ async function main() {
     const kept = await api('GET', `/api/knowledge?file=${stateFileName}`);
     check('the newer text survives', kept.body.content.includes('a debrief written after the filing'), kept.body);
     check('the old payload was not written', !kept.body.content.includes('from an old copy'), kept.body);
+
+    console.log('4. an item that no longer passes lint is caught at approval and at apply, never half-written');
+    // t-494: an item filed before project files were linted, refused at its
+    // second op on apply after its first had landed. The API refuses such a
+    // payload at filing now, so the test plants one as an older hub left it:
+    // stored, hashed, and failing today's lint (a summary over 200 characters).
+    await api('POST', '/api/projects', { label: 'Lintcase' });
+    const archiveFile = 'archive/projects/lintcase/STATE-old.md';
+    const notesFile = 'projects/lintcase/STATE.md';
+    const stateText = summary => `---\ntitle: Lintcase\nsummary: ${summary}\n---\n\n## Now\n\nNothing yet.\n`;
+    const goodOps = [{ op: 'write', file: archiveFile, content: 'the old state, archived\n' },
+      { op: 'write', file: notesFile, content: stateText('Short and fine.') }];
+    const badOps = [goodOps[0], { op: 'write', file: notesFile, content: stateText('far too long '.repeat(20).trim()) }];
+    const plant = async (tid, toStatus) => {
+      await flushed(s => s.tasks.some(t => t.id === tid && t.status === toStatus));
+      await stop();
+      const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
+      const it = s.tasks.find(t => t.id === tid).items[0];
+      it.payload.ops = badOps;
+      it.payload_sha256 = payloadHash(badOps);
+      fs.writeFileSync(stateFile, JSON.stringify(s, null, 2));
+      await start();
+    };
+    const fileTwoOps = async () => {
+      const tid = (await api('POST', '/api/tasks', { title: 'an old digest', project: 'lintcase' })).body.task.id;
+      await api('POST', '/api/tasks/claim', { agent: 'worker-1', id: tid });
+      const f = await api('PATCH', `/api/tasks/${tid}`, { agent: 'worker-1', items: [{ title: 'archive and rewrite', payload: { ops: goodOps } }] });
+      check('a payload that passes lint is filed', f.code === 200, f);
+      await api('PATCH', `/api/tasks/${tid}`, { agent: 'lead-1', status: 'review', after_approval: 'return' });
+      return tid;
+    };
+
+    const atApproval = await fileTwoOps();
+    await plant(atApproval, 'review');
+    const refusedApproval = await api('PATCH', `/api/tasks/${atApproval}`, { agent: 'human', status: 'done', verdicts: [{ id: 'i1', verdict: 'approved' }] });
+    check('approving an item that can no longer be written is refused', refusedApproval.code === 400 && /cannot approve: i1 can no longer be written/.test(refusedApproval.body.error || ''), refusedApproval);
+    check('the refusal says why', /summary/.test(refusedApproval.body.error || ''), refusedApproval.body);
+    check('the mission stays in review', (await api('GET', `/api/tasks/${atApproval}`)).body.task.status === 'review');
+    const rejected = await api('PATCH', `/api/tasks/${atApproval}`, { agent: 'human', status: 'done', verdicts: [{ id: 'i1', verdict: 'rejected', comment: 'summary too long, file it again' }] });
+    check('rejecting it lets the approval through', rejected.code === 200 && rejected.body.task.status === 'approved', rejected);
+    const closed = await api('PATCH', `/api/tasks/${atApproval}`, { agent: 'worker-1', status: 'done' });
+    check('and the holder closes it, nothing left to apply', closed.code === 200 && closed.body.task.status === 'done', closed);
+
+    const atApply = await fileTwoOps();
+    const approvedOk = await api('PATCH', `/api/tasks/${atApply}`, { agent: 'human', status: 'done', verdicts: [{ id: 'i1', verdict: 'approved' }] });
+    check('a good item is approved', approvedOk.body.task && approvedOk.body.task.status === 'approved', approvedOk.body);
+    await plant(atApply, 'approved');
+    const preflight = await api('POST', `/api/tasks/${atApply}/apply`, { agent: 'worker-1', item: 'i1' });
+    check('apply checks every op first and refuses with 422', preflight.code === 422 && /nothing written/.test(preflight.body.error || ''), preflight);
+    const archived = await api('GET', `/api/knowledge?file=${archiveFile}`);
+    check('the first op was not written either', archived.code === 404, archived);
+    const t2 = (await api('GET', `/api/tasks/${atApply}`)).body.task;
+    check('no op is counted as applied', !t2.items[0].applied_ops && !t2.items[0].applied_at, t2.items[0]);
+    const unstuck = await api('PATCH', `/api/tasks/${atApply}`, { agent: 'human', verdicts: [{ id: 'i1', verdict: 'rejected' }] });
+    check('the boss can still reject it while approved', unstuck.code === 200 && unstuck.body.task.items[0].verdict === 'rejected', unstuck);
+    const closed2 = await api('PATCH', `/api/tasks/${atApply}`, { agent: 'worker-1', status: 'done' });
+    check('then the holder closes it', closed2.code === 200 && closed2.body.task.status === 'done', closed2);
   } finally {
     if (hub && hub.exitCode === null && hub.signalCode === null) await stop();
     fs.rmSync(dir, { recursive: true, force: true });

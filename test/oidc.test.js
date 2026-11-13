@@ -147,6 +147,7 @@ async function main() {
   check('human has no metadata', (await fetch(`${BASE}/.well-known/oauth-protected-resource/mcp/agent/human`)).status === 404);
   const wk = await fetch(`${BASE}/.well-known/bureau`).then((r) => r.json());
   check('/.well-known/bureau tells the CLI the issuer and its client', wk.issuer === ISSUER && wk.cli_client_id === 'bureau-cli' && wk.agents_url_template === `${BASE}/mcp/agent/{agent}` && wk.sign_in === true, wk);
+  check('an issuer from the environment is not OMAKO, so no OMAKO button', wk.omako === false, wk);
   check('no pairing challenge is served unless one is pending', (await fetch(`${BASE}/.well-known/omako-hub-challenge`)).status === 404);
 
   console.log('B. No sign-in, no entry');
@@ -176,7 +177,15 @@ async function main() {
   const pending = await mcp('sol', tokenFor('sol'), 'whoami');
   check('a new app gets the waiting room, not a 401 loop', pending.status === 200 && pending.isError && /waiting for an owner/.test(pending.text), pending);
   const list = await fetch(`${BASE}/mcp/agent/sol`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tokenFor('sol')}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/list' }) }).then((r) => r.json());
-  check('the waiting room lists one tool, access', list.result.tools.length === 1 && list.result.tools[0].name === 'access', list);
+  const waitingNames = list.result.tools.map((t) => t.name);
+  check('the waiting room lists the agent\'s real tools, so nothing goes stale once allowed', waitingNames.includes('create_mission') && waitingNames.includes('whoami') && !waitingNames.includes('access'), waitingNames);
+  check('named for the agent, not consul', list.result.tools.every((t) => !/\bconsul\b/.test(t.description)), list.result.tools.map((t) => t.description).filter((d) => /\bconsul\b/.test(d)));
+  const waitingCall = await mcp('sol', tokenFor('sol'), 'create_mission', { title: 'nope', project: 'general' });
+  check('any call in the waiting room says it is waiting, and does nothing', waitingCall.isError && /waiting for an owner/.test(waitingCall.text), waitingCall);
+  const initFor = (token) => fetch(`${BASE}/mcp/agent/sol`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } }) }).then((r) => r.json());
+  const showsB = (info) => !!(info && info.title === 'Bureau' && Array.isArray(info.icons) && info.icons.some((i) => i.src === `${BASE}/app/mark.svg` && i.mimeType === 'image/svg+xml'));
+  const waitingInit = await initFor(tokenFor('sol'));
+  check('the waiting room already shows the B (serverInfo.icons)', showsB(waitingInit.result && waitingInit.result.serverInfo), waitingInit);
   const apps = await asBoss('GET', '/api/apps');
   const mine = apps.json.apps.find((a) => a.client_id === APP && a.agent === 'sol');
   check('the owner sees it pending, with its name', mine && mine.status === 'pending' && mine.name === 'Claude', apps.json);
@@ -185,6 +194,10 @@ async function main() {
   check('the owner allows it', okd && okd.status === 200 && okd.json.app.status === 'allowed', okd && okd.json);
   const who = await mcp('sol', tokenFor('sol'), 'whoami');
   check('then whoami says sol', who.status === 200 && JSON.parse(who.text).agent === 'sol', who);
+  const listAfter = await fetch(`${BASE}/mcp/agent/sol`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${tokenFor('sol')}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 3, method: 'tools/list' }) }).then((r) => r.json());
+  check('the open door lists exactly the tools the waiting room listed', JSON.stringify(listAfter.result.tools.map((t) => t.name)) === JSON.stringify(waitingNames), listAfter.result.tools.map((t) => t.name));
+  const allowedInit = await initFor(tokenFor('sol'));
+  check('and the full door shows the B too', showsB(allowedInit.result && allowedInit.result.serverInfo), allowedInit);
   const kassadSameApp = await mcp('kassad', tokenFor('kassad'), 'whoami');
   check('allowed for sol is not allowed for kassad', kassadSameApp.isError && /waiting for an owner/.test(kassadSameApp.text), kassadSameApp);
   await allow('kassad', APP);

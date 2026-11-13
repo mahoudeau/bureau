@@ -7,6 +7,8 @@ mockups/
 docs/
 test/
 connectors/
+# except sol's charter: the first-run guide (/setup) hands it out
+!connectors/cowork/SOL-SHIFT.md
 projects/
 node_modules/
 **/node_modules/
