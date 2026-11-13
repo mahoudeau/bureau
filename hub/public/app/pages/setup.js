@@ -6,13 +6,15 @@
 // Next opens only once the check passes. The guide can be left at any step;
 // the banner (setup/banner.js) brings the owner back where they stopped.
 
-import { fill, h } from '../dom.js';
+import { fill, h, s as svg } from '../dom.js';
 import * as api from '../api.js';
 import { toast } from '../ui.js';
 import { BOSS_ONLY, notice, refusal, setupPage, pageHead } from '../setup/kit.js';
 import { setupStatus } from '../setup/banner.js';
+import { CHAT_PREFERENCE, CLAUDE_MD } from '../setup/texts.js';
 
 const CONNECTORS_URL = 'https://claude.ai/settings/connectors';
+const PROFILE_URL = 'https://claude.ai/settings/profile';
 const ROUTINES_URL = 'https://claude.ai/code/routines';
 const HELLO = 'Who am I at Bureau?';
 const SAVED = 'bureau.setup';
@@ -25,6 +27,31 @@ function loadSaved() {
 }
 function save(state) {
   try { localStorage.setItem(SAVED, JSON.stringify(state)); } catch { /* private window: fine */ }
+}
+
+// claude.ai's three tool permissions, drawn the way its connector page shows
+// them, with the one to pick marked: a tick (Always allow), a hand (Needs
+// approval) and a barred circle (Blocked).
+const ICONS = {
+  allow: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M8 12.5l2.7 2.7L16.2 9.6' }]],
+  ask: [['path', { d: 'M8.5 13V6.8a1.2 1.2 0 0 1 2.4 0V11M10.9 11V5.4a1.2 1.2 0 0 1 2.4 0V11M13.3 11V6a1.2 1.2 0 0 1 2.4 0v5.5M15.7 11.5V8.4a1.2 1.2 0 0 1 2.4 0v5.4a6.2 6.2 0 0 1-6.2 6.2h-.4a6.2 6.2 0 0 1-5.3-3l-2-3.3a1.3 1.3 0 0 1 2.1-1.5l1.2 1.6' }]],
+  block: [['circle', { cx: 12, cy: 12, r: 9 }], ['path', { d: 'M5.6 5.6l12.8 12.8' }]],
+};
+const icon = (name) => svg('svg', { viewBox: '0 0 24 24', class: 'wiz-perm-icon', 'aria-hidden': 'true' },
+  ICONS[name].map(([tag, attrs]) => svg(tag, attrs)));
+function permissionsFigure() {
+  const seg = (name, label, on) => h('span', { class: `wiz-perm-opt${on ? ' is-on' : ''}`, title: label }, icon(name));
+  return h('figure', { class: 'wiz-perm' },
+    h('div', { class: 'wiz-perm-row' },
+      h('span', { class: 'wiz-perm-name' }, 'Other tools'),
+      h('span', { class: 'wiz-perm-menu' }, icon('allow'), 'Always allow', h('span', { 'aria-hidden': 'true' }, '▾'))),
+    h('div', { class: 'wiz-perm-row' },
+      h('span', { class: 'wiz-perm-name om-data-s' }, 'each tool'),
+      h('span', { class: 'wiz-perm-seg' }, seg('allow', 'Always allow', true), seg('ask', 'Needs approval'), seg('block', 'Blocked'))),
+    h('figcaption', { class: 'wiz-perm-key' },
+      h('span', null, icon('allow'), ' Always allow: pick this'),
+      h('span', null, icon('ask'), ' Needs approval'),
+      h('span', null, icon('block'), ' Blocked')));
 }
 
 const appsOf = (s, name, cli) => s.agents[name].apps.filter((a) => !!a.cli === !!cli);
@@ -65,6 +92,17 @@ function steps(s) {
       action: { type: 'wait', check: () => appsOf(s, 'consul').length > 0, waiting: 'Waiting for claude.ai to reach your hub', ok: 'claude.ai reached your hub.' } },
     { id: 'consul-allow', ch: 'Consul', title: 'Let Claude act as consul', text: ['Only allow an app you just connected yourself.'],
       action: { type: 'allow', apps: () => appsOf(s, 'consul'), agent: 'consul', check: () => appsOf(s, 'consul').some((a) => a.status === 'allowed'), ok: 'Claude can act as consul.' } },
+    { id: 'consul-trust', ch: 'Consul', title: 'Let consul work without asking',
+      text: [
+        ['In claude.ai, open ', h('a', { class: 'om-link', href: CONNECTORS_URL, target: '_blank', rel: 'noopener' }, 'your connectors'), ', then ', h('strong', null, 'Bureau (consul)'), '. Under Tool permissions, every tool starts on ', h('strong', null, 'Needs approval'), ', the hand: Claude would stop and ask you before each step.'],
+        ['Next to ', h('strong', null, 'Other tools'), ', open the menu and pick ', h('strong', null, 'Always allow'), '. Every tool switches to the tick.']],
+      figure: permissionsFigure,
+      action: { type: 'confirm', label: 'I\'ve set Always allow', ok: 'Consul works without asking.' } },
+    { id: 'consul-prefs', ch: 'Consul', title: 'Tell Claude to use it on its own',
+      text: [
+        'Without this, Claude only uses Bureau when you ask. With it, every real piece of work becomes a mission, and what Claude learns is kept.',
+        ['Copy these instructions, then paste them in ', h('a', { class: 'om-link', href: PROFILE_URL, target: '_blank', rel: 'noopener' }, 'claude.ai, Settings, Profile'), ', in the box for your personal preferences. Add them to what\'s there, if anything.']],
+      action: { type: 'copy', value: CHAT_PREFERENCE, hide: true, label: 'Copy the instructions', ok: 'Copied. Paste them in your preferences.' } },
     { id: 'consul-hello', ch: 'Consul', title: 'Say hello',
       text: [['Open a new chat in claude.ai, turn on ', h('strong', null, 'Bureau (consul)'), ', and ask:']],
       action: { type: 'wait', show: HELLO, check: () => appsOf(s, 'consul').some((a) => a.working), waiting: 'Waiting for consul\'s first answer', ok: 'Consul answered. It works.' } },
@@ -76,6 +114,11 @@ function steps(s) {
       then: { type: 'wait', check: () => appsOf(s, 'consul', true).length > 0, waiting: 'Waiting for your terminal to sign in', ok: 'Your terminal reached the hub.' } },
     { id: 'terminal-allow', ch: 'Terminal', terminal: true, title: 'Let your terminal act as consul', text: ['Only allow it if you just ran the command.'],
       action: { type: 'allow', apps: () => appsOf(s, 'consul', true), agent: 'consul', check: () => appsOf(s, 'consul', true).some((a) => a.status === 'allowed'), ok: 'Your terminal can act as consul.' } },
+    { id: 'terminal-claudemd', ch: 'Terminal', terminal: true, title: 'Tell Claude Code to use it on its own',
+      text: [
+        'Same idea as in claude.ai: these instructions make Claude Code open a mission for real work, and keep what it learns.',
+        ['Copy them, then add them to ', h('code', null, '~/.claude/CLAUDE.md'), ', the file Claude Code reads in every project. Create it if it isn\'t there.']],
+      action: { type: 'copy', value: CLAUDE_MD, hide: true, label: 'Copy the instructions', ok: 'Copied. Add them to your CLAUDE.md.' } },
     { id: 'sol-on', ch: 'Sol', title: 'Turn sol on', text: ['Sol is the librarian. This lets it sign in to your hub.'],
       action: { type: 'turnOn', agent: 'sol', label: 'Turn on sol', check: () => sol.on, ok: 'Sol is on.' } },
     { id: 'sol-name', ch: 'Sol', title: 'Add sol as a connector',
@@ -259,7 +302,7 @@ export async function render(ctx) {
     const inCh = list.filter((x) => x.ch === st.ch);
     const count = st.ch === 'Start' || st.ch === 'Done' ? null : h('span', { class: 'wiz-count' }, `${st.ch} · ${inCh.indexOf(st) + 1} of ${inCh.length}`);
     const firstDone = (st.action.check ? st.action.check() : !!local.flags[st.id]) || (st.then && st.then.check());
-    fill(card, count, h('h2', null, st.title), st.text.map((t) => h('p', null, t)),
+    fill(card, count, h('h2', null, st.title), st.text.map((t) => h('p', null, t)), st.figure ? st.figure() : null,
       h('div', { class: 'wiz-action' }, actionNodes(st, st.action, 'first'), st.then && firstDone ? actionNodes(st, st.then, 'then') : null),
       error);
     const canNext = isDone(st) && st.action.type !== 'choice';

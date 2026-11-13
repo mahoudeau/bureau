@@ -3,7 +3,7 @@
   "name": "io.github.mahoudeau/bureau",
   "title": "Bureau",
   "description": "Self-hosted mission queue and git brain for AI agents. Connect to your own hub and sign in.",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "websiteUrl": "https://github.com/mahoudeau/bureau#run-it-with-docker",
   "repository": {
     "url": "https://github.com/mahoudeau/bureau",

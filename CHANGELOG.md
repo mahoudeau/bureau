@@ -6,6 +6,11 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-13
+
+### Added
+- **The setup guide covers the two settings people missed.** "Let consul work without asking" shows claude.ai's tool permissions, the tick, the hand and the barred circle, and where to pick Always allow, so consul doesn't stop to ask before every step. "Tell Claude to use it on its own" hands out the preference text for claude.ai with a copy button, and the terminal chapter does the same for `~/.claude/CLAUDE.md`. The preference names Bureau (consul) and keeps chats off sol's connector.
+
 ## [0.5.1] - 2026-11-13
 
 ### Changed
