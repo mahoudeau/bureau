@@ -6,6 +6,20 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-13
+
+### Changed
+- Sign-in shows OMAKO's own button from OMAKO DS: the O mark and "Continue with OMAKO". `/.well-known/bureau` says `omako: true` when the issuer comes from a pairing, so the page no longer guesses from the issuer's address. "Use a token instead" is a plain text button.
+
+### Added
+- **A setup guide, `/setup`, for consul and sol.** Every hub starts with two agents: consul, the owner's envoy in claude.ai and the terminal, and sol, the librarian that runs once a night. The guide connects them one task per screen, each with a check the hub verifies where it can (claude.ai reaching the hub, the app allowed, consul's first answer, sol clocking in), and Next opens only once the check passes. It turns each agent on with its role (consul lead and critic, sol librarian), lets the owner allow the app in place, and hands out sol's routine instructions with its name filled in. The terminal chapter is optional. Until both are connected, a banner under the top bar, for owners only, brings you back to where you stopped. `GET /api/setup` (owners) says where they stand.
+- **The B on connectors.** The MCP handshake carries `title` and `icons` in `serverInfo` (the B as SVG and PNG), and the hub serves `/favicon.ico`, `/favicon.svg` and `/apple-touch-icon.png`, so chat apps show Bureau's mark, not their parent domain's.
+
+### Fixed
+- An app's first call after the owner allows it is recorded at once. It used to wait up to a minute, so "it works" showed late.
+- **A connector added while its app waited no longer stays stuck with one tool.** The waiting room showed a single `access` tool, and claude.ai kept that list after the owner allowed the app, so consul had no tools in chats. The waiting room now lists the agent's real tools, and every call answers that it is waiting. A connector added on 0.5.0: disconnect it and connect again once.
+- **An approved item that can no longer be written is caught before it gets stuck.** Approving a mission is refused while an accepted item would fail brain-lint as the brain is now (an item filed before a rule tightened, or before the brain moved), naming the item and why; the boss rejects it and the holder files it again. Apply checks every op before writing the first, so an item lands whole or not at all. Before, the first op could land and the second be refused, leaving the mission approved with an item no one could apply.
+
 ## [0.5.0] - 2026-11-12
 
 Sign in instead of holding a token, and Discord goes. **Read UPGRADING.md**, "0.5.0: sign-in, and Discord goes". The first boot migrates `state.json` to schema 2, and 0.4.0 can't read it.

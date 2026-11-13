@@ -176,3 +176,46 @@
   .set-defs { grid-template-columns: minmax(0, 1fr); }
   .set-defs dd { margin-bottom: var(--sp-1); }
 }
+
+/* The first-run banner, under the top bar on every page until consul and sol
+   are connected (setup/banner.js). */
+.app-setup-banner { padding: var(--sp-3) var(--pad) 0; }
+.app-setup-banner[hidden] { display: none; }
+
+/* The setup guide (/setup): one task per screen. Every word sits on a sheet,
+   never on the dotted ground, so it reads in both themes. */
+.wiz { display: grid; gap: var(--sp-4); width: 100%; max-width: 620px; margin-inline: auto; padding-block: var(--sp-6); }
+.wiz-progress { display: grid; gap: var(--sp-2); padding: var(--sp-3) var(--sp-4); background: var(--paper); border: var(--rule-sm) solid var(--ink); }
+.wiz-chapters { display: flex; flex-wrap: wrap; gap: var(--sp-2) var(--sp-5); font: 500 11px/16px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.wiz-chapters .is-now { font-weight: 700; text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+.wiz-chapters .is-done { font-weight: 700; }
+.wiz-chapters .is-done::after { content: " ✓"; }
+.wiz-bar { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 3px; }
+.wiz-bar i { display: block; height: 8px; border: var(--rule-sm) solid var(--ink); background: var(--paper); }
+.wiz-bar i.is-done { background: var(--ink); }
+.wiz-bar i.is-now { background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 2) calc(var(--px) * 2); background-position: 0 0, var(--px) var(--px); }
+.wiz-card { display: grid; gap: var(--sp-4); padding: var(--sp-6) var(--sp-5); background: var(--paper); border: var(--rule-md) solid var(--ink); outline: none; }
+.wiz-count { font: 700 11px/16px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.wiz-card h2 { margin: 0; font: 800 26px/32px var(--font-text); }
+.set-page .wiz-card p { font: 400 16px/24px var(--font-text); max-width: 52ch; }
+.wiz-action { display: grid; gap: var(--sp-3); justify-items: start; }
+.wiz-action > .om-btn, .wiz-value .om-btn { min-height: 44px; padding-inline: var(--sp-5); font-size: 15px; }
+.wiz-value { display: flex; flex-wrap: wrap; gap: var(--sp-2); width: 100%; }
+.wiz-value code { flex: 1 1 260px; min-width: 0; padding: 10px 12px; border: var(--rule-md) solid var(--ink); font: 500 15px/22px var(--font-mono); overflow-wrap: anywhere; user-select: all; }
+.wiz-peek { width: 100%; }
+.wiz-prompt { max-height: 220px; overflow: auto; margin: 0; padding: var(--sp-3); border: var(--rule-sm) solid var(--ink); font: 400 12px/18px var(--font-mono); white-space: pre-wrap; }
+.wiz-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--sp-3); width: 100%; padding: var(--sp-3); border: var(--rule-md) solid var(--ink); }
+.wiz-check { display: flex; align-items: center; gap: var(--sp-3); min-height: 44px; padding: var(--sp-2) var(--sp-3); border: var(--rule-sm) dashed var(--ink); font: 600 14px/20px var(--font-text); }
+.wiz-check .om-wait { flex: 0 0 64px; }
+.wiz-check-mark { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border: var(--rule-md) solid var(--ink); font: 700 14px/1 var(--font-mono); }
+.wiz-check.is-ok { border-style: solid; }
+.wiz-check.is-ok .wiz-check-mark { background: var(--ink); color: var(--paper); }
+.wiz-choice { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-3); width: 100%; }
+.wiz-choice .om-btn { min-height: 64px; white-space: normal; }
+.wiz-nav { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); background: var(--paper); border: var(--rule-sm) solid var(--ink); }
+.wiz-nav .om-btn { min-height: 40px; }
+.wiz-done-list { display: grid; gap: var(--sp-2); margin: 0; padding: 0; list-style: none; }
+@media (max-width: 560px) {
+  .wiz-choice { grid-template-columns: 1fr; }
+  .wiz-card { padding: var(--sp-5) var(--sp-4); }
+}

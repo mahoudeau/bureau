@@ -119,6 +119,13 @@ async function main() {
     const old = await fetch(`${BASE}/v2/tokens.css`);
     await old.text();
     check('an old asset path is a 404', old.status === 404, old.status);
+
+    console.log('3b. the B at the root, for clients that only look there');
+    for (const [url, type] of [['/favicon.ico', 'image/png'], ['/favicon.svg', 'image/svg+xml'], ['/apple-touch-icon.png', 'image/png'], ['/app/icon-512.png', 'image/png']]) {
+      const r = await fetch(BASE + url);
+      const bytes = (await r.arrayBuffer()).byteLength;
+      check(`${url} is served as ${type}`, r.status === 200 && (r.headers.get('content-type') || '').startsWith(type) && bytes > 0, [r.status, r.headers.get('content-type')]);
+    }
   } finally {
     hub.kill('SIGKILL');
   }

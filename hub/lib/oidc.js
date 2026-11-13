@@ -94,9 +94,11 @@ function resourceMetadata(agent) {
   };
 }
 // /.well-known/bureau: what the CLI needs to sign in to this hub (C5). Public.
+// omako: the issuer is the OMAKO this hub paired with, so the sign-in page
+// shows OMAKO's own button.
 function discovery() {
   const c = config();
-  return { issuer: c.issuer || null, cli_client_id: c.on ? c.cliClientId : null, agents_url_template: c.on ? `${c.base}/mcp/agent/{agent}` : null, sign_in: c.webOn };
+  return { issuer: c.issuer || null, cli_client_id: c.on ? c.cliClientId : null, agents_url_template: c.on ? `${c.base}/mcp/agent/{agent}` : null, sign_in: c.webOn, omako: !!(c.webOn && c.hubId) };
 }
 
 // ---- the issuer's metadata and keys, cached ----

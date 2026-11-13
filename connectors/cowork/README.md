@@ -29,6 +29,8 @@ Builder, lead, and critic together form the gauntlet loop (goal in, judged work 
 
 ## Setup
 
+For sol, the dashboard's setup guide (`/setup`) walks you through all of this, one step at a time, and checks each step. The steps below are the same, for any other worker.
+
 1. **Turn on sign-in for the agent.** In Bureau, Settings, Sign-in tab, under "Agents that sign in", add the worker's name. The tab shows its address: `https://<hub>/mcp/agent/<name>`.
 2. **Give it its role.** On a hub with roles in Settings, give the worker its role there (lead, critic, librarian). The `capabilities` a template clocks in with are a label there, not authority.
 3. **Add the connector in claude.ai.** Settings, Connectors, add a custom connector named `Bureau (<name>)` with the agent's address. Sign in with OMAKO when claude.ai asks.

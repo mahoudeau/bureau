@@ -906,6 +906,13 @@ function payloadError(payload) {
   if (bytes > knowledge.MAX_ATTACHMENT) return 'payload too large (5MB cap, as for the knowledge API)';
   return null;
 }
+// The lint errors an approved payload would meet if applied now, from op
+// `from` on, judged as apply judges it (exact: the approved bytes stand). The
+// brain moves and rules tighten after an item is filed, so approval and apply
+// both ask again rather than trust the check made at filing.
+function payloadLint(ops, from = 0) {
+  return ops.slice(from).flatMap(o => knowledge.writeLintErrors({ file: o.file, content: o.content, mode: o.op === 'append' ? 'append' : 'replace', exact: true }));
+}
 // What the files a payload replaces held when it was filed: path to SHA-256,
 // null when the file did not exist. The payload hash proves the text is what
 // the boss approved; this proves the file is still the one he was looking at,
@@ -1091,6 +1098,15 @@ function updateTask({ id, agent, kind, status, note, artifact, lease_minutes, pr
     const open = [...verdictOf].filter(([, v]) => v === 'proposed').map(([iid]) => iid);
     if (Array.isArray(items) && items.some(it => it && it.title)) open.push('the items filed with this request');
     if (open.length) return { error: `undecided items: ${open.join(', ')} still proposed; accept or reject each before approving` };
+    // An accepted item must still be writable. One filed before a rule
+    // tightened, or before the brain moved, is refused here while the boss can
+    // still reject it, not at apply, where the mission would be left approved
+    // with an item that can never land.
+    const stuck = (t.items || [])
+      .filter(it => verdictOf.get(it.id) === 'approved' && !it.applied_at && it.payload && Array.isArray(it.payload.ops))
+      .map(it => ({ id: it.id, lint: payloadLint(it.payload.ops, it.applied_ops || 0) }))
+      .filter(x => x.lint.length);
+    if (stuck.length) return { error: `cannot approve: ${stuck.map(x => `${x.id} can no longer be written (${x.lint.join('; ')})`).join('; ')}. Reject it and the holder files it again against the brain as it is now`, lint: stuck.flatMap(x => x.lint) };
   }
   // after_approval "return": the approval lands on approved, back with the
   // holder, instead of done.
@@ -1196,6 +1212,10 @@ function applyCheck({ id, agent, item }) {
   if (sha !== it.payload_sha256) return { code: 409, error: `apply: ${it.id}'s payload does not match the hash stored when it was filed (${it.payload_sha256}); nothing written` };
   const stale = staleTargets(it);
   if (stale.length) return { code: 409, error: `apply: ${it.id} would overwrite ${stale.join(', ')}, changed since the item was filed; nothing written. File a new item against the current text` };
+  // Every op is checked before the first is written, so an item lands whole
+  // or not at all.
+  const lint = payloadLint(it.payload.ops, it.applied_ops || 0);
+  if (lint.length) return { code: 422, error: `apply: ${it.id} would leave the brain failing brain-lint (${lint.join('; ')}); nothing written. The boss rejects it and the holder files it again`, lint };
   return { task: t, item: it, sha };
 }
 
@@ -1260,7 +1280,10 @@ function seeApp({ client_id, agent, name, verified, sub }) {
   }
   if (name && a.name !== name) a.name = String(name).slice(0, 120);
   a.verified = !!verified;
-  if (!a.last_used || Date.now() - Date.parse(a.last_used) > 60_000) { a.last_used = now; save(); }
+  // Saved once a minute at most, except the first call after the owner ruled:
+  // that one says the app really works (the setup guide waits for it).
+  const firstSinceRuling = a.ruled_at && String(a.last_used) <= String(a.ruled_at);
+  if (!a.last_used || firstSinceRuling || Date.now() - Date.parse(a.last_used) > 60_000) { a.last_used = now; save(); }
   return a;
 }
 function listApps() { return appsOf(load()).slice(); }

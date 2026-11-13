@@ -20,6 +20,8 @@ RUN apk add --no-cache git \
 
 WORKDIR /app
 COPY --chown=node:node hub/ ./
+# Sol's charter, which the first-run guide (/setup) hands out filled in.
+COPY --chown=node:node connectors/cowork/SOL-SHIFT.md ./charters/
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
