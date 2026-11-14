@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-density="compact">
+<html lang="en" data-density="compact" data-theme="light">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,8 +9,9 @@
 <script>
   (function () {
     var attr = { paper: 'light', ink: 'dark' }, saved = null;
-    try { saved = localStorage.getItem('bureau_theme'); } catch (e) { /* no storage: follow the system */ }
-    if (attr[saved]) document.documentElement.setAttribute('data-theme', attr[saved]);
+    try { saved = localStorage.getItem('bureau_theme'); } catch (e) { /* no storage: the default, paper */ }
+    if (saved === 'system') document.documentElement.removeAttribute('data-theme');
+    else if (attr[saved]) document.documentElement.setAttribute('data-theme', attr[saved]);
   })();
 </script>
 <link rel="icon" href="/app/favicon-32.png" sizes="32x32" type="image/png">
