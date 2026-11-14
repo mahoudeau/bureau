@@ -122,6 +122,27 @@ function viewer(p) {
   return { canRead: (f) => canRead(p, f), seesProject: (id) => projectAllowed(p, id) };
 }
 
+// ---- The operator (doc 31, D4) ----
+// Whoever runs the server: the boss token, and people signed in whose email
+// is in BUREAU_OPERATORS (comma-separated), else in BUREAU_OIDC_OWNERS. On a
+// hosted hub that is the host, never the customer. The backup's state is
+// theirs alone: to anyone else its routes answer 404, as if they did not
+// exist. A legacy hub has one token for everyone, so it counts, like for the
+// boss routes.
+function operators() {
+  const raw = process.env.BUREAU_OPERATORS;
+  if (raw === undefined || !raw.trim()) return store.envOwners();
+  return raw.split(/[\s,]+/).filter(Boolean).map((o) => (o.includes('@') ? o.toLowerCase() : o));
+}
+function isOperator(p) {
+  if (!p) return false;
+  if (p.session) {
+    const list = operators();
+    return (!!p.email && list.includes(String(p.email).toLowerCase())) || (!!p.via && list.includes(p.via));
+  }
+  return p.kind === 'boss' || p.kind === 'legacy';
+}
+
 // What a credential sees of a mission. Missions no longer carry capability
 // links (doc 30, D12), so every credential that reaches one sees all of it.
 function taskView(p, t) { return t; }
@@ -130,7 +151,8 @@ function taskView(p, t) { return t; }
 // any: any credential (the handler applies identity and walls). boss: the boss
 // credential in strict mode, any bearer in legacy. strict: the boss credential,
 // and only in strict mode. all: sees every project (boss, shared, ["*"] tokens,
-// legacy). A route missing here is not served: forgetting a rule closes it.
+// legacy). operator: whoever runs the server (isOperator), 404 to the rest. A
+// route missing here is not served: forgetting a rule closes it.
 const RULES = [
   ['GET', /^\/api\/health$/, 'any'],
   ['GET', /^\/api\/events$/, 'all'], ['POST', /^\/api\/events\/ticket$/, 'all'],
@@ -166,6 +188,8 @@ const RULES = [
   ['GET', /^\/api\/setup$/, 'boss'],
   // The generic guide's status for one agent.
   ['GET', /^\/api\/setup\/agent\/[^/]+$/, 'boss'],
+  // The off-server backup (doc 31): the operator's only, 404 to anyone else.
+  ['GET', /^\/api\/backups$/, 'operator'], ['POST', /^\/api\/backups\/verified$/, 'operator'], ['POST', /^\/api\/backups\/run$/, 'operator'],
 ];
 function ruleFor(method, pathname) {
   for (const [m, re, rule] of RULES) if (m === method && re.test(pathname)) return rule;
@@ -179,6 +203,8 @@ const READ_POSTS = [['POST', /^\/api\/state$/], ['POST', /^\/api\/events\/ticket
 const matches = (list, method, pathname) => list.some(([m, re]) => m === method && re.test(pathname || ''));
 // null when the credential passes the rule, else {status, error}.
 function checkRule(rule, p, method, pathname) {
+  // Judged first, so no other refusal tells anyone the route is there.
+  if (rule === 'operator') return isOperator(p) ? null : { status: 404, error: 'not found' };
   // People signed in to the dashboard below owner: a viewer reads, an approver
   // reads and rules. Judged before the rule, whatever it says.
   const reads = !method || method === 'GET' || matches(READ_POSTS, method, pathname);
@@ -205,5 +231,5 @@ const MCP_RULES = {
 };
 
 module.exports = {
-  secretEqual, fromBearer, fromMcpToken, stillCurrent, actor, projectAllowed, seesTask, seesAll, canRead, canWrite, viewer, taskView, ruleFor, checkRule, RULES, MCP_RULES, sharedLastUsed: () => sharedLastUsed,
+  secretEqual, fromBearer, fromMcpToken, stillCurrent, actor, projectAllowed, seesTask, seesAll, canRead, canWrite, viewer, taskView, ruleFor, checkRule, isOperator, operators, RULES, MCP_RULES, sharedLastUsed: () => sharedLastUsed,
 };

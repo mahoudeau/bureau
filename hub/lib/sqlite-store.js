@@ -15,6 +15,10 @@
 //                 mcp_token, anything a later version adds), one row each.
 //                 Keys starting with _ are the store's own: the hub's
 //                 identity and the order of the state's keys.
+//   backup_runs   one row per nightly off-server backup (lib/backup.js).
+//   backup_checks one row per check of a copy made on the Mac (bureau backup
+//                 verify). Neither is part of the state: a save never
+//                 touches them.
 //
 // Arrays come back in the order their rows were first written (rowid), which
 // is the order the hub appends in. Projects are sorted at load anyway.
@@ -38,6 +42,8 @@ const SCHEMA = `
   CREATE TABLE IF NOT EXISTS oauth_apps(id TEXT PRIMARY KEY, doc TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS agent_tokens(id TEXT PRIMARY KEY, doc TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS events(seq INTEGER PRIMARY KEY AUTOINCREMENT, ts TEXT, type TEXT, doc TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS backup_runs(id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT NOT NULL, finished_at TEXT, ok INTEGER, offsite INTEGER, verified INTEGER, detail TEXT);
+  CREATE TABLE IF NOT EXISTS backup_checks(id INTEGER PRIMARY KEY AUTOINCREMENT, checked_at TEXT NOT NULL, ok INTEGER NOT NULL, file TEXT, detail TEXT, by TEXT);
 `;
 
 function sqlite() {
@@ -271,6 +277,23 @@ function verify(file) {
     if (c) try { c.close(); } catch { /* closed */ }
   }
 }
+// The full check, for the copy that leaves the server: PRAGMA integrity_check
+// reads every page and index. Slower than quick_check, once a night.
+function integrity(file) {
+  const { DatabaseSync } = sqlite();
+  let c = null;
+  try {
+    c = new DatabaseSync(file, { readOnly: true });
+    const res = c.prepare('PRAGMA integrity_check').all().map((r) => Object.values(r)[0]);
+    if (res.length !== 1 || res[0] !== 'ok') return `integrity_check: ${res.join('; ').slice(0, 300)}`;
+    if (!c.prepare("SELECT doc FROM meta WHERE key = 'schema_version'").get()) return 'no state in the copy';
+    return null;
+  } catch (e) {
+    return e.message;
+  } finally {
+    if (c) try { c.close(); } catch { /* closed */ }
+  }
+}
 function copyTo(target, check = verify) {
   try { fs.unlinkSync(target); } catch { /* not there */ }
   db.prepare('VACUUM INTO ?').run(target);
@@ -294,7 +317,34 @@ function readFile(file) {
   } finally { close(); }
 }
 
+// ---- The off-server backup's record (lib/backup.js) ----
+// Prepared on first use: a tool opening an older database read-only must not
+// trip over tables it never asks for.
+function bst(name, sqlText) {
+  if (!st.backup) st.backup = {};
+  if (!st.backup[name]) st.backup[name] = db.prepare(sqlText);
+  return st.backup[name];
+}
+const bool = (v) => (v === null || v === undefined ? null : v ? 1 : 0);
+const backupRuns = {
+  start(at) { return Number(bst('start', 'INSERT INTO backup_runs(started_at) VALUES(?)').run(at).lastInsertRowid); },
+  finish(id, { at, ok, offsite, verified, detail }) {
+    bst('finish', 'UPDATE backup_runs SET finished_at = ?, ok = ?, offsite = ?, verified = ?, detail = ? WHERE id = ?').run(at, bool(ok), bool(offsite), bool(verified), detail || '', id);
+  },
+  get(id) { return bst('get', 'SELECT * FROM backup_runs WHERE id = ?').get(id) || null; },
+  recent(n = 20) { return bst('recent', 'SELECT * FROM backup_runs ORDER BY id DESC LIMIT ?').all(n); },
+  first() { return bst('first', 'SELECT * FROM backup_runs ORDER BY id LIMIT 1').get() || null; },
+  lastOk() { return bst('lastOk', 'SELECT * FROM backup_runs WHERE ok = 1 ORDER BY id DESC LIMIT 1').get() || null; },
+};
+const backupChecks = {
+  add({ at, ok, file, detail, by }) {
+    return Number(bst('checkAdd', 'INSERT INTO backup_checks(checked_at, ok, file, detail, by) VALUES(?, ?, ?, ?, ?)').run(at, ok ? 1 : 0, file || null, detail || '', by || null).lastInsertRowid);
+  },
+  recent(n = 10) { return bst('checkRecent', 'SELECT * FROM backup_checks ORDER BY id DESC LIMIT ?').all(n); },
+  lastOk() { return bst('checkLastOk', 'SELECT * FROM backup_checks WHERE ok = 1 ORDER BY id DESC LIMIT 1').get() || null; },
+};
+
 // Throws the plain message when this Node has no node:sqlite.
 function requireNode() { sqlite(); }
 
-module.exports = { requireNode, open, close, load, save, identity, claimIdentity, setPublicUrl, copyTo, verify, readFile, TABLES };
+module.exports = { requireNode, open, close, load, save, identity, claimIdentity, setPublicUrl, copyTo, verify, integrity, readFile, backupRuns, backupChecks, TABLES };

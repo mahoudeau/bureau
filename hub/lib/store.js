@@ -1499,7 +1499,7 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   authMode, mintToken, listTokens, revokeToken, findAgentToken, isLead,
-  StorageError, SCHEMA_VERSION, STATE_FILE, DB_FILE, STORE_KIND,
+  StorageError, SCHEMA_VERSION, STATE_FILE, DB_FILE, STORE_KIND, DATA_DIR, sql: SQL,
   createTask, claimTask, updateTask, expireLeases, applyCheck, applyItem, payloadHash,
   renameProject, createProject, updateProject, deleteProject, PROJECT_RE,
   findApp, seeApp, listApps, ruleApp, forgetApp, envOwners, MEMBER_ROLES, RESERVED_OAUTH_AGENT, OAUTH_AGENT_NAME,
