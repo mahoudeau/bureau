@@ -178,6 +178,13 @@ jobs:
       - name: SQLite store (test/sqlite-store.test.js)
         run: node test/sqlite-store.test.js
 
+      # The nightly off-server backup: encryption, retention, the operator's
+      # routes, the CLI's keygen and verify, against a WebDAV stand-in in the
+      # test. A temporary home and the file key store, never a keychain.
+      # Ports 8241 and 8242, and one the system picks for the stand-in.
+      - name: Off-server backup (test/backup.test.js)
+        run: node test/backup.test.js
+
       - name: Memory eval (test/memory-eval.sh)
         run: bash test/memory-eval.sh
 

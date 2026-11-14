@@ -535,7 +535,7 @@ async function interactions({ strict, boss, worker, shared, roamer, anon, old, l
 // ---- The table: every route and MCP tool, every credential, allow or deny ----
 async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }) {
   console.log('E. The route table');
-  const A = 'allow', D = 'deny';
+  const A = 'allow', D = 'deny', H = 'norule'; // H: hidden, a 404 like a route that is not there
   const declare = (who) => (who === 'boss' ? 'human' : 'worker');
   // [method, path, body(who), {boss, agent, shared, legacy}]; anon is always deny.
   const ROUTES = [
@@ -589,6 +589,11 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['GET', '/api/omako', null, { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/setup', null, { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/setup/agent/dana', null, { boss: A, agent: D, shared: D, legacy: A }],
+    // The off-server backup (doc 31, D4): the operator only. Everyone else
+    // gets the 404 of a route that does not exist (H), never a 403.
+    ['GET', '/api/backups', null, { boss: A, agent: H, shared: H, legacy: A }],
+    ['POST', '/api/backups/verified', () => ({ ok: true, file: 'bureau-2026-11-14.db.gz.enc', detail: 'row' }), { boss: A, agent: H, shared: H, legacy: A }],
+    ['POST', '/api/backups/run', () => ({}), { boss: A, agent: H, shared: H, legacy: A }],
   ];
   const creds = { boss, agent: worker, shared };
   const callRow = async (c, method, p, b) => {
