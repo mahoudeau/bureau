@@ -4,6 +4,7 @@
 //
 //   bureau login [--agent consul] [--hub URL] [--no-browser]
 //   bureau logout | token | whoami | status   [--agent NAME] [--hub URL]
+//   bureau backup keygen | verify | decrypt | ...   (the off-server backup, below)
 //
 // login runs the OAuth device flow against the issuer the hub names at
 // /.well-known/bureau and keeps the result where only programs read it: the
@@ -20,6 +21,8 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { spawn, spawnSync } = require('child_process');
+
+const zlib = require('zlib');
 
 const SERVICE = process.env.BUREAU_LOGIN_SERVICE || 'bureau-login'; // another name is for tests
 const SCOPE = 'openid email offline_access bureau';
@@ -408,6 +411,333 @@ async function status(opt) {
   return 0;
 }
 
+// ---- the off-server backup (doc 31) ----
+// The hub encrypts its nightly copy with a public key; the private key lives
+// here, in the Keychain (service bureau-backup, account <hub host>), or off a
+// Mac in ~/.config/bureau/backup.json (0600). Beside it, under the same
+// service: <host>/nextcloud (where the copies are) and <host>/operator (the
+// hub token that may report a check). No command prints a secret, except
+// export-key, and only into a pipe.
+//
+// The file format is hub/lib/backup-crypto.js's (the comment there has the
+// layout). This file stands alone, so the key and decrypt side is copied
+// here; test/backup.test.js checks one against the other.
+const BK = {
+  MAGIC: Buffer.from('BRBK', 'latin1'), VERSION: 1, HEADER: 57, TAG: 16, INFO: Buffer.from('bureau-backup v1', 'latin1'),
+  SPKI: Buffer.from('302a300506032b656e032100', 'hex'), PKCS8: Buffer.from('302e020100300506032b656e04220420', 'hex'),
+  PUB: 'x25519:', PRIV: 'x25519-private:',
+};
+const BACKUP_SERVICE = process.env.BUREAU_BACKUP_SERVICE || 'bureau-backup'; // another name is for tests
+const COPY_RE = /^bureau-(\d{4}-\d{2}-\d{2})\.db\.gz\.enc$/;
+const HUB_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/;
+
+function bkRaw(text, tag, what) {
+  const s = String(text || '').trim();
+  const raw = s.startsWith(tag) ? Buffer.from(s.slice(tag.length), 'base64') : null;
+  if (!raw || raw.length !== 32) throw new Fail(`${what} is not a Bureau backup key (it starts with ${tag}).`);
+  return raw;
+}
+const bkPublicObject = (raw) => crypto.createPublicKey({ key: Buffer.concat([BK.SPKI, raw]), format: 'der', type: 'spki' });
+const bkPrivateObject = (raw) => crypto.createPrivateKey({ key: Buffer.concat([BK.PKCS8, raw]), format: 'der', type: 'pkcs8' });
+const bkRawPublic = (k) => k.export({ format: 'der', type: 'spki' }).subarray(BK.SPKI.length);
+const bkKeyId = (raw) => crypto.createHash('sha256').update(raw).digest().subarray(0, 8);
+
+function backupKeyPair() {
+  const { publicKey, privateKey } = crypto.generateKeyPairSync('x25519');
+  return {
+    public_key: BK.PUB + bkRawPublic(publicKey).toString('base64'),
+    private_key: BK.PRIV + privateKey.export({ format: 'der', type: 'pkcs8' }).subarray(BK.PKCS8.length).toString('base64'),
+  };
+}
+function backupPublicOf(privateText) {
+  return BK.PUB + bkRawPublic(crypto.createPublicKey(bkPrivateObject(bkRaw(privateText, BK.PRIV, 'the private key')))).toString('base64');
+}
+function backupDecrypt(buf, privateText) {
+  if (buf.length < BK.HEADER + BK.TAG || !buf.subarray(0, 4).equals(BK.MAGIC)) throw new Fail('not a Bureau backup file.');
+  if (buf[4] !== BK.VERSION) throw new Fail(`backup format ${buf[4]} is newer than this CLI (it reads format ${BK.VERSION}): update it.`);
+  const priv = bkPrivateObject(bkRaw(privateText, BK.PRIV, 'the private key'));
+  const recipient = bkRawPublic(crypto.createPublicKey(priv));
+  if (!buf.subarray(5, 13).equals(bkKeyId(recipient))) throw new Fail('this file was encrypted for another key.');
+  const ephPub = buf.subarray(13, 45);
+  let shared;
+  try { shared = crypto.diffieHellman({ privateKey: priv, publicKey: bkPublicObject(ephPub) }); } catch { throw new Fail('the file is damaged: refused.'); }
+  const key = Buffer.from(crypto.hkdfSync('sha256', shared, Buffer.concat([ephPub, recipient]), BK.INFO, 32));
+  const d = crypto.createDecipheriv('aes-256-gcm', key, buf.subarray(45, BK.HEADER));
+  d.setAAD(buf.subarray(0, BK.HEADER));
+  d.setAuthTag(buf.subarray(buf.length - BK.TAG));
+  try { return Buffer.concat([d.update(buf.subarray(BK.HEADER, buf.length - BK.TAG)), d.final()]); }
+  catch { throw new Fail('the file was changed or damaged: refused.'); }
+}
+
+// Where the backup's secrets are kept: one JSON record per account.
+const backupFileStore = {
+  kind: 'file',
+  file() { return path.join(os.homedir(), '.config', 'bureau', 'backup.json'); },
+  where() { return this.file(); },
+  readAll() {
+    try { const all = JSON.parse(fs.readFileSync(this.file(), 'utf8')); return all && typeof all === 'object' && !Array.isArray(all) ? all : {}; } catch { return {}; }
+  },
+  get(key) { const r = this.readAll()[key]; return r && typeof r === 'object' ? r : null; },
+  set(key, rec) {
+    const all = this.readAll();
+    all[key] = rec;
+    ensureDir(path.dirname(this.file()));
+    const tmp = `${this.file()}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(all, null, 2) + '\n', { mode: 0o600 });
+    fs.renameSync(tmp, this.file());
+    try { fs.chmodSync(this.file(), 0o600); } catch { /* Windows */ }
+  },
+};
+const backupKeychainStore = {
+  kind: 'keychain',
+  where(key) { return `the macOS Keychain (service ${BACKUP_SERVICE}, account ${key})`; },
+  get(key) {
+    const r = spawnSync('security', ['find-generic-password', '-s', BACKUP_SERVICE, '-a', key, '-w'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 5000 });
+    if (r.status !== 0 || !r.stdout) return null;
+    let v = r.stdout.replace(/\r?\n$/, '');
+    if (/^[0-9a-fA-F]+$/.test(v) && v.length % 2 === 0) v = Buffer.from(v, 'hex').toString('utf8');
+    try { const rec = JSON.parse(v); return rec && typeof rec === 'object' ? rec : null; } catch { return null; }
+  },
+  set(key, rec) {
+    if (!/^[A-Za-z0-9.:[\]_/-]+$/.test(key)) throw new Fail('the hub address cannot name a Keychain item.');
+    // Hex, fed on stdin: the value never shows in a process list (see keychainStore).
+    const json = JSON.stringify(rec);
+    const line = `add-generic-password -U -s ${BACKUP_SERVICE} -a ${key} -X ${Buffer.from(json, 'utf8').toString('hex')}\n`;
+    if (line.length > KEYCHAIN_LINE_MAX) throw new Fail('the value is too large for a Keychain item.');
+    const r = spawnSync('security', ['-i'], { input: line, stdio: ['pipe', 'ignore', 'ignore'], timeout: 5000 });
+    if (r.status !== 0) throw new Fail('could not save it in the Keychain.');
+    const back = this.get(key);
+    if (!back || JSON.stringify(back) !== json) throw new Fail('the Keychain did not keep it.');
+  },
+};
+function backupStore() {
+  const file = process.env.BUREAU_BACKUP_STORE === 'file' || process.env.BUREAU_LOGIN_STORE === 'file' || process.platform !== 'darwin';
+  return file ? backupFileStore : backupKeychainStore;
+}
+const hubHost = (opt) => new URL(hubUrl(opt)).host;
+
+function backupKey(host) {
+  const bs = backupStore();
+  const rec = bs.get(host);
+  if (!rec || typeof rec.private_key !== 'string') throw new Fail(`no backup key for ${host} in ${bs.where(host)}. Run bureau backup keygen, or bring the key back from your password manager with bureau backup import-key.`);
+  hide(rec.private_key);
+  return rec;
+}
+
+async function readStdin() {
+  if (process.stdin.isTTY) return null;
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  return Buffer.concat(chunks).toString('utf8').replace(/\r?\n$/, '');
+}
+
+// Nextcloud: BUREAU_NEXTCLOUD_URL, _USER, _PASSWORD and _DIR, else what
+// bureau backup set-nextcloud kept.
+function nextcloudFor(host) {
+  const e = process.env;
+  let c = e.BUREAU_NEXTCLOUD_URL && e.BUREAU_NEXTCLOUD_USER && e.BUREAU_NEXTCLOUD_PASSWORD
+    ? { url: e.BUREAU_NEXTCLOUD_URL, user: e.BUREAU_NEXTCLOUD_USER, password: e.BUREAU_NEXTCLOUD_PASSWORD, dir: e.BUREAU_NEXTCLOUD_DIR }
+    : backupStore().get(`${host}/nextcloud`);
+  if (!c || !c.url || !c.user || !c.password) throw new Fail(`no Nextcloud set for ${host}. Run bureau backup set-nextcloud, or set BUREAU_NEXTCLOUD_URL, BUREAU_NEXTCLOUD_USER and BUREAU_NEXTCLOUD_PASSWORD.`);
+  hide(c.password);
+  checkUrl(c.url, 'the Nextcloud address');
+  return { url: strip(c.url), user: c.user, password: c.password, dir: String(c.dir || 'Bureau-backup').replace(/^\/+|\/+$/g, '') };
+}
+function operatorToken(host) {
+  const t = process.env.BUREAU_OPERATOR_TOKEN || (backupStore().get(`${host}/operator`) || {}).token || null;
+  return t ? hide(t) : null;
+}
+
+// Two WebDAV verbs: list a folder, get a file.
+function dav(nc) {
+  const enc = (p) => p.split('/').filter(Boolean).map(encodeURIComponent).join('/');
+  const root = `${nc.url}/remote.php/dav/files/${encodeURIComponent(nc.user)}/${enc(nc.dir)}`;
+  const auth = `Basic ${Buffer.from(`${nc.user}:${nc.password}`).toString('base64')}`;
+  async function go(method, p, headers = {}) {
+    let res;
+    try { res = await fetch(`${root}/${enc(p)}`, { method, headers: { authorization: auth, ...headers }, redirect: 'manual', signal: AbortSignal.timeout(120000) }); }
+    catch (e) { throw new Fail(`could not reach ${new URL(nc.url).host} (${(e && e.cause && e.cause.code) || 'network error'}).`); }
+    if (!res.ok) throw new Fail(`Nextcloud answered ${res.status} to ${method} ${nc.dir}/${p}.`);
+    return res;
+  }
+  return {
+    async list(dir) {
+      const xml = await (await go('PROPFIND', dir, { depth: '1' })).text();
+      const names = [];
+      for (const m of xml.matchAll(/<(?:[\w-]+:)?href>([^<]+)<\/(?:[\w-]+:)?href>/g)) {
+        const href = decodeURIComponent(new URL(m[1], root).pathname).replace(/\/+$/, '');
+        names.push(href.slice(href.lastIndexOf('/') + 1));
+      }
+      return names;
+    },
+    async get(p) { return Buffer.from(await (await go('GET', p)).arrayBuffer()); },
+  };
+}
+
+// The copy, decrypted and unpacked, opened read-only and checked through.
+function checkDatabase(dbBytes, hubId) {
+  let DatabaseSync;
+  try { ({ DatabaseSync } = require('node:sqlite')); } catch { throw new Fail(`opening the copy needs Node 22.13 or newer (this is ${process.version}).`); }
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bureau-verify-'));
+  const file = path.join(dir, 'copy.db');
+  let db = null;
+  try {
+    fs.writeFileSync(file, dbBytes, { mode: 0o600 });
+    db = new DatabaseSync(file, { readOnly: true });
+    const res = db.prepare('PRAGMA integrity_check').all().map((r) => Object.values(r)[0]);
+    if (res.length !== 1 || res[0] !== 'ok') throw new Fail(`the copy fails its integrity check: ${res.join('; ').slice(0, 200)}`);
+    const meta = (k) => { const r = db.prepare('SELECT doc FROM meta WHERE key = ?').get(k); return r ? JSON.parse(r.doc) : null; };
+    const id = meta('_hub_id');
+    if (hubId && id !== hubId) throw new Fail(`the copy belongs to hub ${id}, not ${hubId}.`);
+    const schema = meta('schema_version');
+    if (schema === null) throw new Fail('the copy holds no state.');
+    const missions = db.prepare('SELECT COUNT(*) AS n FROM tasks').get().n;
+    return { hub_id: id, schema_version: schema, missions };
+  } finally {
+    if (db) try { db.close(); } catch { /* closed */ }
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+async function backupKeygen(opt) {
+  const host = hubHost(opt);
+  const bs = backupStore();
+  const had = bs.get(host);
+  if (had && had.private_key && !opt.force)
+    throw new Fail(`a backup key for ${host} is already in ${bs.where(host)}. A new key cannot read the copies made with the old one. Save the old one first (bureau backup export-key), then pass --force.`);
+  const pair = backupKeyPair();
+  hide(pair.private_key);
+  bs.set(host, { ...pair, created_at: new Date().toISOString() });
+  const back = bs.get(host);
+  if (!back || back.private_key !== pair.private_key) throw new Fail('the key was not kept. Nothing changed on the hub.');
+  say(`Made a backup key pair for ${host}. The private key is in ${bs.where(host)}.`);
+  say('Keep a second copy in your password manager: bureau backup export-key | pbcopy, then paste it there. Lose the private key and the backups cannot be read.');
+  say('Set this on the server as BUREAU_BACKUP_PUBLIC_KEY (it is not a secret):');
+  say(pair.public_key);
+  return 0;
+}
+
+async function backupExportKey(opt) {
+  if (process.stdout.isTTY) {
+    warn('bureau backup export-key only writes into a pipe, never to a terminal. For example: bureau backup export-key | pbcopy');
+    return 2;
+  }
+  process.stdout.write(backupKey(hubHost(opt)).private_key + '\n');
+  return 0;
+}
+
+async function backupImportKey(opt) {
+  const host = hubHost(opt);
+  const text = await readStdin();
+  if (text === null) throw new Fail('pipe the private key in, for example: pbpaste | bureau backup import-key');
+  hide(text.trim());
+  const pub = backupPublicOf(text.trim());
+  const bs = backupStore();
+  const had = bs.get(host);
+  if (had && had.private_key && had.private_key !== text.trim() && !opt.force) throw new Fail(`another backup key for ${host} is already kept. Pass --force to replace it.`);
+  bs.set(host, { private_key: text.trim(), public_key: pub, created_at: (had && had.created_at) || new Date().toISOString() });
+  say(`The backup key for ${host} is in ${bs.where(host)}. Its public key: ${pub}`);
+  return 0;
+}
+
+async function backupSetNextcloud(opt) {
+  const host = hubHost(opt);
+  if (!opt.url || !opt.user) throw new Fail('pass --url and --user, and pipe the app password in: pbpaste | bureau backup set-nextcloud --url URL --user NAME');
+  checkUrl(opt.url, 'the Nextcloud address');
+  const password = await readStdin();
+  if (!password) throw new Fail('pipe the app password in, for example: pbpaste | bureau backup set-nextcloud --url URL --user NAME');
+  hide(password);
+  const bs = backupStore();
+  bs.set(`${host}/nextcloud`, { url: strip(opt.url), user: opt.user, password, dir: opt.dir || 'Bureau-backup' });
+  say(`Nextcloud for ${host} kept in ${bs.where(`${host}/nextcloud`)}.`);
+  return 0;
+}
+
+async function backupSetOperator(opt) {
+  const host = hubHost(opt);
+  const token = await readStdin();
+  if (!token) throw new Fail('pipe the hub token in, for example: pbpaste | bureau backup set-operator');
+  hide(token);
+  const bs = backupStore();
+  bs.set(`${host}/operator`, { token });
+  say(`The operator token for ${host} is kept in ${bs.where(`${host}/operator`)}.`);
+  return 0;
+}
+
+async function backupVerify(opt) {
+  const hub = hubUrl(opt), host = new URL(hub).host;
+  const key = backupKey(host);
+  const nc = nextcloudFor(host);
+  const token = operatorToken(host);
+  let hubId = opt['hub-id'] || null;
+  if (!hubId) {
+    if (!token) throw new Fail('no operator token to ask the hub its id. Run bureau backup set-operator, set BUREAU_OPERATOR_TOKEN, or pass --hub-id.');
+    const r = await call(`${hub}/api/backups`, { bearer: token });
+    if (r.status !== 200 || !r.json || !r.json.status) throw new Fail(`${hub} did not answer as for its operator (${r.status}).`);
+    hubId = r.json.status.hub_id;
+  }
+  if (typeof hubId !== 'string' || !HUB_ID_RE.test(hubId)) throw new Fail('the hub id cannot name a folder.');
+  const result = { ok: false, file: null, detail: '' };
+  try {
+    const remote = dav(nc);
+    const names = (await remote.list(`${hubId}/db`)).filter((n) => COPY_RE.test(n)).sort();
+    if (!names.length) throw new Fail(`no copy in ${nc.dir}/${hubId}/db.`);
+    result.file = names[names.length - 1];
+    const blob = await remote.get(`${hubId}/db/${result.file}`);
+    const gz = backupDecrypt(blob, key.private_key);
+    let raw;
+    try { raw = zlib.gunzipSync(gz); } catch { throw new Fail('the copy does not unpack.'); }
+    const c = checkDatabase(raw, hubId);
+    result.ok = true;
+    result.detail = `${result.file}: decrypted, integrity_check ok, ${c.missions} missions, schema ${c.schema_version}, hub ${c.hub_id}`;
+  } catch (e) {
+    result.detail = `${result.file || 'no copy'}: ${e instanceof Fail ? e.message : `unexpected error (${e && e.name})`}`;
+  }
+  say(result.ok ? `Good: ${result.detail}` : `FAILED: ${result.detail}`);
+  if (opt['no-report']) return result.ok ? 0 : 1;
+  if (!token) { warn('Not reported to the hub: no operator token (bureau backup set-operator, or BUREAU_OPERATOR_TOKEN).'); return result.ok ? 0 : 1; }
+  const r = await callJson(`${hub}/api/backups/verified`, token, { ok: result.ok, file: result.file, detail: result.detail });
+  if (r.status === 200) say('Reported to the hub.');
+  else { warn(`The hub did not take the report (${r.status}).`); return 1; }
+  return result.ok ? 0 : 1;
+}
+
+async function backupDecryptFile(opt) {
+  const input = opt._[2];
+  if (!input) throw new Fail('which file? bureau backup decrypt FILE [--out PATH]');
+  const key = backupKey(hubHost(opt));
+  let out = backupDecrypt(fs.readFileSync(input), key.private_key);
+  let target = opt.out || input.replace(/\.enc$/, '');
+  if (out.length >= 2 && out[0] === 0x1f && out[1] === 0x8b) {
+    out = zlib.gunzipSync(out);
+    if (!opt.out) target = target.replace(/\.gz$/, '');
+  }
+  if (target === input) target += '.plain';
+  if (fs.existsSync(target)) throw new Fail(`${target} already exists. Pass --out with another name.`);
+  fs.writeFileSync(target, out, { mode: 0o600 });
+  say(`Decrypted to ${target} (${out.length} bytes).`);
+  return 0;
+}
+
+// A JSON POST with a bearer, no redirects.
+async function callJson(url, bearer, body) {
+  try {
+    const res = await fetch(url, { method: 'POST', headers: { authorization: `Bearer ${bearer}`, 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify(body), redirect: 'manual', signal: AbortSignal.timeout(15000) });
+    await res.text().catch(() => '');
+    return { status: res.status };
+  } catch { throw new Fail(`could not reach ${new URL(url).origin}.`); }
+}
+
+const BACKUP_COMMANDS = {
+  keygen: backupKeygen, 'export-key': backupExportKey, 'import-key': backupImportKey,
+  'set-nextcloud': backupSetNextcloud, 'set-operator': backupSetOperator, verify: backupVerify, decrypt: backupDecryptFile,
+};
+async function backup(opt) {
+  const sub = opt._[1];
+  if (!BACKUP_COMMANDS[sub]) throw new Fail(`bureau backup ${sub ? `has no command ${String(sub).slice(0, 40)}` : 'needs a command'}. See bureau --help.`);
+  return BACKUP_COMMANDS[sub](opt);
+}
+
 const HELP = `bureau: sign in to a Bureau hub from a terminal.
 
   bureau login  [--agent NAME] [--hub URL] [--no-browser]
@@ -416,10 +746,20 @@ const HELP = `bureau: sign in to a Bureau hub from a terminal.
   bureau token  [--agent NAME] [--hub URL]   a fresh access token, into a pipe only
   bureau logout [--agent NAME] [--hub URL]   revoke at the issuer and forget it
 
+The off-server backup (the hub encrypts, only this Mac can read):
+  bureau backup keygen [--force]       make the key pair, print the public key
+  bureau backup export-key             the private key, into a pipe only
+  bureau backup import-key             the private key back, from a pipe
+  bureau backup set-nextcloud --url URL --user NAME [--dir DIR]   app password from a pipe
+  bureau backup set-operator           the hub token that reports checks, from a pipe
+  bureau backup verify [--hub-id ID] [--no-report]   fetch, decrypt and open the newest copy
+  bureau backup decrypt FILE [--out PATH]            a copy, decrypted and unpacked
+
 Hub: --hub, else BUREAU_URL, else the first line of ~/.bureau-url.
 Agent: --agent, else BUREAU_AGENT, else consul.
-Storage: the macOS Keychain (service bureau-login); off a Mac, or with
-BUREAU_LOGIN_STORE=file, ~/.config/bureau/login.json (mode 0600).
+Storage: the macOS Keychain (services bureau-login and bureau-backup); off a
+Mac, or with BUREAU_LOGIN_STORE=file, ~/.config/bureau/login.json and
+backup.json (mode 0600).
 `;
 
 function parse(argv) {
@@ -427,9 +767,9 @@ function parse(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '-h' || a === '--help') opt.help = true;
-    else if (a === '--no-browser') opt['no-browser'] = true;
-    else if (a.startsWith('--agent=') || a.startsWith('--hub=')) { const at = a.indexOf('='); opt[a.slice(2, at)] = a.slice(at + 1); }
-    else if (a === '--agent' || a === '--hub') {
+    else if (a === '--no-browser' || a === '--force' || a === '--no-report') opt[a.slice(2)] = true;
+    else if (/^--(agent|hub|url|user|dir|hub-id|out)=/.test(a)) { const at = a.indexOf('='); opt[a.slice(2, at)] = a.slice(at + 1); }
+    else if (/^--(agent|hub|url|user|dir|hub-id|out)$/.test(a)) {
       if (i + 1 >= argv.length) throw new Fail(`${a} needs a value.`);
       opt[a.slice(2)] = argv[++i];
     } else if (a.startsWith('-')) throw new Fail(`unknown option ${a.slice(0, 40)}. See bureau --help.`);
@@ -438,7 +778,7 @@ function parse(argv) {
   return opt;
 }
 
-const COMMANDS = { login, logout, token, whoami, status };
+const COMMANDS = { login, logout, token, whoami, status, backup };
 
 async function main(argv) {
   let opt;
@@ -453,6 +793,6 @@ async function main(argv) {
   }
 }
 
-module.exports = { fresh, storeFor, accountKey, fileStore, keychainStore };
+module.exports = { fresh, storeFor, accountKey, fileStore, keychainStore, backupDecrypt, backupKeyPair, backupPublicOf };
 
 if (require.main === module) main(process.argv.slice(2)).then((code) => { process.exitCode = code; });
