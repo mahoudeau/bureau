@@ -6,6 +6,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.5] - 2026-11-14
+
 ### Added
 - **SQLite as an optional store.** `BUREAU_STORE=sqlite` keeps the state in `data/bureau.db` through Node's built-in `node:sqlite`, so still no dependency. The hub still works from memory; a save writes only the rows that changed, in one transaction. Missions, agents, messages, projects, sessions, apps and agent tokens get their own tables, and the event log an append-only table capped at 2000 rows. Off by default. It needs Node 22.13 or newer; the file store still runs on Node 18. See UPGRADING.md.
 - The first boot on SQLite imports `state.json` and keeps it as `state.json.imported-<timestamp>`. `node hub/tools/state-export.js <data-dir>` is the way back: it writes the whole state out as a `state.json`.
@@ -20,6 +22,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ### Changed
 - `hub/tools/export.js` reads `bureau.db` on a SQLite hub, and `hub/tools/import.js` refuses a data dir that already holds one.
+- Paper is the dashboard's default theme. System is still a choice in Settings. The 404 and the link pages are always light.
+- `bureau login` prints the sign-in link with the code in it, so the OMAKO sign-in knows it's for Bureau even when no browser opens.
 
 ## [0.5.4] - 2026-11-13
 
