@@ -1,8 +1,9 @@
 // test/apply.test.js: a tampered payload fails the hash (M4).
 // The API cannot change a filed payload, so this test does what an attacker
 // with disk access would: it stops a scratch hub, edits the payload inside
-// state.json, starts the hub again, and asks it to apply. The hub must refuse
-// and write nothing. Self-contained, zero deps. Usage: node test/apply.test.js
+// state.json (bureau.db with BUREAU_STORE=sqlite), starts the hub again, and
+// asks it to apply. The hub must refuse and write nothing. Self-contained,
+// zero deps. Usage: node test/apply.test.js
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -49,18 +50,34 @@ async function main() {
   // ends the process outright), so the test waits for state.json itself first.
   const stop = () => new Promise(r => { hub.once('exit', r); hub.kill('SIGTERM'); });
   const stateFile = path.join(dir, 'data', 'state.json');
+  // With BUREAU_STORE=sqlite the hub keeps its state in bureau.db: the same
+  // tampering, done in the database.
+  const onSqlite = process.env.BUREAU_STORE === 'sqlite';
+  const dbFile = path.join(dir, 'data', 'bureau.db');
+  const readState = () => (onSqlite ? require('../hub/lib/sqlite-store').readFile(dbFile) : JSON.parse(fs.readFileSync(stateFile, 'utf8')));
   const flushed = async pred => {
     for (let i = 0; i < 40; i++) {
-      try { if (pred(JSON.parse(fs.readFileSync(stateFile, 'utf8')))) return; } catch { }
+      try { if (pred(readState())) return; } catch { }
       await sleep(100);
     }
     throw new Error('state.json never caught up');
   };
-  const editPayload = content => {
+  // Edits one mission on disk, with the hub stopped.
+  const editTask = (tid, change) => {
+    if (onSqlite) {
+      const { DatabaseSync } = require('node:sqlite');
+      const db = new DatabaseSync(dbFile);
+      const t = JSON.parse(db.prepare('SELECT doc FROM tasks WHERE id = ?').get(tid).doc);
+      change(t);
+      db.prepare('UPDATE tasks SET doc = ? WHERE id = ?').run(JSON.stringify(t), tid);
+      db.close();
+      return;
+    }
     const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-    s.tasks.find(t => t.id === id).items[0].payload.ops[0].content = content;
+    change(s.tasks.find(t => t.id === tid));
     fs.writeFileSync(stateFile, JSON.stringify(s, null, 2));
   };
+  const editPayload = content => editTask(id, t => { t.items[0].payload.ops[0].content = content; });
   let id;
   try {
     await start();
@@ -133,11 +150,11 @@ async function main() {
     const plant = async (tid, toStatus) => {
       await flushed(s => s.tasks.some(t => t.id === tid && t.status === toStatus));
       await stop();
-      const s = JSON.parse(fs.readFileSync(stateFile, 'utf8'));
-      const it = s.tasks.find(t => t.id === tid).items[0];
-      it.payload.ops = badOps;
-      it.payload_sha256 = payloadHash(badOps);
-      fs.writeFileSync(stateFile, JSON.stringify(s, null, 2));
+      editTask(tid, t => {
+        const it = t.items[0];
+        it.payload.ops = badOps;
+        it.payload_sha256 = payloadHash(badOps);
+      });
       await start();
     };
     const fileTwoOps = async () => {

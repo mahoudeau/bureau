@@ -135,6 +135,83 @@ jobs:
         if: always()
         run: cat "$RUNNER_TEMP/bureau/hub.log" || true
 
+  # The same suites with the state in SQLite (BUREAU_STORE=sqlite, set for the
+  # whole job, so every hub the tests start runs on it), on Node 22.13, the
+  # oldest Node with node:sqlite unflagged. Then the store's own test.
+  sqlite:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      BUREAU_URL: http://127.0.0.1:8100
+      BUREAU_TOKEN: devtoken
+      BUREAU_STORE: sqlite
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.13'
+
+      - name: Start a scratch hub on SQLite
+        run: |
+          mkdir -p "$RUNNER_TEMP/bureau"
+          PORT=8100 \
+          BUREAU_DATA_DIR="$RUNNER_TEMP/bureau/data" \
+          BUREAU_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" \
+          BUREAU_WORK_DIR="$RUNNER_TEMP/bureau/work" \
+          BUREAU_RESERVATION_TTL_MIN=0.02 \
+            nohup node hub/server.js > "$RUNNER_TEMP/bureau/hub.log" 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf "$BUREAU_URL/health" > /dev/null && break
+            sleep 0.5
+          done
+          curl -sf "$BUREAU_URL/api/health" -H "Authorization: Bearer $BUREAU_TOKEN" | grep -q '"store": "sqlite"' && exit 0
+          echo "the hub is not on SQLite"
+          cat "$RUNNER_TEMP/bureau/hub.log"
+          exit 1
+
+      - name: Conformance on SQLite (test/dummy-agent.sh)
+        run: CONF_SHORT_TTL=1 CONF_BRAIN_DIR="$RUNNER_TEMP/bureau/brain" bash test/dummy-agent.sh
+
+      # Import, restart, the way back, backups and a restore, the silo guard,
+      # two hubs side by side. Ports 8231 to 8234.
+      - name: SQLite store (test/sqlite-store.test.js)
+        run: node test/sqlite-store.test.js
+
+      - name: Memory eval (test/memory-eval.sh)
+        run: bash test/memory-eval.sh
+
+      - name: Search (test/index.test.js)
+        run: node test/index.test.js
+
+      - name: Context call (test/context.test.js)
+        run: node test/context.test.js
+
+      - name: Claim ids (test/claim-ids.test.js)
+        run: node test/claim-ids.test.js
+
+      - name: Pokes (test/pokes.sh)
+        run: sh test/pokes.sh
+
+      - name: Apply (test/apply.test.js)
+        run: node test/apply.test.js
+
+      - name: Authorization (test/authz.test.js)
+        run: node test/authz.test.js
+
+      - name: Sign-in (test/oidc.test.js)
+        run: node test/oidc.test.js
+
+      - name: Security (test/security.test.js)
+        run: node test/security.test.js
+
+      - name: Assets (test/assets.test.js)
+        run: node test/assets.test.js
+
+      - name: Hub log
+        if: always()
+        run: cat "$RUNNER_TEMP/bureau/hub.log" || true
+
   # The office regression guard: every draw stays on the 384x216 canvas and
   # every pixel is one of the palette's 4 shades, at every phase and view.
   # Playwright and Chromium are installed in CI only; the hub itself keeps

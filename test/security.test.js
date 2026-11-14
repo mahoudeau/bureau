@@ -30,7 +30,7 @@ function hubEnv(name, port, extra) {
   fs.mkdirSync(dir, { recursive: true });
   const env = { PATH: process.env.PATH, SYSTEMROOT: process.env.SYSTEMROOT, HOME: dir, USERPROFILE: dir, PORT: String(port), HOST: '127.0.0.1', BUREAU_TOKEN: TOKEN,
     BUREAU_ENV_FILE: path.join(dir, 'no.env'), BUREAU_DATA_DIR: path.join(dir, 'data'), BUREAU_BRAIN_DIR: path.join(dir, 'brain'), BUREAU_WORK_DIR: path.join(dir, 'work'),
-    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', ...extra };
+    GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', BUREAU_STORE: process.env.BUREAU_STORE, ...extra };
   for (const k of Object.keys(env)) if (env[k] === undefined || env[k] === null) delete env[k];
   return { env, dir };
 }
@@ -280,11 +280,18 @@ async function finding7() {
   const seeded = hubEnv('f7', 8209, {});
   fs.mkdirSync(seeded.env.BUREAU_DATA_DIR, { recursive: true, mode: 0o755 });
   fs.chmodSync(seeded.env.BUREAU_DATA_DIR, 0o755);
-  const stateFile = path.join(seeded.env.BUREAU_DATA_DIR, 'state.json');
+  let stateFile = path.join(seeded.env.BUREAU_DATA_DIR, 'state.json');
   fs.writeFileSync(stateFile, JSON.stringify({ schema_version: 1, tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }], mcp_token: 'abc' }), { mode: 0o644 });
   fs.chmodSync(stateFile, 0o644);
   const mode = (f) => (fs.statSync(f).mode & 0o777).toString(8);
   const h = await boot('f7', 8209);
+  // With BUREAU_STORE=sqlite the state lives in bureau.db, and state.json was
+  // imported and kept aside: both must be private.
+  if (process.env.BUREAU_STORE === 'sqlite') {
+    const kept = fs.readdirSync(seeded.env.BUREAU_DATA_DIR).find((n) => n.startsWith('state.json.imported-'));
+    check('the imported state.json, kept aside, is private', !!kept && mode(path.join(seeded.env.BUREAU_DATA_DIR, kept)) === '600', kept);
+    stateFile = path.join(seeded.env.BUREAU_DATA_DIR, 'bureau.db');
+  }
   check('an existing state.json is fixed at boot', mode(stateFile) === '600', mode(stateFile));
   check('the data dir is 0700', mode(seeded.env.BUREAU_DATA_DIR) === '700', mode(seeded.env.BUREAU_DATA_DIR));
   await h.api('PATCH', '/api/settings', { global: { store_prompts_days: 30 } });

@@ -33,7 +33,7 @@ async function boot(name, port, extraEnv, seed) {
   fs.mkdirSync(path.join(d, 'data'), { recursive: true });
   if (seed) fs.writeFileSync(path.join(d, 'data', 'state.json'), JSON.stringify(seed));
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: d, PORT: String(port), HOST: '127.0.0.1',
-    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), ...extraEnv };
+    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_STORE: process.env.BUREAU_STORE, ...extraEnv };
   const child = spawn(process.execPath, [HUB], { env, stdio: 'ignore' });
   hubs.push(child);
   const base = `http://127.0.0.1:${port}`;

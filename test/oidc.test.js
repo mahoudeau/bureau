@@ -96,7 +96,7 @@ async function boot(name, port, extraEnv, seed) {
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP,
     HOME: d, PORT: String(port), HOST: '127.0.0.1', BUREAU_ENV_FILE: path.join(d, 'none.env'),
     BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'),
-    BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_BOSS_TOKEN: BOSS, ...extraEnv };
+    BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_BOSS_TOKEN: BOSS, BUREAU_STORE: process.env.BUREAU_STORE, ...extraEnv };
   const child = spawn(process.execPath, [HUB], { env, stdio: 'ignore' });
   children.push(child);
   const base = `http://127.0.0.1:${port}`;
@@ -352,7 +352,10 @@ async function main() {
 
   console.log('N. A schema 1 state loses its links at boot (migration 1 -> 2)');
   const mBase = await boot('migrate', MIGRATE_PORT, {}, { schema_version: 1, tasks: [{ id: 't-1', title: 'old', status: 'review', project: 'general', log: [], artifacts: [], view_token: 'v'.repeat(32), review_links: { approve: { token: 'a'.repeat(32), exp: '2099-01-01' } } }], agents: [], messages: [], log: [], seq: 1, projects: [{ id: 'general', label: 'General' }], settings: { global: { notify: 'review' }, projects: { general: { notify: 'none', approval: 'in-session' } } } });
-  const migrated = JSON.parse(fs.readFileSync(path.join(dir, 'migrate', 'data', 'state.json'), 'utf8'));
+  // With BUREAU_STORE=sqlite the migrated state is in bureau.db.
+  const migrated = process.env.BUREAU_STORE === 'sqlite'
+    ? require('../hub/lib/sqlite-store').readFile(path.join(dir, 'migrate', 'data', 'bureau.db'))
+    : JSON.parse(fs.readFileSync(path.join(dir, 'migrate', 'data', 'state.json'), 'utf8'));
   check('schema_version is 2', migrated.schema_version === 2, migrated.schema_version);
   check('the links are gone', !migrated.tasks[0].view_token && !migrated.tasks[0].review_links, migrated.tasks[0]);
   check('notify is gone, the rest of the settings stay', migrated.settings.global.notify === undefined && migrated.settings.projects.general.notify === undefined && migrated.settings.projects.general.approval === 'in-session', migrated.settings);
