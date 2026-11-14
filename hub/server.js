@@ -619,7 +619,7 @@ const server = http.createServer(async (req, res) => {
     const denied = auth.checkRule(rule, who, req.method, p);
     if (denied) return send(res, denied.status, { error: denied.error });
     if (p === '/api/health')
-      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime() });
+      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, store: store.STORE_KIND, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime() });
     if (p === '/api/me')
       return send(res, 200, { kind: who.kind, name: who.name, projects: who.projects, role: who.role || (who.kind === 'boss' ? 'owner' : null), email: who.email || null, via: who.via || null, session: !!who.session, sign_in: oidc.config().webOn });
 
@@ -1439,7 +1439,7 @@ const lock = store.acquireLock();
 if (lock.error) { console.error(lock.error); process.exit(1); }
 try {
   const st = store.init();
-  console.log(`Bureau ${VERSION}, state schema ${st.schema_version}`);
+  console.log(`Bureau ${VERSION}, state schema ${st.schema_version}, store ${store.STORE_KIND}`);
 } catch (e) {
   console.error(e instanceof store.StorageError ? e.message : `state load failed: ${e.stack || e}`);
   process.exit(1);

@@ -8,6 +8,14 @@ const knowledge = require('./knowledge');
 
 const DATA_DIR = process.env.BUREAU_DATA_DIR || path.join(__dirname, '..', 'data');
 const STATE_FILE = path.join(DATA_DIR, 'state.json');
+// BUREAU_STORE=sqlite keeps the state in data/bureau.db instead of state.json
+// (lib/sqlite-store.js). The hub works from memory either way; this is only
+// what sits underneath. Needs Node 22.13 or newer, checked when it is opened.
+const SQL = process.env.BUREAU_STORE === 'sqlite' ? require('./sqlite-store') : null;
+const STORE_KIND = SQL ? 'sqlite' : 'json';
+const DB_FILE = path.join(DATA_DIR, 'bureau.db');
+// The first boot on SQLite imports state.json, then keeps it aside.
+let importing = false;
 
 const EMPTY = { tasks: [], agents: [], messages: [], log: [], seq: 0, projects: [{ id: 'general', label: 'General' }] };
 
@@ -39,6 +47,28 @@ class StorageError extends Error {}
 let state = null;
 
 function readState() {
+  if (SQL) {
+    try { SQL.requireNode(); } catch (e) { throw new StorageError(`${e.message}. Refusing to boot. Upgrade Node, or remove BUREAU_STORE to stay on state.json.`); }
+    let fromDb, who;
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true, mode: 0o700 });
+      SQL.open(DB_FILE);
+      who = SQL.claimIdentity({ hubId: process.env.BUREAU_HUB_ID, publicUrl: process.env.BUREAU_PUBLIC_URL });
+      if (!who.error) fromDb = SQL.load();
+    } catch (e) { throw new StorageError(`cannot read ${DB_FILE}: ${e.message}. Refusing to boot.`); }
+    if (who.error) { SQL.close(); throw new StorageError(`${DB_FILE}: ${who.error}`); }
+    if (fromDb) {
+      if (fs.existsSync(STATE_FILE)) console.log(`[store] ${STATE_FILE} is ignored: the state is in ${DB_FILE}`);
+      return fromDb;
+    }
+    // An empty database. Next to a state.json, the first boot imports it.
+    // Next to backups and no state.json, it refuses, like the file store.
+    importing = fs.existsSync(STATE_FILE);
+    if (!importing) {
+      const baks = listDbBackups();
+      if (baks.length) throw new StorageError(`${DB_FILE} holds no state but backups exist (${baks.join(', ')}). Refusing to boot on empty state. Copy a backup over bureau.db (bureau.db.bak.1 is the newest) and delete bureau.db-wal and bureau.db-shm, or move the backups away to start fresh. See UPGRADING.md.`);
+    }
+  }
   let raw;
   try {
     raw = fs.readFileSync(STATE_FILE, 'utf8');
@@ -66,9 +96,17 @@ function readState() {
 
 function migrate(s) {
   const from = Number.isInteger(s.schema_version) ? s.schema_version : 0;
-  if (from > SCHEMA_VERSION) throw new StorageError(`${STATE_FILE} has schema_version ${from}, this hub knows up to ${SCHEMA_VERSION}. It was written by a newer Bureau. Upgrade the hub, or restore a state.json.pre-migrate-* backup.`);
+  // On SQLite the state comes from the database, except on the first boot,
+  // when it comes from the state.json being imported.
+  const inDb = SQL && !importing;
+  const source = inDb ? DB_FILE : STATE_FILE;
+  if (from > SCHEMA_VERSION) throw new StorageError(`${source} has schema_version ${from}, this hub knows up to ${SCHEMA_VERSION}. It was written by a newer Bureau. Upgrade the hub, or restore a ${path.basename(source)}.pre-migrate-* backup.`);
   if (from === SCHEMA_VERSION) return s;
-  if (fs.existsSync(STATE_FILE)) {
+  if (inDb) {
+    const pre = `${DB_FILE}.pre-migrate-${stamp()}`;
+    SQL.copyTo(pre);
+    console.log(`[store] migrating state from schema ${from} to ${SCHEMA_VERSION}; previous database kept at ${pre}`);
+  } else if (fs.existsSync(STATE_FILE)) {
     const pre = `${STATE_FILE}.pre-migrate-${stamp()}`;
     fs.copyFileSync(STATE_FILE, pre);
     console.log(`[store] migrating state from schema ${from} to ${SCHEMA_VERSION}; previous file kept at ${pre}`);
@@ -77,7 +115,9 @@ function migrate(s) {
     MIGRATIONS[v](s);
     s.schema_version = v + 1;
   }
-  writeNow(s);
+  // SQLite writes once load() has brought old shapes in line (projects as
+  // plain names have no id to key a row on).
+  if (!SQL) writeNow(s);
   return s;
 }
 
@@ -87,8 +127,25 @@ function load() {
   // A fresh hub writes its empty state now: the daily snapshot comes next,
   // and backups with no state.json beside them refuse the next boot, so a
   // hub stopped before its first change could never start again.
-  if (!fs.existsSync(STATE_FILE)) writeNow(s);
+  if (!SQL && !fs.existsSync(STATE_FILE)) writeNow(s);
   state = s;
+  normalize(state);
+  if (SQL) {
+    // A no-op when nothing changed. After a migration, or on the first boot,
+    // the write itself.
+    try { writeNow(state); } catch (e) { state = null; throw new StorageError(`cannot write the state into ${DB_FILE}: ${e.message}. Refusing to boot.`); }
+    if (importing) {
+      const kept = `${STATE_FILE}.imported-${stamp()}`;
+      fs.renameSync(STATE_FILE, kept);
+      console.log(`[store] imported ${STATE_FILE} into ${DB_FILE}; the original is kept at ${kept}`);
+      importing = false;
+    }
+  }
+  return state;
+}
+
+// Old shapes brought in line at every load, in memory.
+function normalize(state) {
   for (const k of Object.keys(EMPTY)) if (state[k] === undefined) state[k] = structuredClone(EMPTY[k]);
   // Projects grew from plain names to {id, label, capacity}; migrate old state transparently.
   state.projects = (state.projects || []).map(p => (typeof p === 'string' ? { id: p, label: p } : p));
@@ -99,7 +156,6 @@ function load() {
     if (t.project && t.status !== 'done' && t.status !== 'failed' && t.status !== 'discarded' && !state.projects.some(pj => pj.id === t.project))
       state.projects.push({ id: t.project, label: t.project });
   state.projects.sort((a, b) => a.id.localeCompare(b.id));
-  return state;
 }
 
 // Atomic write: tmp file, fsync, rename. A crash leaves the old file or the new one.
@@ -134,19 +190,35 @@ function renameRetry(from, to) {
     }
   }
 }
-function writeNow(s) { writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2)); dirty = false; }
+// scopes (SQLite only): the parts of the state that changed, so a save after
+// a heartbeat or a session touch looks at one table instead of every mission.
+// null or absent: everything. The file store always writes the whole file.
+function writeNow(s, scopes = null) {
+  if (SQL) SQL.save(s, scopes);
+  else writeFileAtomic(STATE_FILE, JSON.stringify(s, null, 2));
+  dirty = false;
+}
 
 let saveTimer = null;
 // A save that failed: the state is still unwritten, retried in a second and
 // by the exit flush. A failure is logged, never thrown from the timer (that
 // would take the hub down).
 let dirty = false;
-function save() {
+// What the pending save covers: a Set of table names, or null for everything.
+let pendingScopes = null;
+let pendingAll = false;
+// scope: a hint for the SQLite store, the one part of the state this change
+// touched ('sessions', 'agents', 'log', ...). A save without one covers all.
+function save(scope) {
+  if (!scope) pendingAll = true;
+  else (pendingScopes = pendingScopes || new Set()).add(scope);
   // Debounced: many mutations in one tick make one write.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    try { writeNow(state); } catch (e) {
+    const scopes = pendingAll ? null : pendingScopes;
+    pendingAll = false; pendingScopes = null;
+    try { writeNow(state, scopes); } catch (e) {
       dirty = true;
       console.error(`[store] saving state failed, retrying: ${e.message}`);
       setTimeout(() => { if (dirty) save(); }, 1000).unref();
@@ -158,7 +230,10 @@ function flush() {
   if (!saveTimer && !dirty) return;
   clearTimeout(saveTimer);
   saveTimer = null;
-  if (state) writeNow(state);
+  // A save that failed earlier is tried again in full.
+  const scopes = pendingAll || dirty ? null : pendingScopes;
+  pendingAll = false; pendingScopes = null;
+  if (state) writeNow(state, scopes);
 }
 
 // ---- Backups ----
@@ -176,8 +251,53 @@ function listBackups() {
   return names.filter(n => n.startsWith(BASE + '.bak.') || n.startsWith(BASE + '.daily-')).sort();
 }
 
+// ---- Backups on SQLite ----
+// Same schedule and keep counts, as database copies: bureau.db.bak.1 (newest)
+// .. bak.N, and bureau.db.daily-YYYY-MM-DD. Each is taken with VACUUM INTO and
+// checked with PRAGMA quick_check before it gets its name; a copy that fails
+// is deleted, and the failure is logged loudly and in the event log. The
+// daily JSON export (state.json.daily-YYYY-MM-DD) sits beside them: readable
+// with no SQLite tool, and the way back to the file store.
+const DB_BASE = path.basename(DB_FILE);
+function listDbBackups() {
+  let names = [];
+  try { names = fs.readdirSync(DATA_DIR); } catch { return []; }
+  return names.filter(n => /^bureau\.db\.(bak\.\d+|daily-\d{4}-\d{2}-\d{2})$/.test(n)).sort();
+}
+function backupFailed(what, e) {
+  console.error(`[store] BACKUP FAILED: ${what}: ${e.message}`);
+  try { logEvent('store.backup_failed', { note: `${what}: ${e.message}`.slice(0, 500) }); } catch { /* the log is in the same store */ }
+}
+function rotateDbBackups() {
+  const bak = i => `${DB_FILE}.bak.${i}`;
+  const fresh = `${DB_FILE}.bak.new`;
+  // The copy is made and checked first: a failed one leaves the older ones
+  // where they were.
+  flush();
+  try { SQL.copyTo(fresh); } catch (e) { backupFailed('hourly copy', e); return; }
+  try { fs.unlinkSync(bak(BACKUP_KEEP)); } catch { }
+  for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
+    try { fs.renameSync(bak(i), bak(i + 1)); } catch { }
+  }
+  renameRetry(fresh, bak(1));
+}
+function dailyDbSnapshot() {
+  const day = new Date().toISOString().slice(0, 10);
+  const file = `${DB_FILE}.daily-${day}`;
+  if (!fs.existsSync(file)) {
+    flush();
+    try { SQL.copyTo(`${file}.new`); renameRetry(`${file}.new`, file); } catch (e) { backupFailed('daily copy', e); }
+  }
+  const json = `${STATE_FILE}.daily-${day}`;
+  if (!fs.existsSync(json)) writeFileAtomic(json, JSON.stringify(state, null, 2));
+  const prune = (names) => { for (const n of names.slice(0, Math.max(0, names.length - DAILY_KEEP))) { try { fs.unlinkSync(path.join(DATA_DIR, n)); } catch { } } };
+  prune(listDbBackups().filter(n => n.startsWith(DB_BASE + '.daily-')));
+  prune(listBackups().filter(n => n.startsWith(BASE + '.daily-')));
+}
+
 function rotateBackups() {
   if (!state) return;
+  if (SQL) return rotateDbBackups();
   const bak = i => `${STATE_FILE}.bak.${i}`;
   try { fs.unlinkSync(bak(BACKUP_KEEP)); } catch { }
   for (let i = BACKUP_KEEP - 1; i >= 1; i--) {
@@ -188,6 +308,7 @@ function rotateBackups() {
 
 function dailySnapshot() {
   if (!state) return;
+  if (SQL) return dailyDbSnapshot();
   const day = new Date().toISOString().slice(0, 10);
   const file = `${STATE_FILE}.daily-${day}`;
   if (!fs.existsSync(file)) writeFileAtomic(file, JSON.stringify(state, null, 2));
@@ -269,7 +390,7 @@ function findAgentToken(candidate) {
   const hash = Buffer.from(tokenHash(candidate), 'hex');
   let hit = null;
   for (const t of s.agent_tokens) if (crypto.timingSafeEqual(hash, Buffer.from(t.hash, 'hex')) && !t.revoked_at) hit = t;
-  if (hit && (!hit.last_used || Date.now() - Date.parse(hit.last_used) > 60_000)) { hit.last_used = nowISO(); save(); }
+  if (hit && (!hit.last_used || Date.now() - Date.parse(hit.last_used) > 60_000)) { hit.last_used = nowISO(); save('agent_tokens'); }
   return hit;
 }
 // A project renamed moves with the tokens that name it: the wall stays where it was.
@@ -303,7 +424,9 @@ function acquireLock() {
   const mine = () => parseInt(fs.readFileSync(LOCK_FILE, 'utf8'), 10) === process.pid;
   setInterval(() => { try { if (mine()) { const now = new Date(); fs.utimesSync(LOCK_FILE, now, now); } } catch { } }, LOCK_TOUCH_MS).unref();
   const release = () => { try { if (mine()) fs.unlinkSync(LOCK_FILE); } catch { } };
-  process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } release(); });
+  // Closing the database folds its write-ahead log back in, so bureau.db alone
+  // is the whole state once the hub is stopped.
+  process.on('exit', () => { try { flush(); } catch (e) { console.error('[store] final save failed:', e.message); } if (SQL) SQL.close(); release(); });
   // SIGBREAK is Ctrl+Break, SIGHUP a closed console window: Windows only. On
   // Unix SIGHUP keeps its default, so nohup still shields the hub.
   const signals = process.platform === 'win32' ? ['SIGINT', 'SIGTERM', 'SIGHUP', 'SIGBREAK'] : ['SIGINT', 'SIGTERM'];
@@ -317,7 +440,7 @@ function logEvent(type, data) {
   const entry = { ts: nowISO(), type, ...data };
   s.log.push(entry);
   if (s.log.length > 2000) s.log.splice(0, s.log.length - 2000);
-  save();
+  save('log');
   return entry;
 }
 
@@ -409,7 +532,7 @@ function heartbeat(name, note, activity, subAgents) {
   const nextFleet = normalizeFleet(subAgents);
   const fleetChanged = fleetKey(prevFleet) !== fleetKey(nextFleet);
   a.sub_agents = nextFleet;
-  save();
+  save('agents');
   if (fleetChanged) logFleetChange(s, a.name, nextFleet);
   return a;
 }
@@ -1283,7 +1406,7 @@ function seeApp({ client_id, agent, name, verified, sub }) {
   // Saved once a minute at most, except the first call after the owner ruled:
   // that one says the app really works (the setup guide waits for it).
   const firstSinceRuling = a.ruled_at && String(a.last_used) <= String(a.ruled_at);
-  if (!a.last_used || firstSinceRuling || Date.now() - Date.parse(a.last_used) > 60_000) { a.last_used = now; save(); }
+  if (!a.last_used || firstSinceRuling || Date.now() - Date.parse(a.last_used) > 60_000) { a.last_used = now; save('oauth_apps'); }
   return a;
 }
 function listApps() { return appsOf(load()).slice(); }
@@ -1332,7 +1455,8 @@ function findSession(token) {
   const now = nowISO();
   let hit = null;
   for (const x of s.sessions) if (crypto.timingSafeEqual(hash, Buffer.from(x.hash, 'hex')) && x.expires_at > now) hit = x;
-  if (hit && Date.now() - Date.parse(hit.last_seen) > 60_000) { hit.last_seen = now; save(); }
+  // Once a minute at most, and on SQLite it writes this one row.
+  if (hit && Date.now() - Date.parse(hit.last_seen) > 60_000) { hit.last_seen = now; save('sessions'); }
   return hit;
 }
 function endSession(token) {
@@ -1375,7 +1499,7 @@ function getMessages({ forAgent, since }) {
 module.exports = {
   load, save, flush, init, logEvent, upsertAgent, heartbeat, deleteAgent, acquireLock,
   authMode, mintToken, listTokens, revokeToken, findAgentToken, isLead,
-  StorageError, SCHEMA_VERSION, STATE_FILE,
+  StorageError, SCHEMA_VERSION, STATE_FILE, DB_FILE, STORE_KIND,
   createTask, claimTask, updateTask, expireLeases, applyCheck, applyItem, payloadHash,
   renameProject, createProject, updateProject, deleteProject, PROJECT_RE,
   findApp, seeApp, listApps, ruleApp, forgetApp, envOwners, MEMBER_ROLES, RESERVED_OAUTH_AGENT, OAUTH_AGENT_NAME,
