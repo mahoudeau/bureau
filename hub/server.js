@@ -15,6 +15,7 @@ const brainIndex = require('./lib/index');
 const contextCall = require('./lib/context');
 const { KINDS } = require('./lib/claims');
 const work = require('./lib/work');
+const stats = require('./lib/stats');
 const poke = require('./lib/poke');
 const auth = require('./lib/auth');
 const oidc = require('./lib/oidc');
@@ -1083,6 +1084,22 @@ const server = http.createServer(async (req, res) => {
     // ----- memory health (M5): drift in the brain, measured; read-only -----
     if (req.method === 'GET' && p === '/api/memory/health') return send(res, 200, health.get());
 
+    // ----- stats (doc 24, A4): missions per day, week or month -----
+    if (req.method === 'GET' && p === '/api/stats') {
+      const q = stats.parseQuery(url.searchParams, { tz: STATS_TZ });
+      if (q.error) return send(res, 400, { error: q.error });
+      if (q.project && !auth.projectAllowed(who, q.project)) return send(res, 403, { error: `project ${q.project} is outside this credential's list` });
+      return send(res, 200, statsReport(who, q));
+    }
+    if (req.method === 'GET' && p === '/api/stats/day') {
+      const q = stats.parseQuery(url.searchParams, { tz: STATS_TZ });
+      if (q.error) return send(res, 400, { error: q.error });
+      const day = url.searchParams.get('date');
+      if (!stats.validDay(day)) return send(res, 400, { error: 'date is a day, yyyy-mm-dd' });
+      if (q.project && !auth.projectAllowed(who, q.project)) return send(res, 403, { error: `project ${q.project} is outside this credential's list` });
+      return send(res, 200, statsDay(who, { ...q, day }));
+    }
+
     // ----- work (a mission's evidence while it is open; plain files, no git) -----
     if (req.method === 'POST' && p === '/api/work') {
       const b = await readBody(req);
@@ -1169,10 +1186,32 @@ const MCP_TOOLS = [
   { name: 'read_settings', description: 'The policy that applies to consul: the global settings, consul\'s own entry (roles, sign-in) and the settings of the projects consul reaches.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'read_journal', description: 'Journal records as JSON (kind, text, evidence, by, mission, at, confidence, tags, id), filtered by day (yyyy-mm-dd), kind, mission, author or since (an ISO time). Records of projects outside consul\'s list are left out.', inputSchema: { type: 'object', properties: { day: { type: 'string' }, kind: { type: 'string' }, mission: { type: 'string' }, author: { type: 'string' }, since: { type: 'string' } }, additionalProperties: false } },
   { name: 'recent_activity', description: 'What happened lately on the hub: the roster and the last events (brain writes, mission changes), as the dashboard sees them, cut to consul\'s projects.', inputSchema: { type: 'object', properties: { limit: { type: 'integer' } }, additionalProperties: false } },
+  { name: 'read_stats', description: 'Numbers on the missions consul can see, the same JSON as GET /api/stats: filed, done, failed and discarded per day, week or month (group), per project and per agent; time from filing and from claim to close; time in review; send-back rate; the boss\'s rulings; brain commits. from and to are days (yyyy-mm-dd, default the last 12 weeks); tz is an IANA time zone. With date (yyyy-mm-dd), that one day in order instead, as GET /api/stats/day. Use it for weekly digests: what happened last week on a project is one call.', inputSchema: { type: 'object', properties: { from: { type: 'string' }, to: { type: 'string' }, group: { type: 'string', enum: ['day', 'week', 'month'] }, tz: { type: 'string' }, project: { type: 'string' }, agent: { type: 'string' }, date: { type: 'string' } }, additionalProperties: false } },
 ];
 
 // The MCP credential is one agent with its own projects: every call below acts
 // as who.name and stays inside who's walls, like the REST routes.
+// ---------- Stats (lib/stats.js) ----------
+// Days are counted in the caller's time zone (tz), else BUREAU_TZ, else UTC.
+// A credential sees the missions inside its walls; brain commits only when it
+// sees every project, since a commit names files of any project.
+const STATS_TZ = stats.validTz(process.env.BUREAU_TZ || '') ? process.env.BUREAU_TZ : 'UTC';
+function statsInputs(who, from, tz) {
+  store.expireLeases();
+  const tasks = store.load().tasks.filter((t) => auth.seesTask(who, t));
+  const since = new Date(stats.midnight(from, tz) - 86400000).toISOString();
+  const commits = auth.seesAll(who) ? knowledge.commitsSince(since) : null;
+  return { tasks, commits };
+}
+function statsReport(who, q) {
+  const { tasks, commits } = statsInputs(who, q.from, q.tz);
+  return stats.compute(tasks, q, commits);
+}
+function statsDay(who, q) {
+  const { tasks, commits } = statsInputs(who, q.day, q.tz);
+  return stats.timeline(tasks, q, commits);
+}
+
 function mcpWalled(who, taskId) {
   const t = store.load().tasks.find(x => x.id === taskId);
   if (t && !auth.seesTask(who, t)) throw new Error(`${t.id} is outside this credential's projects`);
@@ -1382,6 +1421,16 @@ function mcpToolCall(name, a = {}, who) {
       const seen = new Set(s.tasks.filter((t) => auth.seesTask(who, t)).map((t) => t.id));
       const log = auth.seesAll(who) ? s.log : s.log.filter((e) => e.id && seen.has(e.id));
       return { agents: s.agents.map((x) => ({ name: x.name, kind: x.kind, activity: x.activity, last_seen: x.last_seen })), log: log.slice(-n) };
+    }
+    case 'read_stats': {
+      const q = stats.parseQuery(a, { tz: STATS_TZ });
+      if (q.error) throw new Error(q.error);
+      mcpProject(who, q.project);
+      if (a.date) {
+        if (!stats.validDay(a.date)) throw new Error('date is a day, yyyy-mm-dd');
+        return statsDay(who, { ...q, day: a.date });
+      }
+      return statsReport(who, q);
     }
     default: throw new Error(`unknown tool: ${name}`);
   }
