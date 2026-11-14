@@ -30,6 +30,8 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 
 Plus `GET /api/events` (SSE) for anything that wants to *watch* (the dashboard, the office, mirrors). Auth: see **Who can do what** below; the credential goes in the `Authorization` header and never in a URL. A browser's `EventSource` cannot set a header, so `POST /api/events/ticket` (a credential that may open the stream) returns `{ticket, expires_in}`: good once, for 60 seconds, on `GET /api/events?ticket=...` and nothing else. The ticket carries the identity and scope of the credential that minted it, never more. A page signed in with the session cookie (see **Sign-in**) needs no ticket: the cookie travels with the stream request. All responses `Cache-Control: no-store`.
 
+`GET /health` takes no credential and answers liveness only. `GET /api/health` answers `version`, `schema_version`, `store` (`json` for `state.json`, `sqlite` for `bureau.db` with `BUREAU_STORE=sqlite`), `auth`, the caller's `credential` and `uptime`. The store changes nothing on the wire: every call above answers the same on both. On SQLite, a backup copy that fails its check is logged as a `store.backup_failed` event, with the reason in `note`.
+
 Browsers: `/api/` answers same-origin pages. Another origin is refused with a 403, before the token is looked at, unless it is listed in `BUREAU_ALLOWED_ORIGINS`. A client with no `Origin` header (curl, an agent) is judged by its token alone. Errors the caller can act on keep their message; anything else answers `{"error": "internal error"}` and the detail goes to the server log.
 
 ## Who can do what

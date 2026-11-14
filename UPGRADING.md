@@ -4,7 +4,7 @@ For self-hosters. What changed in each release is in [CHANGELOG.md](CHANGELOG.md
 
 ## Where your data lives
 
-- `hub/data/state.json`: missions, roster, messages, projects (or `BUREAU_DATA_DIR`).
+- `hub/data/state.json`: missions, roster, messages, projects (or `BUREAU_DATA_DIR`). On SQLite, `hub/data/bureau.db` instead (see **SQLite, optional**).
 - `hub/brain/`: the knowledge brain, a git repo (or `BUREAU_BRAIN_DIR`).
 - `hub/work/`: the work store, open missions' evidence (or `BUREAU_WORK_DIR`; `/data/work` in the Docker image). Disposable by design: each folder is deleted when its mission closes.
 
@@ -203,6 +203,44 @@ In the data dir, next to `state.json`:
 - `state.json.corrupt-<timestamp>`: a bad file set aside, never deleted by the hub.
 
 Tune with `BUREAU_BACKUP_INTERVAL_MS` (default 3600000), `BUREAU_BACKUP_KEEP` (24) and `BUREAU_DAILY_KEEP` (7). These all sit on the same disk as the state: copy the data dir somewhere else now and then, the way you push the brain to a remote.
+
+On SQLite the backups are database copies instead; see below.
+
+## SQLite, optional
+
+By default the state lives in `state.json`. With `BUREAU_STORE=sqlite` it lives in `data/bureau.db`, through Node's built-in `node:sqlite`, so still no dependency. The hub still works from memory. What changes is underneath: a save writes only the rows that changed, in one transaction, instead of the whole file. It pays off on a big hub: at 10,000 missions a save after one change takes about 8 ms instead of 40, and a heartbeat writes one row (`node test/store-bench.js` measures it on your machine). Load time and file size stay about the same.
+
+It needs **Node 22.13 or newer**. Without the setting, nothing changes and the file store still runs on Node 18. With the setting on an older Node, the hub refuses to start and says which Node it found.
+
+**Switch.**
+
+1. Stop the hub and copy the data dir somewhere safe.
+2. Set `BUREAU_STORE=sqlite` in `hub/.env` (or the host's environment) and start the hub.
+3. The first boot imports `state.json` and keeps it as `state.json.imported-<timestamp>`. The log says so.
+4. `GET /api/health` now says `"store": "sqlite"`.
+
+**Go back.** Stop the hub, then write the state out as a `state.json`:
+
+```
+node hub/tools/state-export.js hub/data
+```
+
+It never overwrites a `state.json`. Remove `BUREAU_STORE`, start the hub, and it runs on the file store with everything the database held. The tool also reads a backup: `node hub/tools/state-export.js hub/data/bureau.db.bak.1 /tmp/state.json`.
+
+**Backups on SQLite.** Same schedule and the same three settings as above:
+
+- `bureau.db.bak.1` to `bureau.db.bak.24`: one per hour, `.bak.1` the newest.
+- `bureau.db.daily-YYYY-MM-DD`: the first of each UTC day, the last seven kept.
+- `state.json.daily-YYYY-MM-DD`: the same day as plain JSON, the last seven kept. It reads with no SQLite tool, and it is a way back on its own.
+- `bureau.db.pre-migrate-<timestamp>`: one per schema migration, never deleted by the hub.
+
+Each copy is taken with `VACUUM INTO`, so it is consistent even while the hub writes. Then it is opened and checked with `PRAGMA quick_check` before it gets its name. A copy that fails the check is deleted, and the failure goes to the hub's log (`BACKUP FAILED`) and to the event log (`store.backup_failed`). The older copies stay as they were.
+
+**Restore a backup.** Stop the hub. Copy the backup over `bureau.db`, delete `bureau.db-wal` and `bureau.db-shm` if they are there, and start the hub. A database with no state next to backups refuses to boot, as a missing `state.json` does.
+
+**One hub, one database.** When the database is made, it records the hub's identity: a random `hub_id` (or `BUREAU_HUB_ID` when it is set) and `BUREAU_PUBLIC_URL` when it is set. At every boot, if `BUREAU_HUB_ID` is set and differs, or `BUREAU_PUBLIC_URL` is set and differs from the one recorded, the hub refuses to start and names both. A wrong path or a swapped volume can never open another hub's data. `node hub/tools/hub-identity.js hub/data` prints the identity. If a hub really moved to a new address, stop it and run `node hub/tools/hub-identity.js hub/data --public-url https://new.example`.
+
+`hub/tools/export.js` reads the database when `BUREAU_STORE=sqlite`, and `hub/tools/import.js` writes a `state.json` that a SQLite hub imports at its first boot.
 
 ## Roll back
 

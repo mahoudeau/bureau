@@ -6,6 +6,17 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Added
+- **SQLite as an optional store.** `BUREAU_STORE=sqlite` keeps the state in `data/bureau.db` through Node's built-in `node:sqlite`, so still no dependency. The hub still works from memory; a save writes only the rows that changed, in one transaction. Missions, agents, messages, projects, sessions, apps and agent tokens get their own tables, and the event log an append-only table capped at 2000 rows. Off by default. It needs Node 22.13 or newer; the file store still runs on Node 18. See UPGRADING.md.
+- The first boot on SQLite imports `state.json` and keeps it as `state.json.imported-<timestamp>`. `node hub/tools/state-export.js <data-dir>` is the way back: it writes the whole state out as a `state.json`.
+- Backups on SQLite: hourly and daily `VACUUM INTO` copies on the same schedule and settings as today, each checked with `PRAGMA quick_check` before it is kept, plus a daily JSON export beside them. A copy that fails its check is deleted and logged (`store.backup_failed`).
+- One hub, one database: the database records the hub's identity when it is made (a random `hub_id`, or `BUREAU_HUB_ID`, and `BUREAU_PUBLIC_URL`). A hub refuses to boot on a database that belongs to another, and says which two. `node hub/tools/hub-identity.js` prints it, and records a new address after a move.
+- `GET /api/health` says which store is in use: `"store": "json"` or `"sqlite"`.
+- `test/store-bench.js`: load and save times and file size, file store against SQLite, at 1k, 10k and 50k missions.
+
+### Changed
+- `hub/tools/export.js` reads `bureau.db` on a SQLite hub, and `hub/tools/import.js` refuses a data dir that already holds one.
+
 ## [0.5.4] - 2026-11-13
 
 ### Changed
