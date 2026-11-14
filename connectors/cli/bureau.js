@@ -313,7 +313,9 @@ async function login(opt) {
   const page = typeof dev.verification_uri_complete === 'string' && /^https?:/.test(dev.verification_uri_complete) ? dev.verification_uri_complete : dev.verification_uri;
   checkUrl(page, 'the sign-in page');
   say(`Signing in to ${hub} as ${agent}.`);
-  say(`Open ${dev.verification_uri} and enter the code ${String(dev.user_code).replace(/[^\x20-\x7e]/g, '').slice(0, 32)}`);
+  // The link with the code in it, so the sign-in knows which product it's for
+  // even when nobody opens a browser here; the code is printed to check against.
+  say(`Open ${page} and check it shows the code ${String(dev.user_code).replace(/[^\x20-\x7e]/g, '').slice(0, 32)}`);
   if (process.stdout.isTTY && !opt['no-browser'] && !process.env.BUREAU_NO_BROWSER) openBrowser(page);
   say('Waiting for you to approve it...');
   let interval = Number(dev.interval) > 0 ? Math.max(1, Number(dev.interval)) : 5; // seconds, RFC 8628 default 5
