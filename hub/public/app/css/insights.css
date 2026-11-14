@@ -1,0 +1,103 @@
+/* Insights, one day in order, and the Desk's "This week" card. Ink and paper
+   only: the dither steps are the second colour, and every chart has a legend. */
+
+.ins-page [hidden] { display: none !important; }
+.ins-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-3); }
+.ins-range { display: inline-flex; align-items: center; gap: var(--sp-2); }
+.ins-range-text { white-space: nowrap; }
+.ins-body { display: flex; flex-direction: column; gap: var(--sp-4); min-width: 0; }
+.ins-body > .om-empty, .ins-body > .om-loading { padding: var(--sp-6) 0; }
+.ins-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: var(--sp-4); align-items: start; }
+.ins-two > * { min-width: 0; }
+.ins-sub { margin: 0 0 var(--sp-2); }
+.ins-note { max-width: 80ch; }
+
+/* Headline numbers: the system's stat row, framed like a sheet. Text sits on
+   paper, never on the ground. */
+.ins-stats { border: var(--rule-sm) solid var(--ink); background: var(--paper); }
+.ins-stats .om-stat-value { overflow-wrap: anywhere; }
+@media (max-width: 560px) {
+  .ins-stats { grid-template-columns: 1fr 1fr; }
+  .ins-stats > * { border-right: 0; border-bottom: var(--rule-sm) solid var(--ink); }
+  .ins-stats > :nth-child(odd) { border-right: var(--rule-sm) solid var(--ink); }
+}
+
+/* Cells: the calendar, the legend and the Desk week. Empty is a dotted frame,
+   full is solid ink, the three steps between are the system's dither. */
+.ins-cell { display: block; box-sizing: border-box; width: 14px; height: 14px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); }
+.ins-l0 { border-style: dotted; }
+.ins-l4 { background: var(--ink); }
+.ins-solidline { border-style: solid; }
+a.ins-cell:is(:hover, :focus-visible), .ins-cell.is-mark { outline: 2px solid var(--ink); outline-offset: 1px; }
+.ins-key { display: inline-flex; align-items: center; gap: 6px; }
+.ins-key .ins-cell { width: 12px; height: 12px; }
+.ins-legend { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-2) var(--sp-4); }
+
+.ins-heat { overflow-x: auto; padding-bottom: var(--sp-1); }
+.ins-cal { --cell: 16px; display: grid; grid-auto-flow: column; grid-template-rows: 16px repeat(7, var(--cell)); grid-template-columns: 32px; grid-auto-columns: var(--cell); gap: 3px; width: max-content; }
+.ins-cal .ins-cell { width: var(--cell); height: var(--cell); }
+.ins-cal .ins-lab { line-height: var(--cell); overflow: visible; }
+.ins-lab { font: 400 11px/14px var(--font-mono); white-space: nowrap; }
+
+/* Charts: drawn to the box's width in script, so text keeps its size. */
+.ins-chart { position: relative; width: 100%; min-width: 0; }
+.ins-svg { display: block; overflow: visible; color: var(--ink); }
+.ins-svg text { fill: var(--ink); font: 400 11px var(--font-mono); }
+.ins-grid { stroke: var(--ink); stroke-width: 1; stroke-dasharray: 1 3; }
+.ins-axis { stroke: var(--ink); stroke-width: 1; }
+.ins-out { fill: var(--paper); stroke: var(--ink); stroke-width: 1; }
+.ins-solid { fill: var(--ink); }
+.ins-dith { fill: url(#ins-dith); stroke: var(--ink); stroke-width: 1; }
+.ins-area { fill: url(#ins-dith); opacity: 0.35; }
+.ins-line { fill: none; stroke: var(--ink); stroke-width: 2; }
+.ins-dot { fill: var(--paper); stroke: var(--ink); stroke-width: 2; }
+.ins-hit { fill: transparent; }
+.ins-mark { cursor: default; outline: none; }
+.ins-mark:is(:hover, :focus-visible) .ins-hit { fill: var(--ink); fill-opacity: 0.06; }
+.ins-mark:is(:hover, :focus-visible) .ins-dot { r: 6; }
+
+.ins-tip { position: absolute; z-index: var(--z-overlay); pointer-events: none; width: 220px; display: grid; gap: 2px; padding: 8px 10px; background: var(--paper); color: var(--ink); border: var(--rule-md) solid var(--ink); box-shadow: var(--shadow-menu); }
+.ins-tip b { font: 700 13px/18px var(--font-text); }
+.om-sheet:has(> .ins-tip) { position: relative; }
+.set-section > .ins-tip { margin: 0; }
+
+/* Ranked bars and tables. */
+.ins-rows { display: grid; gap: 10px; }
+.ins-rowbar { display: grid; grid-template-columns: minmax(96px, 36%) minmax(0, 1fr) 52px; gap: var(--sp-3); align-items: center; }
+.ins-rowlabel { overflow-wrap: anywhere; }
+.ins-num { text-align: right; font-variant-numeric: tabular-nums; }
+.ins-share { display: block; height: 10px; border: var(--rule-sm) solid var(--ink); background: var(--paper); }
+.ins-share > i { display: block; height: 100%; background: var(--ink); }
+.ins-table td, .ins-table th { font-variant-numeric: tabular-nums; }
+.ins-table .ins-n { text-align: right; font-family: var(--font-mono); }
+.ins-table .ins-bar { width: 26%; min-width: 80px; }
+@media (max-width: 640px) {
+  .ins-table .ins-bar { width: auto; }
+  .ins-table .ins-bar .ins-share { flex: 0 1 60%; }
+}
+
+/* One day in order. */
+.ins-tl { display: flex; flex-direction: column; min-width: 0; }
+.ins-tl > .om-empty { padding: var(--sp-4); }
+.ins-hour { position: sticky; top: 0; background: var(--paper); z-index: 1; }
+.ins-tl-row { display: grid; grid-template-columns: 44px 168px minmax(0, 1fr); gap: var(--sp-3); align-items: baseline; padding: 8px var(--sp-3); border-bottom: var(--rule-sm) dotted var(--ink); }
+.ins-tl-kind { display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
+.ins-tl-what { display: grid; gap: 2px; min-width: 0; }
+.ins-tl-what > * { overflow-wrap: anywhere; }
+.set-section > .om-chips { margin: var(--sp-3) var(--sp-4); }
+.set-section > .ins-tl { margin: 0; }
+@media (max-width: 560px) {
+  .ins-tl-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .ins-tl-what { grid-column: 1 / -1; }
+}
+
+/* The Desk's week card. */
+.ins-stats-sm > * { padding: var(--sp-2) var(--sp-3); }
+.ins-stats-sm .om-stat-value { font-size: 24px; line-height: 26px; }
+.ins-stats-sm { border-bottom: var(--rule-sm) solid var(--ink); }
+.ins-week-body { display: grid; gap: var(--sp-2); padding: var(--sp-3); }
+.ins-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.ins-week .ins-lab { text-align: center; }
+.ins-week .ins-cell { width: auto; height: 22px; }
+.ins-week .ins-later { opacity: 0.4; }
+.ins-week-line { margin: 0; }

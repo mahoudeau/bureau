@@ -6,6 +6,11 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Added
+- **Insights.** A new page in the dashboard's main nav: missions filed and closed per day, week or month, the time from claim to done, the wait in your review, how many waited on you at the end of each period, your rulings (chat approvals included), per project, per agent, and brain commits per author and compartment. A calendar of every day opens that day in order: claims, closes, approvals and brain commits, hour by hour. Filters by project and agent. Days are counted in the browser's time zone.
+- A "This week" card on the Desk: done, filed and waiting since Monday, and the seven days.
+- `GET /api/stats` and `GET /api/stats/day`, and the MCP tool `read_stats`, so a weekly digest is one call. Any credential, cut to the projects it sees; brain commits only for a credential that sees every project. `tz` sets the time zone, else `BUREAU_TZ`, else UTC. Missions from before the log recorded status changes are counted, their close read from their last log entry, and the answer says how many (`estimated`) and from which day the log has status changes (`status_log_since`).
+
 ## [0.5.5] - 2026-11-14
 
 ### Added

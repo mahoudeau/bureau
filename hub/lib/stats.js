@@ -136,10 +136,12 @@ function facts(t, nowMs) {
     if (l.to !== 'review' && l.to !== 'blocked') continue;
     const end = log.slice(i + 1).find((x) => x.from || x.to);
     const startMs = Date.parse(l.ts);
-    const endMs = end ? Date.parse(end.ts) : (t.status === l.to ? nowMs : startMs);
-    if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) continue;
+    // A wait still open has no end yet; its time so far runs to now.
+    const open = !end && t.status === l.to;
+    const endMs = end ? Date.parse(end.ts) : (open ? Infinity : startMs);
+    if (!Number.isFinite(startMs) || Number.isNaN(endMs)) continue;
     waits.push([startMs, endMs, l.to]);
-    if (l.to === 'review') reviewMs.push(Math.max(0, endMs - startMs));
+    if (l.to === 'review') reviewMs.push(Math.max(0, (open ? nowMs : endMs) - startMs));
   }
   return {
     claimedAt: claimed ? claimed.ts : null,
@@ -200,6 +202,9 @@ function compute(tasks, opts, commits = null, now = new Date()) {
   const reviewWaits = [];
   let doneWithSendBack = 0;
   const waits = [];
+  // The first status change any of these missions recorded: before it, the
+  // waiting counts and close times are blind or estimated.
+  let statusSince = null;
   const project = (id) => {
     const k = id || 'none';
     if (!projects.has(k)) projects.set(k, { project: k, created: 0, done: 0, failed: 0, discarded: 0, send_backs: 0, cycle: [] });
@@ -214,6 +219,8 @@ function compute(tasks, opts, commits = null, now = new Date()) {
     const f = facts(t, nowMs);
     if (!wanted(t, f, opts)) continue;
     const pj = project(t.project);
+    const firstTo = f.log.find((l) => l.to);
+    if (firstTo && (!statusSince || firstTo.ts < statusSince)) statusSince = firstTo.ts;
 
     const created = dayOf(t.created_at, tz);
     if (inRange(created)) {
@@ -300,6 +307,7 @@ function compute(tasks, opts, commits = null, now = new Date()) {
   const done = totals.done;
   return {
     from, to, group, tz, project: opts.project || null, agent: opts.agent || null, generated_at: now.toISOString(),
+    status_log_since: statusSince ? dayOf(statusSince, tz) : null,
     totals: {
       ...totals,
       send_back_rate: done ? Math.round((doneWithSendBack / done) * 1000) / 1000 : null,

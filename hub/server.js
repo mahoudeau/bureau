@@ -106,7 +106,7 @@ function servePage(res, name, ...parts) {
 }
 // One shell for every page of the app. The client routes from the URL, and
 // everything it shows comes from the API, behind the token.
-const SHELL_ROUTE = /^\/(?:index\.html|sign-in|setup(?:\/agent\/[^/]+)?|missions(?:\/[^/]+)?|goals(?:\/[^/]+)?|brain(?:\/.+)?|projects(?:\/[^/]+)?|agents|activity|settings|ds)?$/;
+const SHELL_ROUTE = /^\/(?:index\.html|sign-in|setup(?:\/agent\/[^/]+)?|missions(?:\/[^/]+)?|goals(?:\/[^/]+)?|brain(?:\/.+)?|projects(?:\/[^/]+)?|agents|activity|insights(?:\/[^/]+)?|settings|ds)?$/;
 const serveShell = res => servePage(res, 'app', 'index.html');
 // Static files. A segment can't hold a dot and the name holds exactly one, so
 // no `..` and no encoded slash can match. index.html and README.md can't either.
