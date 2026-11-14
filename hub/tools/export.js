@@ -15,7 +15,8 @@
 // but they would keep working on the new hub). Never read: hub/.env and the
 // environment's tokens. The work store is not exported: it only holds open
 // missions' scratch files.
-// Safe to run while the hub runs: state.json is always written whole.
+// Safe to run while the hub runs: state.json is always written whole, and
+// bureau.db is read in one consistent snapshot.
 'use strict';
 require('../lib/env').load();
 const fs = require('fs');
@@ -33,7 +34,12 @@ function main() {
   if (fs.existsSync(out) && fs.readdirSync(out).length) throw new Error(`${out} is not empty`);
   fs.mkdirSync(out, { recursive: true, mode: 0o700 });
 
-  const state = JSON.parse(fs.readFileSync(path.join(DATA, 'state.json'), 'utf8'));
+  // On SQLite (BUREAU_STORE=sqlite) the state is read from bureau.db, read-only.
+  let state;
+  if (process.env.BUREAU_STORE === 'sqlite') {
+    state = require('../lib/sqlite-store').readFile(path.join(DATA, 'bureau.db'));
+    if (!state) throw new Error(`no state in ${path.join(DATA, 'bureau.db')}`);
+  } else state = JSON.parse(fs.readFileSync(path.join(DATA, 'state.json'), 'utf8'));
   const dropped = [];
   if (state.mcp_token) { delete state.mcp_token; dropped.push('the old MCP URL'); }
   if (state.sessions) { delete state.sessions; dropped.push('dashboard sessions'); }
