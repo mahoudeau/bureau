@@ -14,6 +14,9 @@ else DIR="$(mktemp -d)"; KEEP=0; fi
 PASS=0; FAIL=0
 # The hubs below skip a local hub/.env (its token, its webhook): a missing file instead
 export BUREAU_ENV_FILE="$DIR/no.env"
+# The file store's own checks (state.json, its backups, its corrupt copies).
+# The SQLite store has its twin in test/sqlite-store.test.js.
+unset BUREAU_STORE
 
 check() { # label haystack needle
   if printf '%s' "$2" | grep -q -- "$3"; then PASS=$((PASS+1)); echo "  ok: $1";

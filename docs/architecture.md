@@ -109,9 +109,21 @@ Sign-in (OMAKO Accounts by default, any OpenID issuer, or none): people sign in 
 
 ## 6. Deployment
 
-The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_BOSS_TOKEN` (and optionally `BUREAU_PUBLIC_URL` with a pairing for sign-in, and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md) and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
+The hub is **zero-dependency Node** (no npm install, no native builds), so it runs on minimal shared hosting: point the host at `node server.js`, set `BUREAU_BOSS_TOKEN` (and optionally `BUREAU_PUBLIC_URL` with a pairing for sign-in, and `BUREAU_POKES`). The server listens on `process.env.PORT || 8100`. State lives in `data/state.json` (atomic writes, hourly and daily backups beside it, a `schema_version` migrated on boot; see UPGRADING.md), or in `data/bureau.db` with `BUREAU_STORE=sqlite` (below), and `brain/` (git). A scheduled `git push` of the brain to a private remote makes an off-site backup.
 
-JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable. If the queue ever gets big, swapping `lib/store.js` for SQLite is a contained change.
+JSON-file storage is a feature at this stage, not a shortcut: at one-person scale it is plenty, trivially debuggable (`cat data/state.json`), and trivially portable.
+
+For a big queue, `BUREAU_STORE=sqlite` puts the state in `data/bureau.db` instead (`lib/sqlite-store.js`, Node's built-in `node:sqlite`, Node 22.13 or newer). The hub still works from memory: reads never touch the disk, and `lib/store.js` keeps the same functions. Only the layer under it changes. A save is one transaction that writes the rows that changed:
+
+| Table | Holds |
+|---|---|
+| `tasks` | one row per mission: `status`, `project`, `assignee`, `created_at`, `claimed_at`, `closed_at`, `send_backs` as real columns for queries, and `doc`, the whole record |
+| `agents`, `messages`, `projects` | one row per record, keyed by name or id, `doc` the record |
+| `sessions`, `oauth_apps`, `agent_tokens` | sign-in's state, one row per record, so a session's last-seen time writes one row |
+| `events` | the event log, append-only, capped at 2000 rows like the log in memory |
+| `meta` | every other top-level key (`seq`, `schema_version`, `settings`, ...), one row each, plus the hub's identity |
+
+Statements are prepared once, at open. WAL, `synchronous=NORMAL`, `busy_timeout`. A change that only touches one table (a heartbeat, a session's last-seen time, an event) saves that table alone. Backups are `VACUUM INTO` copies checked with `PRAGMA quick_check`, with a daily JSON export beside them. The database records its hub's identity when it is made, and a hub refuses a database that belongs to another: one hub, one data folder, one process. UPGRADING.md has the switch, the way back and the backups.
 
 ## 7. What's in the repo
 

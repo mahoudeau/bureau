@@ -19,6 +19,7 @@ const poke = require('./lib/poke');
 const auth = require('./lib/auth');
 const oidc = require('./lib/oidc');
 const omako = require('./lib/omako');
+const backups = require('./lib/backup').create();
 const { VERSION } = require('./version');
 
 const security = require('./lib/security');
@@ -619,7 +620,9 @@ const server = http.createServer(async (req, res) => {
     const denied = auth.checkRule(rule, who, req.method, p);
     if (denied) return send(res, denied.status, { error: denied.error });
     if (p === '/api/health')
-      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime() });
+      return send(res, 200, { ok: true, version: VERSION, schema_version: store.SCHEMA_VERSION, store: store.STORE_KIND, auth: store.authMode(), credential: { kind: who.kind, name: who.name, projects: who.projects }, uptime: process.uptime(),
+        // The off-server backup, for the operator only (doc 31, D4).
+        ...(auth.isOperator(who) ? { backup: backups.health() } : {}) });
     if (p === '/api/me')
       return send(res, 200, { kind: who.kind, name: who.name, projects: who.projects, role: who.role || (who.kind === 'boss' ? 'owner' : null), email: who.email || null, via: who.via || null, session: !!who.session, sign_in: oidc.config().webOn });
 
@@ -780,6 +783,24 @@ const server = http.createServer(async (req, res) => {
       const name = decodeURIComponent(p.slice('/api/setup/agent/'.length));
       if (!SETUP_NAME.test(name) || name === 'human' || name === 'system') return send(res, 400, { error: 'not an agent name: lowercase letters, digits, - or _' });
       return send(res, 200, setupAgentStatus(name));
+    }
+
+    // ----- the off-server backup (doc 31): the operator's only, the rule table -----
+    if (req.method === 'GET' && p === '/api/backups') return send(res, 200, { status: backups.status(), runs: backups.runs(20), checks: backups.checks(10) });
+    if (req.method === 'POST' && p === '/api/backups/verified') {
+      const b = await readBody(req);
+      if (store.STORE_KIND !== 'sqlite') return send(res, 409, { error: 'the off-server backup needs the SQLite store' });
+      if (typeof b.ok !== 'boolean') return send(res, 400, { error: 'ok: true or false' });
+      if (b.file !== undefined && b.file !== null && (typeof b.file !== 'string' || b.file.length > 200)) return send(res, 400, { error: 'file: the name of the copy checked' });
+      if (b.detail !== undefined && b.detail !== null && typeof b.detail !== 'string') return send(res, 400, { error: 'detail: text' });
+      const check = backups.recordCheck({ ok: b.ok, file: b.file || null, detail: String(b.detail || '').slice(0, 1000), by: who.via || who.name || who.kind });
+      if (!b.ok) console.error(`[backup] the check on the Mac FAILED: ${String(b.detail || '').slice(0, 300)}`);
+      return send(res, 200, { check, status: backups.status() });
+    }
+    if (req.method === 'POST' && p === '/api/backups/run') {
+      if (!backups.configured) return send(res, 409, { error: backups.status().problem || 'the off-server backup is not set up' });
+      const run = await backups.run();
+      return send(res, 200, { run, status: backups.status() });
     }
 
     // ----- agent tokens (strict mode, boss only: the rule table) -----
@@ -1439,11 +1460,12 @@ const lock = store.acquireLock();
 if (lock.error) { console.error(lock.error); process.exit(1); }
 try {
   const st = store.init();
-  console.log(`Bureau ${VERSION}, state schema ${st.schema_version}`);
+  console.log(`Bureau ${VERSION}, state schema ${st.schema_version}, store ${store.STORE_KIND}`);
 } catch (e) {
   console.error(e instanceof store.StorageError ? e.message : `state load failed: ${e.stack || e}`);
   process.exit(1);
 }
+backups.schedule();
 knowledge.ensureRepo();
 try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
 contextCall.pruneLog();

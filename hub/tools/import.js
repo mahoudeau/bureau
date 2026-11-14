@@ -38,6 +38,8 @@ function main() {
   if ((manifest.schema_version || 0) > SCHEMA_VERSION) throw new Error(`the export has schema ${manifest.schema_version}; this hub knows up to ${SCHEMA_VERSION}. Upgrade this hub first`);
   if (lockIsLive()) throw new Error('the hub is running: stop it first');
   if (fs.existsSync(path.join(DATA, 'state.json'))) throw new Error(`${DATA} already holds a state.json: import only into a fresh hub`);
+  // A hub on SQLite imports the state.json written here at its first boot.
+  if (fs.existsSync(path.join(DATA, 'bureau.db'))) throw new Error(`${DATA} already holds a bureau.db: import only into a fresh hub`);
   if (fs.existsSync(BRAIN) && fs.readdirSync(BRAIN).length) throw new Error(`${BRAIN} is not empty: import only into a fresh hub`);
 
   fs.mkdirSync(DATA, { recursive: true, mode: 0o700 });

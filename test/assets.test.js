@@ -87,7 +87,7 @@ async function main() {
   check('the walk reached the fonts through all.css', [...assets.keys()].some((u) => u.endsWith('.woff2')), [...assets.keys()]);
 
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: scratch, USERPROFILE: scratch, PORT: String(PORT), HOST: '127.0.0.1', BUREAU_TOKEN: 'assets-test-token-0123456789',
-    BUREAU_ENV_FILE: path.join(scratch, 'none.env'), BUREAU_DATA_DIR: path.join(scratch, 'data'), BUREAU_BRAIN_DIR: path.join(scratch, 'brain'), BUREAU_WORK_DIR: path.join(scratch, 'work'), GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null' };
+    BUREAU_ENV_FILE: path.join(scratch, 'none.env'), BUREAU_DATA_DIR: path.join(scratch, 'data'), BUREAU_BRAIN_DIR: path.join(scratch, 'brain'), BUREAU_WORK_DIR: path.join(scratch, 'work'), GIT_CONFIG_GLOBAL: process.platform === 'win32' ? 'NUL' : '/dev/null', BUREAU_STORE: process.env.BUREAU_STORE };
   const hub = spawn(process.execPath, [path.join(ROOT, 'hub', 'server.js')], { env, stdio: 'ignore' });
   try {
     let up = false;

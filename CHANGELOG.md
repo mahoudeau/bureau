@@ -6,6 +6,21 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Added
+- **SQLite as an optional store.** `BUREAU_STORE=sqlite` keeps the state in `data/bureau.db` through Node's built-in `node:sqlite`, so still no dependency. The hub still works from memory; a save writes only the rows that changed, in one transaction. Missions, agents, messages, projects, sessions, apps and agent tokens get their own tables, and the event log an append-only table capped at 2000 rows. Off by default. It needs Node 22.13 or newer; the file store still runs on Node 18. See UPGRADING.md.
+- The first boot on SQLite imports `state.json` and keeps it as `state.json.imported-<timestamp>`. `node hub/tools/state-export.js <data-dir>` is the way back: it writes the whole state out as a `state.json`.
+- Backups on SQLite: hourly and daily `VACUUM INTO` copies on the same schedule and settings as today, each checked with `PRAGMA quick_check` before it is kept, plus a daily JSON export beside them. A copy that fails its check is deleted and logged (`store.backup_failed`).
+- One hub, one database: the database records the hub's identity when it is made (a random `hub_id`, or `BUREAU_HUB_ID`, and `BUREAU_PUBLIC_URL`). A hub refuses to boot on a database that belongs to another, and says which two. `node hub/tools/hub-identity.js` prints it, and records a new address after a move.
+- `GET /api/health` says which store is in use: `"store": "json"` or `"sqlite"`.
+- `test/store-bench.js`: load and save times and file size, file store against SQLite, at 1k, 10k and 50k missions.
+- **A nightly encrypted copy off the server.** On SQLite, with `BUREAU_BACKUP_PUBLIC_KEY` and `BUREAU_NEXTCLOUD_URL`, `_USER` and `_PASSWORD` set: every night at 03:30 Paris time (two minutes after boot when a night was missed), a `VACUUM INTO` copy checked with `PRAGMA integrity_check`, gzipped, encrypted and sent over WebDAV to `<BUREAU_NEXTCLOUD_DIR>/<hub id>/db/bureau-YYYY-MM-DD.db.gz.enc`, with missions, agents, projects and settings as encrypted JSON under `current/`. Every file is fetched back and compared byte for byte. Kept 30 nights, and the 1st of each month for a year. Each run is recorded in a `backup_runs` table.
+- The encryption uses `node:crypto` alone: an X25519 key per file, agreed with the hub's public key, HKDF-SHA256, then AES-256-GCM. The server holds only the public key and cannot read what it sends. The format is documented in `hub/lib/backup-crypto.js`.
+- `bureau backup keygen` makes the key pair on the Mac, keeps the private key in the Keychain (service `bureau-backup`), and prints only the public key. `bureau backup verify` fetches the newest copy, decrypts it, opens it read-only, runs `integrity_check` and tells the hub. `bureau backup decrypt` unpacks a copy for a restore. docs/restore.md says how to put one back.
+- `GET /api/backups`, `POST /api/backups/verified` and `POST /api/backups/run`, for the operator only: the boss token, and people whose email is in `BUREAU_OPERATORS` (default: `BUREAU_OIDC_OWNERS`). Anyone else gets a 404. The operator sees a red line on the Desk when there is no good copy in 36 hours or no good check on the Mac in 35 days, and `GET /api/health` carries a `backup` field for them alone.
+
+### Changed
+- `hub/tools/export.js` reads `bureau.db` on a SQLite hub, and `hub/tools/import.js` refuses a data dir that already holds one.
+
 ## [0.5.4] - 2026-11-13
 
 ### Changed
