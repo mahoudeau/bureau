@@ -57,6 +57,22 @@ The access token lasts as long as the issuer says (an hour at OMAKO). `bureau to
 
 The claude-code connector reads the same place: `hub.sh` through `bureau token`, `context-hook.js` directly.
 
+## The off-server backup
+
+The hub sends an encrypted copy of its database to Nextcloud every night (docs/restore.md). Only the Mac holding the private key can read it.
+
+| Command | What it does |
+|---|---|
+| `bureau backup keygen` | Makes the key pair, keeps the private key, prints only the public key (for `BUREAU_BACKUP_PUBLIC_KEY`). Refuses to replace a key unless `--force`. |
+| `bureau backup export-key` | Prints the private key, only into a pipe: `bureau backup export-key \| pbcopy`, for the password manager. |
+| `bureau backup import-key` | Takes the private key back from a pipe: `pbpaste \| bureau backup import-key`. |
+| `bureau backup set-nextcloud --url URL --user NAME [--dir DIR]` | Keeps where the copies are, with the app password from a pipe. Or set `BUREAU_NEXTCLOUD_URL`, `_USER`, `_PASSWORD` and `_DIR`. |
+| `bureau backup set-operator` | Keeps the hub token that reports checks (the boss token), from a pipe. Or set `BUREAU_OPERATOR_TOKEN`. |
+| `bureau backup verify [--hub-id ID] [--no-report]` | Fetches the newest copy, decrypts it, opens it read-only, runs `integrity_check`, and tells the hub. Exit 1 when the copy fails. Needs Node 22.13 or newer. |
+| `bureau backup decrypt FILE [--out PATH]` | Decrypts a copy, and unpacks a database copy, for a restore. Never overwrites a file. |
+
+On a Mac they live in the Keychain, service `bureau-backup`: account `<hub host>` for the key pair, `<hub host>/nextcloud` and `<hub host>/operator` for the rest. Elsewhere, or with `BUREAU_LOGIN_STORE=file` or `BUREAU_BACKUP_STORE=file`, in `~/.config/bureau/backup.json`, mode 0600. No output ever shows the password, the token or the private key, except `export-key` into a pipe. `node test/backup.test.js` runs them against a WebDAV stand-in, under a temporary home.
+
 ## CI
 
 CI should not use `bureau login`. It is for a person at a terminal. A CI job uses a token minted for it on the hub (`node hub/tools/token.js mint <name> <projects>`), passed as the secret `BUREAU_TOKEN`.

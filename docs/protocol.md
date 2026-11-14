@@ -30,7 +30,7 @@ Anything that can make HTTP calls. No SDK, no library, no framework. The referen
 
 Plus `GET /api/events` (SSE) for anything that wants to *watch* (the dashboard, the office, mirrors). Auth: see **Who can do what** below; the credential goes in the `Authorization` header and never in a URL. A browser's `EventSource` cannot set a header, so `POST /api/events/ticket` (a credential that may open the stream) returns `{ticket, expires_in}`: good once, for 60 seconds, on `GET /api/events?ticket=...` and nothing else. The ticket carries the identity and scope of the credential that minted it, never more. A page signed in with the session cookie (see **Sign-in**) needs no ticket: the cookie travels with the stream request. All responses `Cache-Control: no-store`.
 
-`GET /health` takes no credential and answers liveness only. `GET /api/health` answers `version`, `schema_version`, `store` (`json` for `state.json`, `sqlite` for `bureau.db` with `BUREAU_STORE=sqlite`), `auth`, the caller's `credential` and `uptime`. The store changes nothing on the wire: every call above answers the same on both. On SQLite, a backup copy that fails its check is logged as a `store.backup_failed` event, with the reason in `note`.
+`GET /health` takes no credential and answers liveness only. `GET /api/health` answers `version`, `schema_version`, `store` (`json` for `state.json`, `sqlite` for `bureau.db` with `BUREAU_STORE=sqlite`), `auth`, the caller's `credential` and `uptime`, plus `backup` for the operator alone (see **The operator and the off-server backup**). The store changes nothing on the wire: every call above answers the same on both. On SQLite, a backup copy that fails its check is logged as a `store.backup_failed` event, with the reason in `note`.
 
 Browsers: `/api/` answers same-origin pages. Another origin is refused with a 403, before the token is looked at, unless it is listed in `BUREAU_ALLOWED_ORIGINS`. A client with no `Origin` header (curl, an agent) is judged by its token alone. Errors the caller can act on keep their message; anything else answers `{"error": "internal error"}` and the detail goes to the server log.
 
@@ -109,8 +109,19 @@ Outbound credentials (the `BUREAU_POKES` headers, GitHub tokens) are not part of
 | `GET /api/journal` | yes | its own records and its projects' | yes | yes |
 | `GET /api/memory/health` | yes | only with `["*"]` | yes | yes |
 | `POST/GET /api/work` | yes | its projects' missions | yes | yes |
+| `GET /api/backups`, `POST /api/backups/verified`, `POST /api/backups/run` | the operator only (below); 404 to anyone else | 404 | 404 | yes |
 
 `/health`, the dashboard shells, `/auth/*` and the `/.well-known/` documents take no bearer. An `/api/` route with no rule in the table is a 404: a route cannot be reached by forgetting to give it a rule.
+
+### The operator and the off-server backup
+
+The operator is whoever runs the server, which on a hosted hub is the host, never the customer. That is the boss token, and the people signed in whose email is in `BUREAU_OPERATORS` (comma-separated), or in `BUREAU_OIDC_OWNERS` when `BUREAU_OPERATORS` is not set. An owner added in Settings is not an operator. A legacy hub has one token for everyone, so its bearer counts. To anyone else the routes below answer `404 {"error": "not found"}`, the answer of a route that does not exist, so a hub's users do not learn the backup is there.
+
+- `GET /api/backups`: `{status, runs, checks}`. `status` holds `configured`, `problem` (a sentence when the settings are half there, else `null`), `store`, `hub_id`, `where` (the Nextcloud host and folder, never the password), `last_run`, `last_ok_at`, `last_check`, `last_ok_check_at`, `next_run_at` and `alerts`: the lines the Desk shows the operator in red, none when all is well. There is one when there is no good copy in 36 hours, and one when there is no good check on the Mac in 35 days. `runs` is the last 20 nightly runs, newest first (`id`, `started_at`, `finished_at`, `ok`, `offsite`, `verified`, `detail`). `checks` is the last 10 checks from the Mac (`checked_at`, `ok`, `file`, `detail`, `by`).
+- `POST /api/backups/verified` `{ok, file?, detail?}`: the result of `bureau backup verify` on the Mac. `ok` must be `true` or `false`. Answers `{check, status}`. 409 on the file store.
+- `POST /api/backups/run`: runs the nightly backup now and answers `{run, status}` when it is done. 409, with the reason, when it is not set up.
+
+`GET /api/health` adds `backup` (`configured`, `last_ok_at`, `last_ok_check_at`, `alerts`) for the operator, and nothing for anyone else. A failed run goes to the server's log (`OFF-SERVER BACKUP FAILED`), never to the event log the hub's users read. The settings, the file format and the restore are in `UPGRADING.md` and `docs/restore.md`.
 
 ### Sign-in
 

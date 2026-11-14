@@ -242,6 +242,16 @@ Each copy is taken with `VACUUM INTO`, so it is consistent even while the hub wr
 
 `hub/tools/export.js` reads the database when `BUREAU_STORE=sqlite`, and `hub/tools/import.js` writes a `state.json` that a SQLite hub imports at its first boot.
 
+**A copy off the server, every night.** Everything above sits on the hub's own disk: a lost server loses it all. On SQLite the hub can also send an encrypted copy to a Nextcloud folder every night at 03:30 Paris time. It stays off until four settings are all set. To turn it on:
+
+1. On your Mac, with the hub's address in `BUREAU_URL` (or `--hub`): `bureau backup keygen`. It keeps the private key in the Keychain and prints the public key. Then `bureau backup export-key | pbcopy` and paste the private key into your password manager. **Without the private key the copies cannot be read.**
+2. In Nextcloud, make an app password for Bureau alone (Settings, Security), so it can be revoked without touching anything else.
+3. On the server, set `BUREAU_BACKUP_PUBLIC_KEY` (the `x25519:...` line keygen printed, not a secret), `BUREAU_NEXTCLOUD_URL`, `BUREAU_NEXTCLOUD_USER`, `BUREAU_NEXTCLOUD_PASSWORD`, and `BUREAU_NEXTCLOUD_DIR` if not `Bureau-backup`. Put them there by script, never through a chat. Restart the hub.
+4. The hub's log names the next run. A hub that missed a night runs two minutes after boot. An operator can run one at once with `POST /api/backups/run`, and read the result at `GET /api/backups`.
+5. On the Mac: `bureau backup set-nextcloud --url URL --user NAME` with the app password piped in, `bureau backup set-operator` with the boss token piped in, then `bureau backup verify`. Run it monthly (docs/restore.md has a launchd job).
+
+Who sees it: the operator only, meaning the boss token and the people listed in `BUREAU_OPERATORS` (emails, comma-separated; by default `BUREAU_OIDC_OWNERS`). On a hosted hub, set `BUREAU_OPERATORS` to the host's people, so the customer never sees it. The operator gets a red line on the Desk when there is no good copy in 36 hours, or no good check on the Mac in 35 days. Everyone else gets a 404 from the backup routes. Restoring from a copy: docs/restore.md.
+
 ## Roll back
 
 To the code and state from before an upgrade:
