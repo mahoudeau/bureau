@@ -17,9 +17,9 @@ const ROLES = [
 const appState = (a) => h('span', { class: `om-tag${a.status === 'allowed' ? ' om-tag-solid' : ''}` }, a.status === 'pending' ? 'Waiting' : a.status === 'allowed' ? 'Allowed' : 'Denied');
 
 export async function signin(ctx, health) {
-  let omako, apps, sessions, settings;
+  let omako, apps, sessions, settings, envOwners;
   try {
-    [omako, apps, sessions, { settings }] = await Promise.all([
+    [omako, apps, sessions, { settings, env_owners: envOwners = [] }] = await Promise.all([
       api.get('/api/omako', { signal: ctx.signal }),
       api.get('/api/apps', { signal: ctx.signal }).then((r) => r.apps),
       api.get('/api/sessions', { signal: ctx.signal }).then((r) => r.sessions),
@@ -159,15 +159,20 @@ export async function signin(ctx, health) {
       if (await save({ members: { [key]: { role: roleSelect.value } } }, `${key}: ${roleSelect.value}`)) reload();
     },
   }, field('Email, or the issuer\'s id', keyInput), field('Role', roleSelect), h('div', null, h('button', { type: 'submit', class: 'om-btn om-btn-primary' }, 'Add')));
-  const people = Object.entries(members).sort(([a], [b]) => a.localeCompare(b));
+  // The owners named on the server (BUREAU_OIDC_OWNERS) come first: they sign
+  // in as owners whatever Settings says, and only the server can drop them.
+  const fromServer = envOwners.filter((k) => !members[k]).map((k) => [k, { role: 'owner' }, true]);
+  const people = [...fromServer, ...Object.entries(members).sort(([a], [b]) => a.localeCompare(b))];
   const peopleBox = section('People', String(people.length),
     people.length
       ? table([
         { label: 'Who', cell: ([k]) => h('span', { class: 'om-strong' }, k) },
         { label: 'Role', cell: ([, m]) => ROLES.find(([v]) => v === m.role)[1] },
-        { label: 'Remove', cell: ([k]) => confirmButton('Remove', async () => { if (await save({ members: { [k]: null } }, `${k} removed`)) reload(); }, { title: `Remove ${k}?`, body: 'Their session ends at their next click.' }) },
+        { label: 'Remove', cell: ([k, , server]) => (server
+          ? h('span', { class: 'om-data-s', title: 'BUREAU_OIDC_OWNERS, in the hub\'s environment' }, 'Set on the server')
+          : confirmButton('Remove', async () => { if (await save({ members: { [k]: null } }, `${k} removed`)) reload(); }, { title: `Remove ${k}?`, body: 'Their session ends at their next click.' })) },
       ], people)
-      : h('p', null, 'Only the owners set on the server (BUREAU_OIDC_OWNERS) sign in for now.'),
+      : h('p', null, 'Nobody signs in yet. Add yourself as owner below, or set BUREAU_OIDC_OWNERS on the server.'),
     addForm,
     h('dl', { class: 'set-defs' }, ROLES.map(([, w, what]) => [h('dt', { class: 'om-label' }, w), h('dd', null, what)])));
 

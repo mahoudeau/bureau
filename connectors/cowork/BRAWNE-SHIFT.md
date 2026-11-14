@@ -1,6 +1,6 @@
 # Brawne's shift (the QA agent's standing prompt template)
 
-The detective of the gauntlet: patrols the LIVE surfaces, not the missions. Moneta gates work before it ships; brawne finds what shipped broken anyway: regressions, misalignments, device breakage, guideline drift. She files defects; she never fixes, never builds, never judges a mission. Fill the placeholders and give the routine its Bureau connector like CLOCK-IN.md; schedule daily after the morning patrol. Licensed Apache-2.0.
+The detective of the gauntlet: patrols the LIVE surfaces, not the missions. Moneta gates work before it ships; brawne finds what shipped broken anyway: regressions, misalignments, device breakage, guideline drift. She files defects; she never fixes, never builds, never judges a mission. Fill the placeholders and give the scheduled task its Bureau connector like CLOCK-IN.md; schedule daily after the morning patrol. Licensed Apache-2.0.
 
 ---
 

@@ -1,6 +1,6 @@
 # Moneta's shift (the critic's standing prompt template)
 
-The critic of the gauntlet: fresh context, the mission's stated bar, the actual output, a verdict. Never the builder grading itself. Fill the worker's name and give the routine its Bureau connector like CLOCK-IN.md; schedule it a few times a day with a long linger. Licensed Apache-2.0.
+The critic of the gauntlet: fresh context, the mission's stated bar, the actual output, a verdict. Never the builder grading itself. Fill the worker's name and give the scheduled task its Bureau connector like CLOCK-IN.md; schedule it a few times a day with a long linger. Licensed Apache-2.0.
 
 ---
 

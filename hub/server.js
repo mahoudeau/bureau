@@ -133,7 +133,7 @@ function mcpServerInfo() {
 }
 // The first-run guide (/setup): every hub starts with two agents, consul (the
 // owner's envoy in chat and the terminal) and sol (the librarian, a nightly
-// routine). The guide turns their sign-in on with these roles, walks the owner
+// scheduled task). The guide turns their sign-in on with these roles, walks the owner
 // through connecting each app, and is done once each has an app allowed.
 const SETUP_AGENTS = { consul: ['critic', 'lead'], sol: ['librarian'] };
 // A role's charter, below its line, with the name filled in. The repo keeps
@@ -732,7 +732,8 @@ const server = http.createServer(async (req, res) => {
       const all = store.settingsOf(store.load());
       // Who may sign in is the owner's business; approvers and viewers see the rest.
       if (who.kind === 'approver' || who.kind === 'viewer') { const { members: _m, ...rest } = all; return send(res, 200, { settings: rest }); }
-      if (auth.seesAll(who) && who.kind !== 'agent') return send(res, 200, { settings: all });
+      // Owners also see the owners named on the server (BUREAU_OIDC_OWNERS), which Settings can't change.
+      if (auth.seesAll(who) && who.kind !== 'agent') return send(res, 200, { settings: all, env_owners: store.envOwners() });
       // An agent token reads the global policy, its own entry and its projects'.
       return send(res, 200, { settings: {
         global: all.global,
@@ -1136,8 +1137,8 @@ const MCP_TOOLS = [
   { name: 'memory_health', description: 'The memory health block, the same JSON as GET /api/memory/health: status (ok or attention) with its reasons, lint errors, unreadable journal blocks and capture volume, approved items not applied yet, stale claims, contradictions, and provenance coverage. Read-only.', inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
   { name: 'write_work', description: 'Write a mission\'s evidence (screenshots, drafts, test output) to the work store, not the brain: file is work/<mission id>/<name>, the mission must be open, nothing is committed, and the folder is deleted when the mission closes done, failed or discarded. Cite an image as an artifact ({label, url: "work/t-12/home.png"}) and the review page shows it. Same types and base64 rule as write_knowledge.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, content: { type: 'string' }, mode: { type: 'string', enum: ['replace', 'append'] }, encoding: { type: 'string', enum: ['base64'] } }, required: ['file', 'content'], additionalProperties: false } },
   { name: 'read_work', description: 'Read a work store file (work/<mission id>/<name>), or list a mission\'s files with {task}. Binaries come back as content_base64.', inputSchema: { type: 'object', properties: { file: { type: 'string' }, task: { type: 'string' } }, additionalProperties: false } },
-  // The shift tools (doc 30, D16): what a routine did with curl, now through its own signed-in connector.
-  { name: 'clock_in', description: 'Register on the roster as consul at the start of a shift. kind says what runs you (cowork for a cloud routine); capabilities are tags you declare, which grant nothing once roles are set in Settings: the answer says so.', inputSchema: { type: 'object', properties: { kind: { type: 'string' }, capabilities: { type: 'array', items: { type: 'string' } } }, additionalProperties: false } },
+  // The shift tools (doc 30, D16): what a scheduled task did with curl, now through its own signed-in connector.
+  { name: 'clock_in', description: 'Register on the roster as consul at the start of a shift. kind says what runs you (cowork for a cloud scheduled task); capabilities are tags you declare, which grant nothing once roles are set in Settings: the answer says so.', inputSchema: { type: 'object', properties: { kind: { type: 'string' }, capabilities: { type: 'array', items: { type: 'string' } } }, additionalProperties: false } },
   { name: 'heartbeat', description: 'Say you are alive and what you are doing, every few minutes during a shift. activity is one honest word (thinking, reading, editing, testing, waiting, idle); note is one line.', inputSchema: { type: 'object', properties: { activity: { type: 'string' }, note: { type: 'string' }, sub_agents: { type: 'array', items: { type: 'object' } } }, additionalProperties: false } },
   { name: 'read_inbox', description: 'Read consul\'s messages (to consul, to everyone, or from consul), oldest first, the last 200. since (an ISO time) keeps only newer ones.', inputSchema: { type: 'object', properties: { since: { type: 'string' } }, additionalProperties: false } },
   { name: 'send_message', description: 'Send a message as consul. to is an agent name, human for the boss, or * for everyone; task_id ties it to a mission.', inputSchema: { type: 'object', properties: { to: { type: 'string' }, body: { type: 'string' }, task_id: { type: 'string' } }, required: ['body'], additionalProperties: false } },

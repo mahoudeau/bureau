@@ -1,6 +1,6 @@
 // /setup: the first-run guide. Every hub starts with two agents, consul (the
 // owner's envoy in chat and the terminal) and sol (the librarian, a nightly
-// routine). The owner picks a path first: Claude, walked click by click
+// scheduled task). The owner picks a path first: Claude, walked click by click
 // (claude.ai for consul and sol, Claude Code in the terminal), or any other AI
 // app, with the generic steps (setup/generic.js). The engine is
 // setup/wizard.js; the banner (setup/banner.js) brings the owner back here.
@@ -14,7 +14,9 @@ import { HELLO, genericSteps, signinStep } from '../setup/generic.js';
 
 const CONNECTORS_URL = 'https://claude.ai/new#customize/connectors';
 const PROFILE_URL = 'https://claude.ai/settings/profile';
-const ROUTINES_URL = 'https://claude.ai/code/routines';
+// claude.ai's Scheduled tasks page. It kept its old address when the
+// feature was renamed from routines.
+const TASKS_URL = 'https://claude.ai/code/routines';
 
 // claude.ai's three tool permissions, drawn the way its connector page shows
 // them, with the one to pick marked: a tick (Always allow), a hand (Needs
@@ -124,17 +126,17 @@ function steps(s) {
       then: { type: 'wait', check: () => appsOf(s, 'sol').length > 0, waiting: 'Waiting for the connector to reach your hub', ok: 'The connector reached your hub.' } },
     { id: 'sol-allow', ch: 'Sol', when: claude, title: 'Let it act as sol', text: ['Only allow an app you just connected yourself.'],
       action: { type: 'allow', apps: () => appsOf(s, 'sol'), agent: 'sol', check: () => appsOf(s, 'sol').some((a) => a.status === 'allowed'), ok: 'Claude can act as sol.' } },
-    { id: 'sol-routine', ch: 'Sol', when: claude, title: 'Create sol\'s routine',
-      text: [['A routine is a task claude.ai runs on a schedule. In claude.ai, open ', h('strong', null, 'Code'), ', then ', h('strong', null, 'Routines'), ', then ', h('strong', null, 'New routine'), '. Name it ', h('strong', null, 'sol'), '.']],
-      action: { type: 'link', href: ROUTINES_URL, label: 'Open claude.ai routines', ok: 'Opened in a new tab.' } },
+    { id: 'sol-routine', ch: 'Sol', when: claude, title: 'Create sol\'s scheduled task',
+      text: [['A scheduled task is one claude.ai runs on its own, on a schedule. Open ', h('strong', null, 'Scheduled tasks'), ' in claude.ai, click ', h('strong', null, 'New task'), ', and name it ', h('strong', null, 'sol'), '.']],
+      action: { type: 'link', href: TASKS_URL, label: 'Open claude.ai scheduled tasks', ok: 'Opened in a new tab.' } },
     { id: 'sol-prompt', ch: 'Sol', when: claude, title: 'Paste its instructions',
-      text: ['Copy them, and paste them as the routine\'s prompt. They tell sol what to do each night.'],
+      text: ['Copy them, and paste them as the task\'s prompt. They tell sol what to do each night.'],
       action: { type: 'copy', value: s.sol_charter || '', hide: true, label: 'Copy the instructions', ok: 'Copied. Paste them as the prompt.', missing: 'The instructions aren\'t on this hub. Take them from connectors/cowork/SOL-SHIFT.md in the Bureau repo.' } },
     { id: 'sol-schedule', ch: 'Sol', when: claude, title: 'Pick its connector and its time',
       text: [['Under connectors, keep ', h('strong', null, 'Bureau (sol)'), ' and switch the others off.'], ['Set it to run ', h('strong', null, 'every day'), ', at night: 01:00 is a good time. Then save.']],
-      action: { type: 'confirm', label: 'I\'ve saved the routine', ok: 'Saved.' } },
+      action: { type: 'confirm', label: 'I\'ve saved the task', ok: 'Saved.' } },
     { id: 'sol-run', ch: 'Sol', when: claude, title: 'Run it once now',
-      text: [['On the routine\'s page, click ', h('strong', null, 'Run now'), '. Its first night is a short one.']],
+      text: [['On the task\'s page, click ', h('strong', null, 'Run now'), '. Its first night is a short one.']],
       action: { type: 'wait', check: () => appsOf(s, 'sol').some((a) => a.working), waiting: 'Waiting for sol to clock in', ok: 'Sol clocked in. It works.' } },
 
     // ---- Another AI app: the generic steps ----

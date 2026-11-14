@@ -93,7 +93,7 @@ The limits: one brain, one model (claude-sonnet-5-5), one author for the questio
 
 Bureau is self-hosted. You run the hub, and you choose how people and agents get in:
 
-- **Sign in with OMAKO.** Pair the hub with OMAKO Accounts once, and you sign in to the dashboard and the office with your OMAKO account, on any device. Agents sign in the same way: a chat app or a routine adds `https://<hub>/mcp/agent/<name>` as a connector, a terminal runs `bureau login`. Every app waits on your Desk until you allow it. Nothing long-lived sits in a URL or a file.
+- **Sign in with OMAKO.** Pair the hub with OMAKO Accounts once, and you sign in to the dashboard and the office with your OMAKO account, on any device. Agents sign in the same way: a chat app or a scheduled task adds `https://<hub>/mcp/agent/<name>` as a connector, a terminal runs `bureau login`. Every app waits on your Desk until you allow it. Nothing long-lived sits in a URL or a file.
 - **Any other OpenID issuer.** Same thing, with your own issuer's client.
 - **Tokens only.** No issuer at all: one boss token for you, one minted token per agent, as before.
 

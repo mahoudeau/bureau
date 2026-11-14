@@ -18,7 +18,8 @@ const TABS = [
 function who(health, me) {
   const c = health.credential || {};
   if (me && me.session) return `Signed in as ${me.email || 'you'} (${me.role})`;
-  if (c.kind === 'boss') return 'Signed in as the boss';
+  // A pasted boss token, not an account: say which, since sign-in has accounts now.
+  if (c.kind === 'boss') return 'Signed in with the boss token';
   if (c.kind === 'agent') return `Signed in as ${c.name}`;
   if (c.kind === 'shared') return 'Signed in with the shared token';
   return 'Signed in';

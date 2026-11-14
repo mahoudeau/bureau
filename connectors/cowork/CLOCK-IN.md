@@ -1,6 +1,6 @@
 # Bureau clock-in (standing prompt template)
 
-Fill the worker's name, give the routine its Bureau connector (README.md, Setup), then use this text as the recurring prompt of a scheduled session. Licensed Apache-2.0.
+Fill the worker's name, give the scheduled task its Bureau connector (README.md, Setup), then use this text as the recurring prompt of a scheduled session. Licensed Apache-2.0.
 
 ---
 

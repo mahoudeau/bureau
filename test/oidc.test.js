@@ -217,6 +217,11 @@ async function main() {
   check('an agent with no charter gets none, and its app shows allowed', guideKassad.status === 200 && guideKassad.json.charter === null && guideKassad.json.agent.allowed && !guideKassad.json.agent.working, guideKassad.json);
   check('the guide refuses a name that is not an agent', (await asBoss('GET', '/api/setup/agent/Not%20A%20Name')).status === 400 && (await asBoss('GET', '/api/setup/agent/human')).status === 400);
   check('an agent token cannot read the guide', (await call('GET', '/api/setup/agent/sol', { bearer: tokenFor('kassad') })).status === 403);
+  // People in Settings lists the owners named on the server, for owners only.
+  const ownerSettings = await asBoss('GET', '/api/settings');
+  check('the owner sees the owners set on the server', JSON.stringify(ownerSettings.json.env_owners) === JSON.stringify([OWNER_SUB, 'owner@example.com']), ownerSettings.json.env_owners);
+  const solSettings = await call('GET', '/api/settings', { bearer: tokenFor('sol') });
+  check('an agent does not', solSettings.status === 200 && !('env_owners' in solSettings.json), solSettings.json);
 
   console.log('E. A good token works, as that agent, inside its walls');
   check('sol sees only general', JSON.stringify(JSON.parse(who.text).projects) === JSON.stringify(['general']), who.text);

@@ -1,6 +1,6 @@
 # Sol's shift (the librarian's standing prompt template)
 
-The first per-role prompt: where CLOCK-IN.md workers work the queue, the librarian curates the brain. Fill the worker's name and give the routine its Bureau connector like CLOCK-IN.md; schedule it once a night, off the worker grid, so nobody appends while the librarian rewrites. Licensed Apache-2.0.
+The first per-role prompt: where CLOCK-IN.md workers work the queue, the librarian curates the brain. Fill the worker's name and give the scheduled task its Bureau connector like CLOCK-IN.md; schedule it once a night, off the worker grid, so nobody appends while the librarian rewrites. Licensed Apache-2.0.
 
 ---
 
