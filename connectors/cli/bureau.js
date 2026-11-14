@@ -619,6 +619,13 @@ async function backupKeygen(opt) {
   return 0;
 }
 
+// The public key again, worked out from the kept private key. Not a secret:
+// pipe it to the server's settings.
+async function backupPublicKey(opt) {
+  process.stdout.write(backupPublicOf(backupKey(hubHost(opt)).private_key) + '\n');
+  return 0;
+}
+
 async function backupExportKey(opt) {
   if (process.stdout.isTTY) {
     warn('bureau backup export-key only writes into a pipe, never to a terminal. For example: bureau backup export-key | pbcopy');
@@ -731,7 +738,7 @@ async function callJson(url, bearer, body) {
 }
 
 const BACKUP_COMMANDS = {
-  keygen: backupKeygen, 'export-key': backupExportKey, 'import-key': backupImportKey,
+  keygen: backupKeygen, 'public-key': backupPublicKey, 'export-key': backupExportKey, 'import-key': backupImportKey,
   'set-nextcloud': backupSetNextcloud, 'set-operator': backupSetOperator, verify: backupVerify, decrypt: backupDecryptFile,
 };
 async function backup(opt) {
@@ -750,6 +757,7 @@ const HELP = `bureau: sign in to a Bureau hub from a terminal.
 
 The off-server backup (the hub encrypts, only this Mac can read):
   bureau backup keygen [--force]       make the key pair, print the public key
+  bureau backup public-key             the public key again (not a secret)
   bureau backup export-key             the private key, into a pipe only
   bureau backup import-key             the private key back, from a pipe
   bureau backup set-nextcloud --url URL --user NAME [--dir DIR]   app password from a pipe
