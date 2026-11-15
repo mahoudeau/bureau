@@ -412,13 +412,14 @@ async function authRoute(req, res, url, p) {
       console.error('[auth] login:', e.message);
       return signInError(res, 502, 'Can\'t reach the sign-in service right now. Try again in a minute, or use a token instead.');
     }
-    setCookie(res, FLOW_COOKIE, security.signValue(a.flow), security.cookieAttrs(req, { path: '/auth', maxAge: 600 }));
+    // On a local hub the callback comes back under /h/<id>/auth: the cookie goes there.
+    setCookie(res, FLOW_COOKIE, security.signValue(a.flow), security.cookieAttrs(req, { path: `${c.localPrefix || ''}/auth`, maxAge: 600 }));
     res.writeHead(302, { location: a.url, 'cache-control': 'no-store' });
     return res.end();
   }
   if (req.method === 'GET' && p === '/auth/callback') {
     const flow = security.readSigned(security.parseCookies(req.headers.cookie)[FLOW_COOKIE]);
-    setCookie(res, FLOW_COOKIE, '', security.cookieAttrs(req, { path: '/auth', maxAge: 0 }));
+    setCookie(res, FLOW_COOKIE, '', security.cookieAttrs(req, { path: `${c.localPrefix || ''}/auth`, maxAge: 0 }));
     if (!c.webOn) return signInError(res, 404, 'Sign-in is not set up on this hub.');
     let who;
     try { who = await oidc.completeSignIn(url.searchParams, flow); } catch (e) {
@@ -480,6 +481,15 @@ const server = http.createServer(async (req, res) => {
   // A target no URL parser accepts (GET // HTTP/1.1) is the caller's to fix.
   try { url = new URL(req.url, 'http://x'); p = url.pathname; }
   catch { return send(res, 400, { error: 'bad request' }); }
+  // A hub on the owner's computer, paired with OMAKO, is known there as
+  // http://localhost:<port>/h/<its id> (lib/oidc.js): its sign-in callback and
+  // its agents' addresses carry that. Under it, the hub is the same hub. Its
+  // agents' resource metadata comes in both RFC 9728 spellings.
+  const local = oidc.config().localPrefix;
+  if (local) {
+    if (p === local || p.startsWith(`${local}/`)) p = p.slice(local.length) || '/';
+    else if (p.startsWith(`/.well-known/oauth-protected-resource${local}/`)) p = `/.well-known/oauth-protected-resource${p.slice(`/.well-known/oauth-protected-resource${local}`.length)}`;
+  }
 
   try {
     res.setHeader('x-content-type-options', 'nosniff');
@@ -792,6 +802,21 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ended });
     }
     if (req.method === 'GET' && p === '/api/omako') return send(res, 200, await omako.status());
+    // Sign in with OMAKO, from the setup guide or Settings (t-541): the hub
+    // pairs itself and hands back OMAKO's link. A hub on a server pairs at
+    // its https address; a hub opened on this computer, at http://localhost.
+    if (req.method === 'POST' && p === '/api/omako/pair') {
+      const pub = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
+      let hubUrl = null;
+      if (/^https:\/\//.test(pub)) hubUrl = pub;
+      else if (security.loopbackRequest(req) && (!pub || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(pub))) hubUrl = oidc.localOrigin();
+      if (!hubUrl) return send(res, 400, { error: 'This hub is opened from another computer, so OMAKO needs its https address: set BUREAU_PUBLIC_URL, restart the hub, and try again. On the hub\'s own computer, open it at http://localhost instead.' });
+      try {
+        return send(res, 200, await omako.pairFromDashboard(hubUrl, { onPaired: syncSignedInAgents }));
+      } catch (e) {
+        return send(res, /already paired/.test(e.message) ? 409 : 502, { error: /already paired/.test(e.message) ? e.message : `OMAKO: ${e.message}` });
+      }
+    }
     if (req.method === 'GET' && p === '/api/setup') return send(res, 200, setupStatus());
     if (req.method === 'GET' && p.startsWith('/api/setup/agent/')) {
       const name = decodeURIComponent(p.slice('/api/setup/agent/'.length));
@@ -1533,6 +1558,27 @@ try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep 
 contextCall.pruneLog();
 setInterval(() => contextCall.pruneLog(), 3600_000);
 try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
+// Once paired with OMAKO, every agent whose sign-in is already on gets its
+// address there, as hub/tools/omako.js sync does.
+// by: who confirmed the pairing at OMAKO. They connected the hub from its own
+// dashboard as its owner, so they sign in as its owner from now on.
+async function syncSignedInAgents(pair, by) {
+  const who = by && (by.email ? String(by.email).toLowerCase() : by.sub);
+  if (who && !store.settingsOf(store.load()).members[who]) {
+    const r = store.patchSettings({ members: { [who]: { role: 'owner' } } });
+    if (r && r.error) console.error('[omako] could not add the owner:', r.error);
+    else console.log(`[omako] ${who} connected this hub to OMAKO and signs in as its owner.`);
+  }
+  const agents = store.settingsOf(store.load()).agents || {};
+  const on = Object.entries(agents).filter(([, v]) => v && v.oauth).map(([name]) => ({ name, on: true }));
+  if (on.length) await omako.syncAgents(on);
+}
+// A local hub paired with OMAKO and started on another port: OMAKO follows.
+function followPort() {
+  omako.followPort()
+    .then((m) => { if (m) console.log(`[omako] this hub moved from ${m.from} to ${m.to}: sign-in and agent addresses follow.`); })
+    .catch((e) => console.error(`[omako] couldn't tell OMAKO about the new port: ${e.message}. Sign-in may fail until it can.`));
+}
 // A hub that made its own token and has not been opened yet: the one link that
 // gets its owner in, printed after the address so it is the last thing shown.
 function firstRunLink() {
@@ -1550,11 +1596,11 @@ function firstRunLink() {
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
     console.log('IPv6 unavailable, falling back to 0.0.0.0');
-    server.listen(PORT, '0.0.0.0', () => { console.log(`Bureau hub listening on 0.0.0.0:${PORT}`); firstRunLink(); });
+    server.listen(PORT, '0.0.0.0', () => { console.log(`Bureau hub listening on 0.0.0.0:${PORT}`); firstRunLink(); followPort(); });
   } else { console.error(`cannot listen on [${HOST}]:${PORT}: ${e.message}`); process.exit(1); }
 });
 // Past this point nothing a request does may end the process. A bug still
 // reaches the log, and the requests around it keep being served.
 process.on('unhandledRejection', (e) => console.error(`[hub] unhandled rejection: ${(e && e.stack) || e}`));
 process.on('uncaughtException', (e) => console.error(`[hub] uncaught exception: ${(e && e.stack) || e}`));
-server.listen(PORT, HOST, () => { console.log(`Bureau hub listening on [${HOST}]:${PORT}`); firstRunLink(); });
+server.listen(PORT, HOST, () => { console.log(`Bureau hub listening on [${HOST}]:${PORT}`); firstRunLink(); followPort(); });

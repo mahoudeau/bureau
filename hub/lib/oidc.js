@@ -57,10 +57,27 @@ function challengeText() {
   try { return fs.readFileSync(CHALLENGE_FILE, 'utf8').trim(); } catch { return null; }
 }
 
+// A hub on the owner's own computer, paired with OMAKO (t-541): OMAKO keeps it
+// as http://localhost:<port>/h/<hub id>, so that thousands of hubs at
+// localhost:8100 never mix. Its sign-in callback and its agents' addresses live
+// under that, on whatever port it runs on now (lib/omako.js tells OMAKO when
+// the port changes).
+const LOCAL_HUB_URL = /^http:\/\/localhost(?::\d+)?\/h\/(hub_[A-Za-z0-9_-]{16})$/;
+function localHubId(pair) {
+  const m = pair && typeof pair.hub_url === 'string' ? LOCAL_HUB_URL.exec(pair.hub_url) : null;
+  return m && m[1] === pair.hub_id ? m[1] : null;
+}
+const localOrigin = () => `http://localhost:${process.env.PORT || 8100}`;
+// The address a local hub would have now, or null for a hub on a domain.
+function localBase(pair) {
+  const id = localHubId(pair);
+  return id ? `${localOrigin()}/h/${id}` : null;
+}
+
 function config() {
   const pair = pairing();
   const issuer = (process.env.BUREAU_OIDC_ISSUER || (pair && pair.issuer) || '').replace(/\/$/, '');
-  const base = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
+  const base = (localBase(pair) || process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
   const owners = store.envOwners();
   // The dashboard's client: the env's, else the pairing's (only for the same issuer).
   const fromPair = pair && pair.issuer && pair.issuer.replace(/\/$/, '') === issuer;
@@ -71,6 +88,8 @@ function config() {
     scope: process.env.BUREAU_OIDC_SCOPE || 'bureau',
     cliClientId: process.env.BUREAU_OIDC_CLI_CLIENT_ID || 'bureau-cli',
     hubId: fromPair ? pair.hub_id || null : null,
+    // the /h/<id> a local hub's addresses carry, or null
+    localPrefix: fromPair && localHubId(pair) ? `/h/${localHubId(pair)}` : null,
     on: !!(issuer && base),
     webOn: !!(issuer && base && clientId),
   };
@@ -284,6 +303,6 @@ async function endSessionUrl(idToken) {
 function _reset() { meta = null; metaAt = 0; metaFor = ''; jwks = null; jwksFor = ''; emails.clear(); pairingCache = { mtime: -1, value: null }; }
 
 module.exports = {
-  config, pairing, challengeText, PAIRING_FILE, CHALLENGE_FILE, discovery, resourceMetadata, resourceFor, validAgent,
+  config, pairing, challengeText, PAIRING_FILE, CHALLENGE_FILE, discovery, resourceMetadata, resourceFor, validAgent, localHubId, localOrigin,
   agentPrincipal, roleOf, challenge, authorizeRequest, completeSignIn, endSessionUrl, looksLikeJwt, AuthError, AGENT_NAME, _reset,
 };
