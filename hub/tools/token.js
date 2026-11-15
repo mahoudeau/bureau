@@ -6,13 +6,14 @@
 //   node hub/tools/token.js list
 //   node hub/tools/token.js revoke <token-id>
 //
-// Reads BUREAU_BOSS_TOKEN and PORT from the environment or hub/.env, and the
-// hub's address from BUREAU_URL (default http://localhost:<PORT>).
+// Reads BUREAU_BOSS_TOKEN and PORT from the environment or hub/.env (or the
+// token the hub made itself, in its data folder), and the hub's address from
+// BUREAU_URL (default http://localhost:<PORT>).
 'use strict';
 require('../lib/env').load();
 
 const BASE = (process.env.BUREAU_URL || `http://localhost:${process.env.PORT || 8100}`).replace(/\/$/, '');
-const BOSS = process.env.BUREAU_BOSS_TOKEN;
+const BOSS = process.env.BUREAU_BOSS_TOKEN || require('../lib/firstrun').readBossToken();
 
 async function call(method, p, body) {
   const r = await fetch(BASE + p, { method, headers: { authorization: `Bearer ${BOSS}`, 'content-type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
@@ -25,7 +26,7 @@ const USAGE = 'usage: token.js mint <agent> <project,project|*> [label] | list |
 
 async function main() {
   const [cmd, a, b, label] = process.argv.slice(2);
-  if (!BOSS) throw new Error('BUREAU_BOSS_TOKEN is not set: this tool acts as the boss');
+  if (!BOSS) throw new Error('no boss token: set BUREAU_BOSS_TOKEN, or start the hub once with no token so it makes its own; this tool acts as the boss');
   if (cmd === 'mint' && a && b) {
     const t = await call('POST', '/api/tokens', { agent: a, projects: b.split(',').map(s => s.trim()).filter(Boolean), label });
     console.log(`minted ${t.id} for ${t.agent}, projects: ${t.projects.join(', ')}`);

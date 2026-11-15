@@ -12,7 +12,11 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const HUB = path.join(__dirname, '..', 'hub', 'server.js');
-const HUB_PORT = 8193, ISSUER_PORT = 8194, MIGRATE_PORT = 8186;
+const HUB_PORT = 8193, ISSUER_PORT = 8194, MIGRATE_PORT = 8186, LOCAL_PORT = 8187;
+// A hub on the owner's computer, paired as such: OMAKO knows it as
+// http://localhost:<port>/h/<its id> (section O).
+const LOCAL_ID = 'hub_localtesthub0001';
+const LOCAL_BASE = `http://localhost:${LOCAL_PORT}/h/${LOCAL_ID}`;
 const BASE = `http://127.0.0.1:${HUB_PORT}`;
 const ISSUER = `http://127.0.0.1:${ISSUER_PORT}`;
 const BOSS = 'boss-secret-token-for-oidc-test';
@@ -77,7 +81,7 @@ const issuer = http.createServer((req, res) => {
       codes.delete(f.get('code'));
       if (!c) return out(400, { error: 'invalid_grant' });
       if (crypto.createHash('sha256').update(f.get('code_verifier') || '').digest('base64url') !== c.challenge) return out(400, { error: 'invalid_grant', error_description: 'pkce' });
-      if (f.get('redirect_uri') !== `${BASE}/auth/callback`) return out(400, { error: 'invalid_grant', error_description: 'redirect' });
+      if (![`${BASE}/auth/callback`, `${LOCAL_BASE}/auth/callback`].includes(f.get('redirect_uri'))) return out(400, { error: 'invalid_grant', error_description: 'redirect' });
       const id_token = sign({ iss: ISSUER, sub: c.sub, aud: CLIENT_ID, nonce: c.nonce, iat: now(), exp: now() + 600, ...(c.badNonce ? { nonce: 'replayed' } : {}) }, { typ: null });
       const access_token = sign({ iss: ISSUER, sub: c.sub, aud: `${ISSUER}/userinfo`, scope: 'openid email profile', client_id: CLIENT_ID, iat: now(), exp: now() + 600 });
       return out(200, { token_type: 'Bearer', id_token, access_token, expires_in: 600 });
@@ -361,6 +365,54 @@ async function main() {
   check('notify is gone, the rest of the settings stay', migrated.settings.global.notify === undefined && migrated.settings.projects.general.notify === undefined && migrated.settings.projects.general.approval === 'in-session', migrated.settings);
   check('a copy was kept before migrating', fs.readdirSync(path.join(dir, 'migrate', 'data')).some((n) => n.startsWith('state.json.pre-migrate-')));
   check('the migrated hub answers', (await fetch(`${mBase}/health`)).ok);
+
+  console.log('O. A hub on the owner\'s computer: everything under /h/<id>');
+  const ld = path.join(dir, 'local', 'data');
+  fs.mkdirSync(ld, { recursive: true });
+  fs.writeFileSync(path.join(ld, 'omako.json'), JSON.stringify({ hub_id: LOCAL_ID, client_id: CLIENT_ID, client_secret: CLIENT_SECRET, issuer: ISSUER, hub_url: LOCAL_BASE, workspace_id: null }), { mode: 0o600 });
+  // no BUREAU_PUBLIC_URL and no issuer in the env: the pairing says it all
+  const lBase = await boot('local', LOCAL_PORT, { BUREAU_OIDC_OWNERS: OWNER_SUB, BUREAU_OMAKO_URL: 'http://127.0.0.1:9' });
+  const lcall = (method, p, { bearer, cookie, body } = {}) => fetch(lBase + p, { method, redirect: 'manual', headers: { ...(bearer ? { authorization: `Bearer ${bearer}` } : {}), ...(cookie ? { cookie } : {}), ...(body !== undefined ? { 'content-type': 'application/json' } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined })
+    .then(async (r) => { const text = await r.text(); let json = null; try { json = JSON.parse(text); } catch { /* html */ } return { status: r.status, json, text, headers: r.headers }; });
+  const lWk = (await lcall('GET', '/.well-known/bureau')).json;
+  check('its agents\' addresses carry its id', lWk.agents_url_template === `${LOCAL_BASE}/mcp/agent/{agent}` && lWk.sign_in === true && lWk.omako === true, lWk);
+  const prmA = await lcall('GET', `/.well-known/oauth-protected-resource/h/${LOCAL_ID}/mcp/agent/sol`);
+  const prmB = await lcall('GET', `/h/${LOCAL_ID}/.well-known/oauth-protected-resource/mcp/agent/sol`);
+  check('its resource metadata answers at the RFC 9728 address', prmA.status === 200 && prmA.json.resource === `${LOCAL_BASE}/mcp/agent/sol`, prmA.json);
+  check('and under its prefix', prmB.status === 200 && prmB.json.resource === `${LOCAL_BASE}/mcp/agent/sol`, prmB.json);
+  check('another id is not this hub', (await lcall('GET', '/.well-known/oauth-protected-resource/h/hub_someoneelse00001/mcp/agent/sol')).status === 404);
+  // the dashboard's sign-in comes back under the prefix
+  const lStart = await lcall('GET', '/auth/login?next=/');
+  const lLoc = new URL(lStart.headers.get('location'));
+  check('the sign-in goes out with the callback under /h/<id>', lLoc.searchParams.get('redirect_uri') === `${LOCAL_BASE}/auth/callback`, lLoc.searchParams.get('redirect_uri'));
+  const lFlowLine = (lStart.headers.getSetCookie ? lStart.headers.getSetCookie() : [lStart.headers.get('set-cookie')]).find((l) => l && l.startsWith('bureau_oidc='));
+  check('its flow cookie is scoped there, and not https-only on localhost', /Path=\/h\/hub_localtesthub0001\/auth/.test(lFlowLine) && !/Secure/.test(lFlowLine), lFlowLine);
+  const lCode = crypto.randomBytes(8).toString('hex');
+  codes.set(lCode, { sub: OWNER_SUB, nonce: lLoc.searchParams.get('nonce'), challenge: lLoc.searchParams.get('code_challenge') });
+  const lCb = await lcall('GET', `/h/${LOCAL_ID}/auth/callback?code=${lCode}&state=${encodeURIComponent(lLoc.searchParams.get('state'))}&iss=${encodeURIComponent(ISSUER)}`, { cookie: lFlowLine.split(';')[0] });
+  const lSession = cookieOf(lCb, 'bureau_session');
+  check('the callback under /h/<id> signs the owner in', lCb.status === 303 && !!lSession, { status: lCb.status, text: lCb.text.slice(0, 120) });
+  const lMe = (await lcall('GET', '/api/me', { cookie: lSession })).json;
+  check('as the owner', lMe && lMe.role === 'owner' && lMe.session === true, lMe);
+  // an agent at its /h/<id> address
+  await lcall('PATCH', '/api/settings', { bearer: BOSS, body: { agents: { sol: { oauth: { projects: ['*'] } } } } });
+  const lTok = sign({ iss: ISSUER, sub: OWNER_SUB, aud: `${LOCAL_BASE}/mcp/agent/sol`, scope: 'openid bureau offline_access', client_id: APP, client_name: 'Claude Code', iat: now(), exp: now() + 3600 });
+  const lMcp = async (token) => {
+    const r = await fetch(`${lBase}/h/${LOCAL_ID}/mcp/agent/sol`, { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'whoami', arguments: {} } }) });
+    const j = await r.json().catch(() => null);
+    return { status: r.status, text: j && j.result ? j.result.content[0].text : '', isError: !j || !j.result || j.result.isError };
+  };
+  let lr = await lMcp(lTok);
+  check('a new app at the /h/<id> address waits for the owner', lr.status === 200 && lr.isError && /waiting for an owner/.test(lr.text), lr);
+  const lApps = (await lcall('GET', '/api/apps', { bearer: BOSS })).json.apps;
+  const lApp = lApps.find((x) => x.agent === 'sol');
+  if (lApp) await lcall('POST', `/api/apps/${lApp.id}`, { bearer: BOSS, body: { status: 'allowed' } });
+  lr = await lMcp(lTok);
+  check('allowed, it works as sol', lr.status === 200 && !lr.isError && /sol/.test(lr.text), lr);
+  const bare = sign({ iss: ISSUER, sub: OWNER_SUB, aud: `http://localhost:${LOCAL_PORT}/mcp/agent/sol`, scope: 'openid bureau offline_access', client_id: APP, iat: now(), exp: now() + 3600 });
+  check('a token for the bare localhost address is refused: it could be anyone\'s hub', (await lMcp(bare)).status === 401);
+  const st = (await lcall('GET', '/api/setup', { bearer: BOSS })).json;
+  check('the guide knows it is on this computer', st.local === true && st.hub_url === LOCAL_BASE, { local: st.local, hub_url: st.hub_url });
 }
 
 main().catch((e) => { FAIL++; console.error(e); }).finally(() => {

@@ -6,6 +6,17 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+### Added
+- **A first run in one step.** `node server.js` on a fresh clone, then click the link it prints. A hub started with no token makes its own boss token, keeps it in `data/boss-token` (0600), runs strict, and prints a one-time link that signs the browser in as the owner and opens the setup guide. No env file to copy, no token to make or paste. The link works once and lasts 24 hours; `node tools/sign-in-link.js` prints a new one any time, good for an hour. Docker: the link is in `docker compose logs`.
+- **Sign in with OMAKO in one click**, in the setup guide and in Settings, Sign-in: the hub pairs itself and opens OMAKO's page. No terminal, no restart. Whoever confirms becomes the hub's owner, so there's no `BUREAU_OIDC_OWNERS` to set. `node tools/omako.js pair` still works on a server.
+- **A hub on your own computer signs in with OMAKO too.** It pairs as `http://localhost:<port>`, and OMAKO knows it as `http://localhost:<port>/h/<its id>`, so everyone can run one on 8100 without mixing them up. Its sign-in and its agents' addresses carry that id. Start it on another port and it tells OMAKO by itself. Agents that run on the same computer reach it, like Claude Code (`claude mcp add`) and the terminal; apps that connect from the cloud, like claude.ai, can't, and the guide says so and walks you through Claude Code instead.
+- `POST /api/setup/claim` (the first-run key, no credential) and `POST /api/omako/pair` (owners). `GET /api/omako` and the guide's status carry `local`.
+
+### Changed
+- `hub/.env.example` has nothing uncommented: a new hub needs no settings. The placeholder `BUREAU_TOKEN` is gone from it.
+- `tools/token.js` uses the hub's own boss token when `BUREAU_BOSS_TOKEN` isn't set.
+- A hub that already holds data and lost its tokens still refuses to start, as before: the hub makes its own token only on a brand-new data folder.
+
 ## [0.5.6] - 2026-11-15
 
 ### Added

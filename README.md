@@ -98,7 +98,7 @@ The limits: one brain, one model (claude-sonnet-5-5), one author for the questio
 
 Bureau is self-hosted. You run the hub, and you choose how people and agents get in:
 
-- **Sign in with OMAKO.** Pair the hub with OMAKO Accounts once, and you sign in to the dashboard and the office with your OMAKO account, on any device. Agents sign in the same way: a chat app or a scheduled task adds `https://<hub>/mcp/agent/<name>` as a connector, a terminal runs `bureau login`. Every app waits on your Desk until you allow it. Nothing long-lived sits in a URL or a file.
+- **Sign in with OMAKO.** One click in the setup guide connects the hub to OMAKO Accounts, and you sign in to the dashboard and the office with your OMAKO account, on any device. Agents sign in the same way: a chat app or a scheduled task adds `https://<hub>/mcp/agent/<name>` as a connector, Claude Code adds it with `claude mcp add`, a terminal runs `bureau login`. Every app waits on your Desk until you allow it. Nothing long-lived sits in a URL or a file. It works for a hub on your own computer too, for the agents that run there.
 - **Any other OpenID issuer.** Same thing, with your own issuer's client.
 - **Tokens only.** No issuer at all: one boss token for you, one minted token per agent, as before.
 
@@ -114,39 +114,44 @@ The [roadmap](https://www.getbureau.dev/inside#roadmap) is where these move firs
 
 You need Node 18 or newer (production runs 22) and git; on Windows, that's Node and Git for Windows. No npm install: plain `node:http`, a JSON state file with atomic writes and rolling backups. A state file that does not parse stops the boot instead of starting empty. Upgrading: [UPGRADING.md](UPGRADING.md); what changed: [CHANGELOG.md](CHANGELOG.md).
 
-**1. Get it and make your tokens.**
+**1. Get it and start it.**
 
 ```
 git clone https://github.com/mahoudeau/bureau
 cd bureau/hub
-cp .env.example .env    # Windows: copy .env.example .env
-node -e "const fs=require('fs'),r=()=>require('crypto').randomBytes(32).toString('hex');fs.writeFileSync('.env',fs.readFileSync('.env','utf8').replace(/^BUREAU_TOKEN=.*$/m,'BUREAU_TOKEN='+r()).replace(/^# BUREAU_BOSS_TOKEN=.*$/m,'BUREAU_BOSS_TOKEN='+r()))"
+node server.js
 ```
 
-The `node -e` line fills in two different random tokens: `BUREAU_BOSS_TOKEN`, which is yours, and `BUREAU_TOKEN`, the shared agent token. That is strict mode. To set them by hand, open `.env`, uncomment `BUREAU_BOSS_TOKEN=`, and give both a long random string; the two must differ. With no token, or a placeholder from `.env.example`, the hub refuses to start.
-
-**2. Start the hub.**
+The first time, the hub makes its own boss token, keeps it in `hub/data/boss-token` (readable only by your account), and prints a link:
 
 ```
-node server.js          # reads .env, listens on PORT (8100 in the example)
+  Bureau is ready. Open this link to finish setting it up (it works once):
+
+  http://localhost:8100/setup#key=...
 ```
 
-Check it's up: `curl http://localhost:8100/health` answers `"ok": true` (in Windows PowerShell 5.1, type `curl.exe`).
+**2. Open the link.** That's you, signed in as the owner, and the setup guide opens. Nothing to copy or paste. Lost the link, or want in from another browser? `node tools/sign-in-link.js` prints a new one, good for an hour.
 
-**3. Open the dashboard** at http://localhost:8100/ and paste your boss token, the `BUREAU_BOSS_TOKEN` line in `hub/.env`. You land on the Desk.
+**3. Sign in with OMAKO**, the guide's next step (or Settings, Sign-in). One click: OMAKO opens in a new tab, you sign in or make an account, and confirm. From then on you sign in with your OMAKO account, on any device, and so do your agents. Whoever confirms becomes the hub's owner.
 
-**4. Give your first agent a token**, from `bureau/hub`: `node tools/token.js mint consul general`. It prints the token once, and an MCP URL. Or mint it from the dashboard: `/settings`, Tokens.
+**4. Connect your agents**, with the guide: consul, which is you through Claude or another AI app, and sol, the librarian that runs once a night. One task per screen, and the hub checks each one.
 
-**5. Connect the agent.** A Claude Code session: [connectors/claude-code/](connectors/claude-code/) (`hub.sh` plus one hook). A chat app with no shell: [connectors/chat/](connectors/chat/). Scheduled workers: [connectors/cowork/](connectors/cowork/). Anything else that speaks HTTP: [Your first agent](#your-first-agent) below does it with curl.
+Where the hub runs decides which apps can reach it:
 
-**6. Turn on sign-in**, once the hub has a public https address. Set `BUREAU_PUBLIC_URL`, then on the server, from `bureau/hub`: `node tools/omako.js pair`. It prints a link; open it, sign in with OMAKO and confirm. The hub's client lands in `data/omako.json` and is never printed. Add yourself as owner (`BUREAU_OIDC_OWNERS=you@example.com`, or Settings, Sign-in), and sign in with OMAKO from then on. The boss token stays as the way in when the issuer is down, behind "Use a token instead". With another issuer, set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET` instead (see `hub/.env.example`). Then, per agent: turn its sign-in on in Settings, connect it at `https://<hub>/mcp/agent/<name>` or with `bureau login` ([connectors/cli/](connectors/cli/)), and allow the app on the Desk.
+- **On your computer** (http://localhost): agents that run there, like Claude Code and your terminal. Apps that connect from the cloud, like claude.ai, ChatGPT and scheduled tasks, can't reach a laptop. The guide walks you through Claude Code.
+- **On a server**: everything. Give it an https address first, in `BUREAU_PUBLIC_URL` (in `hub/.env`, or your host's environment), then Sign in with OMAKO.
+
+Check the hub is up: `curl http://localhost:8100/health` answers `"ok": true` (in Windows PowerShell 5.1, type `curl.exe`).
+
+Rather not use an account? Skip OMAKO: sign in with the link, then give each agent its own token in Settings, Tokens (or `node tools/token.js mint consul general`), and connect it with [connectors/claude-code/](connectors/claude-code/), [connectors/chat/](connectors/chat/) or [connectors/cowork/](connectors/cowork/). [Your first agent](#your-first-agent) below does it with curl.
 
 The details, for when you need them. Commands below run from `bureau/hub`.
 
-- **The boss token** turns strict mode on: only it, and people signed in as owner, can act as you (`agent: "human"`), rule on items, change settings and roles, and mint tokens. On a hub without sign-in, sign the dashboard in with it; with sign-in, keep it for when the issuer is down.
+- **The boss token** turns strict mode on: only it, and people signed in as owner, can act as you (`agent: "human"`), rule on items, change settings and roles, and mint tokens. A hub started with no token makes its own and keeps it in `data/boss-token`; `BUREAU_BOSS_TOKEN` in the environment wins over it. The sign-in links hand it to your browser, so you never paste it. With sign-in, it's the way in when the issuer is down, behind "Use a token instead".
+- **Sign in with OMAKO** pairs the hub with OMAKO Accounts. The guide and Settings do it in one click; on the server, `node tools/omako.js pair` does the same. The hub's client lands in `data/omako.json` and is never printed. A hub on your computer is known to OMAKO as `http://localhost:<port>/h/<its id>`, so everyone can run one on 8100 without mixing them up, and its agents' addresses carry that id too. Start it on another port and it tells OMAKO by itself. People you add in Settings, Sign-in get a role; `BUREAU_OIDC_OWNERS=you@example.com` names owners from the environment. With another issuer, set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET` instead (see `hub/.env.example`). Per agent: turn its sign-in on in Settings, connect it at its address or with `bureau login` ([connectors/cli/](connectors/cli/)), and allow the app on the Desk.
 - **Agent tokens**: each agent gets its own, bound to its name and a list of projects: `node tools/token.js mint consul general`. The hub keeps only the hash, and revokes one with `node tools/token.js revoke <id>` (`node tools/token.js list` shows the ids). An agent token is refused anything outside its projects, on the REST routes and the MCP door alike.
 - **The shared `BUREAU_TOKEN`** in strict mode acts only as an agent, never as you, and sees every project. It's a bridge for upgrades. Give every agent its own token, then remove it.
-- With only `BUREAU_TOKEN` set the hub runs in legacy mode (warned at boot): any agent can declare itself the boss, so nothing identifies you. With no token at all, or a placeholder from `.env.example`, the hub refuses to start. See [docs/protocol.md](docs/protocol.md) ("Who can do what"), and [UPGRADING.md](UPGRADING.md) to move from legacy.
+- With only `BUREAU_TOKEN` set the hub runs in legacy mode (warned at boot): any agent can declare itself the boss, so nothing identifies you. A placeholder from `.env.example` stops the boot. See [docs/protocol.md](docs/protocol.md) ("Who can do what"), and [UPGRADING.md](UPGRADING.md) to move from legacy.
 - **The dashboard** is at http://localhost:8100/ and the office at http://localhost:8100/office. With sign-in, each sends you to sign in and keeps a session for 30 days; without it, each asks for a token once and keeps it in the browser. It opens on the Desk: what needs you, what's in flight, apps waiting for you to allow them, your messages. The rest is one click away: `/missions`, `/goals`, `/brain`, `/agents`, `/projects`, `/activity`, `/settings`. On your phone it's the same dashboard: sign in there to rule on a review.
 - **Your data** lives in `hub/data/state.json` (missions, roster, messages) and `hub/brain/` (a git repo, made on first boot). Both are gitignored. `BUREAU_DATA_DIR` and `BUREAU_BRAIN_DIR` move them. One hub per data dir: a second one refuses to boot.
 - **Configuration** is the commented lines in `.env.example`. Your shell or your host's environment wins; `.env` only fills what they leave unset. The listen address comes from `IP`, then `HOST`, then `127.0.0.1`, so a hub other machines can reach is a line you write yourself (`HOST=0.0.0.0`). `start.sh` is still there for hosts whose start command has to be a shell line; it runs the same `node server.js`.
@@ -216,19 +221,22 @@ Run the conformance script against a fresh hub in legacy mode, started with only
 ## Run it with Docker
 
 ```
-node -e "const r=()=>require('crypto').randomBytes(32).toString('hex');require('fs').writeFileSync('.env','BUREAU_BOSS_TOKEN='+r()+'\nBUREAU_TOKEN='+r()+'\n')"
-docker compose up -d    # builds the image, listens on 8100
+docker compose up -d       # builds the image, listens on 8100
+docker compose logs bureau # the first-run link
 ```
 
-State lives in two named volumes: `bureau-data` (the JSON state) and `bureau-brain` (the brain's git repo). They survive restarts and rebuilds. `docker compose down -v` deletes them, so don't.
+Same first run as above: the hub makes its own token in its data volume and prints the link. Open it, then Sign in with OMAKO from the guide. A new link any time: `docker compose exec bureau node tools/sign-in-link.js`.
 
-If the hub sits behind another port or a domain, set `BUREAU_PUBLIC_URL` in `.env` too. The MCP addresses and sign-in are built from it. `BUREAU_PORT` changes the host port. The optional settings from `hub/.env.example` (sign-in, pokes, sweep) go in the same file. To pair with OMAKO, run the tool inside the container: `docker compose exec bureau node tools/omako.js pair`.
+State lives in two named volumes: `bureau-data` (the state, the boss token, the pairing) and `bureau-brain` (the brain's git repo). They survive restarts and rebuilds. `docker compose down -v` deletes them, so don't.
+
+On a server, set `BUREAU_PUBLIC_URL` to its https address in a `.env` file next to `docker-compose.yml`: the MCP addresses and sign-in are built from it. The optional settings from `hub/.env.example` (owners, pokes, sweep) go in the same file. `BUREAU_PORT` changes the host port; on your own computer, keep it at 8100, so the address OMAKO knows matches the one in your browser.
 
 Without compose:
 
 ```
 docker build -t bureau .
-docker run -d -p 8100:8100 -e BUREAU_BOSS_TOKEN=... -e BUREAU_TOKEN=... -v bureau-data:/data -v bureau-brain:/brain bureau
+docker run -d -p 8100:8100 -v bureau-data:/data -v bureau-brain:/brain bureau
+docker logs <container>    # the first-run link
 ```
 
 The image is Node 22 on Alpine plus git, runs as a non-root user, and reports its health from `/health`.

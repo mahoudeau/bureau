@@ -12,8 +12,8 @@
 //                          makes a new one any time (shell access to the server
 //                          is ownership already).
 //
-// A hub on the old shared token alone (legacy), or on the local demo opt-in,
-// is left exactly as it was.
+// A hub on the old shared token alone (legacy), on the local demo opt-in, or
+// one that already holds data, is left exactly as it was.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -54,6 +54,10 @@ function ensureBossToken(env = process.env) {
   let token = readTrim(TOKEN_FILE);
   let made = false;
   if (!token) {
+    // Only on a brand-new hub. A hub that already holds data and lost its
+    // tokens (an env file gone missing) refuses to start, as it always has,
+    // rather than come up with a new owner link in its log.
+    if (['state.json', 'bureau.db'].some((f) => fs.existsSync(path.join(DATA_DIR, f)))) return { source: 'none', made: false };
     token = crypto.randomBytes(32).toString('hex');
     writeSecret(TOKEN_FILE, `${token}\n`);
     made = true;
@@ -61,6 +65,9 @@ function ensureBossToken(env = process.env) {
   env.BUREAU_BOSS_TOKEN = token;
   return { source: 'file', made };
 }
+
+// The token the hub made itself, without making one: for the tools.
+const readBossToken = () => readTrim(TOKEN_FILE);
 
 // Has a first-run link been opened on this hub?
 const setupDone = () => fs.existsSync(DONE_FILE);
@@ -92,4 +99,4 @@ function linkFor(key, port, env = process.env) {
   return `${base}/setup#key=${key}`;
 }
 
-module.exports = { ensureBossToken, setupDone, mintKey, claim, linkFor, TOKEN_FILE, KEY_FILE, DONE_FILE, BOOT_LINK_MS, TOOL_LINK_MS };
+module.exports = { ensureBossToken, readBossToken, setupDone, mintKey, claim, linkFor, TOKEN_FILE, KEY_FILE, DONE_FILE, BOOT_LINK_MS, TOOL_LINK_MS };
