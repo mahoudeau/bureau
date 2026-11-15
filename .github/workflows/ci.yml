@@ -71,6 +71,10 @@ jobs:
       - name: Journal round trip (test/journal.test.js)
         run: node test/journal.test.js
 
+      # Stats: hand-made missions whose numbers are known, in two time zones.
+      - name: Stats (test/stats.test.js)
+        run: node test/stats.test.js
+
       # Search and the walls between projects. Starts its own hub on port 8193.
       - name: Search (test/index.test.js)
         run: node test/index.test.js
@@ -357,6 +361,9 @@ jobs:
 
       - name: Journal round trip (test/journal.test.js)
         run: node test/journal.test.js
+
+      - name: Stats (test/stats.test.js)
+        run: node test/stats.test.js
 
       - name: Apply (test/apply.test.js)
         run: node test/apply.test.js

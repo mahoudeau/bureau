@@ -373,7 +373,24 @@ function recentCommits(n = 20) {
   } catch { return []; }
 }
 
+// Every brain commit since an instant, with the files it touched, for the
+// stats (lib/stats.js). Capped, newest first; [] when git has nothing.
+function commitsSince(sinceIso, max = 20000) {
+  ensureRepo();
+  try {
+    const out = git(['log', `--since=${sinceIso}`, `-${max}`, '--name-only', '--pretty=format:@@%an|%aI|%s'], { maxBuffer: 64 * 1024 * 1024 });
+    const list = [];
+    for (const line of out.split('\n')) {
+      if (line.startsWith('@@')) {
+        const [author, date, ...msg] = line.slice(2).split('|');
+        list.push({ author, date, message: msg.join('|'), files: [] });
+      } else if (line.trim() && list.length) list[list.length - 1].files.push(line.trim());
+    }
+    return list;
+  } catch { return []; }
+}
+
 module.exports = {
-  ensureRepo, checkGit, writeKnowledge, writeLintErrors, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, renameProjectDir, moveFile, intakeSweep,
+  ensureRepo, checkGit, writeKnowledge, writeLintErrors, readKnowledge, readKnowledgeRaw, listKnowledge, recentCommits, commitsSince, renameProjectDir, moveFile, intakeSweep,
   curatedCompartment, toPosix, normRel, pathError, BRAIN_DIR, BINARY_RE, FILE_RE, FILE_TYPES_ERROR, MAX_ATTACHMENT, MIME,
 };
