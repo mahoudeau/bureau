@@ -82,7 +82,8 @@ const keyIn = (text) => (/\/setup#key=([A-Za-z0-9_-]+)/.exec(text) || [])[1];
   check('and no token is made', !fs.existsSync(path.join(DIR, 'legacy', 'boss-token')));
   const d3 = path.join(DIR, 'old');
   fs.mkdirSync(d3, { recursive: true });
-  fs.copyFileSync(path.join(DIR, 'data', 'state.json'), path.join(d3, 'state.json'));
+  // the store's file: state.json, or bureau.db with BUREAU_STORE=sqlite
+  for (const f of ['state.json', 'bureau.db']) if (fs.existsSync(path.join(DIR, 'data', f))) fs.copyFileSync(path.join(DIR, 'data', f), path.join(d3, f));
   const old = spawnSync(process.execPath, [path.join(ROOT, 'hub/server.js')], { env: { ...env, BUREAU_DATA_DIR: d3, BUREAU_BRAIN_DIR: path.join(DIR, 'brain-old') }, encoding: 'utf8', timeout: 10000 });
   check('a hub that holds data and lost its tokens still refuses to boot', old.status === 1 && /will not start/.test(old.stderr + old.stdout), (old.stderr + old.stdout).slice(0, 300));
   check('and makes no token', !fs.existsSync(path.join(d3, 'boss-token')));
