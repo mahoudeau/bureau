@@ -9,6 +9,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Added
 - **A look of your own.** Settings, Appearance: Paper or Ink as before, then Marker or Pencil. Marker is Bureau as it was, bold and sharp. Pencil is softer and vintage, with less contrast, never under 4.5 to 1. A colour for every mode: Pure (black and white), Grey, Olive, Green and Amber, the last four the office's own palettes. And the ground behind the sheets: Dots (as before), Fine dither, Scanlines, Solid, Gradient or Dithered fade. Kept in the browser and applied before the first paint; another tab follows at once.
 - The office follows the colour by default. Picking an office palette by hand turns that off.
+- The first-run guide opens on "Make it yours": the same look picker, before connecting consul and sol.
 
 ## [0.5.5] - 2026-11-14
 
