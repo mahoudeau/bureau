@@ -6,6 +6,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.6] - 2026-11-15
+
 ### Added
 - **Insights.** A new page in the dashboard's main nav: missions filed and closed per day, week or month, the time from claim to done, the wait in your review, how many waited on you at the end of each period, your rulings (chat approvals included), per project, per agent, and brain commits per author and compartment. A calendar of every day opens that day in order: claims, closes, approvals and brain commits, hour by hour. Filters by project and agent. Days are counted in the browser's time zone.
 - A "This week" card on the Desk: done, filed and waiting since Monday, and the seven days.
