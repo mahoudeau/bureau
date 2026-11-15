@@ -3,6 +3,10 @@
 'use strict';
 // hub/.env first: lib/store.js and lib/knowledge.js read their dirs at load
 require('./lib/env').load();
+// A hub started with no token makes its own boss token, before anything reads
+// the tokens (lib/firstrun.js).
+const firstRun = require('./lib/firstrun');
+const BOSS_FROM = firstRun.ensureBossToken();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -535,6 +539,15 @@ const server = http.createServer(async (req, res) => {
       if (!ch) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(ch);
+    }
+    // A first-run link (lib/firstrun.js): its one-time key, traded once for the
+    // boss token, which the browser then keeps as if it had been pasted.
+    if (req.method === 'POST' && p === '/api/setup/claim') {
+      const body = await readBody(req).catch(() => null);
+      const key = body && typeof body.key === 'string' ? body.key : '';
+      if (store.authMode() !== 'strict' || !firstRun.claim(key)) return send(res, 403, { error: 'This link has been used or has expired. On the server, node tools/sign-in-link.js makes a new one.' });
+      console.log('First-run link opened: the browser that opened it is signed in as the owner.');
+      return send(res, 200, { token: process.env.BUREAU_BOSS_TOKEN });
     }
 
     // ----- Dashboard sign-in (doc 30, C4): code flow + PKCE on the server -----
@@ -1520,15 +1533,28 @@ try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep 
 contextCall.pruneLog();
 setInterval(() => contextCall.pruneLog(), 3600_000);
 try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
+// A hub that made its own token and has not been opened yet: the one link that
+// gets its owner in, printed after the address so it is the last thing shown.
+function firstRunLink() {
+  if (BOSS_FROM.source !== 'file' || firstRun.setupDone()) return;
+  const link = firstRun.linkFor(firstRun.mintKey(firstRun.BOOT_LINK_MS), PORT);
+  console.log('');
+  console.log('  Bureau is ready. Open this link to finish setting it up (it works once):');
+  console.log('');
+  console.log(`  ${link}`);
+  console.log('');
+  console.log('  Lost it? On this machine, run: node tools/sign-in-link.js');
+  console.log('');
+}
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
     console.log('IPv6 unavailable, falling back to 0.0.0.0');
-    server.listen(PORT, '0.0.0.0', () => console.log(`Bureau hub listening on 0.0.0.0:${PORT}`));
+    server.listen(PORT, '0.0.0.0', () => { console.log(`Bureau hub listening on 0.0.0.0:${PORT}`); firstRunLink(); });
   } else { console.error(`cannot listen on [${HOST}]:${PORT}: ${e.message}`); process.exit(1); }
 });
 // Past this point nothing a request does may end the process. A bug still
 // reaches the log, and the requests around it keep being served.
 process.on('unhandledRejection', (e) => console.error(`[hub] unhandled rejection: ${(e && e.stack) || e}`));
 process.on('uncaughtException', (e) => console.error(`[hub] uncaught exception: ${(e && e.stack) || e}`));
-server.listen(PORT, HOST, () => console.log(`Bureau hub listening on [${HOST}]:${PORT}`));
+server.listen(PORT, HOST, () => { console.log(`Bureau hub listening on [${HOST}]:${PORT}`); firstRunLink(); });

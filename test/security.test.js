@@ -202,10 +202,18 @@ async function finding3() {
 
 async function finding5() {
   console.log('5. the hub will not start open, and browsers stay same-origin');
-  let r = bootExit('f5a', 8205, { BUREAU_TOKEN: undefined });
-  check('no token: refuses to boot', r.status === 1 && /BUREAU_TOKEN/.test(r.stderr + r.stdout), { status: r.status, out: (r.stderr || r.stdout || '').slice(0, 200) });
-  check('the refusal names the opt-in', /BUREAU_ALLOW_INSECURE_LOCAL/.test(r.stderr + r.stdout), (r.stderr || r.stdout || '').slice(0, 200));
-  r = bootExit('f5b', 8205, { BUREAU_TOKEN: 'change-me-long-random-string' });
+  // No token at all: the hub makes its own boss token (lib/firstrun.js) and
+  // starts strict, never open. The only way in is the one-time link it prints.
+  const fresh = await boot('f5a', 8205, { BUREAU_TOKEN: undefined });
+  await sleep(300);
+  check('no token: boots strict on its own token', fresh.alive() && /Auth mode: strict/.test(fresh.log()), fresh.log().slice(0, 300));
+  check('and prints a one-time link', /\/setup#key=[A-Za-z0-9_-]{20,}/.test(fresh.log()), fresh.log().slice(-300));
+  if (fresh.alive()) {
+    const open = await fresh.api('GET', '/api/tasks', undefined, { authorization: '' });
+    check('with no credential, it answers 401', open.code === 401, open.code);
+  }
+  await stop(fresh);
+  let r = bootExit('f5b', 8205, { BUREAU_TOKEN: 'change-me-long-random-string' });
   check('the .env.example placeholder: refuses to boot', r.status === 1, { status: r.status });
   r = bootExit('f5c', 8205, { BUREAU_TOKEN: undefined, BUREAU_ALLOW_INSECURE_LOCAL: '1', HOST: '0.0.0.0' });
   check('the opt-in does not cover a public bind', r.status === 1, { status: r.status });

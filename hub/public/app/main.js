@@ -43,6 +43,24 @@ function guard(route, url) {
   return null;
 }
 
+// A first-run or sign-in link (#key=, printed by the hub or by
+// tools/sign-in-link.js): its one-time key, traded for the hub's token, kept
+// here as if it had been pasted. A spent link goes to sign-in, which says why.
+async function takeSetupKey() {
+  const m = /[#&]key=([^&]*)/.exec(location.hash);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search);
+  let key = '';
+  try { key = decodeURIComponent(m[1]); } catch { return; }
+  try {
+    const r = await fetch('/api/setup/claim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ key }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.token) { api.setToken(j.token); return; }
+    try { sessionStorage.setItem('bureau_link_error', j.error || 'This link has been used or has expired.'); } catch { /* sign-in shows nothing extra */ }
+  } catch { /* the hub is unreachable: the page says so on its own */ }
+}
+await takeSetupKey();
+
 window.BureauHub.takeUrlToken();
 // A #token= pasted over an open tab doesn't load a page, so nothing else sees it.
 window.addEventListener('hashchange', () => {
