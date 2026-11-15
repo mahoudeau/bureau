@@ -1,0 +1,45 @@
+# Publishes the GitHub Release for every release tag, with the summary written
+# in docs/releases/<tag>.md on main. CI refuses a version bump without that
+# file, so it is there by the time the tag is pushed. If it is not, this run
+# fails and says so; write the file, merge it, then run this workflow by hand
+# with the tag. The Docker image is release-image.yml's job, not this one's.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag to publish, e.g. v0.5.7'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          notes="docs/releases/$TAG.md"
+          if [ ! -f "$notes" ]; then
+            echo "::error::$notes is missing on main. Write the release summary, merge it, then run this workflow with tag $TAG."
+            exit 1
+          fi
+          # A pre-release (v0.6.0-rc1) never becomes Latest.
+          extra=""
+          case "$TAG" in *-*) extra="--prerelease --latest=false" ;; esac
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file "$notes"
+          else
+            gh release create "$TAG" --title "$TAG" --notes-file "$notes" --verify-tag $extra
+          fi
