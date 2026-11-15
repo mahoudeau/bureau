@@ -11,6 +11,7 @@ import { setupStatus } from '../setup/banner.js';
 import { CHAT_PREFERENCE, CLAUDE_MD } from '../setup/texts.js';
 import { runWizard } from '../setup/wizard.js';
 import { HELLO, genericSteps, signinStep } from '../setup/generic.js';
+import { lookPicker } from '../setup/look-picker.js';
 
 const CONNECTORS_URL = 'https://claude.ai/new#customize/connectors';
 const PROFILE_URL = 'https://claude.ai/settings/profile';
@@ -63,6 +64,9 @@ function steps(s) {
         [h('strong', null, 'Sol'), ' is the librarian. Once a night it tidies what the day wrote down, and leaves you a short digest to approve.'],
         'You connect each one once, with your account. One thing at a time, about ten minutes.'],
       action: { type: 'none' }, next: 'Start' },
+    { id: 'look', ch: 'Start', title: 'Make it yours',
+      text: ['Pick how Bureau looks: paper or ink, marker or pencil, a colour and the ground behind the pages. It changes as you click, and you can change it any time in Settings, Appearance.'],
+      action: { type: 'show', render: () => lookPicker() } },
   ];
   if (!s.sign_in) list.push(signinStep(s));
   list.push(

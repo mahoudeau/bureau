@@ -5,38 +5,34 @@
 import { h } from '../dom.js';
 import * as api from '../api.js';
 import * as store from '../store.js';
-import { THEMES, getTheme, setTheme } from '../theme.js';
 import { confirmButton, emptyState, timeTag, toast } from '../ui.js';
 import { BOSS_ONLY, copyButton, field, message, notice, refusal, section, table } from './kit.js';
 import { POLICIES, globalSelect, projectSelect } from './approval.js';
-
-const THEME_WORDS = { system: 'System', paper: 'Paper', ink: 'Ink' };
-const THEME_HINT = { system: 'Follows your machine.', paper: 'Ink on paper.', ink: 'Paper on ink.' };
+import { lookPicker } from './look-picker.js';
 
 // ---- Appearance ----
+// Paper or Ink, Marker or Pencil, a colour and a ground (setup/look-picker.js,
+// shared with the first-run guide), then the office's own palette.
 
-export function appearance() {
-  const hint = h('p', { class: 'om-data-s set-hint' });
-  const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Theme' });
-  function paint() {
-    const now = getTheme();
-    hint.textContent = THEME_HINT[now];
-    seg.replaceChildren(...THEMES.map((name) => h('button', {
-      type: 'button',
-      'aria-pressed': name === now ? 'true' : 'false',
-      onClick() {
-        setTheme(name);
-        paint();
-        seg.querySelector('[aria-pressed="true"]').focus();
-      },
-    }, THEME_WORDS[name])));
-  }
-  paint();
-  return h('div', { class: 'set-sections' }, section('Theme', null, seg, hint), officePalette());
+const looks = () => window.BureauLooks;
+
+export function appearance(ctx) {
+  const picker = lookPicker();
+  const office = officePalette();
+  const repaint = () => office.paint();
+  window.addEventListener('bureau:look', repaint);
+  window.addEventListener('storage', repaint);
+  if (ctx && ctx.onCleanup) ctx.onCleanup(() => {
+    window.removeEventListener('bureau:look', repaint);
+    window.removeEventListener('storage', repaint);
+    picker.stop();
+  });
+  return h('div', { class: 'set-sections' }, section('Look', null, picker), office.node);
 }
 
-// The office keeps its own four-shade palettes; the dashboard stays ink and
-// paper. Same key as office.html, which follows a change made here at once.
+// The office keeps its own four-shade palettes. With "the office uses the
+// same colour" on, the Look's colour sets it; picking here turns that off.
+// Same key as office.html, which follows a change made here at once.
 const OFFICE_KEY = 'bureau_office_palette';
 const OFFICE_PALETTES = [['pocket', 'Grey'], ['olive', 'Olive'], ['dmg', 'Green'], ['amber', 'Amber']];
 const OFFICE_HINT = { pocket: 'Pocket grey. The default.', olive: 'Olive, the first office.', dmg: 'The original pea green.', amber: 'Warm amber, like an old monitor.' };
@@ -51,19 +47,24 @@ function officePalette() {
   const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Office palette' });
   function paint() {
     const now = read();
-    hint.textContent = OFFICE_HINT[now];
+    const p = looks().get();
+    hint.textContent = p.follow && p.colour !== 'pure'
+      ? `${OFFICE_HINT[now]} Follows the Look's colour; picking one here stops that.`
+      : OFFICE_HINT[now];
     seg.replaceChildren(...OFFICE_PALETTES.map(([key, word]) => h('button', {
       type: 'button',
       'aria-pressed': key === now ? 'true' : 'false',
       onClick() {
         try { localStorage.setItem(OFFICE_KEY, key); } catch { /* it just won't stick */ }
+        // A hand-picked office palette wins over the Look's colour.
+        if (looks().get().follow && looks().get().colour !== 'pure') looks().set({ follow: false });
         paint();
         seg.querySelector('[aria-pressed="true"]').focus();
       },
     }, word)));
   }
   paint();
-  return section('Office palette', null, seg, hint);
+  return { node: section('Office palette', null, seg, hint), paint };
 }
 
 // ---- Approval ----

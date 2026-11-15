@@ -7,7 +7,7 @@
 // A step is { id, ch, title, text[], more?, figure?, action, then?, when?, next? }.
 // text items are paragraphs; more is [summary, paragraphs[]] pairs, folded.
 // when(local) hides the step until a choice shows it. Actions:
-//   none | done {render(s, local)} | link {href} | copy {value, hide?}
+//   none | done {render(s, local)} | show {render()} | link {href} | copy {value, hide?}
 //   confirm | wait {check, show?} | turnOn {body(), check} | allow {apps(), agent, check}
 //   choice {key, options: [{value, label}]}
 
@@ -42,6 +42,8 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
   function isDone(st) {
     const a = st.action;
     if (a.type === 'none' || a.type === 'done') return true;
+    // Seen is enough: a fresh guide opens on it, and Next is open once shown.
+    if (a.type === 'show') return !!local.flags[st.id];
     if (a.type === 'choice') return local.choices[a.key] !== undefined && local.choices[a.key] !== null;
     const first = a.check ? a.check() : !!local.flags[st.id];
     if (!st.then) return first;
@@ -67,6 +69,8 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
   ctx.onCleanup(() => clearInterval(timer));
 
   function say(text) { error.textContent = text; error.hidden = !text; }
+  const shownNodes = {};
+  ctx.onCleanup(() => { for (const n of Object.values(shownNodes)) if (n.stop) n.stop(); });
 
   function check(text, done) {
     return h('div', { class: `wiz-check${done ? ' is-ok' : ''}`, role: 'status' },
@@ -143,6 +147,12 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
         }, o.label)))];
       case 'done':
         return a.render(s, local, check);
+      // Something to look at or play with, nothing to check: the look picker.
+      // Kept across the three-second refresh, so a choice in progress stays.
+      case 'show':
+        if (!shownNodes[st.id]) shownNodes[st.id] = a.render();
+        if (!local.flags[st.id]) { local.flags[st.id] = true; remember(); }
+        return [shownNodes[st.id]];
       default: return [];
     }
   }
