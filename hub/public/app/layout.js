@@ -13,6 +13,7 @@ const NAV = [
   ['Goals', '/goals'],
   ['Brain', '/brain'],
   ['Agents', '/agents'],
+  ['Insights', '/insights'],
   ['Office', '/office'],
 ];
 // Rarely used, so they sit with the tools and leave the main nav alone.

@@ -15,6 +15,7 @@ import { teamSection } from '../desk/team.js';
 import { officeWindow } from '../desk/office.js';
 import { appsSection } from '../desk/apps.js';
 import { backupNotice } from '../desk/backup.js';
+import { weekSection } from '../desk/week.js';
 
 // What the feed says. Heartbeats aren't here: eight agents pinging is noise.
 const VERBS = {
@@ -141,6 +142,7 @@ export async function render(ctx) {
   const recent = recentSection();
   const inbox = inboxSection(ctx);
   const team = teamSection();
+  const week = weekSection(ctx);
 
   // The layers: one raised sheet for the decisions, plain sheets for what's
   // moving, and the rail for what you glance at.
@@ -148,13 +150,15 @@ export async function render(ctx) {
     h('div', { class: 'om-ground om-field-ground' },
       h('div', { class: 'om-workspace' },
         h('div', { class: 'om-work work-main' }, backup.node, apps.node, needs.node, flight.node, merge.node, recent.node),
-        h('aside', { class: 'om-rail work-rail', 'aria-label': 'The office, inbox and team' }, officeWindow(), inbox.node, team.node))));
+        h('aside', { class: 'om-rail work-rail', 'aria-label': 'The office, this week, inbox and team' }, officeWindow(), week.node, inbox.node, team.node))));
 
   backup.paint();
   apps.paint();
+  week.paint();
   ctx.onCleanup(store.subscribe((state) => {
     backup.paint();
     apps.paint();
+    week.paint();
     needs.paint();
     flight.paint(state);
     merge.paint();

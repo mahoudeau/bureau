@@ -177,6 +177,8 @@ const RULES = [
   ['POST', /^\/api\/context$/, 'any'],
   ['POST', /^\/api\/journal$/, 'any'], ['GET', /^\/api\/journal$/, 'any'],
   ['GET', /^\/api\/memory\/health$/, 'all'],
+  // Stats (doc 24, A4): cut to the caller's walls by the handler.
+  ['GET', /^\/api\/stats$/, 'any'], ['GET', /^\/api\/stats\/day$/, 'any'],
   ['POST', /^\/api\/work$/, 'any'], ['GET', /^\/api\/work$/, 'any'],
   // Sign-in (doc 30): who am I, the apps acting as agents, dashboard sessions,
   // the pairing with OMAKO. Apps and sessions are the owner's to rule.
@@ -227,7 +229,7 @@ const MCP_RULES = {
   apply_item: 'any', write_knowledge: 'any', capture: 'any', read_knowledge: 'any', get_context: 'any', brain_map: 'any',
   search_knowledge: 'any', memory_health: 'all', write_work: 'any', read_work: 'any',
   clock_in: 'any', heartbeat: 'any', read_inbox: 'any', send_message: 'any', claim_mission: 'any', get_mission: 'any',
-  list_missions_full: 'any', read_settings: 'any', read_journal: 'any', recent_activity: 'any',
+  list_missions_full: 'any', read_settings: 'any', read_journal: 'any', recent_activity: 'any', read_stats: 'any',
 };
 
 module.exports = {

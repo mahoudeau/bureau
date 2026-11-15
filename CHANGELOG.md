@@ -7,6 +7,9 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ## [Unreleased]
 
 ### Added
+- **Insights.** A new page in the dashboard's main nav: missions filed and closed per day, week or month, the time from claim to done, the wait in your review, how many waited on you at the end of each period, your rulings (chat approvals included), per project, per agent, and brain commits per author and compartment. A calendar of every day opens that day in order: claims, closes, approvals and brain commits, hour by hour. Filters by project and agent. Days are counted in the browser's time zone.
+- A "This week" card on the Desk: done, filed and waiting since Monday, and the seven days.
+- `GET /api/stats` and `GET /api/stats/day`, and the MCP tool `read_stats`, so a weekly digest is one call. Any credential, cut to the projects it sees; brain commits only for a credential that sees every project. `tz` sets the time zone, else `BUREAU_TZ`, else UTC. Missions from before the log recorded status changes are counted, their close read from their last log entry, and the answer says how many (`estimated`) and from which day the log has status changes (`status_log_since`).
 - **A look of your own.** Settings, Appearance: Paper or Ink as before, then Marker or Pencil. Marker is Bureau as it was, bold and sharp. Pencil is softer and vintage, with less contrast, never under 4.5 to 1. A colour for every mode: Pure (black and white), Grey, Olive, Green and Amber, the last four the office's own palettes. And the ground behind the sheets: Dots (as before), Fine dither, Scanlines, Solid, Gradient or Dithered fade. Kept in the browser and applied before the first paint; another tab follows at once.
 - The office follows the colour by default. Picking an office palette by hand turns that off.
 - The first-run guide opens on "Make it yours": the same look picker, before connecting consul and sol.

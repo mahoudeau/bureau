@@ -577,6 +577,8 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['POST', '/api/journal', (w) => ({ agent: declare(w), kind: 'fact', text: 'row (fake)', evidence: 'y' }), { boss: A, agent: A, shared: A, legacy: A }],
     ['GET', '/api/journal', null, { boss: A, agent: A, shared: A, legacy: A }],
     ['GET', '/api/memory/health', null, { boss: A, agent: D, shared: A, legacy: A }],
+    ['GET', '/api/stats', null, { boss: A, agent: A, shared: A, legacy: A }],
+    ['GET', '/api/stats/day?date=2026-11-14', null, { boss: A, agent: A, shared: A, legacy: A }],
     ['POST', '/api/work', () => ({ file: `work/${TA}/row.md`, content: 'x' }), { boss: A, agent: A, shared: A, legacy: A }],
     ['GET', `/api/work?task=${TA}`, null, { boss: A, agent: A, shared: A, legacy: A }],
     // Sign-in (doc 30): who am I for everyone; apps, sessions and the pairing for the boss.
@@ -664,6 +666,7 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     read_settings: [{}, null],
     read_journal: [{}, null],
     recent_activity: [{ limit: 5 }, null],
+    read_stats: [{ group: 'week', project: 'alpha' }, { project: 'beta' }],
   };
   const list = await (await fetch(`${legacy.base}/mcp/${new URL((await old('GET', '/api/mcp')).json.url).pathname.split('/').pop()}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) })).json();
   const names = list.result.tools.map((t) => t.name);
