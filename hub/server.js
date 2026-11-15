@@ -25,6 +25,7 @@ const auth = require('./lib/auth');
 const oidc = require('./lib/oidc');
 const omako = require('./lib/omako');
 const backups = require('./lib/backup').create();
+const updates = require('./lib/updates').create();
 const { VERSION } = require('./version');
 
 const security = require('./lib/security');
@@ -846,6 +847,13 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { run, status: backups.status() });
     }
 
+    // ----- a newer release (lib/updates.js): the operator's only, the rule table -----
+    if (req.method === 'GET' && p === '/api/updates') return send(res, 200, updates.status());
+    if (req.method === 'POST' && p === '/api/updates/check') {
+      if (!updates.enabled) return send(res, 409, { error: 'the release check is off (BUREAU_UPDATE_CHECK)' });
+      return send(res, 200, await updates.check());
+    }
+
     // ----- agent tokens (strict mode, boss only: the rule table) -----
     if (req.method === 'POST' && p === '/api/tokens') {
       const b = await readBody(req);
@@ -1557,6 +1565,7 @@ try {
   process.exit(1);
 }
 backups.schedule();
+updates.schedule();
 knowledge.ensureRepo();
 try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep failed:', e.message); }
 contextCall.pruneLog();

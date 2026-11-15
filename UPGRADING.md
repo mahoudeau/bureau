@@ -22,6 +22,14 @@ The brain has its own history in git. The state file is what the steps below pro
 
 No `npm install`, ever. The hub has no dependencies.
 
+## Knowing a release is out
+
+The hub checks once a day, and a minute after it starts. When a newer release is tagged, the Desk says so, and Settings, Updates shows this file's sections for every release between yours and the new one, read from the new release, with the steps above. Only the operator sees it: the boss token, and the people in `BUREAU_OPERATORS` (by default `BUREAU_OIDC_OWNERS`).
+
+The check is two GET requests to GitHub, for the tag list and for this file at the new tag. They carry no token and no version, and nothing about your hub. `BUREAU_UPDATE_CHECK=off` stops it. `GET /api/updates` gives the same answer to a script.
+
+The hub doesn't update itself. With Docker, `docker compose pull` then `docker compose up -d` takes the new image. Each section below tells you what to change by hand.
+
 ## 0.5.7: the first run, and hubs on your computer
 
 Nothing changes for a hub that's already running. Your tokens, your pairing and your owners stay as they are, and a hub that holds data still refuses to start without a token. What's new is for fresh installs, and two buttons:
@@ -200,6 +208,9 @@ The hub checks `state.json` before it listens.
 | Schema | Release | What it does |
 |---|---|---|
 | 0 to 1 | 0.2.0 | Adds `schema_version` to the file and fills in top-level lists older files may lack (`agents`, `messages`, `log`). Nothing is removed or renamed. |
+| 1 to 2 | 0.5.0 | Drops `review_links`, `answer_link` and `view_token` from every mission, and `notify` from settings (global and per project). Discord and the capability links are gone. |
+
+Migrations chain: a hub several releases behind runs each missing one in order on its first boot, after a single `pre-migrate` copy. You can go from any release to the latest in one step. Settings that changed between releases are not migrated, so read each release's section above for the ones you skip. On SQLite, the same migrations run on the database, and the copy is `bureau.db.pre-migrate-<timestamp>`.
 
 ## Backups the hub keeps
 

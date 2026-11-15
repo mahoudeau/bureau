@@ -33,7 +33,7 @@ async function boot(name, port, extraEnv, seed) {
   fs.mkdirSync(path.join(d, 'data'), { recursive: true });
   if (seed) fs.writeFileSync(path.join(d, 'data', 'state.json'), JSON.stringify(seed));
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: d, PORT: String(port), HOST: '127.0.0.1',
-    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_STORE: process.env.BUREAU_STORE,
+    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', BUREAU_UPDATE_CHECK: 'off', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_STORE: process.env.BUREAU_STORE,
     // Nothing here may reach the real OMAKO (POST /api/omako/pair would start a pairing there).
     BUREAU_OMAKO_URL: 'http://127.0.0.1:9', ...extraEnv };
   const child = spawn(process.execPath, [HUB], { env, stdio: 'ignore' });
@@ -602,6 +602,10 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['GET', '/api/backups', null, { boss: A, agent: H, shared: H, legacy: A }],
     ['POST', '/api/backups/verified', () => ({ ok: true, file: 'bureau-2026-11-14.db.gz.enc', detail: 'row' }), { boss: A, agent: H, shared: H, legacy: A }],
     ['POST', '/api/backups/run', () => ({}), { boss: A, agent: H, shared: H, legacy: A }],
+    // A newer release (lib/updates.js): the operator only, the same 404. The
+    // check is off in this hub, so check now answers 409 and asks nothing of GitHub.
+    ['GET', '/api/updates', null, { boss: A, agent: H, shared: H, legacy: A }],
+    ['POST', '/api/updates/check', () => ({}), { boss: A, agent: H, shared: H, legacy: A }],
   ];
   const creds = { boss, agent: worker, shared };
   const callRow = async (c, method, p, b) => {

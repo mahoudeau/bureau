@@ -192,6 +192,8 @@ const RULES = [
   ['GET', /^\/api\/setup\/agent\/[^/]+$/, 'boss'],
   // The off-server backup (doc 31): the operator's only, 404 to anyone else.
   ['GET', /^\/api\/backups$/, 'operator'], ['POST', /^\/api\/backups\/verified$/, 'operator'], ['POST', /^\/api\/backups\/run$/, 'operator'],
+  // A newer release and what to do before upgrading (lib/updates.js): the operator's too.
+  ['GET', /^\/api\/updates$/, 'operator'], ['POST', /^\/api\/updates\/check$/, 'operator'],
 ];
 function ruleFor(method, pathname) {
   for (const [m, re, rule] of RULES) if (m === method && re.test(pathname)) return rule;

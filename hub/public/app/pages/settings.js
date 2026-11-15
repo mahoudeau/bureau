@@ -5,6 +5,7 @@ import * as api from '../api.js';
 import { pageHead, setupPage } from '../setup/kit.js';
 import { appearance, approval, mcp, roles, tokens } from '../setup/settings-tabs.js';
 import { signin } from '../setup/signin-tab.js';
+import { updates } from '../setup/updates-tab.js';
 
 const TABS = [
   ['appearance', 'Appearance', appearance],
@@ -13,6 +14,7 @@ const TABS = [
   ['signin', 'Sign-in', signin],
   ['tokens', 'Tokens', tokens],
   ['mcp', 'MCP', mcp],
+  ['updates', 'Updates', updates],
 ];
 
 function who(health, me) {
