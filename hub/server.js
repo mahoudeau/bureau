@@ -175,13 +175,17 @@ function setupBase() {
   const s = store.load();
   const c = oidc.config();
   return { s, settings: store.settingsOf(s), c, apps: store.listApps(),
-    head: { sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), issuer: c.issuer || null, hub_url: c.base || null } };
+    // local: a hub on the owner's computer, paired as such: apps in the cloud can't reach it.
+    head: { sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), local: !!c.localPrefix, issuer: c.issuer || null, hub_url: c.base || null } };
 }
 function setupStatus() {
   const { s, settings, c, apps, head } = setupBase();
   const agents = {};
   for (const [name, roles] of Object.entries(SETUP_AGENTS)) agents[name] = setupAgent(name, roles, s, settings, c, apps);
-  return { ...head, agents, sol_charter: charterText('sol'), done: Object.values(agents).every((a) => a.on && a.allowed) };
+  // A hub on the owner's computer is set up once consul works: sol runs from
+  // the cloud, which can't reach it, and waits for a server.
+  const needed = head.local ? [agents.consul] : Object.values(agents);
+  return { ...head, agents, sol_charter: charterText('sol'), done: needed.every((a) => a.on && a.allowed) };
 }
 // The generic guide for any one agent (/setup/agent/<name>): the same facts,
 // plus its charter when the hub has one (sol), for a scheduled run.

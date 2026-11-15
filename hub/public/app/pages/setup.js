@@ -10,7 +10,7 @@ import { BOSS_ONLY, notice, setupPage, pageHead } from '../setup/kit.js';
 import { setupStatus } from '../setup/banner.js';
 import { CHAT_PREFERENCE, CLAUDE_MD } from '../setup/texts.js';
 import { runWizard } from '../setup/wizard.js';
-import { HELLO, genericSteps, signinStep } from '../setup/generic.js';
+import { HELLO, genericSteps, signinStep, onThisComputer } from '../setup/generic.js';
 import { lookPicker } from '../setup/look-picker.js';
 
 const CONNECTORS_URL = 'https://claude.ai/new#customize/connectors';
@@ -47,6 +47,8 @@ function permissionsFigure() {
 const appsOf = (s, name, cli) => s.agents[name].apps.filter((a) => !!a.cli === !!cli);
 const claude = (l) => l.choices.mode === 'claude';
 const generic = (l) => l.choices.mode === 'generic';
+// A hub on the owner's computer: Claude Code connects from here, claude.ai can't.
+const code = (l) => l.choices.mode === 'code';
 const terminal = (l) => claude(l) && l.choices.terminal === true;
 
 // The steps, rebuilt from each fresh status. check() says whether a step is
@@ -69,13 +71,48 @@ function steps(s) {
       action: { type: 'show', render: () => lookPicker() } },
   ];
   if (!s.sign_in) list.push(signinStep(s));
+  // On this computer: paired as a local hub, or about to be.
+  const local = s.local || (!s.sign_in && onThisComputer());
   list.push(
-    { id: 'path', ch: 'Start', title: 'Which AI do you use?',
+    local
+      ? { id: 'path', ch: 'Start', title: 'Which AI do you use?',
+        text: [
+          'This hub runs on your computer, so apps that connect from the cloud, like claude.ai, can\'t reach it. Apps that run here can.',
+          [h('strong', null, 'Claude Code'), ': the guide walks you through it, step by step.'],
+          [h('strong', null, 'Another app on this computer'), ': any app here that can add a remote MCP server works. The guide gives you the address and the instructions.'],
+          'You can come back here and switch.'],
+        action: { type: 'choice', key: 'mode', options: [{ value: 'code', label: 'Claude Code, guided' }, { value: 'generic', label: 'Another app on this computer' }] } }
+      : { id: 'path', ch: 'Start', title: 'Which AI do you use?',
+        text: [
+          [h('strong', null, 'Claude'), ': the guide walks you through claude.ai and Claude Code, click by click.'],
+          [h('strong', null, 'Another AI app'), ': any app that can add a remote MCP server works. The guide gives you the address and the instructions, and you place them in your app.'],
+          'You can come back here and switch.'],
+        action: { type: 'choice', key: 'mode', options: [{ value: 'claude', label: 'Claude, guided' }, { value: 'generic', label: 'Another AI app' }] } },
+
+    // ---- Claude Code, on a hub on this computer ----
+    { id: 'code-on', ch: 'Consul', when: code, title: 'Turn consul on', text: ['This lets consul sign in to your hub, with every project open to it.'],
+      action: { type: 'turnOn', body: turnOn(consul), label: 'Turn on consul', check: () => consul.on, ok: 'Consul is on.' } },
+    { id: 'code-add', ch: 'Consul', when: code, title: 'Add Bureau to Claude Code',
+      text: ['In a terminal on this computer, run this. It adds Bureau to Claude Code, in every project.'],
+      action: { type: 'copy', value: `claude mcp add --scope user --transport http bureau-consul ${consul.address || `${hub}/mcp/agent/consul`}`, ok: 'Copied. Run it in your terminal.' } },
+    { id: 'code-auth', ch: 'Consul', when: code, title: 'Sign in from Claude Code',
+      text: [['Start Claude Code, type ', h('code', null, '/mcp'), ', pick ', h('strong', null, 'bureau-consul'), ' and choose ', h('strong', null, 'Authenticate'), '. Sign in with your OMAKO account and approve.'], 'This screen moves on by itself once Claude Code reaches your hub.'],
+      action: { type: 'wait', check: () => appsOf(s, 'consul').length > 0, waiting: 'Waiting for Claude Code to reach your hub', ok: 'Claude Code reached your hub.' } },
+    { id: 'code-allow', ch: 'Consul', when: code, title: 'Let Claude Code act as consul', text: ['Only allow an app you just connected yourself.'],
+      action: { type: 'allow', apps: () => appsOf(s, 'consul'), agent: 'consul', check: () => appsOf(s, 'consul').some((a) => a.status === 'allowed'), ok: 'Claude Code can act as consul.' } },
+    { id: 'code-claudemd', ch: 'Consul', when: code, title: 'Tell Claude Code to use it on its own',
       text: [
-        [h('strong', null, 'Claude'), ': the guide walks you through claude.ai and Claude Code, click by click.'],
-        [h('strong', null, 'Another AI app'), ': any app that can add a remote MCP server works. The guide gives you the address and the instructions, and you place them in your app.'],
-        'You can come back here and switch.'],
-      action: { type: 'choice', key: 'mode', options: [{ value: 'claude', label: 'Claude, guided' }, { value: 'generic', label: 'Another AI app' }] } },
+        'These instructions make Claude Code open a mission for real work, and keep what it learns.',
+        ['Copy them, then add them to ', h('code', null, '~/.claude/CLAUDE.md'), ', the file Claude Code reads in every project. Create it if it isn\'t there.']],
+      action: { type: 'copy', value: CLAUDE_MD, hide: true, label: 'Copy the instructions', ok: 'Copied. Add them to your CLAUDE.md.' } },
+    { id: 'code-hello', ch: 'Consul', when: code, title: 'Say hello',
+      text: ['In Claude Code, ask:'],
+      action: { type: 'wait', show: HELLO, check: () => appsOf(s, 'consul').some((a) => a.working), waiting: 'Waiting for consul\'s first answer', ok: 'Consul answered. It works.' } },
+    { id: 'code-sol', ch: 'Sol', when: code, title: 'Sol waits for a server',
+      text: [
+        'Sol, the librarian, runs once a night as a scheduled task in the cloud, and the cloud can\'t reach a hub on your computer.',
+        'Bureau works without it: consul keeps what it learns either way. Connect sol once the hub runs on a server, from Settings, Sign-in.'],
+      action: { type: 'confirm', label: 'Got it', ok: 'Sol can wait.' } },
 
     // ---- Claude, guided ----
     { id: 'consul-on', ch: 'Consul', when: claude, title: 'Turn consul on', text: ['This lets consul sign in to your hub, with every project open to it.'],
@@ -150,6 +187,10 @@ function steps(s) {
     { id: 'done', ch: 'Done', title: 'You\'re all set', text: [], next: 'Go to the Desk',
       action: { type: 'done', render: (st, l, check) => {
         const line = (text, ok) => h('li', null, check(text, ok));
+        if (code(l)) {
+          return [h('ul', { class: 'wiz-done-list' }, line('Consul works in Claude Code', st.agents.consul.apps.some((x) => !x.cli && x.status === 'allowed'))),
+            h('p', null, 'Ask consul for anything in Claude Code. You can change any of this in Settings, Sign-in.')];
+        }
         const g = generic(l);
         return [h('ul', { class: 'wiz-done-list' },
           line(g ? 'Consul works in your app' : 'Consul works in claude.ai', st.agents.consul.apps.some((x) => !x.cli && x.status === 'allowed') || (g && st.agents.consul.allowed)),

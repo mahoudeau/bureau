@@ -7,6 +7,7 @@ import * as api from '../api.js';
 import * as store from '../store.js';
 import { confirmButton, emptyState, timeTag, toast } from '../ui.js';
 import { BOSS_ONLY, copyButton, field, message, notice, refusal, section, table } from './kit.js';
+import { omakoMark } from '../layout.js';
 
 const ROLES = [
   ['owner', 'Owner', 'Everything, like the boss: settings, people, agents, apps.'],
@@ -47,17 +48,40 @@ export async function signin(ctx, health) {
   }
 
   // ---- the pairing ----
+  // Sign in with OMAKO: the hub pairs itself (lib/omako.js). The tab opens on
+  // the click, so no popup blocker stops it, then goes to OMAKO's page.
+  async function pairNow(e) {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    error.clear();
+    const tab = window.open('', '_blank');
+    try {
+      const r = await api.post('/api/omako/pair', {}, { signal: ctx.signal });
+      if (tab) tab.location.href = r.verify_url; else window.open(r.verify_url, '_blank');
+      toast('Confirm at OMAKO, in the new tab. This page follows once you have.');
+      const until = Date.now() + 10 * 60 * 1000;
+      const wait = setInterval(async () => {
+        if (Date.now() > until) { clearInterval(wait); return; }
+        try { if ((await api.get('/api/omako', { signal: ctx.signal })).paired) { clearInterval(wait); reload(); } } catch { /* try again */ }
+      }, 3000);
+      ctx.onCleanup(() => clearInterval(wait));
+    } catch (err) {
+      if (tab) tab.close();
+      if (!api.isAbort(err)) { error.say(refusal(err)); btn.disabled = false; }
+    }
+  }
   const pairing = omako.paired
-    ? section('Signing in with OMAKO', omako.verified ? 'Verified' : 'Paired',
+    ? section('Signing in with OMAKO', omako.local ? 'On this computer' : omako.verified ? 'Verified' : 'Paired',
       h('p', null, `This hub is paired with ${omako.issuer}${omako.hub_url ? ` as ${omako.hub_url}` : ''}. People sign in with their OMAKO account, and apps sign in as agents.`),
+      omako.local ? h('p', { class: 'om-data-s' }, 'It runs on your computer: apps that run here reach it, like Claude Code. Apps that connect from the cloud, like claude.ai, can\'t.') : null,
       omako.error ? h('p', { class: 'om-data-s' }, omako.error) : null)
     : section('Signing in', omako.sign_in ? 'On' : 'Off',
       omako.sign_in
         ? h('p', null, `People sign in through ${omako.issuer}.`)
         : h('div', { class: 'om-stack om-stack-3' },
-          h('p', null, 'Sign-in is off: people paste a token, and agents use minted tokens. To sign in with OMAKO, pair this hub. On the server, beside the hub, run:'),
-          h('div', { class: 'set-secret' }, h('code', { class: 'set-code' }, 'node hub/tools/omako.js pair'), copyButton('node hub/tools/omako.js pair')),
-          h('p', { class: 'om-data-s' }, 'Any other OpenID issuer works too: see BUREAU_OIDC_ISSUER in hub/.env.example.')));
+          h('p', null, 'Sign-in is off: people paste a token, and agents use minted tokens. Connect this hub to OMAKO, and you and your agents sign in with your OMAKO account instead.'),
+          h('div', null, h('button', { type: 'button', class: 'om-btn om-btn-omako', onClick: pairNow }, omakoMark(), h('span', null, 'Sign in with OMAKO'))),
+          h('p', { class: 'om-data-s' }, ['On the server, ', h('code', null, 'node hub/tools/omako.js pair'), ' does the same. Any other OpenID issuer works too: see BUREAU_OIDC_ISSUER in hub/.env.example.'])));
 
   // ---- apps acting as agents (D13) ----
   async function rule(app, status) {
