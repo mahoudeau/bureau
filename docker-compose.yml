@@ -1,14 +1,16 @@
-# Bureau hub, one service. Put BUREAU_BOSS_TOKEN in a .env file next to this
-# one, then: docker compose up -d
-# BUREAU_BOSS_TOKEN is the owner's break-glass credential and turns strict
-# mode on (see UPGRADING.md). BUREAU_TOKEN, the old shared token, is optional:
-# leave it out unless an agent still needs it. The hub refuses to start with
-# neither.
-# Sign-in (docs/protocol.md, "MCP with sign-in"): BUREAU_PUBLIC_URL, and
-# either a pairing with OMAKO (node hub/tools/omako.js pair, inside the
-# container) or BUREAU_OIDC_ISSUER with BUREAU_OIDC_CLIENT_ID and _SECRET.
-# Optional in the same .env: BUREAU_PORT (host port), BUREAU_OIDC_OWNERS,
-# BUREAU_POKES, BUREAU_SWEEP_MS. See hub/.env.example.
+# Bureau hub, one service: docker compose up -d, then docker compose logs
+# bureau for the first-run link. Open it: you're the owner, and the setup
+# guide's Sign in with OMAKO connects the rest. No token to make: a hub with
+# none makes its own boss token in its data volume (the owner's break-glass
+# credential, see UPGRADING.md). A new link: docker compose exec bureau node
+# tools/sign-in-link.js.
+# On a server, put BUREAU_PUBLIC_URL (its https address) in a .env file next
+# to this one. Optional in the same file: BUREAU_BOSS_TOKEN (your own, wins
+# over the hub's), BUREAU_TOKEN (the old shared token, only if an agent still
+# needs it), BUREAU_PORT (host port; keep 8100 for a hub on your own
+# computer), BUREAU_OIDC_OWNERS, another issuer (BUREAU_OIDC_ISSUER with
+# BUREAU_OIDC_CLIENT_ID and _SECRET), BUREAU_POKES, BUREAU_SWEEP_MS. See
+# hub/.env.example.
 # Paths, HOST and PORT are fixed by the image on purpose.
 services:
   bureau:

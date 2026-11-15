@@ -125,6 +125,11 @@ jobs:
       - name: Security (test/security.test.js)
         run: node test/security.test.js
 
+      # The first run: a hub with no token makes its own and prints a one-time
+      # link. Self-contained: its own hubs on port 8391.
+      - name: First run (test/firstrun.test.js)
+        run: node test/firstrun.test.js
+
       # The dashboard's markdown: every feature, what must never run, hostile
       # input on a clock. No hub needed.
       - name: Markdown (test/markdown.test.js)
@@ -215,6 +220,9 @@ jobs:
 
       - name: Security (test/security.test.js)
         run: node test/security.test.js
+
+      - name: First run (test/firstrun.test.js)
+        run: node test/firstrun.test.js
 
       - name: Assets (test/assets.test.js)
         run: node test/assets.test.js
@@ -391,6 +399,9 @@ jobs:
 
       - name: Security (test/security.test.js)
         run: node test/security.test.js
+
+      - name: First run (test/firstrun.test.js)
+        run: node test/firstrun.test.js
 
       - name: Markdown (test/markdown.test.js)
         run: node test/markdown.test.js

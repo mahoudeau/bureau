@@ -40,9 +40,11 @@ Browsers: `/api/` answers same-origin pages. Another origin is refused with a 40
 
 The hub runs in one of three auth modes, reported as `auth` in `GET /api/health`:
 
-- **`strict`**: `BUREAU_BOSS_TOKEN` is set. Identity comes from the credential.
+- **`strict`**: `BUREAU_BOSS_TOKEN` is set, or the hub made its own (below). Identity comes from the credential.
 - **`legacy`**: only `BUREAU_TOKEN` is set. One shared token; `agent`, `author` and `from` are strings the client declares. The hub warns at boot. There are no walls: the gate rules below still run, but anyone holding the token can declare `agent: "human"`, and no credential has a project list.
-- **`open`**: no token at all. As legacy, with no authentication. The hub refuses to start this way unless `BUREAU_ALLOW_INSECURE_LOCAL=1` and it binds loopback, for a local demo.
+- **`open`**: no token at all, only with `BUREAU_ALLOW_INSECURE_LOCAL=1` on loopback, for a local demo. As legacy, with no authentication.
+
+**First run.** A hub started with no token at all (and no demo opt-in) makes its own boss token, keeps it in `<data dir>/boss-token` (mode 0600), and runs strict. `BUREAU_BOSS_TOKEN` in the environment always wins over that file. Until someone has opened it, each boot prints a one-time link, `<BUREAU_PUBLIC_URL or http://localhost:PORT>/setup#key=<key>`, good for 24 hours. The key sits in the fragment, so it never reaches a log. The dashboard trades it once at `POST /api/setup/claim` (`{key}`, no credential) for the boss token, which the browser keeps as if it had been pasted; a wrong, spent or expired key gets 403. Only the key's hash is kept, in `<data dir>/setup-key.json`, and opening a link writes `<data dir>/setup-done`, after which the boot prints no link. `node hub/tools/sign-in-link.js` mints a new link any time, good for an hour: whoever can run it on the server already holds the data folder.
 
 Fresh installs use strict. `UPGRADING.md` has the steps from legacy.
 
@@ -98,7 +100,8 @@ Outbound credentials (the `BUREAU_POKES` headers, GitHub tokens) are not part of
 | `GET /api/mcp`, `DELETE /api/mcp` | yes | no | no | yes |
 | `GET /api/apps`, `POST/DELETE /api/apps/:id` | yes | no | no | yes |
 | `GET /api/sessions`, `POST /api/sessions/revoke-all` | yes | no | no | yes |
-| `GET /api/omako` | yes | no | no | yes |
+| `GET /api/omako`, `POST /api/omako/pair` | yes | no | no | yes |
+| `POST /api/setup/claim` | no credential: the first-run key is the credential | | | |
 | `GET /api/projects` | yes | scoped | yes | yes |
 | `POST/PATCH/DELETE /api/projects`, `POST /api/projects/rename` | yes | no | no | yes |
 | `POST /api/messages` | yes | `from` is its own name | any `from` but human | yes |
@@ -131,7 +134,8 @@ People and agents can sign in through an OAuth 2.1 / OpenID issuer instead of ho
 
 **Turning it on.** Sign-in needs `BUREAU_PUBLIC_URL` (the hub's https address) and an issuer, from one of two places:
 
-- **Pair with OMAKO.** On the hub's server, `node hub/tools/omako.js pair`. It prints a link on id.omako.dev; open it, sign in, pick the workspace the hub belongs to and confirm. While it waits, the hub serves a one-time text at `GET /.well-known/omako-hub-challenge`, which OMAKO fetches to check the hub controls its address. OMAKO then hands the hub its own client, which the tool writes to `<data dir>/omako.json` (mode 0600) and never prints. `status` shows the pairing, `sync` tells OMAKO every agent whose sign-in is on, `unpair` revokes the client and deletes the file. A paired hub tells OMAKO by itself when an owner turns an agent's sign-in on or off in settings; the `PATCH /api/settings` answer carries `issuer` with what happened. `GET /api/omako` (owners) shows the same status as the tool.
+- **Pair with OMAKO.** In the dashboard, Sign in with OMAKO (the setup guide, or Settings, Sign-in) calls `POST /api/omako/pair` (owners): the hub starts the pairing and answers `{state, verify_url, expires_at}`; the browser opens `verify_url` on id.omako.dev, where the owner signs in, picks the workspace the hub belongs to and confirms, and the hub waits for that in the background. `GET /api/omako` carries the same `pairing` while it waits. On the hub's server, `node hub/tools/omako.js pair` does the same from the terminal and prints the link. While it waits, the hub serves a one-time text at `GET /.well-known/omako-hub-challenge`, which OMAKO fetches to check the hub controls its address. OMAKO then hands the hub its own client, written to `<data dir>/omako.json` (mode 0600) and never printed, and names who confirmed: the hub adds them to `members` as an owner.
+- **A hub on the owner's computer.** With no `BUREAU_PUBLIC_URL`, a hub opened at `http://localhost` pairs as `http://localhost:<PORT>`. OMAKO can't reach it and doesn't fetch the challenge: the owner's confirmation is the proof. OMAKO keeps it as `http://localhost:<PORT>/h/<hub id>`, so everyone can run one on 8100 without any two mixing. The hub answers under that prefix as under `/`: its sign-in callback is `/h/<id>/auth/callback` and its agents' addresses are `http://localhost:<PORT>/h/<id>/mcp/agent/<name>`, with their resource metadata at both `/.well-known/oauth-protected-resource/h/<id>/mcp/agent/<name>` and `/h/<id>/.well-known/oauth-protected-resource/mcp/agent/<name>`. Started on another port, the hub tells OMAKO at boot (`PUT /api/hubs/self` there) and its addresses follow. Apps that connect from the cloud can't reach it; agents on the same computer can. `GET /api/omako` and the guide's status say `local: true`. `status` shows the pairing, `sync` tells OMAKO every agent whose sign-in is on, `unpair` revokes the client and deletes the file. A paired hub tells OMAKO by itself when an owner turns an agent's sign-in on or off in settings; the `PATCH /api/settings` answer carries `issuer` with what happened. `GET /api/omako` (owners) shows the same status as the tool.
 - **Any other issuer.** Register a client there with the redirect `<BUREAU_PUBLIC_URL>/auth/callback`, then set `BUREAU_OIDC_ISSUER`, `BUREAU_OIDC_CLIENT_ID` and `BUREAU_OIDC_CLIENT_SECRET` (leave the secret out for a public PKCE client). For agents, the issuer must issue JWT access tokens (`typ: at+jwt`) whose audience is the agent's address, `<hub>/mcp/agent/<name>` (RFC 8707 resource indicators). The environment wins over a pairing.
 
 The issuer and `BUREAU_PUBLIC_URL` alone open the agent doors; the dashboard's "Sign in" also needs the client id. `GET /.well-known/bureau` (public) says what is on: `{issuer, cli_client_id, agents_url_template, sign_in, omako}`, where `omako` is true when the issuer comes from an OMAKO pairing, so the sign-in page shows OMAKO's button. The CLI reads it.

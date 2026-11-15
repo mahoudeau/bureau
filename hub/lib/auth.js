@@ -185,7 +185,7 @@ const RULES = [
   ['GET', /^\/api\/me$/, 'any'],
   ['GET', /^\/api\/apps$/, 'boss'], ['POST', /^\/api\/apps\/app-[a-f0-9]+$/, 'boss'], ['DELETE', /^\/api\/apps\/app-[a-f0-9]+$/, 'boss'],
   ['GET', /^\/api\/sessions$/, 'boss'], ['POST', /^\/api\/sessions\/revoke-all$/, 'boss'],
-  ['GET', /^\/api\/omako$/, 'boss'],
+  ['GET', /^\/api\/omako$/, 'boss'], ['POST', /^\/api\/omako\/pair$/, 'boss'],
   // The first-run guide's status: who of consul and sol is connected.
   ['GET', /^\/api\/setup$/, 'boss'],
   // The generic guide's status for one agent.

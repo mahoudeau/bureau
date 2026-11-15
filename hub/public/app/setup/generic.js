@@ -9,12 +9,23 @@ export const HELLO = 'Who am I at Bureau?';
 const CLAUDE_CONNECTORS = 'https://claude.ai/new#customize/connectors';
 const cap = (name) => name.charAt(0).toUpperCase() + name.slice(1);
 
-// The hub needs sign-in before any agent can sign in.
+// Opened on this computer (localhost): the hub pairs as a hub on your
+// computer, which apps in the cloud can't reach.
+export const onThisComputer = () => /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
+
+// The hub needs sign-in before any agent can sign in: one click connects it
+// to OMAKO, from here (the hub pairs itself, lib/omako.js).
 export function signinStep(s) {
-  return { id: 'signin', ch: 'Start', title: 'Turn on sign-in',
-    text: ['Agents connect by signing in with your account, so the hub needs sign-in first. On the server, next to the hub, run this, open the link it prints, and confirm.'],
-    action: { type: 'copy', value: 'node hub/tools/omako.js pair', ok: 'Copied. Run it on the server.' },
-    then: { type: 'wait', check: () => s.sign_in, waiting: 'Waiting for the hub to be paired', ok: 'Sign-in is on.' } };
+  const local = onThisComputer();
+  return { id: 'signin', ch: 'Start', title: 'Sign in with OMAKO',
+    text: [
+      'Your agents connect by signing in with your OMAKO account, and so do you, on any device. Connect this hub to OMAKO once: it opens in a new tab, you sign in (or make an account) and confirm.',
+      local ? 'This hub runs on your computer. Agents that run here can reach it: Claude Code, your terminal. Apps that connect from the cloud, like claude.ai, can\'t: for those, run the hub on a server with an https address.' : null],
+    more: [
+      ['Rather not use an account?', [
+        'Bureau works without one: give each agent its own token in Settings, Tokens. This guide connects agents by sign-in, so it stops here.',
+        ['On the server, ', h('code', null, 'node hub/tools/omako.js pair'), ' does the same as this button.']]]],
+    action: { type: 'pair', check: () => s.sign_in, label: 'Sign in with OMAKO', waiting: 'Waiting for you to confirm at OMAKO', ok: 'Sign-in is on.' } };
 }
 
 // The steps for one agent. agent is its status from the hub; charter, when

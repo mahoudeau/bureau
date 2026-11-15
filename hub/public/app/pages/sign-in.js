@@ -44,6 +44,11 @@ export function render(ctx) {
     ctx.navigate(api.nextPath(), { replace: true });
   }
 
+  // A first-run or sign-in link that didn't work (app/main.js): say why.
+  let linkError = '';
+  try { linkError = sessionStorage.getItem('bureau_link_error') || ''; sessionStorage.removeItem('bureau_link_error'); } catch { /* none */ }
+  const linkNote = h('p', { class: 'om-field-error', role: 'alert', hidden: !linkError }, linkError);
+
   const next = api.nextPath();
   // OMAKO's own button, placed as OMAKO DS draws it: solid ink, the O mark,
   // "Continue with OMAKO". Products don't restyle it. Another issuer gets a
@@ -72,6 +77,7 @@ export function render(ctx) {
         h('section', { class: 'om-cast app-signin-box' },
           h('div', { class: 'om-raised-body om-stack om-stack-4' },
             h('h1', { class: 'om-display-m om-side', dataset: { text: 'Bureau' }, 'aria-label': 'Sign in to Bureau' }, 'Bureau'),
+            linkNote,
             issuerLink,
             tokenForm,
             useToken)),

@@ -8,8 +8,10 @@
 //   node hub/tools/omako.js sync     tell OMAKO every agent whose sign-in is on
 //   node hub/tools/omako.js unpair   revoke the hub's client at OMAKO
 //
-// Needs BUREAU_PUBLIC_URL (the hub's own https address), from the environment
-// or hub/.env. The secret OMAKO hands back goes straight to
+// The setup guide and Settings do the same from the browser, with no terminal.
+// A hub on a server needs BUREAU_PUBLIC_URL (its own https address), from the
+// environment or hub/.env. With none set, the hub is a hub on this computer,
+// at http://localhost:<PORT>. The secret OMAKO hands back goes straight to
 // <data dir>/omako.json (mode 0600). It is never printed. Point at another
 // OMAKO with BUREAU_OMAKO_URL (development).
 'use strict';
@@ -19,37 +21,23 @@ const path = require('path');
 const omako = require('../lib/omako');
 const oidc = require('../lib/oidc');
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function pair() {
-  const hubUrl = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
-  if (!/^https:\/\//.test(hubUrl) && !/^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(hubUrl))
-    throw new Error('BUREAU_PUBLIC_URL must be the hub\'s https address (http only for localhost)');
+  // The hub's https address, or, with none set, this computer: a local hub.
+  const hubUrl = (process.env.BUREAU_PUBLIC_URL || oidc.localOrigin()).replace(/\/$/, '');
+  if (!/^https:\/\//.test(hubUrl) && !/^http:\/\/localhost(:\d+)?$/.test(hubUrl))
+    throw new Error('BUREAU_PUBLIC_URL must be the hub\'s https address; leave it unset for a hub on this computer');
   if (oidc.pairing()) throw new Error('this hub is already paired: run unpair first to start again');
   const start = await omako.startPairing(hubUrl);
   omako.writeChallenge(start.challenge);
-  console.log(`Pairing ${hubUrl} with ${omako.omakoUrl()}.`);
+  console.log(`Pairing ${start.hub_url || hubUrl} with ${omako.omakoUrl()}.`);
   console.log('Open this link, sign in, and confirm the workspace this hub belongs to:');
   console.log(`  ${start.verify_url}`);
   console.log('Waiting for you to confirm...');
-  let interval = Math.max(2, Number(start.interval) || 5) * 1000;
-  const deadline = Date.now() + (Number(start.expires_in) || 600) * 1000;
-  try {
-    while (Date.now() < deadline) {
-      await sleep(interval);
-      const r = await omako.pollPairing(start.pairing_id);
-      if (r.slow_down) { interval += 5000; continue; }
-      if (r.pending) continue;
-      const d = r.done;
-      omako.writePairing({ hub_id: d.hub_id, client_id: d.client_id, client_secret: d.client_secret, issuer: d.issuer, workspace_id: d.workspace_id || null, hub_url: hubUrl, paired_at: new Date().toISOString() });
-      console.log(`Paired: hub ${d.hub_id}, workspace ${d.workspace_id || 'personal'}. The client is in ${oidc.PAIRING_FILE} (0600).`);
-      console.log('Next: turn on sign-in for an agent in Settings (or run sync if some already are), then sign in to the dashboard.');
-      return;
-    }
-    throw new Error('the pairing expired before it was confirmed; run pair again');
-  } finally {
-    omako.clearChallenge();
-  }
+  const p = await omako.waitForPairing(start, hubUrl, { log: (l) => console.log(l) });
+  if (!p) throw new Error('the pairing expired before it was confirmed; run pair again');
+  console.log('Next: turn on sign-in for an agent in Settings (or run sync if some already are), then sign in to the dashboard.');
+  console.log('A hub already running picks the pairing up by itself: no restart needed.');
 }
 
 function agentsOn() {

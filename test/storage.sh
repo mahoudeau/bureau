@@ -154,10 +154,10 @@ echo '{"schema_version":99,"tasks":[]}' > "$DIR/n/data/state.json"
 check "newer schema refused" "$(boot_refused n)" 'exit:1'
 check "refusal names both versions" "$(cat "$DIR/n.log")" 'schema_version 99'
 
-echo "11. the example token from .env.example refuses to boot"
-EXAMPLE_TOKEN=$(grep '^BUREAU_TOKEN=' hub/.env.example | cut -d= -f2)
-check ".env.example still ships a placeholder token" "$EXAMPLE_TOKEN" '.'
-TOKEN=$EXAMPLE_TOKEN
+echo "11. a placeholder token refuses to boot, and .env.example sets no token"
+# Since 0.5.7 a new hub makes its own token: the example ships none to copy.
+check ".env.example sets no token" "$(yes_if "$(grep -E '^BUREAU_(BOSS_)?TOKEN=' hub/.env.example)")" 'no'
+TOKEN=change-me-long-random-string
 check "the hub refuses it" "$(boot_refused x)" 'exit:1'
 check "the refusal says why" "$(cat "$DIR/x.log")" 'still a placeholder'
 TOKEN=storagetest

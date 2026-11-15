@@ -3,6 +3,10 @@
 'use strict';
 // hub/.env first: lib/store.js and lib/knowledge.js read their dirs at load
 require('./lib/env').load();
+// A hub started with no token makes its own boss token, before anything reads
+// the tokens (lib/firstrun.js).
+const firstRun = require('./lib/firstrun');
+const BOSS_FROM = firstRun.ensureBossToken();
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -171,13 +175,17 @@ function setupBase() {
   const s = store.load();
   const c = oidc.config();
   return { s, settings: store.settingsOf(s), c, apps: store.listApps(),
-    head: { sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), issuer: c.issuer || null, hub_url: c.base || null } };
+    // local: a hub on the owner's computer, paired as such: apps in the cloud can't reach it.
+    head: { sign_in: c.webOn, agents_on: c.on, omako: !!(c.webOn && c.hubId), local: !!c.localPrefix, issuer: c.issuer || null, hub_url: c.base || null } };
 }
 function setupStatus() {
   const { s, settings, c, apps, head } = setupBase();
   const agents = {};
   for (const [name, roles] of Object.entries(SETUP_AGENTS)) agents[name] = setupAgent(name, roles, s, settings, c, apps);
-  return { ...head, agents, sol_charter: charterText('sol'), done: Object.values(agents).every((a) => a.on && a.allowed) };
+  // A hub on the owner's computer is set up once consul works: sol runs from
+  // the cloud, which can't reach it, and waits for a server.
+  const needed = head.local ? [agents.consul] : Object.values(agents);
+  return { ...head, agents, sol_charter: charterText('sol'), done: needed.every((a) => a.on && a.allowed) };
 }
 // The generic guide for any one agent (/setup/agent/<name>): the same facts,
 // plus its charter when the hub has one (sol), for a scheduled run.
@@ -408,13 +416,14 @@ async function authRoute(req, res, url, p) {
       console.error('[auth] login:', e.message);
       return signInError(res, 502, 'Can\'t reach the sign-in service right now. Try again in a minute, or use a token instead.');
     }
-    setCookie(res, FLOW_COOKIE, security.signValue(a.flow), security.cookieAttrs(req, { path: '/auth', maxAge: 600 }));
+    // On a local hub the callback comes back under /h/<id>/auth: the cookie goes there.
+    setCookie(res, FLOW_COOKIE, security.signValue(a.flow), security.cookieAttrs(req, { path: `${c.localPrefix || ''}/auth`, maxAge: 600 }));
     res.writeHead(302, { location: a.url, 'cache-control': 'no-store' });
     return res.end();
   }
   if (req.method === 'GET' && p === '/auth/callback') {
     const flow = security.readSigned(security.parseCookies(req.headers.cookie)[FLOW_COOKIE]);
-    setCookie(res, FLOW_COOKIE, '', security.cookieAttrs(req, { path: '/auth', maxAge: 0 }));
+    setCookie(res, FLOW_COOKIE, '', security.cookieAttrs(req, { path: `${c.localPrefix || ''}/auth`, maxAge: 0 }));
     if (!c.webOn) return signInError(res, 404, 'Sign-in is not set up on this hub.');
     let who;
     try { who = await oidc.completeSignIn(url.searchParams, flow); } catch (e) {
@@ -476,6 +485,15 @@ const server = http.createServer(async (req, res) => {
   // A target no URL parser accepts (GET // HTTP/1.1) is the caller's to fix.
   try { url = new URL(req.url, 'http://x'); p = url.pathname; }
   catch { return send(res, 400, { error: 'bad request' }); }
+  // A hub on the owner's computer, paired with OMAKO, is known there as
+  // http://localhost:<port>/h/<its id> (lib/oidc.js): its sign-in callback and
+  // its agents' addresses carry that. Under it, the hub is the same hub. Its
+  // agents' resource metadata comes in both RFC 9728 spellings.
+  const local = oidc.config().localPrefix;
+  if (local) {
+    if (p === local || p.startsWith(`${local}/`)) p = p.slice(local.length) || '/';
+    else if (p.startsWith(`/.well-known/oauth-protected-resource${local}/`)) p = `/.well-known/oauth-protected-resource${p.slice(`/.well-known/oauth-protected-resource${local}`.length)}`;
+  }
 
   try {
     res.setHeader('x-content-type-options', 'nosniff');
@@ -535,6 +553,15 @@ const server = http.createServer(async (req, res) => {
       if (!ch) return send(res, 404, { error: 'not found' });
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store' });
       return res.end(ch);
+    }
+    // A first-run link (lib/firstrun.js): its one-time key, traded once for the
+    // boss token, which the browser then keeps as if it had been pasted.
+    if (req.method === 'POST' && p === '/api/setup/claim') {
+      const body = await readBody(req).catch(() => null);
+      const key = body && typeof body.key === 'string' ? body.key : '';
+      if (store.authMode() !== 'strict' || !firstRun.claim(key)) return send(res, 403, { error: 'This link has been used or has expired. On the server, node tools/sign-in-link.js makes a new one.' });
+      console.log('First-run link opened: the browser that opened it is signed in as the owner.');
+      return send(res, 200, { token: process.env.BUREAU_BOSS_TOKEN });
     }
 
     // ----- Dashboard sign-in (doc 30, C4): code flow + PKCE on the server -----
@@ -779,6 +806,21 @@ const server = http.createServer(async (req, res) => {
       return send(res, 200, { ended });
     }
     if (req.method === 'GET' && p === '/api/omako') return send(res, 200, await omako.status());
+    // Sign in with OMAKO, from the setup guide or Settings (t-541): the hub
+    // pairs itself and hands back OMAKO's link. A hub on a server pairs at
+    // its https address; a hub opened on this computer, at http://localhost.
+    if (req.method === 'POST' && p === '/api/omako/pair') {
+      const pub = (process.env.BUREAU_PUBLIC_URL || '').replace(/\/$/, '');
+      let hubUrl = null;
+      if (/^https:\/\//.test(pub)) hubUrl = pub;
+      else if (security.loopbackRequest(req) && (!pub || /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(pub))) hubUrl = oidc.localOrigin();
+      if (!hubUrl) return send(res, 400, { error: 'This hub is opened from another computer, so OMAKO needs its https address: set BUREAU_PUBLIC_URL, restart the hub, and try again. On the hub\'s own computer, open it at http://localhost instead.' });
+      try {
+        return send(res, 200, await omako.pairFromDashboard(hubUrl, { onPaired: syncSignedInAgents }));
+      } catch (e) {
+        return send(res, /already paired/.test(e.message) ? 409 : 502, { error: /already paired/.test(e.message) ? e.message : `OMAKO: ${e.message}` });
+      }
+    }
     if (req.method === 'GET' && p === '/api/setup') return send(res, 200, setupStatus());
     if (req.method === 'GET' && p.startsWith('/api/setup/agent/')) {
       const name = decodeURIComponent(p.slice('/api/setup/agent/'.length));
@@ -1520,15 +1562,49 @@ try { knowledge.intakeSweep(); } catch (e) { console.error('[intake] boot sweep 
 contextCall.pruneLog();
 setInterval(() => contextCall.pruneLog(), 3600_000);
 try { const b = brainIndex.build(); console.log(`Brain index: ${b.files} files, ${b.chunks} chunks, ${b.terms} terms, ${b.ms} ms`); } catch (e) { console.error('[index] build failed:', e.message); }
+// Once paired with OMAKO, every agent whose sign-in is already on gets its
+// address there, as hub/tools/omako.js sync does.
+// by: who confirmed the pairing at OMAKO. They connected the hub from its own
+// dashboard as its owner, so they sign in as its owner from now on.
+async function syncSignedInAgents(pair, by) {
+  const who = by && (by.email ? String(by.email).toLowerCase() : by.sub);
+  if (who && !store.settingsOf(store.load()).members[who]) {
+    const r = store.patchSettings({ members: { [who]: { role: 'owner' } } });
+    if (r && r.error) console.error('[omako] could not add the owner:', r.error);
+    else console.log(`[omako] ${who} connected this hub to OMAKO and signs in as its owner.`);
+  }
+  const agents = store.settingsOf(store.load()).agents || {};
+  const on = Object.entries(agents).filter(([, v]) => v && v.oauth).map(([name]) => ({ name, on: true }));
+  if (on.length) await omako.syncAgents(on);
+}
+// A local hub paired with OMAKO and started on another port: OMAKO follows.
+function followPort() {
+  omako.followPort()
+    .then((m) => { if (m) console.log(`[omako] this hub moved from ${m.from} to ${m.to}: sign-in and agent addresses follow.`); })
+    .catch((e) => console.error(`[omako] couldn't tell OMAKO about the new port: ${e.message}. Sign-in may fail until it can.`));
+}
+// A hub that made its own token and has not been opened yet: the one link that
+// gets its owner in, printed after the address so it is the last thing shown.
+function firstRunLink() {
+  if (BOSS_FROM.source !== 'file' || firstRun.setupDone()) return;
+  const link = firstRun.linkFor(firstRun.mintKey(firstRun.BOOT_LINK_MS), PORT);
+  console.log('');
+  console.log('  Bureau is ready. Open this link to finish setting it up (it works once):');
+  console.log('');
+  console.log(`  ${link}`);
+  console.log('');
+  console.log('  Lost it? On this machine, run: node tools/sign-in-link.js');
+  console.log('');
+}
 // Prefer the configured host ('::' for hosts that want IPv6); fall back to IPv4 where IPv6 is absent.
 server.on('error', (e) => {
   if (e.code === 'EAFNOSUPPORT' && HOST === '::') {
     console.log('IPv6 unavailable, falling back to 0.0.0.0');
-    server.listen(PORT, '0.0.0.0', () => console.log(`Bureau hub listening on 0.0.0.0:${PORT}`));
+    server.listen(PORT, '0.0.0.0', () => { console.log(`Bureau hub listening on 0.0.0.0:${PORT}`); firstRunLink(); followPort(); });
   } else { console.error(`cannot listen on [${HOST}]:${PORT}: ${e.message}`); process.exit(1); }
 });
 // Past this point nothing a request does may end the process. A bug still
 // reaches the log, and the requests around it keep being served.
 process.on('unhandledRejection', (e) => console.error(`[hub] unhandled rejection: ${(e && e.stack) || e}`));
 process.on('uncaughtException', (e) => console.error(`[hub] uncaught exception: ${(e && e.stack) || e}`));
-server.listen(PORT, HOST, () => console.log(`Bureau hub listening on [${HOST}]:${PORT}`));
+server.listen(PORT, HOST, () => { console.log(`Bureau hub listening on [${HOST}]:${PORT}`); firstRunLink(); followPort(); });

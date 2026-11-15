@@ -51,11 +51,14 @@ export function setupBanner() {
     if (!show) return;
     const consul = s.agents.consul.allowed;
     const sol = s.agents.sol.allowed;
-    text.textContent = consul ? 'Consul is connected. Sol isn\'t yet.'
-      : sol ? 'Sol is connected. Consul isn\'t yet.'
-        : 'Consul and sol aren\'t connected yet.';
+    // A hub on your computer is set up once consul works: sol waits for a server.
+    text.textContent = s.local ? 'Consul isn\'t connected yet.'
+      : consul ? 'Consul is connected. Sol isn\'t yet.'
+        : sol ? 'Sol is connected. Consul isn\'t yet.'
+          : 'Consul and sol aren\'t connected yet.';
     marks[0].className = consul ? 'is-done' : '';
     marks[1].className = sol ? 'is-done' : '';
+    marks[1].hidden = !!s.local;
     button.textContent = s.agents.consul.on || s.agents.sol.on ? 'Resume setup' : 'Start setup';
   }
   onSetupStatus(paint);

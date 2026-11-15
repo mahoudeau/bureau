@@ -9,12 +9,14 @@
 // when(local) hides the step until a choice shows it. Actions:
 //   none | done {render(s, local)} | show {render()} | link {href} | copy {value, hide?}
 //   confirm | wait {check, show?} | turnOn {body(), check} | allow {apps(), agent, check}
+//   pair {check}: Sign in with OMAKO, the hub pairs itself
 //   choice {key, options: [{value, label}]}
 
 import { fill, h } from '../dom.js';
 import * as api from '../api.js';
 import { toast } from '../ui.js';
 import { refusal } from './kit.js';
+import { omakoMark } from '../layout.js';
 
 // What this browser remembers between visits: the step, the clicks the hub
 // can't see, and the choices. Never anything secret.
@@ -96,6 +98,27 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
             paint();
           } catch (err) { if (!api.isAbort(err)) { say(refusal(err)); paint(); } }
         } }, a.label)];
+      }
+      // Sign in with OMAKO: the hub starts the pairing and hands back OMAKO's
+      // page. The tab is opened on the click itself, so no popup blocker
+      // stops it, and pointed at OMAKO once the hub answers.
+      case 'pair': {
+        if (a.check()) return [check(a.ok, true)];
+        return [h('button', { type: 'button', class: 'om-btn om-btn-omako', async onClick(e) {
+          const btn = e.currentTarget;
+          btn.disabled = true;
+          say('');
+          const tab = window.open('', '_blank');
+          try {
+            const r = await api.post('/api/omako/pair', {}, { signal: ctx.signal });
+            if (!r || !r.verify_url) throw new Error('OMAKO didn\'t answer with a page to open.');
+            if (tab) tab.location.href = r.verify_url; else window.open(r.verify_url, '_blank');
+            local.flags[st.id] = true; remember(); paint();
+          } catch (err) {
+            if (tab) tab.close();
+            if (!api.isAbort(err)) { say(refusal(err)); btn.disabled = false; }
+          }
+        } }, omakoMark(), h('span', null, a.label)), flagged ? check(a.waiting, false) : null];
       }
       case 'link':
         return [h('a', { class: 'om-btn om-btn-primary', href: a.href, target: '_blank', rel: 'noopener', onClick() { local.flags[st.id] = true; remember(); setTimeout(paint, 0); } }, `${a.label} ↗`),

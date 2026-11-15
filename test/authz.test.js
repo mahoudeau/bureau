@@ -33,7 +33,9 @@ async function boot(name, port, extraEnv, seed) {
   fs.mkdirSync(path.join(d, 'data'), { recursive: true });
   if (seed) fs.writeFileSync(path.join(d, 'data', 'state.json'), JSON.stringify(seed));
   const env = { PATH: process.env.PATH, SystemRoot: process.env.SystemRoot, USERPROFILE: process.env.USERPROFILE, TEMP: process.env.TEMP, TMP: process.env.TMP, HOME: d, PORT: String(port), HOST: '127.0.0.1',
-    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_STORE: process.env.BUREAU_STORE, ...extraEnv };
+    BUREAU_ENV_FILE: path.join(d, 'none.env'), BUREAU_DATA_DIR: path.join(d, 'data'), BUREAU_BRAIN_DIR: path.join(d, 'brain'), BUREAU_WORK_DIR: path.join(d, 'work'), BUREAU_POKES: '', GIT_CONFIG_GLOBAL: path.join(d, 'gitconfig'), BUREAU_STORE: process.env.BUREAU_STORE,
+    // Nothing here may reach the real OMAKO (POST /api/omako/pair would start a pairing there).
+    BUREAU_OMAKO_URL: 'http://127.0.0.1:9', ...extraEnv };
   const child = spawn(process.execPath, [HUB], { env, stdio: 'ignore' });
   hubs.push(child);
   const base = `http://127.0.0.1:${port}`;
@@ -589,6 +591,10 @@ async function table({ strict, boss, worker, shared, anon, TA, TB, legacy, old }
     ['GET', '/api/sessions', null, { boss: A, agent: D, shared: D, legacy: A }],
     ['POST', '/api/sessions/revoke-all', () => ({}), { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/omako', null, { boss: A, agent: D, shared: D, legacy: A }],
+    // OMAKO is unreachable here: the boss gets as far as the 502.
+    ['POST', '/api/omako/pair', null, { boss: A, agent: D, shared: D, legacy: A }],
+    // Public on purpose: a first-run link's key, which only the key opens.
+    ['POST', '/api/setup/claim', () => ({ key: 'not-a-key' }), { boss: D, agent: D, shared: D, legacy: D }],
     ['GET', '/api/setup', null, { boss: A, agent: D, shared: D, legacy: A }],
     ['GET', '/api/setup/agent/dana', null, { boss: A, agent: D, shared: D, legacy: A }],
     // The off-server backup (doc 31, D4): the operator only. Everyone else
