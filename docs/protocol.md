@@ -115,6 +115,7 @@ Outbound credentials (the `BUREAU_POKES` headers, GitHub tokens) are not part of
 | `GET /api/memory/health` | yes | only with `["*"]` | yes | yes |
 | `POST/GET /api/work` | yes | its projects' missions | yes | yes |
 | `GET /api/backups`, `POST /api/backups/verified`, `POST /api/backups/run` | the operator only (below); 404 to anyone else | 404 | 404 | yes |
+| `GET /api/updates`, `POST /api/updates/check` | the operator only (below); 404 to anyone else | 404 | 404 | yes |
 
 `/health`, the dashboard shells, `/auth/*` and the `/.well-known/` documents take no bearer. An `/api/` route with no rule in the table is a 404: a route cannot be reached by forgetting to give it a rule.
 
@@ -127,6 +128,13 @@ The operator is whoever runs the server, which on a hosted hub is the host, neve
 - `POST /api/backups/run`: runs the nightly backup now and answers `{run, status}` when it is done. 409, with the reason, when it is not set up.
 
 `GET /api/health` adds `backup` (`configured`, `last_ok_at`, `last_ok_check_at`, `alerts`) for the operator, and nothing for anyone else. A failed run goes to the server's log (`OFF-SERVER BACKUP FAILED`), never to the event log the hub's users read. The settings, the file format and the restore are in `UPGRADING.md` and `docs/restore.md`.
+
+### A newer release
+
+Once a day, and a minute after boot, the hub reads the `vX.Y.Z` tags of `mahoudeau/bureau` on GitHub (`lib/updates.js`). When the highest is newer than the hub, it also reads `UPGRADING.md` at that tag and keeps its `## X.Y.Z` sections for the releases after the hub's, up to the new one, and the `## Upgrade` steps. The requests carry no token and no version. `BUREAU_UPDATE_CHECK=off` stops them. The answer is kept in memory only.
+
+- `GET /api/updates`: `enabled`, `current`, `latest` (`null` before the first good check), `behind`, `checked_at`, `error` (the last check's failure, else `null`; a failed check keeps what the last good one found), `sections` (`[{version, title, markdown}]`, newest first, links made absolute at the tag on GitHub; empty unless `behind`), `steps` (markdown or `null`), `upgrading_url` and `changelog_url`. The Desk shows a line when `behind`; Settings, Updates shows the rest.
+- `POST /api/updates/check`: checks now and answers the same. 409 when the check is off.
 
 ### Sign-in
 

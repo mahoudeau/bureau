@@ -130,6 +130,11 @@ jobs:
       - name: First run (test/firstrun.test.js)
         run: node test/firstrun.test.js
 
+      # The daily release check against a stand-in for GitHub, then a hub with
+      # the check off. Never reaches GitHub. Its own hub on port 8243.
+      - name: Release check (test/updates.test.js)
+        run: node test/updates.test.js
+
       # The dashboard's markdown: every feature, what must never run, hostile
       # input on a clock. No hub needed.
       - name: Markdown (test/markdown.test.js)
