@@ -147,6 +147,11 @@ jobs:
       - name: Markdown (test/markdown.test.js)
         run: node test/markdown.test.js
 
+      # The setup guide: which screen it opens on, when a screen is finished.
+      # No hub needed.
+      - name: Setup guide (test/guide.test.js)
+        run: node test/guide.test.js
+
       # Every file the app shell and the stylesheets name exists and is served,
       # so a missing module fails here. Self-contained: its own hub on port 8215.
       - name: Assets (test/assets.test.js)
@@ -417,6 +422,9 @@ jobs:
 
       - name: Markdown (test/markdown.test.js)
         run: node test/markdown.test.js
+
+      - name: Setup guide (test/guide.test.js)
+        run: node test/guide.test.js
 
       - name: Assets (test/assets.test.js)
         run: node test/assets.test.js

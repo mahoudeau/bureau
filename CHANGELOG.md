@@ -11,6 +11,9 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 - `GET /api/updates` and `POST /api/updates/check` (check now), the operator's only.
 - **GitHub Releases again, on their own.** Pushing a `v*` tag now publishes its GitHub Release, with the summary in `docs/releases/v<version>.md` (`.github/workflows/release.yml`). CI fails when the version in `hub/version.js` has no summary. Releases from 0.4.0 to 0.5.7 were backfilled; 0.5.0 to 0.5.3 were never tagged, and their summary is in 0.5.4's.
 
+### Fixed
+- **The setup guide opens on its welcome screen.** On a brand-new hub it skipped "Bureau starts with two agents" and opened on "Make it yours": a screen with nothing to do counted as finished before anyone saw it. It now counts as finished once seen, like the look picker. The rule lives in `hub/public/app/setup/progress.js`, tested by `test/guide.test.js`.
+
 ### Docs
 - UPGRADING.md lists the 1 to 2 migration from 0.5.0, and says migrations chain, so any release upgrades to the latest in one step.
 
