@@ -17,6 +17,7 @@ import * as api from '../api.js';
 import { toast } from '../ui.js';
 import { refusal } from './kit.js';
 import { omakoMark } from '../layout.js';
+import { openingStep, stepDone } from './progress.js';
 
 // What this browser remembers between visits: the step, the clicks the hub
 // can't see, and the choices. Never anything secret.
@@ -38,19 +39,12 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
   if (migrate) migrate(saved, local);
   let all = steps(s);
   const shown = () => all.filter((st) => !st.when || st.when(local));
-  const firstOpen = () => shown().find((st) => !isDone(st)) || shown()[shown().length - 1];
-  let at = (shown().find((st) => st.id === saved.at) || firstOpen()).id;
+  const firstOpen = () => openingStep(shown(), local);
+  let at = openingStep(shown(), local, saved.at).id;
 
-  function isDone(st) {
-    const a = st.action;
-    if (a.type === 'none' || a.type === 'done') return true;
-    // Seen is enough: a fresh guide opens on it, and Next is open once shown.
-    if (a.type === 'show') return !!local.flags[st.id];
-    if (a.type === 'choice') return local.choices[a.key] !== undefined && local.choices[a.key] !== null;
-    const first = a.check ? a.check() : !!local.flags[st.id];
-    if (!st.then) return first;
-    return (first || st.then.check()) && st.then.check();
-  }
+  // Seen is enough for a screen with nothing to do: a fresh guide opens on it,
+  // and Next is open once it's shown (progress.js).
+  const isDone = (st) => stepDone(st, local);
   function remember() { save(key, { at, flags: local.flags, choices: local.choices }); }
 
   const chapters = h('div', { class: 'wiz-chapters' });
@@ -202,6 +196,8 @@ export function runWizard(ctx, { key, load, initial, steps, doneHref = '/', migr
     let i = list.findIndex((st) => st.id === at);
     if (i < 0) { at = firstOpen().id; i = list.findIndex((st) => st.id === at); }
     const st = list[i];
+    // A screen with nothing to do is finished once it's on screen.
+    if (st.action.type === 'none' && !local.flags[st.id]) { local.flags[st.id] = true; remember(); }
     // The chapters are the ones the shown steps belong to, in order.
     const names = [...new Set(list.map((x) => x.ch))];
     const chNow = names.indexOf(st.ch);
