@@ -1,25 +1,15 @@
 // System, paper or ink, kept in localStorage. Paper (light) is the default;
-// system is a choice you make. index.html reads the same key before first
-// paint.
-
-const KEY = 'bureau_theme';
-const ATTR = { paper: 'light', ink: 'dark' };
+// system is a choice you make. The look itself (Marker or Pencil, colour,
+// ground) lives in looks.js, which index.html runs before the first paint.
 
 export const THEMES = ['system', 'paper', 'ink'];
 
+const looks = () => window.BureauLooks;
+
 export function getTheme() {
-  let saved = null;
-  try { saved = localStorage.getItem(KEY); } catch { /* no storage: the default */ }
-  return THEMES.includes(saved) ? saved : 'paper';
+  return looks() ? looks().get().theme : 'paper';
 }
 
 export function setTheme(name) {
-  const theme = THEMES.includes(name) ? name : 'paper';
-  try {
-    if (theme === 'paper') localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, theme);
-  } catch { /* it still applies to this page */ }
-  if (theme === 'system') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', ATTR[theme]);
-  return theme;
+  return looks() ? looks().set({ theme: name }).theme : 'paper';
 }

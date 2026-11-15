@@ -11,32 +11,87 @@ import { BOSS_ONLY, copyButton, field, message, notice, refusal, section, table 
 import { POLICIES, globalSelect, projectSelect } from './approval.js';
 
 const THEME_WORDS = { system: 'System', paper: 'Paper', ink: 'Ink' };
-const THEME_HINT = { system: 'Follows your machine.', paper: 'Ink on paper.', ink: 'Paper on ink.' };
+const THEME_HINT = { system: 'Paper or ink, as your machine is set.', paper: 'Ink on paper.', ink: 'Paper on ink.' };
+const MARKER_WORDS = { marker: 'Marker', pencil: 'Pencil' };
+const MARKER_HINT = { marker: 'Bold and sharp, the strongest contrast.', pencil: 'Softer and vintage: the colour\'s own shades, less contrast, still easy to read.' };
+const COLOUR_WORDS = { pure: 'Pure', pocket: 'Grey', olive: 'Olive', dmg: 'Green', amber: 'Amber' };
+const COLOUR_HINT = { pure: 'Black and white.', pocket: 'Pocket grey.', olive: 'Olive, the first office.', dmg: 'The original pea green.', amber: 'Warm amber, like an old monitor.' };
+const GROUND_WORDS = { dots: 'Dots', fine: 'Fine dither', lines: 'Scanlines', solid: 'Solid', gradient: 'Gradient', fade: 'Dithered fade' };
+const GROUND_HINT = {
+  dots: 'A sparse dot screen. The default.', fine: 'Twice as dense.', lines: 'A line every four pixels, like an old monitor.',
+  solid: 'One flat tint, a step from the paper. The quietest.', gradient: 'A smooth fade into a deeper tint.', fade: 'The same fade in dither pixels: thick at the foot, gone at the top.',
+};
 
 // ---- Appearance ----
+// Paper or Ink, Marker or Pencil, a colour and a ground, all from looks.js and
+// kept in this browser. A change applies at once, here and in other tabs.
 
-export function appearance() {
-  const hint = h('p', { class: 'om-data-s set-hint' });
-  const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Theme' });
-  function paint() {
-    const now = getTheme();
-    hint.textContent = THEME_HINT[now];
-    seg.replaceChildren(...THEMES.map((name) => h('button', {
-      type: 'button',
-      'aria-pressed': name === now ? 'true' : 'false',
-      onClick() {
-        setTheme(name);
-        paint();
-        seg.querySelector('[aria-pressed="true"]').focus();
-      },
-    }, THEME_WORDS[name])));
-  }
-  paint();
-  return h('div', { class: 'set-sections' }, section('Theme', null, seg, hint), officePalette());
+const looks = () => window.BureauLooks;
+
+function segOf(label, list, words, now, choose) {
+  return h('div', { class: 'om-seg', role: 'group', 'aria-label': label }, list.map((name) => h('button', {
+    type: 'button',
+    'aria-pressed': name === now ? 'true' : 'false',
+    dataset: { k: name },
+    onClick() { choose(name); },
+  }, words[name])));
 }
 
-// The office keeps its own four-shade palettes; the dashboard stays ink and
-// paper. Same key as office.html, which follows a change made here at once.
+export function appearance(ctx) {
+  const L = looks();
+  const body = h('div', { class: 'set-form' });
+  const follow = h('input', { type: 'checkbox', onChange() { L.set({ follow: follow.checked }); } });
+
+  function paint(focusKey) {
+    const p = L.get();
+    const tone = L.toneOf(p.theme);
+    const choose = (change) => { L.set(change); };
+    body.replaceChildren(
+      field('Paper or Ink', segOf('Paper or Ink', THEMES, THEME_WORDS, p.theme, (theme) => choose({ theme })), THEME_HINT[p.theme]),
+      field('Marker or Pencil', segOf('Marker or Pencil', L.MARKERS, MARKER_WORDS, p.marker, (marker) => choose({ marker })), MARKER_HINT[p.marker]),
+      h('div', { class: 'om-field' },
+        h('span', { class: 'om-field-label', id: 'look-colour' }, 'Colour'),
+        h('div', { class: 'look-swatches', role: 'group', 'aria-labelledby': 'look-colour' }, L.COLOURS.map((c) => {
+          const l = L.look(tone, p.marker, c);
+          return h('button', {
+            type: 'button', class: 'look-swatch', 'aria-pressed': c === p.colour ? 'true' : 'false', dataset: { k: `c-${c}` },
+            title: COLOUR_HINT[c], onClick() { choose({ colour: c }); },
+          }, h('span', { class: 'look-chip', 'aria-hidden': 'true' }, h('i', { style: { background: l.paper } }), h('i', { style: { background: l.ink } })), COLOUR_WORDS[c]);
+        })),
+        h('p', { class: 'om-field-help set-hint' }, COLOUR_HINT[p.colour])),
+      h('div', { class: 'om-field' },
+        h('span', { class: 'om-field-label', id: 'look-ground' }, 'Ground'),
+        h('div', { class: 'look-grounds', role: 'group', 'aria-labelledby': 'look-ground' }, L.GROUNDS.map((g) => h('button', {
+          type: 'button', class: 'look-ground', 'aria-pressed': g === p.ground ? 'true' : 'false', dataset: { k: `g-${g}` },
+          onClick() { choose({ ground: g }); },
+        }, h('span', { class: `look-tile is-${g}`, 'aria-hidden': 'true' }), GROUND_WORDS[g]))),
+        h('p', { class: 'om-field-help set-hint' }, `${GROUND_HINT[p.ground]} Text always sits on a sheet, never on the ground.`)),
+      h('label', { class: 'om-check' }, follow, 'The office uses the same colour'));
+    follow.checked = p.follow;
+    if (focusKey) {
+      const again = body.querySelector(`[data-k="${focusKey}"]`);
+      if (again) again.focus();
+    }
+  }
+
+  // Repaint on any change, from here, the palette or another tab, keeping focus.
+  const repaint = () => {
+    const k = document.activeElement && body.contains(document.activeElement) ? document.activeElement.dataset.k : null;
+    paint(k);
+    office.paint();
+  };
+  window.addEventListener('bureau:look', repaint);
+  window.addEventListener('storage', repaint);
+  if (ctx && ctx.onCleanup) ctx.onCleanup(() => { window.removeEventListener('bureau:look', repaint); window.removeEventListener('storage', repaint); });
+
+  const office = officePalette();
+  paint();
+  return h('div', { class: 'set-sections' }, section('Look', null, body), office.node);
+}
+
+// The office keeps its own four-shade palettes. With "the office uses the
+// same colour" on, the Look's colour sets it; picking here turns that off.
+// Same key as office.html, which follows a change made here at once.
 const OFFICE_KEY = 'bureau_office_palette';
 const OFFICE_PALETTES = [['pocket', 'Grey'], ['olive', 'Olive'], ['dmg', 'Green'], ['amber', 'Amber']];
 const OFFICE_HINT = { pocket: 'Pocket grey. The default.', olive: 'Olive, the first office.', dmg: 'The original pea green.', amber: 'Warm amber, like an old monitor.' };
@@ -51,19 +106,24 @@ function officePalette() {
   const seg = h('div', { class: 'om-seg', role: 'group', 'aria-label': 'Office palette' });
   function paint() {
     const now = read();
-    hint.textContent = OFFICE_HINT[now];
+    const p = looks().get();
+    hint.textContent = p.follow && p.colour !== 'pure'
+      ? `${OFFICE_HINT[now]} Follows the Look's colour; picking one here stops that.`
+      : OFFICE_HINT[now];
     seg.replaceChildren(...OFFICE_PALETTES.map(([key, word]) => h('button', {
       type: 'button',
       'aria-pressed': key === now ? 'true' : 'false',
       onClick() {
         try { localStorage.setItem(OFFICE_KEY, key); } catch { /* it just won't stick */ }
+        // A hand-picked office palette wins over the Look's colour.
+        if (looks().get().follow && looks().get().colour !== 'pure') looks().set({ follow: false });
         paint();
         seg.querySelector('[aria-pressed="true"]').focus();
       },
     }, word)));
   }
   paint();
-  return section('Office palette', null, seg, hint);
+  return { node: section('Office palette', null, seg, hint), paint };
 }
 
 // ---- Approval ----

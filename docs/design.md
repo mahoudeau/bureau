@@ -6,12 +6,16 @@ Two surfaces, one event stream: the dashboard at `/` and the pixel office at `/o
 
 The dashboard is built on OMAKO DS, with a copy in `hub/public/omako-ds/`. Plain CSS, no build, no dependency. Its licence terms are in `NOTICE.md` in that folder.
 
-- **Ink, paper and dither. No hue.** Inversion is the only colour. Dark mode swaps the two.
+- **Ink, paper and dither.** Inversion is the only colour change on a page. Dark mode swaps the two. A colour, when one is picked, tints ink and paper themselves: it never adds a third colour.
 - **Hover runs on dither, and it's instant.** Dither means about to, solid means chosen: a button lifts over a dithered L, a choice shows a dither bar, a row inverts with a dithered edge, and keyboard focus is a dither ring. Links get a heavy underline. Nothing floats, nothing is rounded. A shadow is hard ink or dither.
 - **Archivo for the interface and reading text, JetBrains Mono for data, Archivo Expanded for page titles.** Hierarchy comes from layers (ground, sheet, raised, dock, overlay), weight and size.
 - **Two registers.** Poster has 4px rules and big Archivo, for pages people read once. Desk is `data-density="compact"`: 1px rules, hierarchy by layer and weight. The dashboard is desk.
 - **Every object is a page with a URL.** A mission, a goal, a project, a brain note. No side panels. The command palette is the one overlay.
-- **Themes are system, paper and ink.**
+- **The look is four choices, kept in the browser** (`hub/public/app/looks.js`, run before the first paint):
+  - **Paper or Ink** (or System): light or dark.
+  - **Marker or Pencil.** Marker is bold and sharp. Pencil is softer and vintage, built from the colour's own shades, and never under 4.5 to 1: the ink is pushed apart until it holds.
+  - **Colour:** Pure (black and white, the default), Grey, Olive, Green, Amber. The last four are the office's palettes, and the office follows the colour unless its own palette is picked by hand.
+  - **Ground:** Dots (the default), Fine dither, Scanlines, Solid, Gradient, Dithered fade (`css/looks.css`). Text sits on a sheet, never on the ground, whichever ground it is.
 - **Every page works at phone width.**
 
 ### Dither

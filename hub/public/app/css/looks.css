@@ -1,0 +1,56 @@
+/* The ground behind the sheets, picked in Settings (looks.js sets data-ground
+   on the root, and the two tints). Dots is the design system's own ground and
+   needs nothing here. Text never sits on the ground, whichever it is. */
+
+:root { --ground-tint: var(--paper); --ground-deep: var(--paper); }
+
+:root[data-ground="fine"] .om-ground {
+  background-size: calc(var(--px) * 4) calc(var(--px) * 4);
+  background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2);
+}
+:root[data-ground="lines"] .om-ground {
+  background-image: linear-gradient(to bottom, var(--ink) 0 var(--px), transparent var(--px));
+  background-size: 100% calc(var(--px) * 4);
+  background-position: 0 0;
+}
+:root[data-ground="solid"] .om-ground {
+  background-color: var(--ground-tint);
+  background-image: none;
+}
+:root[data-ground="gradient"] .om-ground {
+  background-color: var(--paper);
+  background-image: linear-gradient(170deg, var(--paper) 0%, var(--ground-tint) 55%, var(--ground-deep) 100%);
+  background-size: 100% 100%;
+  background-position: 0 0;
+  background-repeat: no-repeat;
+}
+/* The fade keeps its pixel size and sits on the bottom edge: dense at the
+   foot, gone at the top, on a page of any height. */
+:root[data-ground="fade"] .om-ground {
+  background-color: var(--paper);
+  background-image: var(--ground-fade, none);
+  background-size: calc(var(--px) * 4) calc(var(--px) * 256);
+  background-position: 0 100%;
+  background-repeat: repeat-x;
+  image-rendering: pixelated;
+}
+
+/* Settings, Appearance: the switches as wide as their words, the colour
+   swatches and the ground tiles. */
+.om-field > .om-seg { justify-self: start; align-self: flex-start; width: max-content; max-width: 100%; }
+.look-swatches { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+.look-swatch { display: grid; justify-items: center; gap: 4px; padding: 6px; border: var(--rule-sm) solid transparent; background: none; color: var(--ink); cursor: pointer; font: 600 12px/14px var(--font-text); }
+.look-swatch[aria-pressed="true"] { border: var(--rule-md) solid var(--ink); padding: 5px; }
+.look-chip { display: flex; width: 44px; height: 28px; border: var(--rule-sm) solid var(--ink); overflow: hidden; }
+.look-chip > i { flex: 1; }
+.look-grounds { display: grid; grid-template-columns: repeat(3, minmax(0, 120px)); gap: var(--sp-2); }
+@media (max-width: 480px) { .look-grounds { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.look-ground { display: grid; gap: 4px; padding: 5px; border: var(--rule-sm) solid transparent; background: none; color: var(--ink); cursor: pointer; font: 600 12px/14px var(--font-text); text-align: left; }
+.look-ground[aria-pressed="true"] { border: var(--rule-md) solid var(--ink); padding: 4px; }
+.look-tile { display: block; height: 36px; border: var(--rule-sm) solid var(--ink); background-color: var(--paper); }
+.look-tile.is-dots { background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 8) calc(var(--px) * 8); background-position: 0 0, calc(var(--px) * 4) calc(var(--px) * 4); }
+.look-tile.is-fine { background-image: var(--dot), var(--dot); background-size: calc(var(--px) * 4) calc(var(--px) * 4); background-position: 0 0, calc(var(--px) * 2) calc(var(--px) * 2); }
+.look-tile.is-lines { background-image: linear-gradient(to bottom, var(--ink) 0 var(--px), transparent var(--px)); background-size: 100% calc(var(--px) * 4); }
+.look-tile.is-solid { background-color: var(--ground-tint); }
+.look-tile.is-gradient { background-image: linear-gradient(170deg, var(--paper) 0%, var(--ground-tint) 55%, var(--ground-deep) 100%); }
+.look-tile.is-fade { background-image: var(--ground-fade, none); background-size: calc(var(--px) * 4) calc(var(--px) * 256); background-position: 0 100%; background-repeat: repeat-x; image-rendering: pixelated; }
