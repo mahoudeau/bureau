@@ -20,13 +20,13 @@ Models come and go. The knowledge your agents build up about you and your projec
 
 A small Node server (the hub) that owns all coordination state. Every agent, dashboard, and mirror talks to it over one plain HTTP API.
 
-<img src="docs/media/desk-light.jpg" alt="The Bureau Desk: what needs you on top, with Review, Answer and Send back on each row, the work in flight by project, recent events, and on the right the office in a window and the team with their roles.">
+<img src="docs/media/desk-light.jpg" alt="The Bureau Desk: what needs you on top, with Approve, Answer and Send back on each row, the work in flight by project, recent events, and on the right the office in a window, this week's numbers and the team with their roles.">
 
-*The Desk at `/`, with demo data: what needs you, what's in flight, and the office and the team on the side.*
+*The Desk at `/`, with demo data: what needs you, what's in flight, this week, and the office and the team on the side.*
 
-<img src="docs/media/desk-themes.jpg" width="640" alt="The same Desk split down the middle: the left half in the paper theme, ink on white, the right half in the ink theme, paper on black.">
+<img src="docs/media/looks.jpg" width="720" alt="The same Desk four times: Paper, Marker, Pure in black and white; Paper, Pencil, Olive in soft olive; Ink, Pencil, Amber in dark warm brown with a fine dither behind; Ink, Marker, Green in dark green with scanlines behind.">
 
-*Two themes, paper and ink, or follow your system. Pick one in Settings.*
+*Your look, picked in Settings or on first launch: Paper or Ink, Marker (sharp) or Pencil (softer, vintage), a colour, and the ground behind the pages.*
 
 - **Mission queue with claim/lease and project capacity.** An agent claims a mission and gets a lease; if the lease expires because the session died, the mission returns to the queue. No work silently dies with a session. Projects are the unit of concurrency (capacity 1 by default), so a pool of workers spreads across projects instead of stacking on one. A `review` status is the human gate for missions marked boss-gate.
 
@@ -59,7 +59,12 @@ A small Node server (the hub) that owns all coordination state. Every agent, das
 
   *Your gate, on a phone: rule on each item, then approve, or send it back with a note the agent reads as its correction.*
 - **Pair mode.** When you work live with one agent and approve in the chat, the mission closes `done` with your exact words quoted in its log. No second click in a dashboard. `review` stays for work finished while you're away, and for irreversible steps you haven't approved yet.
-- **Two views of the same events.** A dashboard at `/` and a Game Boy-inspired pixel office at `/office` (hand-drawn tiles, four 4-shade palettes, grey by default and picked in Settings), both fed by one SSE stream. The dashboard is ink on paper and dither: a status is a pattern and a word, images are dithered, and nothing fades. Every mission, goal, project and brain note is a page with its own URL, and Cmd-K searches all of it.
+- **Insights.** Missions filed and closed per day, week or month, the time from claim to done, how long work waits on you, your rulings (chat approvals included), per project and per agent, and what went into the brain. A calendar of every day opens that day in order. Agents read the same numbers with `GET /api/stats` or the MCP tool `read_stats`, so a weekly digest is one call.
+
+  <img src="docs/media/insights.jpg" alt="The Insights page: done, filed, claim to done, time in your review, waiting on you and sent back; a calendar of every day; filed and closed per week as bars; how many waited on you at the end of each week; and your rulings.">
+
+  *Insights at `/insights`, with demo data.*
+- **Two views of the same events.** A dashboard at `/` and a Game Boy-inspired pixel office at `/office` (hand-drawn tiles, four 4-shade palettes, grey by default; it follows the dashboard's colour unless you pick its own), both fed by one SSE stream. The dashboard is ink on paper and dither: a status is a pattern and a word, images are dithered, and nothing fades. Every mission, goal, project and brain note is a page with its own URL, and Cmd-K searches all of it.
 
 The office comes staffed: the default roster, named for the Hyperion Cantos, is three builders (Bettik, Severn, Kassad), a lead (Ummon), a critic (Moneta), a librarian (Sol), and an interactive envoy (Consul). Every name is a template string; rename your staff at will. The staff are shift prompts in [connectors/cowork/](connectors/cowork/), so a fresh hub's office stays empty until an agent registers. The MCP door's tool text and instructions use the name on the token, so a token minted for `dana` reads `dana`. `consul` stays the default in two places: the context hook (set `BUREAU_AGENT` to change it) and the old pre-strict MCP URL.
 
@@ -159,7 +164,7 @@ Invoke-RestMethod -Method Post -Uri http://localhost:8100/api/tasks -Headers $h 
 
 ### Settings
 
-How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, manages sign-in (members, each agent's sign-in, the apps you allowed, sessions), mints and revokes agent tokens, retires the old MCP URL, and picks the theme and the office palette. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
+How approval works and who holds which role live in the hub, behind `GET` and `PATCH /api/settings`. The dashboard's `/settings` page sets approval and roles, manages sign-in (members, each agent's sign-in, the apps you allowed, sessions), mints and revokes agent tokens, retires the old MCP URL, and picks the look (Paper or Ink, Marker or Pencil, a colour, the ground) and the office palette. The other knobs below are one call. `BOSS_TOKEN` below is the `BUREAU_BOSS_TOKEN` value from your `.env`:
 
 ```
 curl -s -X PATCH http://localhost:8100/api/settings -H "Authorization: Bearer $BOSS_TOKEN" -H "Content-Type: application/json" \
@@ -243,7 +248,7 @@ The six you'll use first. The full list is in [docs/protocol.md](docs/protocol.m
 | `GET/POST /api/messages` | inbox and outbox |
 | `GET/POST /api/knowledge` | read and write the brain |
 
-Plus `GET /api/events` (SSE) for anything that watches.
+Plus `GET /api/events` (SSE) for anything that watches, and `GET /api/stats` for the numbers behind Insights.
 
 ## Docs
 
