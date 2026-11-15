@@ -6,6 +6,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.7] - 2026-11-15
+
 ### Added
 - **A first run in one step.** `node server.js` on a fresh clone, then click the link it prints. A hub started with no token makes its own boss token, keeps it in `data/boss-token` (0600), runs strict, and prints a one-time link that signs the browser in as the owner and opens the setup guide. No env file to copy, no token to make or paste. The link works once and lasts 24 hours; `node tools/sign-in-link.js` prints a new one any time, good for an hour. Docker: the link is in `docker compose logs`.
 - **Sign in with OMAKO in one click**, in the setup guide and in Settings, Sign-in: the hub pairs itself and opens OMAKO's page. No terminal, no restart. Whoever confirms becomes the hub's owner, so there's no `BUREAU_OIDC_OWNERS` to set. `node tools/omako.js pair` still works on a server.

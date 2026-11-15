@@ -22,7 +22,7 @@ The brain has its own history in git. The state file is what the steps below pro
 
 No `npm install`, ever. The hub has no dependencies.
 
-## Next release: the first run, and hubs on your computer
+## 0.5.7: the first run, and hubs on your computer
 
 Nothing changes for a hub that's already running. Your tokens, your pairing and your owners stay as they are, and a hub that holds data still refuses to start without a token. What's new is for fresh installs, and two buttons:
 
@@ -178,7 +178,7 @@ and make sure pair-mode agents carry the boss's words in `approved_in_session`. 
 
 These change what a running hub accepts. Check them before you restart.
 
-1. **A real token is required.** With neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN` set, a placeholder from `.env.example` in either, or the two set to the same value, the hub prints why and exits. (Since the first-run release, a brand-new hub with no data makes its own boss token instead; one that holds data still exits.) Strict mode with no `BUREAU_TOKEN` is fine: that is the end of the upgrade above. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. For a demo on one machine only, `BUREAU_ALLOW_INSECURE_LOCAL=1` starts it anyway, and it refuses any bind that is not loopback.
+1. **A real token is required.** With neither `BUREAU_TOKEN` nor `BUREAU_BOSS_TOKEN` set, a placeholder from `.env.example` in either, or the two set to the same value, the hub prints why and exits. (Since 0.5.7, a brand-new hub with no data makes its own boss token instead; one that holds data still exits.) Strict mode with no `BUREAU_TOKEN` is fine: that is the end of the upgrade above. Generate one: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. For a demo on one machine only, `BUREAU_ALLOW_INSECURE_LOCAL=1` starts it anyway, and it refuses any bind that is not loopback.
 2. **The default bind is `127.0.0.1`**, not all interfaces. A host that injects `IP` is unaffected, and so is the Docker image, which sets `HOST=0.0.0.0`. Anything else that reaches the hub from another machine needs `HOST=0.0.0.0` (or `HOST=::`) in `hub/.env`. Behind a platform proxy, see **0.3.0 behind a platform proxy**.
 3. **CORS is no longer `*`.** Same-origin pages work as before. A page on another origin needs `BUREAU_ALLOWED_ORIGINS=https://that.example`, comma-separated. Behind a reverse proxy that rewrites `Host`, set `BUREAU_PUBLIC_URL` so the hub knows its own name, or dashboard writes and SSE tickets answer 403.
 4. **`?token=` is gone.** Any script calling the API with it must send `Authorization: Bearer <token>` instead. Dashboard links that carried the token use the fragment now: `/#token=...`.
