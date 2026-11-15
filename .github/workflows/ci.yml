@@ -27,6 +27,13 @@ jobs:
         with:
           node-version: '22'
 
+      # The version in hub/version.js has its release summary, so the tag can
+      # publish its GitHub Release (.github/workflows/release.yml).
+      - name: Release summary (docs/releases)
+        run: |
+          v=$(node -p "require('./hub/version').VERSION")
+          test -f "docs/releases/v$v.md" || { echo "::error::docs/releases/v$v.md is missing: write the release summary for $v"; exit 1; }
+
       - name: Start a scratch hub
         run: |
           mkdir -p "$RUNNER_TEMP/bureau"

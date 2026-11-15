@@ -66,6 +66,14 @@ A new hub feature comes with checks in `test/dummy-agent.sh`. If curl can't reac
 - Say what changed and why. The why matters more: the diff already shows the what.
 - Touching the protocol means updating `docs/protocol.md` in the same PR.
 
+## Releases
+
+A release is one PR and one tag:
+
+1. In the PR, bump `hub/version.js`, move the changelog's Unreleased entries under the new version, add a section to UPGRADING.md when something must be done by hand (its heading starts with the version, `## 0.6.0: ...`, which is what a hub shows its operator), and write `docs/releases/v<version>.md`: a short summary in plain words, not the changelog again. CI fails a version without that file.
+2. Merge, then tag main: `git tag v<version>` and `git push origin v<version>`.
+3. The tag builds the Docker image (`release-image.yml`) and publishes the GitHub Release from the summary (`release.yml`).
+
 ## The CLA
 
 Contributions to the AGPL-3.0 parts (`hub/` and everything else not listed below) need a signed [Contributor License Agreement](CLA.md). The Apache-2.0 parts need none: `docs/protocol.md`, `docs/brain-format.md`, `hub/tools/brain-lint.js`, `connectors/`, and `skills/` once it exists. The CLA assistant bot comments on your first PR with a link; sign in with GitHub, give your name and email, and accept once. It asks on every PR, so ignore it if yours only touches the Apache-2.0 parts. [CLA.md](CLA.md) explains what it covers and why it exists.

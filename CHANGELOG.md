@@ -9,6 +9,7 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 ### Added
 - **The hub tells you when a new release is out.** Once a day, and a minute after it starts, the hub reads Bureau's release tags on GitHub. When one is newer, the Desk shows a line, and Settings, Updates shows the UPGRADING.md sections for every release between yours and the new one, read from the new release itself, with the upgrade steps. Only the operator sees it. The hub sends nothing about itself: two plain GET requests, no token, no version. `BUREAU_UPDATE_CHECK=off` stops it.
 - `GET /api/updates` and `POST /api/updates/check` (check now), the operator's only.
+- **GitHub Releases again, on their own.** Pushing a `v*` tag now publishes its GitHub Release, with the summary in `docs/releases/v<version>.md` (`.github/workflows/release.yml`). CI fails when the version in `hub/version.js` has no summary. Releases from 0.4.0 to 0.5.7 were backfilled; 0.5.0 to 0.5.3 were never tagged, and their summary is in 0.5.4's.
 
 ### Docs
 - UPGRADING.md lists the 1 to 2 migration from 0.5.0, and says migrations chain, so any release upgrades to the latest in one step.
