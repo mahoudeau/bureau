@@ -6,6 +6,8 @@ Self-hosters: read [UPGRADING.md](UPGRADING.md) before moving between versions.
 
 ## [Unreleased]
 
+## [0.5.8] - 2026-11-15
+
 ### Added
 - **The hub tells you when a new release is out.** Once a day, and a minute after it starts, the hub reads Bureau's release tags on GitHub. When one is newer, the Desk shows a line, and Settings, Updates shows the UPGRADING.md sections for every release between yours and the new one, read from the new release itself, with the upgrade steps. Only the operator sees it. The hub sends nothing about itself: two plain GET requests, no token, no version. `BUREAU_UPDATE_CHECK=off` stops it.
 - `GET /api/updates` and `POST /api/updates/check` (check now), the operator's only.

@@ -30,6 +30,13 @@ The check is two GET requests to GitHub, for the tag list and for this file at t
 
 The hub doesn't update itself. With Docker, `docker compose pull` then `docker compose up -d` takes the new image. Each section below tells you what to change by hand.
 
+## 0.5.8: release notices, and the guide's welcome screen
+
+Nothing to change. Pull and restart.
+
+- **The hub checks for new releases**, once a day and a minute after it starts, and the Desk says when one is out (see **Knowing a release is out** above). It's on by default. `BUREAU_UPDATE_CHECK=off` stops it, for a hub that must make no outside request.
+- **The setup guide opens on its welcome screen** on a brand-new hub. A guide already in progress reopens where it was.
+
 ## 0.5.7: the first run, and hubs on your computer
 
 Nothing changes for a hub that's already running. Your tokens, your pairing and your owners stay as they are, and a hub that holds data still refuses to start without a token. What's new is for fresh installs, and two buttons:
